@@ -32,6 +32,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.VSCodeSCMView = void 0;
 const git_graph_1 = require("./git-graph");
 const notification_1 = require("./notification");
+const git_error_handler_1 = require("./git-error-handler");
+const git_push_strategy_1 = require("./git-push-strategy");
+const git_push_dialog_1 = require("./git-push-dialog");
+const git_push_executor_1 = require("./git-push-executor");
+const git_consensus_advisor_1 = require("./git-consensus-advisor");
 class VSCodeSCMView {
     constructor(container) {
         this.gitStatus = null;
@@ -48,17 +53,42 @@ class VSCodeSCMView {
         return __awaiter(this, void 0, void 0, function* () {
             // Don't initialize Git decoration provider without a folder
             // It will be initialized when a folder is opened
-            // Start auto-refresh
+            // Initial refresh only - no auto-refresh interval
             yield this.refresh();
-            this.refreshInterval = setInterval(() => this.refresh(), 2000);
-            // Set up global reference
-            window.scmView = this;
+            // Auto-refresh removed - will refresh on Git operations and file saves only
+            // Global reference is now set in renderer.ts when creating the instance
         });
     }
     refresh() {
+        var _a, _b, _c, _d, _e, _f, _g;
         return __awaiter(this, void 0, void 0, function* () {
+            console.log('[SCM] Refresh button clicked!');
             try {
+                // Check if a folder is open first
+                const currentFolder = window.currentOpenedFolder;
+                if (!currentFolder) {
+                    console.log('[SCM] No folder open, showing welcome view');
+                    this.gitStatus = null;
+                    this.render();
+                    return;
+                }
+                // Fetch from remote to get latest ahead/behind counts
+                console.log('[SCM] Fetching from remote to get latest status...');
+                try {
+                    yield window.gitAPI.fetch();
+                    console.log('[SCM] Fetch completed successfully');
+                }
+                catch (fetchError) {
+                    console.log('[SCM] Fetch failed (might be offline):', fetchError);
+                    // Continue anyway - we can still show local status
+                }
+                console.log('[SCM] Getting git status for:', currentFolder);
                 this.gitStatus = yield window.gitAPI.getStatus();
+                console.log('[SCM] Got git status with', ((_b = (_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.files) === null || _b === void 0 ? void 0 : _b.length) || 0, 'files');
+                console.log('[SCM] Branch:', (_c = this.gitStatus) === null || _c === void 0 ? void 0 : _c.branch, 'Ahead:', (_d = this.gitStatus) === null || _d === void 0 ? void 0 : _d.ahead, 'Behind:', (_e = this.gitStatus) === null || _e === void 0 ? void 0 : _e.behind);
+                // Check for untracked files
+                const untracked = ((_g = (_f = this.gitStatus) === null || _f === void 0 ? void 0 : _f.files) === null || _g === void 0 ? void 0 : _g.filter(f => (f.working_dir === '?' || f.working === '?') && f.index === '?')) || [];
+                console.log('[SCM] Untracked files:', untracked.map(f => f.path));
             }
             catch (error) {
                 console.error('[SCM] Failed to refresh:', error);
@@ -67,10 +97,12 @@ class VSCodeSCMView {
             }
             // Always render, even if there was an error
             this.render();
+            console.log('[SCM] Render complete');
         });
     }
     render() {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f, _g;
+        console.log('[SCM] Rendering with status - ahead:', (_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.ahead, 'behind:', (_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.behind, 'branch:', (_c = this.gitStatus) === null || _c === void 0 ? void 0 : _c.branch);
         if (!this.gitStatus || !this.gitStatus.isRepo) {
             // VS Code-style welcome message for Source Control
             this.container.innerHTML = `
@@ -137,13 +169,13 @@ class VSCodeSCMView {
                 <span class="codicon codicon-check"></span>
               </button>
               <div class="scm-toolbar-separator"></div>
-              <button class="scm-toolbar-button" title="Pull${((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.behind) ? ` (${this.gitStatus.behind} behind)` : ''}" onclick="window.scmView?.pull()">
+              <button class="scm-toolbar-button" title="Pull${((_d = this.gitStatus) === null || _d === void 0 ? void 0 : _d.behind) ? ` (${this.gitStatus.behind} behind)` : ''}" onclick="window.scmView?.pull()">
                 <span class="codicon codicon-cloud-download"></span>
               </button>
-              <button class="scm-toolbar-button" title="Push${((_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.ahead) ? ` (${this.gitStatus.ahead} ahead)` : ''}" onclick="window.scmView?.push()">
+              <button class="scm-toolbar-button" title="Push${((_e = this.gitStatus) === null || _e === void 0 ? void 0 : _e.ahead) ? ` (${this.gitStatus.ahead} ahead)` : ''}" onclick="window.scmView?.push()">
                 <span class="codicon codicon-cloud-upload"></span>
               </button>
-              <button class="scm-toolbar-button" title="Sync Changes${((_c = this.gitStatus) === null || _c === void 0 ? void 0 : _c.ahead) || ((_d = this.gitStatus) === null || _d === void 0 ? void 0 : _d.behind) ? ` (${this.gitStatus.ahead || 0}↑ ${this.gitStatus.behind || 0}↓)` : ''}" onclick="window.scmView?.sync()">
+              <button class="scm-toolbar-button" title="Sync Changes${((_f = this.gitStatus) === null || _f === void 0 ? void 0 : _f.ahead) || ((_g = this.gitStatus) === null || _g === void 0 ? void 0 : _g.behind) ? ` (${this.gitStatus.ahead || 0}↑ ${this.gitStatus.behind || 0}↓)` : ''}" onclick="window.scmView?.sync()">
                 <span class="codicon codicon-sync"></span>
               </button>
             </div>
@@ -167,26 +199,35 @@ class VSCodeSCMView {
         </div>
 
         <!-- Resource Groups -->
-        <div class="scm-view-content">
+        <div class="scm-view-content" style="
+          flex: 1 1 auto;
+          overflow-y: auto;
+          overflow-x: hidden;
+          min-height: 0;
+          max-height: calc(100vh - 400px);
+        ">
           ${groups.map(group => this.renderResourceGroup(group)).join('')}
         </div>
         
         <!-- Git Graph Section -->
         <div id="git-graph-container" style="
           border-top: 1px solid var(--vscode-sideBarSectionHeader-border, #1e1e1e);
-          height: 65vh;
-          min-height: 400px;
-          max-height: 800px;
+          height: 300px;
+          flex-shrink: 0;
           overflow: hidden;
         "></div>
 
         <!-- Status Bar -->
         <div class="scm-status-bar">
-          <div class="scm-status-branch">
+          <div class="scm-status-branch" style="position: relative;">
             <span class="codicon codicon-git-branch"></span>
-            <span>${this.gitStatus.branch}</span>
-            ${this.gitStatus.ahead > 0 ? `<span class="badge">↑${this.gitStatus.ahead}</span>` : ''}
-            ${this.gitStatus.behind > 0 ? `<span class="badge">↓${this.gitStatus.behind}</span>` : ''}
+            <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView?.showBranchSwitcher?.()">${this.gitStatus.branch}</span>
+            <span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px; cursor: ${(this.gitStatus.ahead || 0) > 0 ? 'pointer' : 'default'};" 
+                  onclick="${(this.gitStatus.ahead || 0) > 0 ? 'window.scmView?.push()' : ''}"
+                  title="${(this.gitStatus.ahead || 0) > 0 ? 'Click to push' : 'Nothing to push'}">↑${this.gitStatus.ahead || 0}</span>
+            <span class="badge" style="background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px; cursor: ${(this.gitStatus.behind || 0) > 0 ? 'pointer' : 'default'};" 
+                  onclick="${(this.gitStatus.behind || 0) > 0 ? 'window.scmView?.pullAndPush()' : ''}"
+                  title="${(this.gitStatus.behind || 0) > 0 ? 'Click to sync (pull then push)' : 'Up to date'}">↓${this.gitStatus.behind || 0}</span>
           </div>
           <div class="scm-status-actions">
             <!-- Removed redundant sync and refresh buttons -->
@@ -230,27 +271,54 @@ class VSCodeSCMView {
             return [];
         const groups = [];
         const { files } = this.gitStatus;
-        // Staged Changes
+        // Debug logging
+        console.log('[SCM] Grouping files:', files.map(f => ({
+            path: f.path,
+            index: f.index || ' ',
+            working: f.working_dir || f.working || ' ',
+            indexChar: f.index ? f.index.charCodeAt(0) : 32,
+            workingChar: (f.working_dir || f.working) ? (f.working_dir || f.working).charCodeAt(0) : 32
+        })));
+        // Staged Changes (Index Group in VS Code)
         const staged = files.filter(f => f.index !== ' ' && f.index !== '?');
         if (staged.length > 0) {
+            console.log('[SCM] Staged files:', staged.map(f => f.path));
             groups.push({
                 id: 'staged',
                 label: 'Staged Changes',
                 resources: staged
             });
         }
-        // Changes
-        const changes = files.filter(f => f.working !== ' ' && f.working !== '?' && !(f.index !== ' ' && f.index !== '?'));
+        // Changes (Working Tree Group in VS Code - modified/deleted files)
+        const changes = files.filter(f => {
+            // Has working tree changes but not untracked
+            // Note: simple-git uses 'working_dir' not 'working'
+            const working = f.working_dir || f.working || ' ';
+            const hasWorkingChanges = working !== ' ' && working !== '?';
+            // Not staged
+            const notStaged = f.index === ' ';
+            const isInChanges = hasWorkingChanges && notStaged;
+            console.log(`[SCM] File ${f.path}: working='${working}' index='${f.index}' -> inChanges=${isInChanges}`);
+            return isInChanges;
+        });
         if (changes.length > 0) {
+            console.log('[SCM] Changes files:', changes.map(f => f.path));
             groups.push({
                 id: 'changes',
                 label: 'Changes',
                 resources: changes
             });
         }
-        // Untracked
-        const untracked = files.filter(f => f.working === '?');
+        // Untracked (Untracked Group in VS Code - new files)
+        const untracked = files.filter(f => {
+            // Note: simple-git uses 'working_dir' not 'working'
+            const working = f.working_dir || f.working || ' ';
+            const isUntracked = working === '?' && f.index === '?';
+            console.log(`[SCM] File ${f.path}: working='${working}' index='${f.index}' -> untracked=${isUntracked}`);
+            return isUntracked;
+        });
         if (untracked.length > 0) {
+            console.log('[SCM] Untracked files:', untracked.map(f => f.path));
             groups.push({
                 id: 'untracked',
                 label: 'Untracked',
@@ -296,6 +364,8 @@ class VSCodeSCMView {
         const fileName = file.path.split('/').pop() || file.path;
         const folderPath = file.path.includes('/') ?
             file.path.substring(0, file.path.lastIndexOf('/')) : '';
+        // Debug log
+        console.log(`[SCM] Rendering file ${file.path} in group ${groupId}, working: '${file.working}', index: '${file.index}'`);
         const statusIcon = this.getStatusIcon(file);
         const isSelected = this.selectedFiles.has(file.path);
         // Escape the path for use in onclick handlers
@@ -317,8 +387,18 @@ class VSCodeSCMView {
           </div>
         </div>
         <div class="scm-resource-actions">
-          ${groupId === 'changes' || groupId === 'untracked' ? `
+          ${groupId === 'changes' ? `
+            <button class="icon-button" title="Discard Changes" onclick="event.stopPropagation(); window.scmView?.discardFile('${escapedPath}')">
+              <span class="codicon codicon-discard"></span>
+            </button>
             <button class="icon-button" title="Stage Changes" onclick="event.stopPropagation(); window.scmView?.stageFile('${escapedPath}')">
+              <span class="codicon codicon-add"></span>
+            </button>
+          ` : groupId === 'untracked' ? `
+            <button class="icon-button" title="Delete File" onclick="event.stopPropagation(); window.scmView?.deleteUntrackedFile('${escapedPath}')" style="color: #f48771;">
+              <span class="codicon codicon-trash"></span>
+            </button>
+            <button class="icon-button" title="Stage File" onclick="event.stopPropagation(); window.scmView?.stageFile('${escapedPath}')">
               <span class="codicon codicon-add"></span>
             </button>
           ` : groupId === 'staged' ? `
@@ -492,11 +572,49 @@ class VSCodeSCMView {
             }
         });
     }
+    deleteUntrackedFile(path) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const fileName = path.split('/').pop() || path;
+            if (confirm(`Delete untracked file "${fileName}"? This cannot be undone.`)) {
+                try {
+                    // Use git clean to remove the untracked file
+                    yield window.gitAPI.clean([path]);
+                    yield this.refresh();
+                    // Also refresh File Explorer
+                    if (window.fileExplorer) {
+                        yield window.fileExplorer.refreshGitStatus();
+                    }
+                    notification_1.notifications.show({
+                        title: 'File Deleted',
+                        message: `Deleted untracked file: ${fileName}`,
+                        type: 'info',
+                        duration: 3000
+                    });
+                }
+                catch (error) {
+                    console.error('Failed to delete untracked file:', error);
+                    notification_1.notifications.show({
+                        title: 'Delete Failed',
+                        message: `Failed to delete ${fileName}: ${error}`,
+                        type: 'error',
+                        duration: 5000
+                    });
+                }
+            }
+        });
+    }
     stageAll() {
         var _a;
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const changes = ((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.files.filter(f => f.working !== ' ' && !(f.index !== ' ' && f.index !== '?'))) || [];
+                // Only stage tracked files with changes (not untracked files)
+                const changes = ((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.files.filter(f => {
+                    const working = f.working_dir || f.working || ' ';
+                    const hasWorkingChanges = working !== ' ' && working !== '?';
+                    const isNotStaged = f.index === ' ';
+                    const isTracked = working !== '?'; // Not untracked
+                    return hasWorkingChanges && isNotStaged && isTracked;
+                })) || [];
                 yield window.gitAPI.stage(changes.map(f => f.path));
                 yield this.refresh();
             }
@@ -519,22 +637,82 @@ class VSCodeSCMView {
         });
     }
     discardAll(groupId) {
-        var _a;
+        var _a, _b, _c, _d;
         return __awaiter(this, void 0, void 0, function* () {
-            if (!confirm('Discard all changes?'))
-                return;
-            try {
-                let files = [];
-                if (groupId === 'changes') {
-                    files = ((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.files.filter(f => f.working !== ' ' && f.working !== '?').map(f => f.path)) || [];
-                }
-                if (files.length > 0) {
+            if (groupId === 'changes') {
+                // For the Changes group - only modified/deleted files
+                const files = ((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.files.filter(f => ((f.working_dir === 'M' || f.working_dir === 'D') || (f.working === 'M' || f.working === 'D')) && f.index === ' ').map(f => f.path)) || [];
+                if (files.length === 0)
+                    return;
+                const confirmMessage = `Discard ${files.length} change(s)?`;
+                if (!confirm(confirmMessage))
+                    return;
+                try {
                     yield window.gitAPI.discard(files);
-                    yield this.refresh();
+                }
+                catch (error) {
+                    console.error('Failed to discard changes:', error);
+                    notification_1.notifications.show({
+                        title: 'Discard Failed',
+                        message: `Failed to discard changes: ${error}`,
+                        type: 'error',
+                        duration: 5000
+                    });
                 }
             }
-            catch (error) {
-                console.error('Failed to discard all:', error);
+            else if (groupId === 'untracked') {
+                // For the Untracked group - delete untracked files
+                const files = ((_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.files.filter(f => (f.working_dir === '?' || f.working === '?') && f.index === '?').map(f => f.path)) || [];
+                if (files.length === 0)
+                    return;
+                const confirmMessage = `Delete ${files.length} untracked file(s)? This cannot be undone.`;
+                if (!confirm(confirmMessage))
+                    return;
+                try {
+                    yield window.gitAPI.clean(files);
+                }
+                catch (error) {
+                    console.error('Failed to delete untracked files:', error);
+                    notification_1.notifications.show({
+                        title: 'Delete Failed',
+                        message: `Failed to delete untracked files: ${error}`,
+                        type: 'error',
+                        duration: 5000
+                    });
+                }
+            }
+            else if (groupId === 'staged') {
+                const confirmMessage = 'Discard all staged changes? This will unstage and discard the changes.';
+                if (!confirm(confirmMessage))
+                    return;
+                try {
+                    // For staged files: first unstage, then discard
+                    const files = ((_c = this.gitStatus) === null || _c === void 0 ? void 0 : _c.files.filter(f => f.index !== ' ' && f.index !== '?').map(f => f.path)) || [];
+                    if (files.length > 0) {
+                        // First unstage all
+                        yield window.gitAPI.unstage(files);
+                        // Then discard the changes (but only for modified files, not new files)
+                        const modifiedFiles = ((_d = this.gitStatus) === null || _d === void 0 ? void 0 : _d.files.filter(f => f.index === 'M' || f.working_dir === 'M' || f.working === 'M').map(f => f.path)) || [];
+                        if (modifiedFiles.length > 0) {
+                            yield window.gitAPI.discard(modifiedFiles);
+                        }
+                    }
+                }
+                catch (error) {
+                    console.error('Failed to discard staged:', error);
+                    notification_1.notifications.show({
+                        title: 'Discard Failed',
+                        message: `Failed to discard staged changes: ${error}`,
+                        type: 'error',
+                        duration: 5000
+                    });
+                }
+            }
+            // Refresh the view after operations
+            yield this.refresh();
+            // Also refresh File Explorer to update Git decorations
+            if (window.fileExplorer) {
+                yield window.fileExplorer.refreshGitStatus();
             }
         });
     }
@@ -576,7 +754,12 @@ class VSCodeSCMView {
                 if (input) {
                     input.value = '';
                 }
-                yield this.refresh();
+                // Simply recreate the entire panel to ensure fresh state
+                console.log('[SCM] Commit successful, recreating panel...');
+                // Small delay to ensure Git has updated
+                yield new Promise(resolve => setTimeout(resolve, 500));
+                // Recreate the entire panel with fresh data
+                yield this.recreatePanel();
                 notification_1.notifications.update(notificationId, {
                     title: 'Commit Successful',
                     message: `Committed: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`,
@@ -602,11 +785,11 @@ class VSCodeSCMView {
         });
     }
     push() {
-        var _a, _b, _c, _d, _e, _f, _g, _h;
+        var _a, _b, _c, _d;
         return __awaiter(this, void 0, void 0, function* () {
-            console.log('[SCM] Push button clicked');
+            console.log('[SCM] Smart push button clicked');
             // Check if gitAPI is available
-            if (!window.gitAPI || !window.gitAPI.push) {
+            if (!window.gitAPI) {
                 alert('Git API not available!');
                 console.error('[SCM] window.gitAPI:', window.gitAPI);
                 return;
@@ -614,84 +797,142 @@ class VSCodeSCMView {
             const branch = ((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.branch) || 'current branch';
             const aheadCount = ((_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.ahead) || 0;
             console.log('[SCM] Current status - branch:', branch, 'ahead:', aheadCount, 'hasUpstream:', (_c = this.gitStatus) === null || _c === void 0 ? void 0 : _c.hasUpstream);
-            // For branches without upstream, we still want to push if there are local commits
+            // REMOVED: Don't block the dialog when nothing to push
+            // Users might want to use custom commands even with 0 commits ahead
+            // Example: pushing current branch to overwrite a different branch
+            // Special handling when there's nothing to push normally
+            let customModeMessage = '';
             if (aheadCount === 0 && ((_d = this.gitStatus) === null || _d === void 0 ? void 0 : _d.hasUpstream)) {
-                notification_1.notifications.show({
-                    title: 'Nothing to push',
-                    message: 'Your branch is up to date with remote',
-                    type: 'info',
-                    duration: 3000
-                });
-                return;
+                console.log('[SCM] Branch is up to date, opening Smart Push dialog for custom operations');
+                customModeMessage = '⚠️ Your branch is up to date. Showing custom push options only.';
             }
-            // Show loading notification
-            const pushMessage = !((_e = this.gitStatus) === null || _e === void 0 ? void 0 : _e.hasUpstream) ?
-                `Publishing branch ${branch} to remote...` :
-                `Pushing ${aheadCount} commit(s) to remote...`;
-            console.log('[SCM] Showing push notification:', pushMessage);
-            const notificationId = notification_1.notifications.show({
-                title: !((_f = this.gitStatus) === null || _f === void 0 ? void 0 : _f.hasUpstream) ? 'Publishing Branch' : 'Git Push',
-                message: pushMessage,
-                type: 'loading',
-                duration: 0 // Persistent until updated
-            });
             try {
-                console.log('[SCM] About to call gitAPI.push()');
-                // Show progress with regular updates
-                let progressInterval = setInterval(() => {
-                    const currentMessage = document.querySelector('.notification-message');
-                    if (currentMessage && currentMessage.textContent) {
-                        const dots = (currentMessage.textContent.match(/\./g) || []).length;
-                        if (dots < 3) {
-                            currentMessage.textContent += '.';
-                        }
-                        else {
-                            currentMessage.textContent = currentMessage.textContent.replace(/\.+$/, '');
+                // Get repository stats
+                console.log('[SCM] Getting repository stats...');
+                const stats = yield window.gitAPI.getRepoStats();
+                console.log('[SCM] Repository stats:', JSON.stringify(stats, null, 2));
+                console.log('[SCM] Push size from stats:', stats.pushSize, 'Push size MB:', stats.pushSizeMB);
+                // Analyze and get strategy recommendations
+                const analysis = git_push_strategy_1.GitPushStrategyAnalyzer.analyzeRepository(stats, this.gitStatus);
+                console.log('[SCM] Analysis result:', analysis);
+                // Override analysis if nothing to push
+                if (aheadCount === 0) {
+                    // Keep the recommendation but update the reasoning
+                    analysis.reasoning = ['No commits to push', 'Use Custom Command for special operations like cross-branch pushing'];
+                    analysis.commitCount = 0;
+                    console.log('[SCM] Overriding analysis for 0 commits ahead scenario');
+                }
+                // Get intelligent recommendation (simulated AI analysis for safety)
+                // This uses the same logic the consensus AI would use, but doesn't interfere
+                // with the actual consensus engine or AI Helpers
+                console.log('[SCM] Getting intelligent strategy recommendation...');
+                const aiAdvice = yield git_consensus_advisor_1.GitConsensusAdvisor.getStrategyAdvice(stats, this.gitStatus);
+                if (aiAdvice) {
+                    console.log('[SCM] Intelligent recommendation:', aiAdvice);
+                }
+                // Get available strategies
+                let strategies = git_push_strategy_1.GitPushStrategyAnalyzer.getPushStrategies(analysis, this.gitStatus);
+                // If we have AI advice, enhance the recommendation message
+                if (aiAdvice) {
+                    // Find the strategy that matches the AI recommendation
+                    const recommendedIndex = strategies.findIndex(s => s.label.toLowerCase().includes(aiAdvice.recommendedStrategy.toLowerCase().split(' ')[0]));
+                    if (recommendedIndex >= 0) {
+                        // Clear all other recommendations
+                        strategies.forEach(s => s.recommended = false);
+                        // Mark the AI-recommended strategy
+                        strategies[recommendedIndex].recommended = true;
+                        // Add AI reasoning to the description
+                        const originalDesc = strategies[recommendedIndex].description;
+                        strategies[recommendedIndex].description = `${originalDesc}\n\n🤖 AI Analysis: ${aiAdvice.reasoning}`;
+                        // Add risks if provided
+                        if (aiAdvice.risks && aiAdvice.risks.length > 0) {
+                            strategies[recommendedIndex].cons = [
+                                ...(strategies[recommendedIndex].cons || []),
+                                ...aiAdvice.risks
+                            ];
                         }
                     }
-                }, 500);
-                // Add timeout for push operation - 30 seconds
-                const pushPromise = window.gitAPI.push();
-                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Push operation timed out after 30 seconds')), 30000));
-                try {
-                    yield Promise.race([pushPromise, timeoutPromise]);
-                    clearInterval(progressInterval);
-                    console.log('[SCM] Push completed, refreshing status...');
-                    yield this.refresh();
-                    console.log('[SCM] Status refreshed, new ahead count:', (_g = this.gitStatus) === null || _g === void 0 ? void 0 : _g.ahead);
-                    // Update to success notification
-                    const successMessage = !((_h = this.gitStatus) === null || _h === void 0 ? void 0 : _h.hasUpstream) ?
-                        `Successfully published ${branch} to remote` :
-                        `Successfully pushed ${aheadCount} commit(s) to ${branch}`;
-                    notification_1.notifications.update(notificationId, {
-                        title: 'Push Successful',
-                        message: successMessage,
-                        type: 'success',
-                        duration: 3000
+                }
+                console.log('[SCM] Available strategies:', strategies);
+                // Create explanation text
+                let explanation = '';
+                if (aheadCount === 0) {
+                    explanation = customModeMessage || '⚠️ No commits to push. Use Custom Command to push to a different branch or force operations.';
+                }
+                else if (aiAdvice) {
+                    explanation = `🤖 Intelligent Analysis: ${aiAdvice.reasoning}`;
+                }
+                else {
+                    explanation = `Repository: ${analysis.totalSize} | ${analysis.commitCount} commits | ${analysis.recommendation}`;
+                }
+                // Show strategy selection dialog
+                const selectedStrategy = yield git_push_dialog_1.GitPushDialog.show(analysis, strategies, explanation);
+                if (!selectedStrategy) {
+                    console.log('[SCM] User cancelled strategy selection');
+                    return;
+                }
+                console.log('[SCM] User selected strategy:', selectedStrategy);
+                // Execute the selected strategy  
+                const result = yield git_push_executor_1.GitPushExecutor.execute(selectedStrategy, analysis, window.gitAPI, this.gitStatus);
+                console.log('[SCM] Execution result:', result);
+                // Show success notification
+                if (result.success) {
+                    notification_1.notifications.show({
+                        title: '✅ Push Successful',
+                        message: result.message,
+                        type: 'info',
+                        duration: 5000
                     });
                 }
-                catch (innerError) {
-                    clearInterval(progressInterval);
-                    throw innerError;
+                else {
+                    notification_1.notifications.show({
+                        title: '⚠️ Push Partially Successful',
+                        message: result.message,
+                        type: 'warning',
+                        duration: 0 // Keep visible until dismissed
+                    });
                 }
+                // Simply recreate the entire panel after push
+                console.log('[SCM] Push completed, recreating panel...');
+                // Small delay to ensure Git and remote are updated
+                yield new Promise(resolve => setTimeout(resolve, 1000));
+                // Recreate the entire panel with fresh data
+                yield this.recreatePanel();
             }
             catch (error) {
-                console.error('[SCM] Push failed:', error);
-                notification_1.notifications.update(notificationId, {
-                    title: 'Push Failed',
-                    message: (error === null || error === void 0 ? void 0 : error.message) || 'An error occurred while pushing',
+                console.error('[SCM] Smart push failed:', error);
+                // Parse the error to get structured information
+                const errorInfo = git_error_handler_1.GitErrorHandler.parseError(error);
+                // Show error notification
+                notification_1.notifications.show({
+                    title: errorInfo.title,
+                    message: errorInfo.message,
                     type: 'error',
-                    duration: 5000
+                    duration: errorInfo.type === 'size-limit' ? 0 : 5000
                 });
+                // Show action buttons for errors with actions
+                if (errorInfo.actions && errorInfo.actions.length > 0) {
+                    this.showErrorActions(errorInfo, '');
+                }
             }
         });
     }
     pull() {
-        var _a, _b;
+        var _a, _b, _c;
         return __awaiter(this, void 0, void 0, function* () {
             console.log('[SCM] Pull button clicked');
+            // Check if branch has upstream
+            if (!((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.hasUpstream)) {
+                notification_1.notifications.show({
+                    title: 'No upstream branch',
+                    message: 'This branch has no upstream branch set. Push first to create it.',
+                    type: 'warning',
+                    duration: 4000
+                });
+                return;
+            }
             // Check if there's anything to pull
-            if (((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.behind) === 0) {
+            if (((_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.behind) === 0) {
                 notification_1.notifications.show({
                     title: 'Already up to date',
                     message: 'No changes to pull from remote',
@@ -702,7 +943,7 @@ class VSCodeSCMView {
             }
             const notificationId = notification_1.notifications.show({
                 title: 'Git Pull',
-                message: `Pulling ${((_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.behind) || ''} commit(s) from remote...`,
+                message: `Pulling ${((_c = this.gitStatus) === null || _c === void 0 ? void 0 : _c.behind) || ''} commit(s) from remote...`,
                 type: 'loading',
                 duration: 0
             });
@@ -728,13 +969,31 @@ class VSCodeSCMView {
         });
     }
     sync() {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e;
         return __awaiter(this, void 0, void 0, function* () {
             console.log('[SCM] Sync button clicked');
             const branch = ((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.branch) || 'current branch';
             const ahead = ((_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.ahead) || 0;
             const behind = ((_c = this.gitStatus) === null || _c === void 0 ? void 0 : _c.behind) || 0;
-            console.log('[SCM] Sync status - branch:', branch, 'ahead:', ahead, 'behind:', behind);
+            console.log('[SCM] Sync status - branch:', branch, 'ahead:', ahead, 'behind:', behind, 'hasUpstream:', (_d = this.gitStatus) === null || _d === void 0 ? void 0 : _d.hasUpstream);
+            // Check if branch has upstream
+            if (!((_e = this.gitStatus) === null || _e === void 0 ? void 0 : _e.hasUpstream)) {
+                // If we have commits to push, do push to create upstream
+                if (ahead > 0) {
+                    console.log('[SCM] No upstream, but have commits to push - will push to create upstream');
+                    yield this.push();
+                    return;
+                }
+                else {
+                    notification_1.notifications.show({
+                        title: 'No upstream branch',
+                        message: 'This branch has no upstream branch set. Make a commit and push to create it.',
+                        type: 'warning',
+                        duration: 4000
+                    });
+                    return;
+                }
+            }
             // If nothing to sync
             if (ahead === 0 && behind === 0) {
                 notification_1.notifications.show({
@@ -786,6 +1045,247 @@ class VSCodeSCMView {
                 notification_1.notifications.update(notificationId, {
                     title: 'Sync Failed',
                     message: (error === null || error === void 0 ? void 0 : error.message) || 'An error occurred during sync',
+                    type: 'error',
+                    duration: 5000
+                });
+            }
+        });
+    }
+    pullAndPush() {
+        var _a, _b;
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log('[SCM] Pull and push requested from behind badge click');
+            // First fetch to ensure we have latest
+            try {
+                yield window.gitAPI.fetch();
+                console.log('[SCM] Fetch completed');
+            }
+            catch (error) {
+                console.log('[SCM] Fetch failed, continuing anyway:', error);
+            }
+            // Refresh to get latest status
+            yield this.refresh();
+            // If still behind, pull first
+            if ((((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.behind) || 0) > 0) {
+                try {
+                    const notificationId = notification_1.notifications.show({
+                        title: 'Syncing with remote',
+                        message: `Pulling ${this.gitStatus.behind} commits from remote...`,
+                        type: 'info',
+                        duration: 0
+                    });
+                    yield window.gitAPI.pull();
+                    notification_1.notifications.update(notificationId, {
+                        title: 'Pull completed',
+                        message: `Successfully pulled ${this.gitStatus.behind} commits`,
+                        type: 'success',
+                        duration: 3000
+                    });
+                    // Refresh status after pull
+                    yield this.refresh();
+                }
+                catch (error) {
+                    console.error('[SCM] Pull failed:', error);
+                    notification_1.notifications.show({
+                        title: 'Pull failed',
+                        message: (error === null || error === void 0 ? void 0 : error.message) || 'Failed to pull from remote',
+                        type: 'error',
+                        duration: 5000
+                    });
+                    return;
+                }
+            }
+            // Now check if we have anything to push
+            if ((((_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.ahead) || 0) > 0) {
+                // Open push dialog
+                yield this.push();
+            }
+            else {
+                notification_1.notifications.show({
+                    title: 'Up to date',
+                    message: 'Your branch is now synchronized with remote',
+                    type: 'success',
+                    duration: 3000
+                });
+            }
+        });
+    }
+    recreatePanel() {
+        var _a, _b;
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log('[SCM] Recreating entire Source Control panel...');
+            // Clear git graph view reference before clearing DOM
+            if (this.gitGraphView) {
+                this.gitGraphView.destroy();
+                this.gitGraphView = null;
+            }
+            // Clear and recreate the entire panel
+            const container = this.container;
+            container.innerHTML = '';
+            // Get fresh status
+            this.gitStatus = yield window.gitAPI.getStatus();
+            console.log('[SCM] Fresh status for recreated panel - ahead:', (_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.ahead, 'behind:', (_b = this.gitStatus) === null || _b === void 0 ? void 0 : _b.behind);
+            // Render fresh
+            this.render();
+            console.log('[SCM] Panel recreated successfully');
+        });
+    }
+    showBranchSwitcher() {
+        var _a;
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log('[SCM] Opening branch switcher');
+            try {
+                // Get list of branches
+                const branchData = yield window.gitAPI.getBranches();
+                console.log('[SCM] Available branches:', branchData);
+                // Handle both array format and object format
+                const branches = Array.isArray(branchData) ? branchData : (branchData.all || []);
+                if (!branches || branches.length === 0) {
+                    alert('No branches available');
+                    return;
+                }
+                // Create modal dialog for branch selection
+                const modal = document.createElement('div');
+                modal.className = 'git-branch-modal';
+                modal.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: var(--vscode-dropdown-background, #252526);
+        border: 1px solid var(--vscode-dropdown-border, #454545);
+        border-radius: 4px;
+        padding: 16px;
+        z-index: 10000;
+        min-width: 300px;
+        max-width: 500px;
+        max-height: 400px;
+        overflow-y: auto;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      `;
+                // Add backdrop
+                const backdrop = document.createElement('div');
+                backdrop.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+      `;
+                // Build branch list HTML
+                const currentBranch = ((_a = this.gitStatus) === null || _a === void 0 ? void 0 : _a.branch) || '';
+                let branchListHtml = '<h3 style="margin: 0 0 12px 0; color: var(--vscode-foreground);">Switch Branch</h3>';
+                branchListHtml += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+                for (const branch of branches) {
+                    // Handle both string and object format
+                    const branchName = typeof branch === 'string' ? branch : branch.name;
+                    const isCurrentBranch = (typeof branch === 'object' && branch.current) ||
+                        branchName === currentBranch ||
+                        branchName === `* ${currentBranch}`;
+                    const cleanBranchName = branchName.replace('* ', '').trim();
+                    branchListHtml += `
+          <button 
+            class="branch-item" 
+            style="
+              padding: 8px 12px;
+              text-align: left;
+              background: ${isCurrentBranch ? 'var(--vscode-list-activeSelectionBackground, #094771)' : 'transparent'};
+              color: var(--vscode-foreground);
+              border: 1px solid ${isCurrentBranch ? 'var(--vscode-list-activeSelectionBorder, #007acc)' : 'transparent'};
+              border-radius: 4px;
+              cursor: ${isCurrentBranch ? 'default' : 'pointer'};
+              font-family: var(--vscode-font-family);
+              font-size: 13px;
+              ${!isCurrentBranch ? 'hover: background: var(--vscode-list-hoverBackground, #2a2d2e);' : ''}
+            "
+            ${isCurrentBranch ? 'disabled' : `onclick="window.scmView?.switchToBranch?.('${cleanBranchName}')"`}
+          >
+            ${isCurrentBranch ? '✓ ' : ''}${cleanBranchName}
+            ${isCurrentBranch ? ' (current)' : ''}
+          </button>
+        `;
+                }
+                branchListHtml += '</div>';
+                branchListHtml += `
+        <div style="margin-top: 16px; text-align: right;">
+          <button 
+            style="
+              padding: 6px 14px;
+              background: var(--vscode-button-secondaryBackground, #3a3d41);
+              color: var(--vscode-button-secondaryForeground);
+              border: 1px solid var(--vscode-button-border, transparent);
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 13px;
+            "
+            onclick="window.scmView?.closeBranchSwitcher?.()"
+          >
+            Cancel
+          </button>
+        </div>
+      `;
+                modal.innerHTML = branchListHtml;
+                // Add to DOM
+                document.body.appendChild(backdrop);
+                document.body.appendChild(modal);
+                // Store references for cleanup
+                window.branchSwitcherModal = modal;
+                window.branchSwitcherBackdrop = backdrop;
+                // Close on backdrop click
+                backdrop.onclick = () => this.closeBranchSwitcher();
+            }
+            catch (error) {
+                console.error('[SCM] Failed to get branches:', error);
+                alert('Failed to get branch list');
+            }
+        });
+    }
+    closeBranchSwitcher() {
+        const modal = window.branchSwitcherModal;
+        const backdrop = window.branchSwitcherBackdrop;
+        if (modal)
+            modal.remove();
+        if (backdrop)
+            backdrop.remove();
+        delete window.branchSwitcherModal;
+        delete window.branchSwitcherBackdrop;
+    }
+    switchToBranch(branchName) {
+        return __awaiter(this, void 0, void 0, function* () {
+            console.log('[SCM] Switching to branch:', branchName);
+            try {
+                // Close the modal first
+                this.closeBranchSwitcher();
+                // Show progress notification
+                const notificationId = notification_1.notifications.show({
+                    title: 'Switching Branch',
+                    message: `Switching to branch: ${branchName}...`,
+                    type: 'info',
+                    duration: 0
+                });
+                // Switch branch
+                yield window.gitAPI.switchBranch(branchName);
+                // Update notification
+                notification_1.notifications.update(notificationId, {
+                    title: 'Branch Switched',
+                    message: `Successfully switched to branch: ${branchName}`,
+                    type: 'success',
+                    duration: 3000
+                });
+                // Refresh the Git panel
+                yield this.refresh();
+                // Also refresh file explorer to update decorations
+                if (window.fileExplorer) {
+                    yield window.fileExplorer.refreshGitStatus();
+                }
+            }
+            catch (error) {
+                console.error('[SCM] Failed to switch branch:', error);
+                notification_1.notifications.show({
+                    title: 'Branch Switch Failed',
+                    message: (error === null || error === void 0 ? void 0 : error.message) || 'Failed to switch branch',
                     type: 'error',
                     duration: 5000
                 });
@@ -1056,6 +1556,88 @@ class VSCodeSCMView {
       }
     `;
         document.head.appendChild(style);
+    }
+    /**
+     * Show error actions dialog
+     */
+    showErrorActions(errorInfo, notificationId) {
+        var _a;
+        // Create action buttons container
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'error-actions-container';
+        actionsContainer.style.cssText = `
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    `;
+        // Add each action as a button
+        (_a = errorInfo.actions) === null || _a === void 0 ? void 0 : _a.forEach(action => {
+            const button = document.createElement('button');
+            button.className = action.primary ? 'action-button-primary' : 'action-button';
+            button.textContent = action.label;
+            button.style.cssText = `
+        padding: 6px 12px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-size: 12px;
+        background: ${action.primary ? 'var(--vscode-button-background, #0e639c)' : 'var(--vscode-button-secondaryBackground, #3a3d41)'};
+        color: ${action.primary ? 'var(--vscode-button-foreground, #fff)' : 'var(--vscode-button-secondaryForeground, #ccc)'};
+      `;
+            button.addEventListener('click', () => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    yield action.action();
+                    // Close notification if action succeeds
+                    if (notificationId) {
+                        notification_1.notifications.hide(notificationId);
+                    }
+                }
+                catch (error) {
+                    console.error('Error executing action:', error);
+                }
+            }));
+            actionsContainer.appendChild(button);
+        });
+        // Append to the last notification
+        setTimeout(() => {
+            const lastNotification = document.querySelector('.notification-item:last-child .notification-content');
+            if (lastNotification && !lastNotification.querySelector('.error-actions-container')) {
+                lastNotification.appendChild(actionsContainer);
+            }
+        }, 100);
+    }
+    /**
+     * Push using chunked strategy for large repositories
+     */
+    pushWithChunks() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const notificationId = notification_1.notifications.show({
+                title: 'Chunked Push',
+                message: 'This feature needs to be implemented through the main process...',
+                type: 'info',
+                duration: 5000
+            });
+            // TODO: Implement through IPC to main process
+            // For now, show the solutions dialog
+            git_error_handler_1.GitErrorHandler.showSizeLimitSolutions();
+        });
+    }
+    /**
+     * Analyze repository for size issues
+     */
+    analyzeRepository() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const notificationId = notification_1.notifications.show({
+                title: 'Repository Analysis',
+                message: 'This feature needs to be implemented through the main process...',
+                type: 'info',
+                duration: 5000
+            });
+            // TODO: Implement through IPC to main process
+            // For now, show the solutions dialog
+            git_error_handler_1.GitErrorHandler.showSizeLimitSolutions();
+        });
     }
     destroy() {
         if (this.refreshInterval) {

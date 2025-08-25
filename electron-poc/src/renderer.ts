@@ -3892,6 +3892,7 @@ setTimeout(() => {
         
         // Listen for AI tool launch events from main process
         if (window.electronAPI.onLaunchAIToolTerminal) {
+            console.log('✅ [Renderer] Setting up onLaunchAIToolTerminal listener');
             window.electronAPI.onLaunchAIToolTerminal((data: {
                 toolId: string;
                 toolName: string;
@@ -3899,18 +3900,35 @@ setTimeout(() => {
                 cwd: string;
                 env?: Record<string, string>;  // Optional environment variables
             }) => {
-                console.log('📦 Launching AI tool terminal:', data);
+                console.log('📦 [Renderer] Received launch-ai-tool-terminal event:', data);
+                console.log('📦 [Renderer] Tool ID:', data.toolId);
+                console.log('📦 [Renderer] Command:', data.command);
+                console.log('📦 [Renderer] CWD:', data.cwd);
+                console.log('📦 [Renderer] Has env vars:', !!data.env);
+                
                 // Get the TTYDTerminalPanel instance and create a terminal
                 const terminal = (window as any).isolatedTerminal;
+                console.log('📦 [Renderer] Terminal panel instance exists:', !!terminal);
+                
                 if (terminal) {
+                    console.log('📦 [Renderer] Current opened folder:', window.currentOpenedFolder);
+                    console.log('📦 [Renderer] Calling createTerminalTab with:', {
+                        toolId: data.toolId,
+                        command: data.command,
+                        env: data.env
+                    });
+                    
                     // Note: The global folder context is already updated by the main process
                     // via the 'menu-open-folder' event before this terminal launch event
-                    // Call createTerminalTab with toolId, command, and optional env
+                    // Call createTerminalTab with correct parameters: toolId, command, env
+                    // The cwd is already set globally via window.currentOpenedFolder
                     terminal.createTerminalTab(data.toolId, data.command, data.env);
                 } else {
-                    console.error('[Renderer] Terminal panel not initialized');
+                    console.error('❌ [Renderer] Terminal panel not initialized! isolatedTerminal is null');
                 }
             });
+        } else {
+            console.warn('⚠️ [Renderer] onLaunchAIToolTerminal not available in electronAPI');
         }
         
         // REMOVED resize handler for isolated terminal panel - now using auto-flex layout

@@ -198,6 +198,13 @@ class FileExplorer {
             this.render();
         });
     }
+    refreshGitStatus() {
+        return __awaiter(this, void 0, void 0, function* () {
+            // Refresh only Git status without reloading the entire tree
+            // This is more efficient than a full refresh when files are being edited
+            this.render();
+        });
+    }
     setFileTree(tree) {
         this.fileTree = tree;
         this.updateVisibleNodes();

@@ -29,6 +29,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
+const git_chunked_push_main_1 = require("./git-chunked-push-main");
 // Set the app name immediately
 electron_1.app.setName('Hive Consensus');
 const path = __importStar(require("path"));
@@ -41,16 +42,20 @@ const git_manager_v2_1 = require("./git-manager-v2");
 const EnhancedGitManager_1 = require("./git/EnhancedGitManager");
 const file_system_1 = require("./file-system");
 const ProcessManager_1 = require("./utils/ProcessManager");
-const PidTracker_1 = require("./utils/PidTracker");
 const detector_1 = require("./main/cli-tools/detector");
 const cli_tools_1 = require("./shared/types/cli-tools");
 // Removed import - functions are now defined locally
 const SafeLogger_1 = require("./utils/SafeLogger");
 const terminal_ipc_handlers_1 = require("./terminal-ipc-handlers");
+const StartupOrchestrator_1 = require("./startup/StartupOrchestrator");
+const AIToolsDatabase_1 = require("./services/AIToolsDatabase");
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
     electron_1.app.quit();
 }
+// Single source of truth for all process and port management
+// Initialize early so it's available for all components
+const processManager = new ProcessManager_1.ProcessManager();
 let db = null;
 let mainWindow = null;
 // Initialize SQLite database connection - use the existing hive-ai.db
@@ -144,16 +149,18 @@ let fileSystemManager = null;
 const initFileSystemManager = () => {
     fileSystemManager = new file_system_1.FileSystemManager();
 };
-const createWindow = () => {
+const createWindow = (show = true) => {
     // Don't create duplicate windows
     if (mainWindow && !mainWindow.isDestroyed()) {
         SafeLogger_1.logger.info('[Main] Window already exists, focusing it');
-        mainWindow.focus();
-        return;
+        if (show)
+            mainWindow.focus();
+        return mainWindow;
     }
     // Create the browser window.
     mainWindow = new electron_1.BrowserWindow({
         height: 600,
+        show: false,
         width: 800,
         minWidth: 700,
         minHeight: 400,
@@ -171,11 +178,17 @@ const createWindow = () => {
     mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
     // Open the DevTools.
     // mainWindow.webContents.openDevTools(); // Disabled to prevent warning overlay
-    // Register terminal handlers (needs mainWindow reference)
+    // Register terminal handlers with the shared ProcessManager
     // This is safe to call multiple times as it updates the window reference
-    (0, terminal_ipc_handlers_1.registerTerminalHandlers)(mainWindow);
+    (0, terminal_ipc_handlers_1.registerTerminalHandlers)(mainWindow, processManager);
     // Create application menu
     createApplicationMenu();
+    // Show window if requested
+    if (show && mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+    }
+    return mainWindow;
 };
 const registerGitHandlers = () => {
     // Git IPC handlers
@@ -238,6 +251,12 @@ const registerGitHandlers = () => {
         }
         return yield gitManager.discard(files);
     }));
+    electron_1.ipcMain.handle('git-clean', (_, files) => __awaiter(void 0, void 0, void 0, function* () {
+        if (!gitManager) {
+            throw new Error('No folder open');
+        }
+        return yield gitManager.clean(files);
+    }));
     electron_1.ipcMain.handle('git-push', () => __awaiter(void 0, void 0, void 0, function* () {
         SafeLogger_1.logger.info('[Main] git-push IPC called');
         if (!gitManager) {
@@ -260,6 +279,258 @@ const registerGitHandlers = () => {
         }
         catch (error) {
             SafeLogger_1.logger.error('[Main] git-push failed:', error);
+            throw error;
+        }
+    }));
+    // Chunked push for large repositories
+    electron_1.ipcMain.handle('git-push-chunked', () => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info('[Main] git-push-chunked IPC called');
+        if (!gitManager) {
+            throw new Error('No folder open');
+        }
+        try {
+            // Get the repository path from the git manager
+            let repoPath;
+            if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+                repoPath = gitManager.getRepoPath();
+            }
+            else {
+                // Fallback to accessing the property directly
+                repoPath = gitManager.repoPath;
+            }
+            SafeLogger_1.logger.info('[Main] Using repository path for chunked push:', repoPath);
+            const result = yield git_chunked_push_main_1.GitChunkedPushMain.pushInBatches(repoPath);
+            SafeLogger_1.logger.info('[Main] git-push-chunked result:', result);
+            if (!result.success) {
+                throw new Error(result.message);
+            }
+            return result.message;
+        }
+        catch (error) {
+            SafeLogger_1.logger.error('[Main] git-push-chunked failed:', error);
+            throw error;
+        }
+    }));
+    // Get repository statistics
+    electron_1.ipcMain.handle('git-repo-stats', () => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info('[Main] git-repo-stats IPC called');
+        if (!gitManager) {
+            throw new Error('No folder open');
+        }
+        try {
+            // Get the repository path from the git manager
+            let repoPath;
+            if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+                repoPath = gitManager.getRepoPath();
+            }
+            else {
+                // Fallback to accessing the property directly
+                repoPath = gitManager.repoPath;
+            }
+            // Get current git status to know how many commits to push
+            const gitStatus = yield gitManager.getStatus();
+            SafeLogger_1.logger.info('[Main] Using repository path for stats:', repoPath);
+            const stats = yield git_chunked_push_main_1.GitChunkedPushMain.getRepoStats(repoPath, gitStatus);
+            SafeLogger_1.logger.info('[Main] Repository stats:', stats);
+            return stats;
+        }
+        catch (error) {
+            SafeLogger_1.logger.error('[Main] git-repo-stats failed:', error);
+            throw error;
+        }
+    }));
+    // Push with options support
+    electron_1.ipcMain.handle('git-push-with-options', (_event, options) => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info('[Main] git-push-with-options IPC called with:', options);
+        if (!gitManager) {
+            throw new Error('No folder open');
+        }
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            // Get the repository path
+            let repoPath;
+            if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+                repoPath = gitManager.getRepoPath();
+            }
+            else {
+                repoPath = gitManager.repoPath;
+            }
+            // Build git push command with options
+            let command;
+            // Check if we have a custom command FIRST
+            if (options.customCommand) {
+                command = options.customCommand;
+                // Custom command should already have all necessary options
+                SafeLogger_1.logger.info('[Main] Using custom command:', command);
+            }
+            else {
+                // Build standard git push command
+                command = 'git push';
+                if (options.forceWithLease) {
+                    command += ' --force-with-lease';
+                }
+                if (options.includeTags) {
+                    command += ' --tags';
+                }
+                if (options.setUpstream) {
+                    // Get current branch name
+                    const status = yield gitManager.getStatus();
+                    const branch = status.current || 'main';
+                    command += ` -u origin ${branch}`;
+                }
+                if (options.atomic) {
+                    command += ' --atomic';
+                }
+                if (options.signPush) {
+                    command += ' --signed';
+                }
+                if (options.thinPack) {
+                    command += ' --thin';
+                }
+                if (options.commitLimit) {
+                    // Push only last N commits
+                    const status = yield gitManager.getStatus();
+                    const branch = status.current || 'main';
+                    command = `git push origin HEAD~${options.commitLimit}:${branch}`;
+                    // Add other options if commit limit is set
+                    if (options.forceWithLease)
+                        command += ' --force-with-lease';
+                    if (options.atomic)
+                        command += ' --atomic';
+                }
+            }
+            SafeLogger_1.logger.info('[Main] Executing push command:', command);
+            const result = yield execAsync(command, { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 });
+            SafeLogger_1.logger.info('[Main] Push with options completed successfully');
+            return result.stdout || 'Push completed successfully';
+        }
+        catch (error) {
+            SafeLogger_1.logger.error('[Main] git-push-with-options failed:', error);
+            throw error;
+        }
+    }));
+    // Push with --force-with-lease
+    electron_1.ipcMain.handle('git-push-force-lease', () => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info('[Main] git-push-force-lease IPC called');
+        if (!gitManager) {
+            throw new Error('No folder open');
+        }
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            let repoPath;
+            if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+                repoPath = gitManager.getRepoPath();
+            }
+            else {
+                repoPath = gitManager.repoPath;
+            }
+            const result = yield execAsync('git push --force-with-lease', {
+                cwd: repoPath,
+                maxBuffer: 10 * 1024 * 1024
+            });
+            SafeLogger_1.logger.info('[Main] Force with lease push completed successfully');
+            return result.stdout || 'Force push with lease completed successfully';
+        }
+        catch (error) {
+            SafeLogger_1.logger.error('[Main] git-push-force-lease failed:', error);
+            throw error;
+        }
+    }));
+    // Push custom command
+    electron_1.ipcMain.handle('git-push-custom', (_event, command) => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info('[Main] git-push-custom IPC called with:', command);
+        if (!gitManager) {
+            throw new Error('No folder open');
+        }
+        // Security check - ensure command starts with "git push"
+        if (!command.trim().startsWith('git push')) {
+            throw new Error('Custom command must start with "git push" for security');
+        }
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            let repoPath;
+            if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+                repoPath = gitManager.getRepoPath();
+            }
+            else {
+                repoPath = gitManager.repoPath;
+            }
+            SafeLogger_1.logger.info('[Main] Executing custom push command:', command);
+            const result = yield execAsync(command, {
+                cwd: repoPath,
+                maxBuffer: 10 * 1024 * 1024,
+                timeout: 600000 // 10 minute timeout for large pushes
+            });
+            SafeLogger_1.logger.info('[Main] Custom push completed successfully');
+            return result.stdout || 'Custom push completed successfully';
+        }
+        catch (error) {
+            SafeLogger_1.logger.error('[Main] git-push-custom failed:', error);
+            throw error;
+        }
+    }));
+    // Push dry run
+    electron_1.ipcMain.handle('git-push-dry-run', (_event, options) => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info('[Main] git-push-dry-run IPC called with:', options);
+        if (!gitManager) {
+            throw new Error('No folder open');
+        }
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            let repoPath;
+            if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+                repoPath = gitManager.getRepoPath();
+            }
+            else {
+                repoPath = gitManager.repoPath;
+            }
+            let command;
+            // Check if we have a custom command
+            if (options === null || options === void 0 ? void 0 : options.customCommand) {
+                command = options.customCommand;
+                // Add --dry-run if not already present
+                if (!command.includes('--dry-run')) {
+                    command += ' --dry-run';
+                }
+                // Add --porcelain for consistent output
+                if (!command.includes('--porcelain')) {
+                    command += ' --porcelain';
+                }
+            }
+            else {
+                // Build command with --dry-run
+                command = 'git push --dry-run --porcelain';
+                if (options === null || options === void 0 ? void 0 : options.forceWithLease) {
+                    command += ' --force-with-lease';
+                }
+                if (options === null || options === void 0 ? void 0 : options.includeTags) {
+                    command += ' --tags';
+                }
+                if (options === null || options === void 0 ? void 0 : options.setUpstream) {
+                    const status = yield gitManager.getStatus();
+                    const branch = status.current || 'main';
+                    command += ` -u origin ${branch}`;
+                }
+            }
+            SafeLogger_1.logger.info('[Main] Executing dry run:', command);
+            const result = yield execAsync(command, { cwd: repoPath });
+            SafeLogger_1.logger.info('[Main] Dry run completed');
+            return result.stdout || 'Dry run completed - no changes made';
+        }
+        catch (error) {
+            // Dry run often returns non-zero exit code, but that's OK
+            if (error.stdout) {
+                return error.stdout;
+            }
+            SafeLogger_1.logger.error('[Main] git-push-dry-run failed:', error);
             throw error;
         }
     }));
@@ -457,6 +728,16 @@ const registerDialogHandlers = () => {
     electron_1.ipcMain.handle('show-message-box', (_, options) => __awaiter(void 0, void 0, void 0, function* () {
         const result = yield electron_1.dialog.showMessageBox(mainWindow, options);
         return result;
+    }));
+    electron_1.ipcMain.handle('open-external', (_, url) => __awaiter(void 0, void 0, void 0, function* () {
+        try {
+            yield electron_1.shell.openExternal(url);
+            return true;
+        }
+        catch (error) {
+            console.error('Failed to open external URL:', error);
+            return false;
+        }
     }));
     electron_1.ipcMain.handle('show-input-dialog', (_, title, defaultValue) => __awaiter(void 0, void 0, void 0, function* () {
         // For now, use a simple prompt-like dialog
@@ -677,6 +958,17 @@ const createApplicationMenu = () => {
                 },
                 { type: 'separator' },
                 {
+                    label: 'Auto Save',
+                    type: 'checkbox',
+                    checked: false,
+                    click: (menuItem) => {
+                        if (mainWindow) {
+                            mainWindow.webContents.send('menu-toggle-auto-save', menuItem.checked);
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
                     label: 'Close Tab',
                     accelerator: 'CmdOrCtrl+W',
                     click: () => {
@@ -685,9 +977,17 @@ const createApplicationMenu = () => {
                         }
                     }
                 },
+                {
+                    label: 'Close All Tabs',
+                    click: () => {
+                        if (mainWindow) {
+                            mainWindow.webContents.send('menu-close-all-tabs');
+                        }
+                    }
+                },
                 { type: 'separator' },
                 {
-                    label: 'Quit',
+                    label: 'Exit',
                     accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
                     click: () => {
                         electron_1.app.quit();
@@ -848,8 +1148,7 @@ const createApplicationMenu = () => {
     electron_1.Menu.setApplicationMenu(menu);
 };
 // ========== MEMORY SERVICE INTEGRATION ==========
-// Memory Service management - uses ProcessManager for production-ready management
-const processManager = new ProcessManager_1.ProcessManager();
+// Memory Service management - uses the shared ProcessManager instance
 let memoryServicePort = 3457;
 let websocketBackendPort = 8765; // Dynamic port for WebSocket backend
 // CLI Tools Manager for AI CLI integration
@@ -2337,16 +2636,33 @@ server.start();
                 selectedPath = result.filePaths[0];
             }
             SafeLogger_1.logger.info(`[Main] Selected folder: ${selectedPath}`);
-            // Import the AI tools database
-            const { AIToolsDatabase } = yield Promise.resolve().then(() => __importStar(require('./services/AIToolsDatabase')));
-            const aiToolsDb = AIToolsDatabase.getInstance();
+            // Get the AI tools database instance
+            SafeLogger_1.logger.info(`[Main] Getting AIToolsDatabase instance...`);
+            let aiToolsDb;
+            try {
+                aiToolsDb = AIToolsDatabase_1.AIToolsDatabase.getInstance();
+                SafeLogger_1.logger.info(`[Main] AIToolsDatabase instance obtained`);
+            }
+            catch (dbError) {
+                SafeLogger_1.logger.error(`[Main] Failed to get AIToolsDatabase instance:`, dbError);
+                SafeLogger_1.logger.error(`[Main] AIToolsDatabase error message:`, dbError === null || dbError === void 0 ? void 0 : dbError.message);
+                SafeLogger_1.logger.error(`[Main] AIToolsDatabase error stack:`, dbError === null || dbError === void 0 ? void 0 : dbError.stack);
+                // Continue without the database - just don't track launches
+                aiToolsDb = null;
+            }
             // Check if tool has been launched in this repository before
-            const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(toolId, selectedPath);
-            SafeLogger_1.logger.info(`[Main] Database check - Tool: ${toolId}, Path: ${selectedPath}, Previously launched: ${hasBeenLaunched}`);
-            // Get launch info for debugging
-            const launchInfo = aiToolsDb.getLaunchInfo(toolId, selectedPath);
-            if (launchInfo) {
-                SafeLogger_1.logger.info(`[Main] Previous launch info: Count: ${launchInfo.launch_count}, Last: ${launchInfo.last_launched_at}`);
+            let hasBeenLaunched = false;
+            if (aiToolsDb) {
+                hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(toolId, selectedPath);
+                SafeLogger_1.logger.info(`[Main] Database check - Tool: ${toolId}, Path: ${selectedPath}, Previously launched: ${hasBeenLaunched}`);
+                // Get launch info for debugging
+                const launchInfo = aiToolsDb.getLaunchInfo(toolId, selectedPath);
+                if (launchInfo) {
+                    SafeLogger_1.logger.info(`[Main] Previous launch info: Count: ${launchInfo.launch_count}, Last: ${launchInfo.last_launched_at}`);
+                }
+            }
+            else {
+                SafeLogger_1.logger.warn(`[Main] AIToolsDatabase not available, skipping launch tracking`);
             }
             // Determine the command to run
             let command;
@@ -2470,17 +2786,20 @@ server.start();
             }
             SafeLogger_1.logger.info(`[Main] Using command: ${command} (previously launched: ${hasBeenLaunched})`);
             // Record this launch in the database
-            aiToolsDb.recordLaunch(toolId, selectedPath, {
-                context: {
-                    resumeUsed: hasBeenLaunched,
-                    launchTime: new Date().toISOString()
-                }
-            });
+            if (aiToolsDb) {
+                aiToolsDb.recordLaunch(toolId, selectedPath, {
+                    context: {
+                        resumeUsed: hasBeenLaunched,
+                        launchTime: new Date().toISOString()
+                    }
+                });
+            }
             // Send IPC to renderer to create a terminal tab with the tool
             if (mainWindow && !mainWindow.isDestroyed()) {
                 // FIRST: Update the global folder context to the selected path
                 // This ensures Explorer, Source Control, and Status Bar all update
                 SafeLogger_1.logger.info(`[Main] Sending menu-open-folder event for: ${selectedPath}`);
+                SafeLogger_1.logger.info(`[Main] MainWindow exists: ${!!mainWindow}, isDestroyed: ${mainWindow === null || mainWindow === void 0 ? void 0 : mainWindow.isDestroyed()}`);
                 mainWindow.webContents.send('menu-open-folder', selectedPath);
                 // THEN: After a small delay to ensure folder context is set, launch the terminal
                 setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
@@ -2522,13 +2841,39 @@ server.start();
                         }
                     }
                     SafeLogger_1.logger.info(`[Main] Sending launch-ai-tool-terminal event with command: ${command}`);
-                    mainWindow.webContents.send('launch-ai-tool-terminal', {
+                    SafeLogger_1.logger.info(`[Main] Event data:`, {
                         toolId: toolId,
                         toolName: toolName,
                         command: command,
                         cwd: selectedPath,
-                        env: env // Pass environment variables
+                        hasEnv: !!env
                     });
+                    // Check if mainWindow is ready
+                    if (!mainWindow.webContents.isLoading()) {
+                        SafeLogger_1.logger.info(`[Main] Window is ready, sending event now`);
+                        mainWindow.webContents.send('launch-ai-tool-terminal', {
+                            toolId: toolId,
+                            toolName: toolName,
+                            command: command,
+                            cwd: selectedPath,
+                            env: env // Pass environment variables
+                        });
+                        SafeLogger_1.logger.info(`[Main] Event sent successfully`);
+                    }
+                    else {
+                        SafeLogger_1.logger.warn(`[Main] Window is still loading, waiting for ready...`);
+                        mainWindow.webContents.once('did-finish-load', () => {
+                            SafeLogger_1.logger.info(`[Main] Window finished loading, sending event now`);
+                            mainWindow.webContents.send('launch-ai-tool-terminal', {
+                                toolId: toolId,
+                                toolName: toolName,
+                                command: command,
+                                cwd: selectedPath,
+                                env: env // Pass environment variables
+                            });
+                            SafeLogger_1.logger.info(`[Main] Event sent successfully after wait`);
+                        });
+                    }
                 }), 100); // Small delay to ensure folder opens first
             }
             SafeLogger_1.logger.info(`[Main] Completed launch sequence for ${toolId} in ${selectedPath}`);
@@ -2536,7 +2881,9 @@ server.start();
         }
         catch (error) {
             SafeLogger_1.logger.error(`[Main] Failed to launch ${toolId}:`, error);
-            return { success: false, error: error.message };
+            SafeLogger_1.logger.error(`[Main] Error message:`, error === null || error === void 0 ? void 0 : error.message);
+            SafeLogger_1.logger.error(`[Main] Error stack:`, error === null || error === void 0 ? void 0 : error.stack);
+            return { success: false, error: (error === null || error === void 0 ? void 0 : error.message) || String(error) };
         }
     }));
     // TODO: Implement progress events when installation logic is added
@@ -2545,100 +2892,35 @@ server.start();
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 electron_1.app.on('ready', () => __awaiter(void 0, void 0, void 0, function* () {
-    // Clean up any orphaned processes from previous runs
-    yield PidTracker_1.PidTracker.cleanupOrphans();
-    initDatabase();
-    // Initialize ProcessManager with all process configurations
-    initializeProcessManager();
-    // Register Memory Service handlers BEFORE creating window
-    // This ensures they're available when the renderer process starts
-    registerMemoryServiceHandlers();
-    // Register WebSocket backend port handler EARLY to prevent warning
-    // Must be registered before window creation so it's available when renderer starts
-    electron_1.ipcMain.handle('websocket-backend-port', () => __awaiter(void 0, void 0, void 0, function* () {
-        const backendInfo = processManager.getProcessStatus('websocket-backend');
-        const port = (backendInfo === null || backendInfo === void 0 ? void 0 : backendInfo.port) || 8765;
-        SafeLogger_1.logger.info(`[Main] WebSocket backend port requested: ${port}`);
-        return port;
-    }));
-    // Register other IPC handlers once at app startup (not in createWindow)
-    // This prevents duplicate handler registration errors
-    registerGitHandlers();
-    registerFileSystemHandlers();
-    registerDialogHandlers();
-    // Start all processes in PARALLEL for fast startup (2025 best practice)
-    SafeLogger_1.logger.info('[Main] 🚀 Starting all managed processes in parallel...');
-    // Log initial ProcessManager status
-    SafeLogger_1.logger.info('[Main] Initial ProcessManager status:');
-    processManager.logStatus();
-    // Start all services simultaneously - no blocking, no waiting
-    const startupPromises = [];
-    // Start WebSocket Backend (highest priority - contains AI Helpers and Consensus)
-    startupPromises.push(processManager.startProcess('websocket-backend')
-        .then((started) => {
-        if (started) {
-            const backendInfo = processManager.getProcessStatus('websocket-backend');
-            if (backendInfo && backendInfo.port) {
-                websocketBackendPort = backendInfo.port;
-            }
-            SafeLogger_1.logger.info(`[Main] ✅ WebSocket Backend started on port ${websocketBackendPort}`);
-            return { name: 'websocket-backend', success: true };
+    var _a;
+    try {
+        // Use StartupOrchestrator for clean, visual startup
+        const orchestrator = new StartupOrchestrator_1.StartupOrchestrator({
+            initDatabase,
+            initializeProcessManager,
+            registerMemoryServiceHandlers,
+            registerGitHandlers,
+            registerFileSystemHandlers,
+            registerDialogHandlers,
+            registerSimpleCliToolHandlers,
+            processManager
+        });
+        // The orchestrator will handle all initialization and show splash screen
+        const result = yield orchestrator.showSplashAndInitialize(createWindow);
+        if (!result.success) {
+            SafeLogger_1.logger.error('[Main] Startup failed:', result.error);
+            electron_1.dialog.showErrorBox('Startup Failed', `Unable to initialize required services.\n\n${((_a = result.error) === null || _a === void 0 ? void 0 : _a.message) || 'Unknown error'}`);
+            electron_1.app.quit();
+            return;
         }
-        else {
-            SafeLogger_1.logger.error('[Main] ❌ WebSocket Backend failed to start');
-            return { name: 'websocket-backend', success: false };
-        }
-    })
-        .catch((error) => {
-        SafeLogger_1.logger.error('[Main] ❌ WebSocket Backend error:', error.message);
-        return { name: 'websocket-backend', success: false };
-    }));
-    // Start Memory Service in parallel (non-blocking, non-critical)
-    startupPromises.push(processManager.startProcess('memory-service')
-        .then((started) => {
-        if (started) {
-            SafeLogger_1.logger.info('[Main] ✅ Memory Service started successfully');
-            return { name: 'memory-service', success: true };
-        }
-        else {
-            SafeLogger_1.logger.warn('[Main] ⚠️ Memory Service failed (non-critical)');
-            return { name: 'memory-service', success: false };
-        }
-    })
-        .catch((error) => {
-        SafeLogger_1.logger.warn('[Main] ⚠️ Memory Service error (non-critical):', error.message);
-        return { name: 'memory-service', success: false };
-    }));
-    // Wait for all services to complete startup attempts
-    const results = yield Promise.allSettled(startupPromises);
-    // Check critical services only (backend with AI Helpers is critical)
-    let criticalServicesHealthy = true;
-    results.forEach((result) => {
-        if (result.status === 'fulfilled') {
-            const { name, success } = result.value;
-            if (name === 'websocket-backend' && !success) {
-                criticalServicesHealthy = false;
-            }
-        }
-    });
-    // Log final status
-    SafeLogger_1.logger.info('[Main] Final ProcessManager status after parallel startup:');
-    processManager.logStatus();
-    if (!criticalServicesHealthy) {
-        SafeLogger_1.logger.error('[Main] ⚠️ Critical services (WebSocket Backend) failed to start');
+        // Success - app is now running with main window shown
+        SafeLogger_1.logger.info('[Main] ✅ Application started successfully');
     }
-    else {
-        SafeLogger_1.logger.info('[Main] ✅ Critical services started successfully');
+    catch (error) {
+        SafeLogger_1.logger.error('[Main] Unexpected startup error:', error);
+        electron_1.dialog.showErrorBox('Startup Error', `An unexpected error occurred during startup.\n\n${error}`);
+        electron_1.app.quit();
     }
-    // Initialize CLI Tools Manager (commented out to avoid WebSocket issues)
-    // initializeCliToolsManager();
-    // Register our simple CLI tool detection handlers
-    registerSimpleCliToolHandlers();
-    // Don't initialize Git manager on startup - wait until a folder is opened
-    // initGitManager(); 
-    createWindow();
-    // Dialog handlers are now registered in createWindow
-    // registerDialogHandlers();  // Removed - already registered in createWindow
 }));
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
@@ -2929,7 +3211,7 @@ electron_1.ipcMain.handle('settings-load', () => __awaiter(void 0, void 0, void 
     });
 }));
 electron_1.ipcMain.handle('settings-test-keys', (_, { openrouterKey, hiveKey }) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d;
+    var _b, _c, _d, _e;
     const result = { openrouterValid: false, hiveValid: false, licenseInfo: null };
     // Test OpenRouter key
     if (openrouterKey && openrouterKey.startsWith('sk-or-')) {
@@ -2997,10 +3279,10 @@ electron_1.ipcMain.handle('settings-test-keys', (_, { openrouterKey, hiveKey }) 
                         SafeLogger_1.logger.info('D1 validation response:', JSON.stringify(data, null, 2));
                         if (data.valid) {
                             // Parse tier information
-                            const tier = data.tier || ((_a = data.user) === null || _a === void 0 ? void 0 : _a.subscription_tier) || 'free';
-                            const dailyLimit = data.daily_limit || ((_b = data.limits) === null || _b === void 0 ? void 0 : _b.daily) || 10;
-                            const email = data.email || ((_c = data.user) === null || _c === void 0 ? void 0 : _c.email) || '';
-                            const userId = data.user_id || ((_d = data.user) === null || _d === void 0 ? void 0 : _d.id) || '';
+                            const tier = data.tier || ((_b = data.user) === null || _b === void 0 ? void 0 : _b.subscription_tier) || 'free';
+                            const dailyLimit = data.daily_limit || ((_c = data.limits) === null || _c === void 0 ? void 0 : _c.daily) || 10;
+                            const email = data.email || ((_d = data.user) === null || _d === void 0 ? void 0 : _d.email) || '';
+                            const userId = data.user_id || ((_e = data.user) === null || _e === void 0 ? void 0 : _e.id) || '';
                             // Check if D1 returned usage information
                             let remaining = undefined;
                             let dailyUsed = undefined;

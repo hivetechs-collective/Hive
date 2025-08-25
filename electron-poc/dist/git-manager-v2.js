@@ -523,6 +523,28 @@ class GitManagerV2 {
             }));
         });
     }
+    clean(files) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.isRepo)
+                return;
+            return this.queue.enqueue('clean', () => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    // Use git clean -f to remove untracked files
+                    // We specify each file explicitly for safety
+                    for (const file of files) {
+                        yield this.executor.exec(['clean', '-f', '--', file]);
+                    }
+                    console.log('[GitManagerV2] Cleaned untracked files:', files);
+                    // Invalidate status cache
+                    this.cachedStatus = null;
+                }
+                catch (error) {
+                    console.error('[GitManagerV2] Failed to clean files:', error);
+                    throw error;
+                }
+            }));
+        });
+    }
     initRepo() {
         return __awaiter(this, void 0, void 0, function* () {
             try {

@@ -49,8 +49,8 @@ class VSCodeExplorerExact {
                 this.setupContainer();
                 this.attachStyles();
             }
-            // If no root path set, show welcome message
-            if (!this.rootPath) {
+            // If no root path set or empty string, show welcome message
+            if (!this.rootPath || this.rootPath.trim() === '') {
                 console.log('[VSCodeExplorer] No root path set, showing welcome message');
                 this.showWelcomeMessage();
                 return;
@@ -80,8 +80,8 @@ class VSCodeExplorerExact {
                 this.gitDecorationProvider = new git_decoration_provider_1.GitDecorationProvider(this.rootPath);
                 // Listen for decoration changes
                 this.gitDecorationProvider.on('decorationsChanged', (changedPaths) => {
-                    console.log('[VSCodeExplorer] Git decorations changed, re-rendering...');
-                    this.render(); // Re-render when Git status changes
+                    console.log('[VSCodeExplorer] Git decorations changed, updating in place...');
+                    this.updateGitDecorationsInPlace(); // Update decorations without re-rendering
                 });
                 // Initialize the provider
                 yield this.gitDecorationProvider.initialize();
@@ -305,7 +305,15 @@ class VSCodeExplorerExact {
     loadRootDirectory() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
+                // Don't try to load if rootPath is empty
+                if (!this.rootPath || this.rootPath.trim() === '') {
+                    console.warn('[VSCodeExplorer] Cannot load directory: rootPath is empty');
+                    this.rootNodes = [];
+                    return;
+                }
                 console.log('[VSCodeExplorer] Loading root directory:', this.rootPath);
+                console.log('[VSCodeExplorer] rootPath type:', typeof this.rootPath);
+                console.log('[VSCodeExplorer] rootPath value:', JSON.stringify(this.rootPath));
                 const rootItems = yield window.fileAPI.getFileTree(this.rootPath);
                 if (!rootItems || rootItems.length === 0) {
                     console.warn('[VSCodeExplorer] No items returned from fileAPI');
@@ -345,6 +353,9 @@ class VSCodeExplorerExact {
                 return;
             }
             console.log('[VSCodeExplorer] Rendering tree...');
+            // Save scroll position before render
+            const scrollContainer = this.container.querySelector('.monaco-list');
+            const scrollTop = (scrollContainer === null || scrollContainer === void 0 ? void 0 : scrollContainer.scrollTop) || 0;
             // Get flattened visible nodes
             const flatNodes = yield this.getFlattenedNodes();
             if (flatNodes.length === 0) {
@@ -361,6 +372,13 @@ class VSCodeExplorerExact {
             rowsContainer.appendChild(fragment);
             // Attach event listeners
             this.attachEventListeners();
+            // Restore scroll position after render
+            if (scrollContainer) {
+                // Use requestAnimationFrame to ensure DOM has updated
+                requestAnimationFrame(() => {
+                    scrollContainer.scrollTop = scrollTop;
+                });
+            }
         });
     }
     createTreeElement(node) {
@@ -690,15 +708,26 @@ class VSCodeExplorerExact {
     toggleExpanded(node) {
         return __awaiter(this, void 0, void 0, function* () {
             console.log('[VSCodeExplorer] Toggling:', node.name);
+            // Save current scroll position before any changes
+            const scrollContainer = this.container.querySelector('.monaco-list');
+            const scrollTop = (scrollContainer === null || scrollContainer === void 0 ? void 0 : scrollContainer.scrollTop) || 0;
             if (node.collapsibleState === TreeItemCollapsibleState.Collapsed) {
                 node.collapsibleState = TreeItemCollapsibleState.Expanded;
                 this.expandedNodes.add(node.path);
+                // Lazy load children if not loaded yet
+                if (!node.children) {
+                    node.children = yield this.loadDirectoryChildren(node);
+                }
             }
             else {
                 node.collapsibleState = TreeItemCollapsibleState.Collapsed;
                 this.expandedNodes.delete(node.path);
             }
             yield this.render();
+            // Restore scroll position after render
+            if (scrollContainer) {
+                scrollContainer.scrollTop = scrollTop;
+            }
         });
     }
     updateSelection() {
@@ -731,6 +760,88 @@ class VSCodeExplorerExact {
             yield this.render();
         });
     }
+    refreshGitStatus() {
+        return __awaiter(this, void 0, void 0, function* () {
+            // Lightweight refresh that only updates Git decorations
+            // without reloading the entire tree structure
+            console.log('[VSCodeExplorer] Refreshing Git status only...');
+            if (this.gitDecorationProvider) {
+                yield this.gitDecorationProvider.refreshStatus();
+                // Update Git decorations in-place without re-rendering the entire tree
+                yield this.updateGitDecorationsInPlace();
+            }
+        });
+    }
+    updateGitDecorationsInPlace() {
+        return __awaiter(this, void 0, void 0, function* () {
+            // Update existing DOM elements with new Git status without rebuilding the tree
+            const rowsContainer = this.container.querySelector('.monaco-list-rows');
+            if (!rowsContainer)
+                return;
+            const rows = rowsContainer.querySelectorAll('.monaco-list-row');
+            rows.forEach((row) => {
+                var _a;
+                const path = row.getAttribute('data-path');
+                if (!path)
+                    return;
+                const decoration = (_a = this.gitDecorationProvider) === null || _a === void 0 ? void 0 : _a.getDecoration(path);
+                // Update Git status attribute
+                if (decoration === null || decoration === void 0 ? void 0 : decoration.badge) {
+                    let status = '';
+                    switch (decoration.badge) {
+                        case 'M':
+                            status = 'modified';
+                            break;
+                        case 'A':
+                            status = 'added';
+                            break;
+                        case 'D':
+                            status = 'deleted';
+                            break;
+                        case 'U':
+                            status = 'untracked';
+                            break;
+                        case 'R':
+                            status = 'renamed';
+                            break;
+                    }
+                    if (status) {
+                        row.setAttribute('data-git-status', status);
+                    }
+                }
+                else {
+                    row.removeAttribute('data-git-status');
+                }
+                // Update label color
+                const label = row.querySelector('.label-name');
+                if (label && (decoration === null || decoration === void 0 ? void 0 : decoration.color)) {
+                    label.style.color = decoration.color;
+                }
+                else if (label) {
+                    label.style.color = '';
+                }
+                // Update or add Git indicator badge
+                let indicator = row.querySelector('.git-indicator');
+                if (decoration === null || decoration === void 0 ? void 0 : decoration.badge) {
+                    if (!indicator) {
+                        // Create new indicator
+                        indicator = document.createElement('span');
+                        indicator.className = 'git-indicator';
+                        const container = row.querySelector('.monaco-icon-label-container');
+                        if (container) {
+                            container.appendChild(indicator);
+                        }
+                    }
+                    indicator.textContent = decoration.badge;
+                    indicator.className = 'git-indicator ' + (status || '');
+                }
+                else if (indicator) {
+                    // Remove indicator if no longer needed
+                    indicator.remove();
+                }
+            });
+        });
+    }
     collapseAll() {
         return __awaiter(this, void 0, void 0, function* () {
             console.log('[VSCodeExplorer] Collapsing all...');
@@ -750,9 +861,18 @@ class VSCodeExplorerExact {
             yield this.render();
         });
     }
+    getCurrentPath() {
+        return this.rootPath;
+    }
     createFile(fileName) {
         return __awaiter(this, void 0, void 0, function* () {
             console.log('[VSCodeExplorer] Create file:', fileName);
+            // Check if we have a valid root path
+            if (!this.rootPath || this.rootPath.trim() === '') {
+                console.error('[VSCodeExplorer] Cannot create file: no folder is open');
+                alert('Please open a folder first');
+                return;
+            }
             // Get the current directory (use selected directory or root)
             let targetDir = this.rootPath;
             if (this.selectedNode && this.selectedNode.type === 'directory') {
@@ -783,6 +903,12 @@ class VSCodeExplorerExact {
     createFolder(folderName) {
         return __awaiter(this, void 0, void 0, function* () {
             console.log('[VSCodeExplorer] Create folder:', folderName);
+            // Check if we have a valid root path
+            if (!this.rootPath || this.rootPath.trim() === '') {
+                console.error('[VSCodeExplorer] Cannot create folder: no folder is open');
+                alert('Please open a folder first');
+                return;
+            }
             // Get the current directory (use selected directory or root)
             let targetDir = this.rootPath;
             if (this.selectedNode && this.selectedNode.type === 'directory') {

@@ -89,6 +89,7 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     showSaveDialog: (options) => electron_1.ipcRenderer.invoke('show-save-dialog', options),
     showMessageBox: (options) => electron_1.ipcRenderer.invoke('show-message-box', options),
     setTitle: (title) => electron_1.ipcRenderer.invoke('set-title', title),
+    openExternal: (url) => electron_1.ipcRenderer.invoke('open-external', url),
     // Memory Service API
     startMemoryService: () => electron_1.ipcRenderer.invoke('memory-service-start'),
     stopMemoryService: () => electron_1.ipcRenderer.invoke('memory-service-stop'),
@@ -137,6 +138,12 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     onMenuCloseTab: (callback) => {
         electron_1.ipcRenderer.on('menu-close-tab', callback);
     },
+    onMenuCloseAllTabs: (callback) => {
+        electron_1.ipcRenderer.on('menu-close-all-tabs', callback);
+    },
+    onMenuToggleAutoSave: (callback) => {
+        electron_1.ipcRenderer.on('menu-toggle-auto-save', (_, enabled) => callback(enabled));
+    },
     onMenuResetState: (callback) => {
         electron_1.ipcRenderer.on('menu-reset-state', callback);
     }
@@ -152,6 +159,7 @@ electron_1.contextBridge.exposeInMainWorld('gitAPI', {
     unstage: (files) => electron_1.ipcRenderer.invoke('git-unstage', files),
     commit: (message) => electron_1.ipcRenderer.invoke('git-commit', message),
     discard: (files) => electron_1.ipcRenderer.invoke('git-discard', files),
+    clean: (files) => electron_1.ipcRenderer.invoke('git-clean', files),
     push: () => electron_1.ipcRenderer.invoke('git-push'),
     pull: () => electron_1.ipcRenderer.invoke('git-pull'),
     sync: () => electron_1.ipcRenderer.invoke('git-sync'),
@@ -164,7 +172,14 @@ electron_1.contextBridge.exposeInMainWorld('gitAPI', {
     getFileDiff: (commitHash, filePath) => electron_1.ipcRenderer.invoke('git-file-diff', commitHash, filePath),
     setFolder: (folderPath) => electron_1.ipcRenderer.invoke('git-set-folder', folderPath),
     getSubmoduleStatus: (submodulePath) => electron_1.ipcRenderer.invoke('git-submodule-status', submodulePath),
-    getSubmoduleDiff: (submodulePath) => electron_1.ipcRenderer.invoke('git-submodule-diff', submodulePath)
+    getSubmoduleDiff: (submodulePath) => electron_1.ipcRenderer.invoke('git-submodule-diff', submodulePath),
+    pushChunked: () => electron_1.ipcRenderer.invoke('git-push-chunked'),
+    getRepoStats: () => electron_1.ipcRenderer.invoke('git-repo-stats'),
+    // New push options
+    pushWithOptions: (options) => electron_1.ipcRenderer.invoke('git-push-with-options', options),
+    pushForceWithLease: () => electron_1.ipcRenderer.invoke('git-push-force-lease'),
+    pushCustom: (command) => electron_1.ipcRenderer.invoke('git-push-custom', command),
+    pushDryRun: (options) => electron_1.ipcRenderer.invoke('git-push-dry-run', options)
 });
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown
 const safeInvoke = (channel, ...args) => __awaiter(void 0, void 0, void 0, function* () {

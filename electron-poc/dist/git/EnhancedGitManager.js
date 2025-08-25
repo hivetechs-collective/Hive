@@ -416,6 +416,18 @@ class EnhancedGitManager {
         });
     }
     /**
+     * Remove untracked files
+     */
+    clean(files) {
+        return __awaiter(this, void 0, void 0, function* () {
+            // Use git clean -f to remove untracked files
+            // We specify each file explicitly for safety
+            for (const file of files) {
+                yield this.git.clean('f', ['--', file]);
+            }
+        });
+    }
+    /**
      * Initialize Git repository
      */
     initRepo() {

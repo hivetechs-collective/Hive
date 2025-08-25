@@ -38,14 +38,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.cleanupTerminals = exports.registerTerminalHandlers = void 0;
 const electron_1 = require("electron");
 const TTYDManager_1 = __importDefault(require("./services/TTYDManager"));
-const ProcessManager_1 = __importDefault(require("./utils/ProcessManager"));
 const SafeLogger_1 = require("./utils/SafeLogger");
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
-// Initialize managers
-const processManager = new ProcessManager_1.default();
-const ttydManager = new TTYDManager_1.default(processManager);
+// Managers will be initialized when registerTerminalHandlers is called
+let processManager;
+let ttydManager;
 // Track active terminal numbers to reuse closed ones
 const activeTerminalNumbers = new Set();
 // Track if handlers are already registered
@@ -64,8 +63,10 @@ function getNextTerminalNumber() {
 }
 /**
  * Register all terminal-related IPC handlers
+ * @param mainWindow - The main browser window
+ * @param processManagerInstance - The ProcessManager instance from the main process
  */
-function registerTerminalHandlers(mainWindow) {
+function registerTerminalHandlers(mainWindow, processManagerInstance) {
     console.log('[TerminalIPC] Registering TTYD terminal handlers');
     SafeLogger_1.logger.info('[TerminalIPC] Registering TTYD terminal handlers');
     // Skip if already registered
@@ -74,6 +75,9 @@ function registerTerminalHandlers(mainWindow) {
         SafeLogger_1.logger.info('[TerminalIPC] Terminal IPC handlers already registered, skipping');
         return;
     }
+    // Initialize managers with the shared ProcessManager instance
+    processManager = processManagerInstance;
+    ttydManager = new TTYDManager_1.default(processManager);
     handlersRegistered = true;
     mainWindowRef = mainWindow;
     console.log('[TerminalIPC] Handlers registered, mainWindow set');

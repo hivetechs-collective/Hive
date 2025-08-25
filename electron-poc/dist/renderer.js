@@ -44,6 +44,13 @@ require("./status-bar.css");
 require("./vscode-scm.css");
 const Hive_Logo_small_jpg_1 = __importDefault(require("./Hive-Logo-small.jpg"));
 const settings_modal_1 = require("./settings-modal");
+// Import AI CLI tool icons
+const claude_svg_1 = __importDefault(require("../resources/ai-cli-icons/claude.svg"));
+const gemini_svg_1 = __importDefault(require("../resources/ai-cli-icons/gemini.svg"));
+const grok_svg_1 = __importDefault(require("../resources/ai-cli-icons/grok.svg"));
+const qwen_svg_1 = __importDefault(require("../resources/ai-cli-icons/qwen.svg"));
+const openai_svg_1 = __importDefault(require("../resources/ai-cli-icons/openai.svg"));
+const cline_svg_1 = __importDefault(require("../resources/ai-cli-icons/cline.svg"));
 const consensus_websocket_1 = require("./consensus-websocket");
 const memory_dashboard_1 = require("./components/memory-dashboard");
 const neural_consciousness_1 = require("./neural-consciousness");
@@ -374,28 +381,28 @@ document.body.innerHTML = `
         
         <!-- AI CLI Tool Quick Launch Icons -->
         <div class="ai-cli-icons-section">
-          <button class="activity-btn cli-quick-launch" data-tool="claude-code" aria-label="Claude Code">
-            <img src="resources/ai-cli-icons/claude.svg" width="20" height="20" alt="Claude" />
+          <button class="activity-btn cli-quick-launch claude-icon" data-tool="claude-code" aria-label="Claude Code">
+            <img src="${claude_svg_1.default}" width="24" height="24" alt="Claude" style="object-fit: contain;" />
             <span class="activity-tooltip">Claude Code</span>
           </button>
-          <button class="activity-btn cli-quick-launch" data-tool="gemini-cli" aria-label="Gemini CLI">
-            <img src="resources/ai-cli-icons/gemini.svg" width="20" height="20" alt="Gemini" />
+          <button class="activity-btn cli-quick-launch gemini-icon" data-tool="gemini-cli" aria-label="Gemini CLI">
+            <img src="${gemini_svg_1.default}" width="24" height="24" alt="Gemini" style="object-fit: contain;" />
             <span class="activity-tooltip">Gemini CLI</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="grok" aria-label="Grok">
-            <img src="resources/ai-cli-icons/grok.svg" width="20" height="20" alt="Grok" />
+            <img src="${grok_svg_1.default}" width="24" height="24" alt="Grok" style="object-fit: contain;" />
             <span class="activity-tooltip">Grok CLI</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="qwen-code" aria-label="Qwen Code">
-            <img src="resources/ai-cli-icons/qwen.svg" width="20" height="20" alt="Qwen" />
+            <img src="${qwen_svg_1.default}" width="24" height="24" alt="Qwen" style="object-fit: contain;" />
             <span class="activity-tooltip">Qwen Code</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="openai-codex" aria-label="OpenAI Codex">
-            <img src="resources/ai-cli-icons/openai.svg" width="20" height="20" alt="OpenAI" />
+            <img src="${openai_svg_1.default}" width="24" height="24" alt="OpenAI" style="object-fit: contain;" />
             <span class="activity-tooltip">OpenAI Codex</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="cline" aria-label="Cline">
-            <img src="resources/ai-cli-icons/cline.svg" width="20" height="20" alt="Cline" />
+            <img src="${cline_svg_1.default}" width="24" height="24" alt="Cline" style="object-fit: contain;" />
             <span class="activity-tooltip">Cline</span>
           </button>
         </div>
@@ -454,7 +461,12 @@ document.body.innerHTML = `
     </div>
 
     <!-- Center Area (Editor + Terminal) -->
-    <div class="center-area" id="center-area">
+    <div class="center-area" id="center-area" style="position: relative;">
+      <!-- Collapse button for center area (positioned on right to avoid tab arrows) -->
+      <button class="panel-collapse-btn" id="toggle-center-area" title="Collapse Editor" style="right: 10px; left: auto;">−</button>
+      
+      <!-- Resize handle removed - using fixed flex layout instead -->
+      
       <!-- Editor Area -->
       <div class="editor-area" id="editor-area">
         <!-- Editor tabs and content will be mounted here -->
@@ -485,12 +497,11 @@ document.body.innerHTML = `
     </div>
 
     <!-- Isolated Terminal Panel (modeled after consensus panel) -->
-    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="width: 400px; background: #1e1e1e; display: flex; flex-direction: column; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30; position: relative;">
+    <div class="isolated-terminal-panel" id="isolated-terminal-panel">
       <!-- Collapse button for entire panel -->
-      <button class="panel-collapse-btn" id="toggle-isolated-terminal" title="Collapse Terminal Panel" style="position: absolute; left: 5px; top: 5px; z-index: 1000; width: 20px; height: 20px; padding: 0; background: #007ACC; border: none; color: white; cursor: pointer; font-size: 16px; line-height: 1; border-radius: 2px;">−</button>
+      <button class="panel-collapse-btn" id="toggle-isolated-terminal" title="Collapse Terminal Panel">−</button>
       
-      <!-- Left resize handle (like consensus panel) -->
-      <div class="resize-handle vertical-resize" id="isolated-terminal-resize" style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: ew-resize; z-index: 10;"></div>
+      <!-- Resize handle removed - using fixed flex layout instead -->
       
       <!-- Terminal tabs header -->
       <div class="isolated-terminal-header" style="height: 35px; background: #252526; display: flex; align-items: center; border-bottom: 1px solid #3c3c3c; padding-left: 30px;">
@@ -512,6 +523,22 @@ document.body.innerHTML = `
         <button class="tab-nav-arrow" id="tab-nav-right" title="Scroll tabs right" style="display: none; padding: 0 8px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 14px; height: 100%;">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
             <path d="M4 2 L8 6 L4 10" stroke="currentColor" stroke-width="2" fill="none"/>
+          </svg>
+        </button>
+        
+        <!-- Refresh button for fixing symbol distortion -->
+        <button class="isolated-terminal-refresh" id="isolated-terminal-refresh" title="Refresh Terminal (Cmd+Shift+R or F5)" style="padding: 0 8px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 14px;">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+            <path d="M12 7a5 5 0 1 1-1.5-3.5L9 5h4V1l-1.5 1.5A6 6 0 1 0 13 7h-1z"/>
+          </svg>
+        </button>
+        
+        <!-- System Log toggle button -->
+        <button class="isolated-terminal-system-log-toggle" id="isolated-terminal-system-log-toggle" title="Toggle System Log (📊)" style="padding: 0 8px; background: transparent; border: none; color: #cccccc; cursor: pointer; font-size: 14px; transition: all 0.2s ease;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <!-- Terminal/log icon similar to VS Code's output panel -->
+            <path d="M2 2v12h12V2H2zm11 11H3V3h10v10z"/>
+            <path d="M4 5h8v1H4zm0 2h8v1H4zm0 2h6v1H4zm0 2h7v1H4z"/>
           </svg>
         </button>
         
@@ -712,9 +739,16 @@ function toggleSidebarPanel(panelType) {
                     }
                     // Check if we need to initialize or update the explorer
                     if (currentOpenedFolder) {
-                        // If explorer doesn't exist, create it
-                        if (!window.fileExplorer) {
-                            console.log('Creating new file explorer for:', currentOpenedFolder);
+                        console.log('[Explorer Activation] currentOpenedFolder value:', currentOpenedFolder);
+                        console.log('[Explorer Activation] currentOpenedFolder type:', typeof currentOpenedFolder);
+                        // Check if explorer exists and is showing the wrong folder
+                        const needsUpdate = window.fileExplorer && window.fileExplorer.getCurrentPath() !== currentOpenedFolder;
+                        // If explorer doesn't exist OR container is empty OR showing wrong folder, create/update it
+                        if (!window.fileExplorer || !container.querySelector('.explorer-folders-view') || needsUpdate) {
+                            if (needsUpdate) {
+                                console.log('Explorer showing wrong folder. Current:', window.fileExplorer.getCurrentPath(), 'Should be:', currentOpenedFolder);
+                            }
+                            console.log('Creating/updating file explorer for:', currentOpenedFolder);
                             container.innerHTML = ''; // Clear any existing content
                             window.fileExplorer = new vscode_explorer_exact_1.VSCodeExplorerExact(container);
                             window.fileExplorer.initialize(currentOpenedFolder);
@@ -738,9 +772,7 @@ function toggleSidebarPanel(panelType) {
                             });
                         }
                         else {
-                            // Explorer already exists, but we need to ensure it's showing the correct folder
-                            console.log('Explorer exists, reinitializing with:', currentOpenedFolder);
-                            window.fileExplorer.initialize(currentOpenedFolder);
+                            console.log('Explorer already showing correct folder:', currentOpenedFolder);
                         }
                     }
                     else {
@@ -2529,6 +2561,40 @@ function createStaticToolCard(id, name, description, badgeText, badgeColor, docs
     return card;
 }
 // CLI Tool Action Handlers
+/**
+ * Refresh a specific sidebar tool icon after installation/update
+ */
+function refreshSidebarToolIcon(toolId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(`[Sidebar] Refreshing icon status for ${toolId}`);
+        const btn = document.querySelector(`.cli-quick-launch[data-tool="${toolId}"]`);
+        if (!btn)
+            return;
+        // Check the current installation status
+        const electronAPI = window.electronAPI;
+        const toolStatus = yield electronAPI.detectCliTool(toolId);
+        // Remove any existing status indicator
+        const existingIndicator = btn.querySelector('.cli-tool-status-indicator');
+        if (existingIndicator) {
+            existingIndicator.remove();
+        }
+        if (toolStatus.installed) {
+            // Tool is installed - remove the not-installed class and restore full opacity
+            btn.classList.remove('not-installed');
+            console.log(`[Sidebar] ${toolId} icon updated - tool is installed`);
+        }
+        else {
+            // Tool is not installed - add indicator
+            const indicator = document.createElement('span');
+            indicator.className = 'cli-tool-status-indicator';
+            indicator.innerHTML = '⬇'; // Download arrow icon
+            indicator.title = 'Not installed - Click to install';
+            btn.appendChild(indicator);
+            btn.classList.add('not-installed');
+            console.log(`[Sidebar] ${toolId} icon updated - tool is not installed`);
+        }
+    });
+}
 function installCliTool(toolId) {
     return __awaiter(this, void 0, void 0, function* () {
         console.log(`[CLI Tools] Install requested for ${toolId}`);
@@ -2548,6 +2614,8 @@ function installCliTool(toolId) {
                 console.log(`[CLI Tools] ${toolId} installed successfully`);
                 // Force refresh the entire panel to update status
                 yield renderCliToolsPanel(true);
+                // Also refresh the sidebar icon for this tool
+                yield refreshSidebarToolIcon(toolId);
             }
             else {
                 console.error(`[CLI Tools] Failed to install ${toolId}:`, result.error);
@@ -2668,6 +2736,8 @@ function updateCliTool(toolId) {
                 // Force refresh the panel to show updated version
                 setTimeout(() => __awaiter(this, void 0, void 0, function* () {
                     yield renderCliToolsPanel(true);
+                    // Also refresh the sidebar icon
+                    yield refreshSidebarToolIcon(toolId);
                 }), 1000);
             }
             else {
@@ -2780,10 +2850,15 @@ function installAllCliTools() {
                     statusDiv.style.display = 'none';
                 }, 5000);
             }
-            // Refresh the entire panel to show updated statuses
-            setTimeout(() => {
-                renderCliToolsPanel(true);
-            }, 1000);
+            // Refresh the entire panel to show updated statuses and sidebar icons
+            setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                yield renderCliToolsPanel(true);
+                // Refresh all sidebar icons
+                const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+                for (const toolId of toolsToInstall) {
+                    yield refreshSidebarToolIcon(toolId);
+                }
+            }), 1000);
         }
         catch (error) {
             console.error('[CLI Tools] Error in batch install:', error);
@@ -2884,10 +2959,15 @@ function updateAllCliTools() {
                     statusDiv.style.display = 'none';
                 }, 5000);
             }
-            // Refresh the entire panel to show updated statuses
-            setTimeout(() => {
-                renderCliToolsPanel(true);
-            }, 1000);
+            // Refresh the entire panel to show updated statuses and sidebar icons
+            setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                yield renderCliToolsPanel(true);
+                // Refresh all sidebar icons
+                const toolsToUpdate = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+                for (const toolId of toolsToUpdate) {
+                    yield refreshSidebarToolIcon(toolId);
+                }
+            }), 1000);
         }
         catch (error) {
             console.error('[CLI Tools] Error in batch update:', error);
@@ -2935,9 +3015,11 @@ function uninstallCliTool(toolId) {
                     }
                 }
                 // Refresh the panel after a short delay to update buttons
-                setTimeout(() => {
-                    renderCliToolsPanel(true);
-                }, 1500);
+                setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                    yield renderCliToolsPanel(true);
+                    // Also refresh the sidebar icon to show it's uninstalled
+                    yield refreshSidebarToolIcon(toolId);
+                }), 1500);
             }
             else {
                 console.error(`[CLI Tools] Failed to uninstall ${toolId}:`, (result === null || result === void 0 ? void 0 : result.error) || 'Unknown error');
@@ -3052,10 +3134,15 @@ function uninstallAllCliTools() {
                     statusDiv.style.display = 'none';
                 }, 5000);
             }
-            // Refresh the entire panel to show updated statuses
-            setTimeout(() => {
-                renderCliToolsPanel(true);
-            }, 1000);
+            // Refresh the entire panel to show updated statuses and sidebar icons
+            setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                yield renderCliToolsPanel(true);
+                // Refresh all sidebar icons to show uninstalled status
+                const toolsToUninstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+                for (const toolId of toolsToUninstall) {
+                    yield refreshSidebarToolIcon(toolId);
+                }
+            }), 1000);
         }
         catch (error) {
             console.error('[CLI Tools] Error in batch uninstall:', error);
@@ -3078,6 +3165,35 @@ function launchCliTool(toolId) {
     var _a;
     return __awaiter(this, void 0, void 0, function* () {
         console.log(`[CLI Tools] Launch requested for ${toolId}`);
+        // First, check if the tool is installed
+        const electronAPI = window.electronAPI;
+        const toolStatus = yield electronAPI.detectCliTool(toolId);
+        if (!toolStatus.installed) {
+            console.log(`[CLI Tools] ${toolId} is not installed. Redirecting to CLI Tools panel...`);
+            // Switch to CLI Tools panel
+            const cliToolsButton = document.querySelector('[data-view="cli-tools"]');
+            if (cliToolsButton) {
+                cliToolsButton.click();
+                // Wait for panel to render, then highlight the install button
+                setTimeout(() => {
+                    const toolCard = document.querySelector(`[data-tool-id="${toolId}"]`);
+                    if (toolCard) {
+                        // Add highlight effect
+                        toolCard.style.animation = 'pulse-highlight 1s ease-in-out 3';
+                        // Scroll to the card
+                        toolCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Show a notification in the card
+                        const statusDiv = toolCard.querySelector('.tool-status');
+                        if (statusDiv) {
+                            statusDiv.innerHTML = '⚠️ Please install this tool first';
+                            statusDiv.style.color = '#FFC107';
+                        }
+                    }
+                }, 300);
+            }
+            return;
+        }
+        // Tool is installed, proceed with launch
         // Show launching status  
         const card = document.querySelector(`[data-tool-id="${toolId}"]`);
         if (card) {
@@ -3093,7 +3209,6 @@ function launchCliTool(toolId) {
             // 2. Check database for previous launches
             // 3. Determine command (claude vs claude --resume)
             // 4. Send event to create terminal
-            const electronAPI = window.electronAPI;
             const result = yield electronAPI.launchCliTool(toolId);
             if (result.success) {
                 console.log(`[CLI Tools] ${toolId} launched successfully with command: ${result.command}`);
@@ -3467,75 +3582,121 @@ setTimeout(() => {
         }
     }
     // Initialize Isolated Terminal Panel
-    const isolatedTerminalPanel = document.getElementById('isolated-terminal-panel');
-    if (isolatedTerminalPanel) {
-        window.isolatedTerminal = TTYDTerminalPanel_1.ttydTerminalPanel.initialize(isolatedTerminalPanel);
+    const isolatedTerminalPanelElement = document.getElementById('isolated-terminal-panel');
+    if (isolatedTerminalPanelElement) {
+        window.isolatedTerminal = TTYDTerminalPanel_1.ttydTerminalPanel.initialize(isolatedTerminalPanelElement);
         console.log('✅ TTYD Terminal Panel initialized');
+        // Add click handler for refresh button
+        const refreshBtn = document.getElementById('isolated-terminal-refresh');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                console.log('[Renderer] Refresh button clicked');
+                const terminal = window.isolatedTerminal;
+                if (terminal && terminal.refreshActiveTerminal) {
+                    terminal.refreshActiveTerminal();
+                }
+            });
+            // Add hover effect
+            refreshBtn.addEventListener('mouseenter', () => {
+                refreshBtn.style.color = '#cccccc';
+            });
+            refreshBtn.addEventListener('mouseleave', () => {
+                refreshBtn.style.color = '#969696';
+            });
+        }
         // Listen for AI tool launch events from main process
         if (window.electronAPI.onLaunchAIToolTerminal) {
+            console.log('✅ [Renderer] Setting up onLaunchAIToolTerminal listener');
             window.electronAPI.onLaunchAIToolTerminal((data) => {
-                console.log('📦 Launching AI tool terminal:', data);
+                console.log('📦 [Renderer] Received launch-ai-tool-terminal event:', data);
+                console.log('📦 [Renderer] Tool ID:', data.toolId);
+                console.log('📦 [Renderer] Command:', data.command);
+                console.log('📦 [Renderer] CWD:', data.cwd);
+                console.log('📦 [Renderer] Has env vars:', !!data.env);
                 // Get the TTYDTerminalPanel instance and create a terminal
                 const terminal = window.isolatedTerminal;
+                console.log('📦 [Renderer] Terminal panel instance exists:', !!terminal);
                 if (terminal) {
+                    console.log('📦 [Renderer] Current opened folder:', window.currentOpenedFolder);
+                    console.log('📦 [Renderer] Calling createTerminalTab with:', {
+                        toolId: data.toolId,
+                        command: data.command,
+                        env: data.env
+                    });
                     // Note: The global folder context is already updated by the main process
                     // via the 'menu-open-folder' event before this terminal launch event
-                    // Call createTerminalTab with toolId, command, and optional env
+                    // Call createTerminalTab with correct parameters: toolId, command, env
+                    // The cwd is already set globally via window.currentOpenedFolder
                     terminal.createTerminalTab(data.toolId, data.command, data.env);
                 }
                 else {
-                    console.error('[Renderer] Terminal panel not initialized');
+                    console.error('❌ [Renderer] Terminal panel not initialized! isolatedTerminal is null');
                 }
             });
         }
-        // Setup resize handler for the isolated terminal panel (exactly like consensus panel)
-        const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
-        const consensusPanel = document.getElementById('consensus-chat');
-        if (isolatedTerminalResize && isolatedTerminalPanel) {
-            let isResizing = false;
-            let startX = 0;
-            let startWidth = 0;
-            isolatedTerminalResize.addEventListener('mousedown', (e) => {
-                isResizing = true;
-                startX = e.clientX;
-                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
-                document.body.style.cursor = 'ew-resize';
-                e.preventDefault();
-            });
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing)
-                    return;
-                // Use exact same formula as consensus panel (lines 3413-3414)
-                const deltaX = startX - e.clientX;
-                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 600);
-                isolatedTerminalPanel.style.width = newWidth + 'px';
-            });
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                }
-            });
+        else {
+            console.warn('⚠️ [Renderer] onLaunchAIToolTerminal not available in electronAPI');
         }
+        // REMOVED resize handler for isolated terminal panel - now using auto-flex layout
+        // This prevents the terminal resize issues when dragging
+        // Get elements for use in both handlers
+        const centerArea = document.getElementById('center-area');
+        const isolatedTerminalPanel = document.querySelector('.isolated-terminal-panel');
         // Isolated terminal panel collapse/expand (exactly like consensus panel)
         const toggleIsolatedTerminal = document.getElementById('toggle-isolated-terminal');
         if (toggleIsolatedTerminal && isolatedTerminalPanel) {
             toggleIsolatedTerminal.addEventListener('click', () => {
                 const isCollapsed = isolatedTerminalPanel.classList.contains('collapsed');
                 if (isCollapsed) {
+                    // Expand TTYD panel
                     isolatedTerminalPanel.classList.remove('collapsed');
-                    isolatedTerminalPanel.style.width = '400px';
+                    isolatedTerminalPanel.style.width = ''; // Let CSS handle width via flex
                     toggleIsolatedTerminal.textContent = '−';
                     toggleIsolatedTerminal.title = 'Collapse Terminal Panel';
+                    // Check if center area is collapsed, if so, expand TTYD to fill
+                    if (centerArea && centerArea.classList.contains('collapsed')) {
+                        isolatedTerminalPanel.classList.add('expanded');
+                    }
                 }
                 else {
+                    // Collapse TTYD panel
                     isolatedTerminalPanel.classList.add('collapsed');
-                    isolatedTerminalPanel.style.width = '40px';
+                    isolatedTerminalPanel.classList.remove('expanded');
+                    isolatedTerminalPanel.style.width = ''; // Let CSS handle width
                     toggleIsolatedTerminal.textContent = '+';
                     toggleIsolatedTerminal.title = 'Expand Terminal Panel';
                 }
             });
         }
+        // Center area collapse/expand (exactly like consensus panel)
+        const toggleCenterArea = document.getElementById('toggle-center-area');
+        if (toggleCenterArea && centerArea) {
+            toggleCenterArea.addEventListener('click', () => {
+                const isCollapsed = centerArea.classList.contains('collapsed');
+                if (isCollapsed) {
+                    // Expand center area
+                    centerArea.classList.remove('collapsed');
+                    toggleCenterArea.textContent = '−';
+                    toggleCenterArea.title = 'Collapse Editor';
+                    // Remove expanded from TTYD panel
+                    if (isolatedTerminalPanel) {
+                        isolatedTerminalPanel.classList.remove('expanded');
+                    }
+                }
+                else {
+                    // Collapse center area
+                    centerArea.classList.add('collapsed');
+                    toggleCenterArea.textContent = '+';
+                    toggleCenterArea.title = 'Expand Editor';
+                    // Add expanded to TTYD panel if it's not collapsed
+                    if (isolatedTerminalPanel && !isolatedTerminalPanel.classList.contains('collapsed')) {
+                        isolatedTerminalPanel.classList.add('expanded');
+                    }
+                }
+            });
+        }
+        // REMOVED center area resize handler - now using auto-flex layout
+        // Panels will automatically adjust to fill available space
     }
     // Listen for menu events from main process
     setupMenuEventListeners();
@@ -3756,16 +3917,29 @@ setTimeout(() => {
     setupResizeHandles();
     // Add click handlers for AI CLI quick launch buttons - use the same launchCliTool function as Launch buttons
     const cliQuickLaunchButtons = document.querySelectorAll('.cli-quick-launch');
-    cliQuickLaunchButtons.forEach(btn => {
+    cliQuickLaunchButtons.forEach((btn) => __awaiter(void 0, void 0, void 0, function* () {
+        const toolId = btn.getAttribute('data-tool');
+        if (!toolId)
+            return;
+        // Check installation status and add visual indicator
+        const electronAPI = window.electronAPI;
+        const toolStatus = yield electronAPI.detectCliTool(toolId);
+        if (!toolStatus.installed) {
+            // Add a small indicator for uninstalled tools
+            const indicator = document.createElement('span');
+            indicator.className = 'cli-tool-status-indicator';
+            indicator.innerHTML = '⬇'; // Download arrow icon
+            indicator.title = 'Not installed - Click to install';
+            btn.appendChild(indicator);
+            // Add visual styling for uninstalled tools
+            btn.classList.add('not-installed');
+        }
         btn.addEventListener('click', () => __awaiter(void 0, void 0, void 0, function* () {
-            const toolId = btn.getAttribute('data-tool');
-            if (!toolId)
-                return;
             // Use the exact same launchCliTool function that the Launch buttons use
             console.log(`[Sidebar] Launching ${toolId} via quick launch icon...`);
             yield window.launchCliTool(toolId);
         }));
-    });
+    }));
     // Menu events are handled via window.addEventListener for messages from main process
     // This would need to be set up in preload script if we want menu events
 }, 200);
@@ -3812,11 +3986,26 @@ function setupResizeHandles() {
             e.preventDefault();
         });
         document.addEventListener('mousemove', (e) => {
+            var _a, _b;
             if (!isResizing)
                 return;
             const deltaX = startX - e.clientX;
-            const newWidth = Math.min(Math.max(startWidth + deltaX, 300), 600);
-            consensusPanel.style.width = newWidth + 'px';
+            const newWidth = Math.min(Math.max(startWidth + deltaX, 300), 800);
+            // Ensure center area maintains minimum width of 400px
+            const centerArea = document.getElementById('center-area');
+            if (centerArea) {
+                const windowWidth = window.innerWidth;
+                const sidebarWidth = ((_a = document.getElementById('left-sidebar')) === null || _a === void 0 ? void 0 : _a.offsetWidth) || 0;
+                const terminalWidth = ((_b = document.getElementById('isolated-terminal-panel')) === null || _b === void 0 ? void 0 : _b.offsetWidth) || 0;
+                const remainingWidth = windowWidth - sidebarWidth - terminalWidth - newWidth;
+                // Only apply the new width if center area would have at least 400px
+                if (remainingWidth >= 400) {
+                    consensusPanel.style.width = newWidth + 'px';
+                }
+            }
+            else {
+                consensusPanel.style.width = newWidth + 'px';
+            }
         });
         document.addEventListener('mouseup', () => {
             isResizing = false;
@@ -3871,10 +4060,13 @@ function handleOpenFolder(folderPath) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             console.log('[handleOpenFolder] Opening folder:', folderPath);
+            console.log('[handleOpenFolder] Folder path type:', typeof folderPath);
+            console.log('[handleOpenFolder] Folder path value:', JSON.stringify(folderPath));
             console.log('[handleOpenFolder] Previous folder:', currentOpenedFolder);
             // Update the current opened folder state
             currentOpenedFolder = folderPath;
             window.currentOpenedFolder = currentOpenedFolder;
+            console.log('[handleOpenFolder] Set currentOpenedFolder to:', currentOpenedFolder);
             // Update window title with folder name
             const folderName = folderPath.split('/').pop() || folderPath;
             document.title = `Hive Consensus - ${folderName}`;
@@ -3887,28 +4079,42 @@ function handleOpenFolder(folderPath) {
             // Refresh the file explorer with the new folder
             const explorerContainer = document.getElementById('explorer-content');
             if (explorerContainer) {
-                // Clear existing explorer and create a new one with the opened folder
-                explorerContainer.innerHTML = '';
-                window.fileExplorer = new vscode_explorer_exact_1.VSCodeExplorerExact(explorerContainer);
-                yield window.fileExplorer.initialize(folderPath);
-                // Reconnect file selection handler for the editor
-                window.fileExplorer.onFileSelect((filePath) => {
-                    console.log('File selected:', filePath);
-                    if (window.editorTabs) {
-                        // Wrap in try-catch to prevent errors from bubbling to webpack
-                        try {
-                            window.editorTabs.openFile(filePath).catch((err) => {
-                                console.error('Error opening file:', err);
-                            });
+                // Check if explorer panel is currently visible
+                const explorerPanel = document.getElementById('explorer-sidebar');
+                const isExplorerVisible = explorerPanel && explorerPanel.style.display !== 'none';
+                if (isExplorerVisible) {
+                    // Explorer is visible, update it immediately
+                    console.log('[handleOpenFolder] Explorer is visible, updating now');
+                    explorerContainer.innerHTML = '';
+                    window.fileExplorer = new vscode_explorer_exact_1.VSCodeExplorerExact(explorerContainer);
+                    yield window.fileExplorer.initialize(folderPath);
+                    // Reconnect file selection handler for the editor
+                    window.fileExplorer.onFileSelect((filePath) => {
+                        console.log('File selected:', filePath);
+                        if (window.editorTabs) {
+                            // Wrap in try-catch to prevent errors from bubbling to webpack
+                            try {
+                                window.editorTabs.openFile(filePath).catch((err) => {
+                                    console.error('Error opening file:', err);
+                                });
+                            }
+                            catch (err) {
+                                console.error('Error calling openFile:', err);
+                            }
                         }
-                        catch (err) {
-                            console.error('Error calling openFile:', err);
+                        else {
+                            console.error('editorTabs not found');
                         }
+                    });
+                }
+                else {
+                    // Explorer is not visible, just clear the existing instance so it gets recreated with the new folder when activated
+                    console.log('[handleOpenFolder] Explorer is not visible, clearing instance for later recreation');
+                    if (window.fileExplorer) {
+                        window.fileExplorer = null;
+                        explorerContainer.innerHTML = '';
                     }
-                    else {
-                        console.error('editorTabs not found');
-                    }
-                });
+                }
             }
             // Update Git manager with the new folder
             if (window.gitAPI) {
@@ -4051,7 +4257,8 @@ if (typeof window !== 'undefined' && window.electronAPI) {
                 window.scmView.destroy();
             }
             // Create new SCM view which will show welcome since no folder is open
-            window.scmView = new vscode_scm_view_1.VSCodeSCMView(scmContainer);
+            window.gitUI = new vscode_scm_view_1.VSCodeSCMView(scmContainer);
+            window.scmView = window.gitUI;
         }
         // Close all editor tabs
         if (window.editorTabs) {
@@ -4104,18 +4311,25 @@ function initializeCliToolDetector() {
 // Call on startup
 initializeCliToolDetector();
 // Define global functions for opening folder and cloning repository
-window.openFolder = () => __awaiter(void 0, void 0, void 0, function* () {
+window.openFolder = (folderPath) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        // If a folder path is provided, open it directly
+        if (folderPath) {
+            console.log('[OpenFolder] Opening provided folder:', folderPath);
+            handleOpenFolder(folderPath);
+            return;
+        }
+        // Otherwise, show the folder selection dialog
         console.log('[OpenFolder] Starting folder selection...');
         const result = yield window.electronAPI.showOpenDialog({
             properties: ['openDirectory']
         });
         console.log('[OpenFolder] Dialog result:', result);
         if (!result.canceled && result.filePaths.length > 0) {
-            const folderPath = result.filePaths[0];
-            console.log('[OpenFolder] Selected folder:', folderPath);
+            const selectedFolder = result.filePaths[0];
+            console.log('[OpenFolder] Selected folder:', selectedFolder);
             // Use the same handleOpenFolder function that File > Open Folder uses
-            handleOpenFolder(folderPath);
+            handleOpenFolder(selectedFolder);
         }
         else {
             console.log('[OpenFolder] Folder selection was canceled');
@@ -4148,4 +4362,100 @@ window.cloneRepository = () => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 // Testing Git modification indicator
+// ========== FILE MENU EVENT HANDLERS ==========
+// Listen for menu events from the main process
+(function setupMenuHandlers() {
+    // Auto-save toggle
+    window.electronAPI.onMenuToggleAutoSave((enabled) => {
+        if (window.editorTabs) {
+            window.editorTabs.setAutoSave(enabled, 1000); // 1 second delay
+            console.log('[Menu] Auto-save:', enabled ? 'enabled' : 'disabled');
+        }
+    });
+    // Save current file
+    window.electronAPI.onMenuSave(() => {
+        if (window.editorTabs) {
+            // Save the active tab
+            const activeTab = window.editorTabs.getActiveTab();
+            if (activeTab) {
+                window.editorTabs.saveActiveTab();
+            }
+        }
+    });
+    // Save As
+    window.electronAPI.onMenuSaveAs(() => __awaiter(this, void 0, void 0, function* () {
+        if (window.editorTabs) {
+            const activeTab = window.editorTabs.getActiveTab();
+            if (activeTab) {
+                // TODO: Implement save as dialog
+                console.log('[Menu] Save As not yet implemented');
+            }
+        }
+    }));
+    // Open file
+    window.electronAPI.onMenuOpenFile((filePath) => {
+        if (window.editorTabs && filePath) {
+            window.editorTabs.openFile(filePath);
+        }
+    });
+    // New file
+    window.electronAPI.onMenuNewFile(() => {
+        if (window.editorTabs) {
+            // Create a new untitled file
+            window.editorTabs.createNewFile();
+        }
+    });
+    // Close tab
+    window.electronAPI.onMenuCloseTab(() => {
+        if (window.editorTabs) {
+            const activeTab = window.editorTabs.getActiveTab();
+            if (activeTab) {
+                window.editorTabs.closeTab(activeTab.id);
+            }
+        }
+    });
+    // Close all tabs
+    window.electronAPI.onMenuCloseAllTabs(() => {
+        if (window.editorTabs) {
+            window.editorTabs.closeAllTabs();
+        }
+    });
+    // Open folder
+    window.electronAPI.onMenuOpenFolder((folderPath) => {
+        if (folderPath) {
+            window.openFolder(folderPath);
+        }
+    });
+    // Close folder
+    window.electronAPI.onMenuCloseFolder(() => {
+        window.closeFolder();
+    });
+    console.log('[Menu] Event handlers registered');
+})();
+// Close the current folder
+window.closeFolder = () => {
+    // Clear current folder
+    window.currentOpenedFolder = null;
+    // Clear file explorer
+    if (window.fileExplorer) {
+        const explorerContainer = document.querySelector('.file-explorer-container');
+        if (explorerContainer) {
+            explorerContainer.innerHTML = '';
+        }
+        window.fileExplorer = null;
+    }
+    // Clear git status
+    if (window.scmView) {
+        window.scmView = null;
+        const gitContainer = document.querySelector('.scm-view');
+        if (gitContainer && gitContainer.parentElement) {
+            gitContainer.parentElement.innerHTML = '';
+        }
+    }
+    // Close all editor tabs
+    if (window.editorTabs) {
+        window.editorTabs.closeAllTabs();
+    }
+    console.log('[CloseFolder] Folder closed');
+};
 //# sourceMappingURL=renderer.js.map

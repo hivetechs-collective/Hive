@@ -58,7 +58,8 @@ class PortManager {
                     server.close();
                     resolve(true);
                 });
-                server.listen(port, '127.0.0.1');
+                // Check on all interfaces (0.0.0.0) to catch servers listening on any interface
+                server.listen(port, '0.0.0.0');
             });
         });
     }
@@ -151,17 +152,26 @@ class PortManager {
             // Start with preferred port
             let currentPort = port;
             let portToUse = null;
+            // Check if preferred port is already allocated to another service
+            const isPortAllocatedToAnother = Array.from(this.allocatedPorts.values()).includes(currentPort);
             // Check preferred port first
-            if (yield this.isPortAvailable(currentPort)) {
+            if (!isPortAllocatedToAnother && (yield this.isPortAvailable(currentPort))) {
                 portToUse = currentPort;
                 SafeLogger_1.logger.info(`[PortManager] Port ${currentPort} is available for ${serviceName}`);
             }
             else {
-                SafeLogger_1.logger.info(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
+                if (isPortAllocatedToAnother) {
+                    SafeLogger_1.logger.info(`[PortManager] Port ${currentPort} is allocated to another service, finding next available port...`);
+                }
+                else {
+                    SafeLogger_1.logger.info(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
+                }
                 // Try alternative ports if provided
                 if (alternativePorts && alternativePorts.length > 0) {
                     for (const altPort of alternativePorts) {
-                        if (yield this.isPortAvailable(altPort)) {
+                        // Check if this port is allocated to another service
+                        const isAltPortAllocated = Array.from(this.allocatedPorts.values()).includes(altPort);
+                        if (!isAltPortAllocated && (yield this.isPortAvailable(altPort))) {
                             portToUse = altPort;
                             SafeLogger_1.logger.info(`[PortManager] Using alternative port ${altPort} for ${serviceName}`);
                             break;
@@ -173,7 +183,9 @@ class PortManager {
                     currentPort = port + 1;
                     const maxPort = port + 100; // Search up to 100 ports ahead
                     while (currentPort < maxPort) {
-                        if (yield this.isPortAvailable(currentPort)) {
+                        // Check if this port is allocated to another service
+                        const isCurrentPortAllocated = Array.from(this.allocatedPorts.values()).includes(currentPort);
+                        if (!isCurrentPortAllocated && (yield this.isPortAvailable(currentPort))) {
                             portToUse = currentPort;
                             SafeLogger_1.logger.info(`[PortManager] Found available port ${currentPort} for ${serviceName}`);
                             break;
@@ -234,9 +246,10 @@ class PortManager {
             const startTime = Date.now();
             while (Date.now() - startTime < timeout) {
                 try {
-                    const isInUse = !(yield this.isPortAvailable(port));
-                    if (isInUse) {
-                        // Port is in use, service is likely ready
+                    // Try to connect to the port to see if something is listening
+                    const isListening = yield this.isPortListening(port);
+                    if (isListening) {
+                        // Port is listening, service is likely ready
                         // Try to make a health check request
                         try {
                             const response = yield fetch(`http://localhost:${port}/health`);
@@ -245,7 +258,7 @@ class PortManager {
                             }
                         }
                         catch (_a) {
-                            // Service might not have HTTP endpoint yet
+                            // Service might not have HTTP endpoint yet, but port is listening
                         }
                         // Port is at least bound
                         return true;
@@ -257,6 +270,31 @@ class PortManager {
                 yield new Promise(resolve => setTimeout(resolve, checkInterval));
             }
             return false;
+        });
+    }
+    /**
+     * Check if a port is listening by trying to connect to it
+     */
+    static isPortListening(port) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve) => {
+                const client = new net.Socket();
+                const timeout = setTimeout(() => {
+                    client.destroy();
+                    resolve(false);
+                }, 100);
+                client.once('connect', () => {
+                    clearTimeout(timeout);
+                    client.destroy();
+                    resolve(true);
+                });
+                client.once('error', () => {
+                    clearTimeout(timeout);
+                    resolve(false);
+                });
+                // Try to connect to localhost on the port
+                client.connect(port, 'localhost');
+            });
         });
     }
 }

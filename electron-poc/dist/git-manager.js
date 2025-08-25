@@ -324,6 +324,23 @@ class GitManager {
             }
         });
     }
+    clean(files) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.isRepo)
+                return;
+            try {
+                // Use git clean -f to remove untracked files
+                // We specify each file explicitly for safety
+                for (const file of files) {
+                    yield this.git.clean('f', ['--', file]);
+                }
+            }
+            catch (error) {
+                console.error('Git clean error:', error);
+                throw error;
+            }
+        });
+    }
     pushWithSpawn(args) {
         return new Promise((resolve, reject) => {
             console.log(`[GitManager] Spawning: git push ${args.join(' ')}`);

@@ -2314,16 +2314,164 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
 
 #### Core Functions
 ```typescript
-- getStatus()      // Working tree status
+- getStatus()      // Working tree status with ahead/behind counts
 - stage(files)     // Stage changes
 - unstage(files)   // Unstage changes
-- commit(message)  // Create commit
-- push()          // Push to remote
+- commit(message)  // Create commit with auto-refresh
+- push()          // Smart push with strategy analysis
 - pull()          // Pull from remote
 - sync()          // Pull + Push
 - getBranches()   // List branches
-- switchBranch()  // Change branch
+- switchBranch()  // Change branch with modal dialog
+- getRepoStats()   // Repository and push size analysis
+- analyzeStrategy() // Smart push strategy recommendations
 ```
+
+#### Smart Push System (Enterprise-Grade)
+**Location**: `src/git-push-*.ts`
+
+##### Strategy Analysis Engine
+```typescript
+// Analyzes repository characteristics for optimal push strategy
+class GitPushStrategyAnalyzer {
+  static analyzeRepository(stats, gitStatus): RepositoryAnalysis {
+    // Calculates ACTUAL push size (not repo size)
+    // Uses git rev-list to measure only unpushed objects
+    // Provides intelligent recommendations based on:
+    - Push size (prioritized over repo size)
+    - Commit count
+    - Branch status (new/existing/diverged)
+    - Large file detection
+    - GitHub 2GB pack limits
+  }
+}
+```
+
+##### Available Push Strategies
+1. **Standard Push** - Regular git push for normal repos
+2. **Smart Chunked Push** - Batches commits (50→25→10→5→1) for large pushes
+3. **Force Push** - Replace remote branch (non-main branches only)
+4. **Fresh Branch** - Create new branch to avoid history issues
+5. **Squash & Push** - Combine commits to reduce size
+6. **Create Bundle** - Export as file for manual upload
+7. **Clean History First** - BFG cleanup for oversized repos
+
+##### Custom Command Support
+- **Cross-branch pushing**: Push local branch to different remote branch
+- **Force with lease**: Safer force push with protection
+- **Dry run validation**: Test commands before execution
+- **User-defined commands**: Full flexibility for enterprise workflows
+
+### Smart Push Dialog Architecture
+**Location**: `src/git-push-dialog.ts`
+
+#### Dialog Structure
+```typescript
+class GitPushDialog {
+  // Comprehensive push strategy selection
+  // Real-time repository analysis
+  // Interactive option configuration
+}
+```
+
+#### Key Features
+1. **Repository Analysis Display**:
+   - Shows actual push size (not repo size)
+   - Commit count to be pushed
+   - Branch status (new/existing/diverged)
+   - Large file warnings
+   - Risk assessment
+
+2. **Strategy Cards**:
+   - Visual cards for each strategy
+   - Recommended badge on optimal choice
+   - Pros/cons for each approach
+   - Estimated time to complete
+   - Requirements and warnings
+
+3. **Advanced Options Panel**:
+   - Force with Lease (safer force push)
+   - Include Tags
+   - Set Upstream
+   - Dry Run (test without pushing)
+   - Commit Limit (for chunked push)
+   - Custom Command (full flexibility)
+   - Atomic Push
+   - Sign Push (GPG)
+   - Thin Pack
+
+4. **Custom Command Support**:
+   - Full command input field
+   - Supports cross-branch pushing
+   - Example: `git push origin local:main`
+   - Dry run validation before execution
+   - IPC handler properly processes custom commands
+
+5. **UI/UX Design**:
+   - Dark theme matching VS Code
+   - Smooth animations
+   - Clear visual hierarchy
+   - Responsive layout
+   - Keyboard shortcuts (Escape to close)
+
+### IPC Handlers for Git Operations
+**Location**: `src/index.ts`
+
+#### Critical Handlers
+```typescript
+// Repository statistics with push size calculation
+ipcMain.handle('git-repo-stats', async (event, repoPath) => {
+  // Calculates actual push size using git rev-list
+  // Provides both repo size and push size
+  // Passes gitStatus for context
+});
+
+// Smart push execution
+ipcMain.handle('git-push', async (event, options) => {
+  // Handles all push strategies
+  // Supports custom commands
+  // Implements chunked push logic
+  // Returns detailed progress
+});
+
+// Dry run validation
+ipcMain.handle('git-push-dry-run', async (event, options) => {
+  // Tests push without execution
+  // Properly handles custom commands
+  // Shows what would be pushed
+});
+```
+
+#### Bug Fixes Applied
+1. **Custom Command in Dry Run**: Fixed handler to respect customCommand option
+2. **Push Size Calculation**: Added git rev-list for accurate push size
+3. **Shell Parameter**: Changed from `shell: true` to `shell: '/bin/bash'`
+
+### Repository Cleanup & BFG Integration
+
+#### Large Repository Management
+**Problem**: Repositories exceeding GitHub's 2GB pack limits
+**Solution**: BFG Repo Cleaner integration for history cleanup
+
+##### BFG Usage Examples
+```bash
+# Remove large files from history
+bfg --strip-blobs-bigger-than 100M
+
+# Remove specific directories (e.g., build artifacts)
+bfg --delete-folders target
+
+# Clean up after BFG
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+```
+
+##### Real-World Case Study
+- **Initial Size**: 11GB repository
+- **Issue**: Rust target directories in history
+- **Solution**: `bfg --delete-folders target`
+- **Result**: Reduced to 5.9GB (46% reduction)
+- **Preserved**: All commit messages and history
 
 ### Authentication System
 **Location**: `src/git/authentication/`
@@ -2371,6 +2519,22 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
   - Unstage all for staged section
   - Discard changes per file or section
   - Delete untracked files (trash icon)
+  - **Smart Push Button** - Launches intelligent push dialog
+  - **Refresh Button** - Force panel recreation
+- **Branch Display** (Enhanced):
+  - Current branch with icon
+  - **Clickable Ahead/Behind Badges**:
+    - Always visible (shows 0 when no commits)
+    - Blue badges with hover effects
+    - Click ahead (↑) → Launch Smart Push
+    - Click behind (↓) → Fetch then Smart Push
+    - Real-time updates after operations
+- **Panel Refresh System** (Production-Grade):
+  - `recreatePanel()` method for complete DOM refresh
+  - Auto-triggered after commits and pushes
+  - Preserves Git Graph view reference
+  - DOM safety checks with auto-recovery
+  - No polling - fully event-driven
 - **UI Layout**:
   - Scrollable content area with flexbox layout
   - Fixed height sections (header, commit input, status bar)
@@ -5558,6 +5722,40 @@ export class TTYDManager extends EventEmitter {
 4. **Low Maintenance**: Battle-tested solution used in production environments
 5. **Native Performance**: Direct terminal output without JavaScript translation overhead
 
+#### Terminal Tab Display Fix (DOM Safety Enhancement)
+
+**Problem Solved**: Terminal tabs disappearing for AI CLI tools
+**Root Cause**: DOM element references lost during Git panel updates
+**Solution**: Enhanced TTYDTerminalPanel with safety checks and auto-recovery
+
+```typescript
+// Auto-recovery system for tabs container
+private ensureTabsContainer(): HTMLElement {
+  if (!this.tabsContainer) {
+    this.tabsContainer = document.getElementById('isolated-terminal-tabs');
+    if (!this.tabsContainer) {
+      // Recreate if missing
+      const wrapper = document.querySelector('.isolated-terminal-tabs-wrapper');
+      if (wrapper) {
+        this.tabsContainer = document.createElement('div');
+        this.tabsContainer.id = 'isolated-terminal-tabs';
+        this.tabsContainer.className = 'isolated-terminal-tabs';
+        this.tabsContainer.style.cssText = 'display: flex; align-items: center;';
+        wrapper.appendChild(this.tabsContainer);
+      }
+    }
+  }
+  return this.tabsContainer;
+}
+```
+
+**Key Improvements**:
+- DOM element validation before every operation
+- Automatic recreation of missing container elements  
+- Null-safe operations throughout tab management
+- Preserved functionality across panel refreshes
+- No impact on terminal server connections
+
 #### 🚨 TTYD Terminal Server Architecture (Working Implementation)
 
 **How Our TTYD Integration Actually Works**:
@@ -7855,6 +8053,39 @@ hive-2025-08-20T19-30-45-123Z.log
 **Symptoms**: Memory Service panel shows "Loading..." indefinitely
 **Cause**: Express app not attached to HTTP server
 **Solution**: Ensure `this.server = http.createServer(this.app)` in server.ts
+
+## Recent Improvements (2025-08-25)
+
+### Smart Git Push System
+- **Intelligent Strategy Analysis**: Analyzes repository and calculates actual push size (not repo size)
+- **7 Push Strategies**: Standard, Chunked, Force, Fresh Branch, Squash, Bundle, Cleanup
+- **Custom Commands**: Full support for cross-branch pushing and complex git operations
+- **Enterprise Features**: Dry run validation, force with lease, atomic pushes
+- **Visual Enhancements**: 
+  - Clickable ahead/behind badges in Source Control panel
+  - Smart Push dialog with strategy recommendations
+  - Real-time push size calculation
+  
+### Repository Management
+- **BFG Integration**: Clean large files from git history
+- **Size Optimization**: Reduced 11GB repo to 5.9GB
+- **Push Size vs Repo Size**: Smart recommendations based on actual data to push
+
+### UI/UX Improvements
+- **Panel Refresh System**: `recreatePanel()` method for reliable updates
+- **DOM Safety**: Auto-recovery for missing elements
+- **Event-Driven Updates**: No polling, fully reactive
+- **Badge Interactions**: Click ahead/behind badges for smart actions
+
+### Terminal Tab Fixes
+- **DOM Element Recovery**: Auto-recreate missing tab containers
+- **Safety Checks**: Validate elements before operations
+- **AI CLI Tool Integration**: Proper event handling for tool launches
+
+### IPC Handler Enhancements
+- **Custom Command Support**: Properly handle custom git commands in dry run
+- **Push Size Calculation**: Added `git rev-list` for accurate measurements
+- **Shell Configuration**: Fixed shell parameter types for TypeScript
 
 ## Future Enhancements
 
