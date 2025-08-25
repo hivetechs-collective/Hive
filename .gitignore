@@ -56,3 +56,7 @@ coverage/
 
 # External AI helper repositories
 external/ai_helpers/
+
+# Cloudflare Wrangler temporary files
+.wrangler/
+cloudflare/.wrangler/
