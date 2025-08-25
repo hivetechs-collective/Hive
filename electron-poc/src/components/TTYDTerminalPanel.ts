@@ -131,7 +131,7 @@ export class TTYDTerminalPanel {
         tabBtn.addEventListener('click', () => this.switchToTab(tab.id));
         this.tabsContainer.appendChild(tabBtn);
 
-        // Create content area for system log
+        // Create content area for system log with wrapper
         const content = document.createElement('div');
         content.id = `isolated-content-${tab.id}`;
         content.className = 'isolated-tab-content';  // Remove 'active' class
@@ -143,15 +143,32 @@ export class TTYDTerminalPanel {
             bottom: 0;
             background: #1e1e1e;
             display: none;  // Hide by default since it's not active
+        `;
+        
+        // Create the actual scrollable log container
+        const logContainer = document.createElement('div');
+        logContainer.id = 'system-log-container';
+        logContainer.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             overflow-y: auto;
+            overflow-x: hidden;
             padding: 10px;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 12px;
             color: #cccccc;
+            line-height: 1.4;
+            scroll-behavior: auto;  // Changed from smooth for more reliable scrolling
+            -webkit-overflow-scrolling: touch;
         `;
         
         // Add initial message
-        content.innerHTML = `<div style="color: #569cd6;">[System Log initialized]</div>`;
+        logContainer.innerHTML = `<div style="color: #569cd6;">[System Log initialized]</div>`;
+        
+        content.appendChild(logContainer);
         
         this.contentContainer.appendChild(content);
         
@@ -159,8 +176,8 @@ export class TTYDTerminalPanel {
         this.tabs.set(tab.id, tab);
         // Don't set activeTabId here - let the first terminal or AI tool take focus
         
-        // Set up console capture for system log
-        this.setupConsoleCapture(content);
+        // Set up console capture for system log - pass the actual log container
+        this.setupConsoleCapture(logContainer);
     }
 
     private setupConsoleCapture(logElement: HTMLElement): void {
@@ -168,7 +185,54 @@ export class TTYDTerminalPanel {
         const originalError = console.error;
         const originalWarn = console.warn;
         
+        // Track if user has manually scrolled up
+        let userHasScrolledUp = false;
+        let isAutoScrolling = false;
+        
+        // Function to scroll to bottom
+        const scrollToBottom = () => {
+            isAutoScrolling = true;
+            // Multiple attempts to ensure it works
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            setTimeout(() => {
+                logElement.scrollTop = logElement.scrollHeight;
+                requestAnimationFrame(() => {
+                    logElement.scrollTop = logElement.scrollHeight;
+                    // Clear the auto-scrolling flag after animation frame
+                    setTimeout(() => {
+                        isAutoScrolling = false;
+                    }, 100);
+                });
+            }, 10);
+        };
+        
+        // Initially scroll to bottom
+        setTimeout(scrollToBottom, 100);
+        
+        // Listen for user scroll events
+        logElement.addEventListener('scroll', () => {
+            // Skip if this is our programmatic scroll
+            if (isAutoScrolling) return;
+            
+            const scrollTop = logElement.scrollTop;
+            const scrollHeight = logElement.scrollHeight;
+            const clientHeight = logElement.clientHeight;
+            const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+            
+            // If user is more than 100px from bottom, they've scrolled up
+            if (distanceFromBottom > 100) {
+                userHasScrolledUp = true;
+            } else if (distanceFromBottom < 20) {
+                // If they're very close to bottom, resume auto-scroll
+                userHasScrolledUp = false;
+            }
+        });
+        
         const addLogEntry = (message: string, type: 'log' | 'error' | 'warn') => {
+            // Check if we were at bottom before adding entry
+            const wasAtBottom = !userHasScrolledUp;
+            
             const entry = document.createElement('div');
             const timestamp = new Date().toLocaleTimeString();
             
@@ -182,20 +246,22 @@ export class TTYDTerminalPanel {
                 prefix = 'WARN';
             }
             
-            entry.style.color = color;
-            entry.style.marginBottom = '2px';
+            entry.style.cssText = `
+                color: ${color};
+                margin-bottom: 2px;
+                word-wrap: break-word;
+                white-space: pre-wrap;
+                font-family: inherit;
+                font-size: inherit;
+            `;
             entry.textContent = `[${timestamp}] [${prefix}] ${message}`;
             
             logElement.appendChild(entry);
             
-            // Auto-scroll to bottom - use requestAnimationFrame for smooth scrolling
-            requestAnimationFrame(() => {
-                if (logElement && logElement.scrollHeight) {
-                    logElement.scrollTop = logElement.scrollHeight;
-                    // Force a reflow to ensure scroll happens
-                    logElement.scrollIntoView({ behavior: 'auto', block: 'end' });
-                }
-            });
+            // If we were at bottom (or user hasn't scrolled), stay at bottom
+            if (wasAtBottom) {
+                scrollToBottom();
+            }
             
             // Limit log entries to prevent memory issues
             while (logElement.children.length > 1000) {
