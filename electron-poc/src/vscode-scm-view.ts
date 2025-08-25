@@ -795,15 +795,15 @@ export class VSCodeSCMView {
     
     console.log('[SCM] Current status - branch:', branch, 'ahead:', aheadCount, 'hasUpstream:', this.gitStatus?.hasUpstream);
     
-    // For branches without upstream, we still want to push if there are local commits
+    // REMOVED: Don't block the dialog when nothing to push
+    // Users might want to use custom commands even with 0 commits ahead
+    // Example: pushing current branch to overwrite a different branch
+    
+    // Special handling when there's nothing to push normally
+    let customModeMessage = '';
     if (aheadCount === 0 && this.gitStatus?.hasUpstream) {
-      notifications.show({
-        title: 'Nothing to push',
-        message: 'Your branch is up to date with remote',
-        type: 'info',
-        duration: 3000
-      });
-      return;
+      console.log('[SCM] Branch is up to date, opening Smart Push dialog for custom operations');
+      customModeMessage = '⚠️ Your branch is up to date. Showing custom push options only.';
     }
     
     try {
@@ -815,6 +815,13 @@ export class VSCodeSCMView {
       // Analyze and get strategy recommendations
       const analysis = GitPushStrategyAnalyzer.analyzeRepository(stats, this.gitStatus!);
       console.log('[SCM] Analysis result:', analysis);
+      
+      // Override analysis if nothing to push
+      if (aheadCount === 0) {
+        analysis.recommendation = 'No commits to push. Use Custom Command for special operations.';
+        analysis.commitCount = 0;
+        console.log('[SCM] Overriding analysis for 0 commits ahead scenario');
+      }
       
       // Get intelligent recommendation (simulated AI analysis for safety)
       // This uses the same logic the consensus AI would use, but doesn't interfere
@@ -864,9 +871,14 @@ export class VSCodeSCMView {
       console.log('[SCM] Available strategies:', strategies);
       
       // Create explanation text
-      const explanation = aiAdvice 
-        ? `🤖 Intelligent Analysis: ${aiAdvice.reasoning}`
-        : `Repository: ${analysis.totalSize} | ${analysis.commitCount} commits | ${analysis.recommendation}`;
+      let explanation = '';
+      if (aheadCount === 0) {
+        explanation = customModeMessage || '⚠️ No commits to push. Use Custom Command to push to a different branch or force operations.';
+      } else if (aiAdvice) {
+        explanation = `🤖 Intelligent Analysis: ${aiAdvice.reasoning}`;
+      } else {
+        explanation = `Repository: ${analysis.totalSize} | ${analysis.commitCount} commits | ${analysis.recommendation}`;
+      }
       
       // Show strategy selection dialog
       const selectedStrategy = await GitPushDialog.show(analysis, strategies, explanation);
