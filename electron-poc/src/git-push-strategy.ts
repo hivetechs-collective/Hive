@@ -83,8 +83,12 @@ export class GitPushStrategyAnalyzer {
       repoSizeInMB = value * (multipliers[unit] || 1);
     }
     
-    // Use push size for decisions if available, otherwise use repo size
-    const sizeInMB = pushSizeMB > 0 ? pushSizeMB : repoSizeInMB;
+    // Use push size for decisions if we have commits to push
+    const sizeInMB = (gitStatus.ahead > 0 && pushSizeMB >= 0) ? pushSizeMB : repoSizeInMB;
+    const usingPushSize = (gitStatus.ahead > 0 && pushSizeMB >= 0);
+    
+    console.log(`[GitPushStrategyAnalyzer] Using ${usingPushSize ? 'PUSH' : 'REPO'} size for recommendations`);
+    console.log(`[GitPushStrategyAnalyzer] Push size: ${pushSizeMB}MB, Repo size: ${repoSizeInMB}MB, Using: ${sizeInMB}MB`);
 
     // Determine branch status
     let branchStatus: 'new' | 'existing' | 'diverged' = 'existing';
@@ -107,8 +111,14 @@ export class GitPushStrategyAnalyzer {
 
     // Decision tree for recommendations
     
+    // Special case: Nothing to push
+    if (gitStatus.ahead === 0) {
+      recommendation = PushStrategy.REGULAR;
+      reasoning.push('No commits to push');
+      reasoning.push('Use Custom Command for special operations like cross-branch pushing');
+    }
     // Special handling for fresh branches
-    if (isFreshBranch) {
+    else if (isFreshBranch) {
       if (!gitStatus.hasUpstream) {
         recommendation = PushStrategy.REGULAR;
         reasoning.push('Fresh branch created successfully');
@@ -132,7 +142,12 @@ export class GitPushStrategyAnalyzer {
         reasoning.push('Fresh branch avoids history transfer issues');
         risks.push('Current branch has too much historical data');
       }
-    } else if (sizeInMB > 2000) { // > 2GB
+    } else if (usingPushSize && sizeInMB > 100) {
+      // When using PUSH size, recommend chunked if over 100MB
+      recommendation = PushStrategy.CHUNKED;
+      reasoning.push(`Push size is ${pushSize || sizeInMB + 'MB'} - exceeds safe limits`);
+      reasoning.push('Chunked push will break this into smaller batches');
+    } else if (!usingPushSize && sizeInMB > 2000) { // Only check repo size if not using push size
       if (stats.commitCount > 1000) {
         recommendation = PushStrategy.CHUNKED;
         reasoning.push('Large repository with many commits');
@@ -146,7 +161,7 @@ export class GitPushStrategyAnalyzer {
         reasoning.push('Repository approaching GitHub limits');
         reasoning.push('Incremental push most likely to succeed');
       }
-    } else if (sizeInMB > 1000) { // > 1GB
+    } else if (!usingPushSize && sizeInMB > 1000) { // > 1GB - only check repo size
       if (branchStatus === 'diverged') {
         recommendation = PushStrategy.FORCE;
         reasoning.push('Branch has diverged from remote');

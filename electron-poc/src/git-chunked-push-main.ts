@@ -207,10 +207,23 @@ export class GitChunkedPushMain {
         try {
           // Get the size of objects that would be pushed
           // This simulates what would be sent in a push
-          const { stdout: pushObjects } = await execAsync(
-            `git rev-list --objects origin/${gitStatus.branch}..HEAD 2>/dev/null | git cat-file --batch-check='%(objectsize) %(objectname)' | awk '{sum+=$1} END {print sum}'`,
-            { cwd: repoPath, shell: true }
-          );
+          // First try with origin/branch, if that fails try without
+          let pushObjects = '';
+          try {
+            const result = await execAsync(
+              `git rev-list --objects origin/${gitStatus.branch}..HEAD 2>/dev/null | git cat-file --batch-check='%(objectsize) %(objectname)' | awk '{sum+=$1} END {print sum}'`,
+              { cwd: repoPath, shell: true }
+            );
+            pushObjects = result.stdout;
+          } catch (e) {
+            console.log('[GitChunkedPushMain] First push size calculation failed, trying alternative method');
+            // Try counting just the commits we're ahead
+            const result = await execAsync(
+              `git rev-list HEAD~${gitStatus.ahead}..HEAD --objects | git cat-file --batch-check='%(objectsize) %(objectname)' | awk '{sum+=$1} END {print sum}'`,
+              { cwd: repoPath, shell: true }
+            );
+            pushObjects = result.stdout;
+          }
           
           const pushBytes = parseInt(pushObjects.trim()) || 0;
           pushSizeMB = pushBytes / (1024 * 1024);
@@ -224,7 +237,8 @@ export class GitChunkedPushMain {
             pushSize = `${(pushSizeMB / 1024).toFixed(2)} GiB`;
           }
           
-          console.log(`[GitChunkedPushMain] Push size calculated: ${pushSize} (${commitsAhead} commits)`);
+          console.log(`[GitChunkedPushMain] Push size calculated: ${pushSize} (${pushSizeMB.toFixed(2)} MB) for ${commitsAhead} commits`);
+          console.log(`[GitChunkedPushMain] Push bytes: ${pushBytes}, Repository size: ${totalSize}`);
         } catch (e) {
           console.log('[GitChunkedPushMain] Could not calculate push size:', e);
           // Fallback: estimate based on commit count
