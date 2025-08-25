@@ -312,6 +312,7 @@ export class GitPushDialog {
         font-size: 13px;
       `;
       cancelButton.onclick = () => {
+        if ((overlay as any).cleanup) (overlay as any).cleanup();
         overlay.remove();
         resolve(null);
       };
@@ -363,7 +364,7 @@ export class GitPushDialog {
       });
       
       // Handle push to different branch checkbox (backup event listener in case inline fails)
-      setTimeout(() => {
+      const initTimeout = setTimeout(() => {
         const differentBranchCheckbox = document.getElementById('push-opt-different-branch') as HTMLInputElement;
         const targetBranchInput = document.getElementById('push-opt-target-branch') as HTMLInputElement;
         
@@ -373,17 +374,21 @@ export class GitPushDialog {
           targetBranchInput.disabled = true;
           
           // Add event listener as backup
-          differentBranchCheckbox.addEventListener('change', () => {
-            console.log('Checkbox changed:', differentBranchCheckbox.checked);
+          const changeHandler = () => {
             targetBranchInput.disabled = !differentBranchCheckbox.checked;
             targetBranchInput.style.opacity = differentBranchCheckbox.checked ? '1' : '0.3';
             if (differentBranchCheckbox.checked) {
               targetBranchInput.focus();
               targetBranchInput.value = targetBranchInput.value || 'main'; // Suggest 'main' as default
             }
-          });
-        } else {
-          console.warn('Could not find push-to-different-branch elements');
+          };
+          differentBranchCheckbox.addEventListener('change', changeHandler);
+          
+          // Store cleanup function
+          (overlay as any).cleanup = () => {
+            differentBranchCheckbox.removeEventListener('change', changeHandler);
+            clearTimeout(initTimeout);
+          };
         }
       }, 100);
       
@@ -444,6 +449,7 @@ export class GitPushDialog {
               dryRun: (document.getElementById('push-opt-dry-run') as HTMLInputElement)?.checked
             }
           };
+          if ((overlay as any).cleanup) (overlay as any).cleanup();
           overlay.remove();
           resolve(customStrategy);
           return;
@@ -470,6 +476,7 @@ export class GitPushDialog {
           thinPack: (document.getElementById('push-opt-thin') as HTMLInputElement)?.checked
         };
         
+        if ((overlay as any).cleanup) (overlay as any).cleanup();
         overlay.remove();
         resolve(selectedStrategy);
       };
@@ -493,16 +500,6 @@ export class GitPushDialog {
       
       // Show dialog
       document.body.appendChild(overlay);
-      
-      // Additional setup after dialog is shown
-      setTimeout(() => {
-        // Make absolutely sure the event handlers are attached
-        const diffBranchCheck = document.getElementById('push-opt-different-branch') as HTMLInputElement;
-        const targetInput = document.getElementById('push-opt-target-branch') as HTMLInputElement;
-        if (diffBranchCheck && targetInput) {
-          console.log('Dialog ready, elements found');
-        }
-      }, 50);
       
       // Focus first strategy
       (strategyElements[0] as HTMLElement)?.focus();
