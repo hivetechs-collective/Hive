@@ -425,6 +425,8 @@ export class GitPushDialog {
           if ((document.getElementById('push-opt-force-lease') as HTMLInputElement)?.checked) {
             finalCustomCommand += ' --force-with-lease';
           }
+          
+          // Do NOT add --dry-run here, it will be handled by the executor based on selectedOptions.dryRun
         }
         
         // If we have a custom command, execute it

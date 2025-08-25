@@ -23,13 +23,13 @@ export class GitPushExecutor {
     try {
       let result: { success: boolean; message: string };
       
-      // Check if user provided a custom command
-      if (strategy.selectedOptions?.customCommand) {
-        result = await this.executeCustomCommand(gitAPI, strategy.selectedOptions.customCommand, progressDialog);
-      } 
-      // Check if dry run is selected
-      else if (strategy.selectedOptions?.dryRun) {
+      // Check if dry run is selected (regardless of custom command or not)
+      if (strategy.selectedOptions?.dryRun) {
         result = await this.executeDryRun(gitAPI, gitStatus, strategy, progressDialog);
+      }
+      // Check if user provided a custom command (without dry run)
+      else if (strategy.selectedOptions?.customCommand) {
+        result = await this.executeCustomCommand(gitAPI, strategy.selectedOptions.customCommand, progressDialog);
       }
       // Normal strategy execution
       else {
