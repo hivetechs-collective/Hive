@@ -146,13 +146,11 @@ export class GitPushExecutor {
     this.updateProgress(dialog, `Executing custom command: ${command}`);
     
     try {
-      // For now, we'll need to add a new IPC handler for custom commands
-      // This is a placeholder that shows the intent
-      alert(`Custom command execution:\n\n${command}\n\nThis feature requires implementation in the main process.`);
+      const result = await gitAPI.pushCustom(command);
       
       return {
-        success: false,
-        message: 'Custom command execution not yet implemented. Please use standard options.'
+        success: true,
+        message: `Custom command executed successfully:\n${result}`
       };
     } catch (error: any) {
       throw new Error(`Custom command failed: ${error.message}`);
@@ -171,7 +169,10 @@ export class GitPushExecutor {
     this.updateProgress(dialog, 'Running push simulation (dry run)...');
     
     try {
-      // Build the command that would be executed
+      // Execute actual dry run with git
+      const result = await gitAPI.pushDryRun(strategy.selectedOptions);
+      
+      // Build command display for user
       let command = 'git push';
       
       if (strategy.selectedOptions?.forceWithLease) {
@@ -203,8 +204,11 @@ export class GitPushExecutor {
 Dry Run Results:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Command that would run:
+Command executed:
 ${command}
+
+Git Output:
+${result || 'Everything up-to-date (no changes to push)'}
 
 What would happen:
 • ${gitStatus.ahead || 0} commits would be pushed
@@ -240,30 +244,20 @@ No actual changes were made (dry run mode).
     this.updateProgress(dialog, 'Pushing to remote repository...');
     
     try {
-      // Build push command based on options
-      // For now, we use the standard push but log what would be different
-      if (options) {
+      let result: string;
+      
+      // Use the new API with options if any are selected
+      if (options && Object.keys(options).some(key => options[key])) {
         console.log('Push options selected:', options);
-        
-        // These would need implementation in the main process
-        if (options.forceWithLease) {
-          console.log('Would use --force-with-lease');
-        }
-        if (options.includeTags) {
-          console.log('Would include --tags');
-        }
-        if (options.setUpstream) {
-          console.log('Would set upstream with -u');
-        }
-        if (options.commitLimit) {
-          console.log(`Would push only last ${options.commitLimit} commits`);
-        }
+        result = await gitAPI.pushWithOptions(options);
+      } else {
+        // Use standard push if no options
+        result = await gitAPI.push();
       }
       
-      await gitAPI.push();
       return {
         success: true,
-        message: `Successfully pushed ${gitStatus.ahead || 0} commits to ${gitStatus.branch}`
+        message: `Successfully pushed ${gitStatus.ahead || 0} commits to ${gitStatus.branch}\n${result}`
       };
     } catch (error: any) {
       if (error.message?.includes('pack exceeds maximum allowed size') || 
@@ -343,14 +337,13 @@ No actual changes were made (dry run mode).
     this.updateProgress(dialog, 'Force pushing to remote...');
     
     try {
-      // Call the force push API (needs to be added to gitAPI)
-      if (gitAPI.forcePush) {
-        await gitAPI.forcePush();
+      // Use force with lease by default (safer)
+      if (options?.forceWithLease !== false) {
+        // Default to safer force-with-lease
+        await gitAPI.pushForceWithLease();
       } else {
-        // Fallback: try regular push for now
-        // TODO: Implement force push in main process
-        this.updateProgress(dialog, 'Using regular push (force push being implemented)...');
-        await gitAPI.push();
+        // Use pushWithOptions for full force (when explicitly requested)
+        await gitAPI.pushWithOptions({ force: true });
       }
       
       return {

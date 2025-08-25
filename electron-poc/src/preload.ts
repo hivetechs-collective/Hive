@@ -158,7 +158,12 @@ contextBridge.exposeInMainWorld('gitAPI', {
   getSubmoduleStatus: (submodulePath: string) => ipcRenderer.invoke('git-submodule-status', submodulePath),
   getSubmoduleDiff: (submodulePath: string) => ipcRenderer.invoke('git-submodule-diff', submodulePath),
   pushChunked: () => ipcRenderer.invoke('git-push-chunked'),
-  getRepoStats: () => ipcRenderer.invoke('git-repo-stats')
+  getRepoStats: () => ipcRenderer.invoke('git-repo-stats'),
+  // New push options
+  pushWithOptions: (options: any) => ipcRenderer.invoke('git-push-with-options', options),
+  pushForceWithLease: () => ipcRenderer.invoke('git-push-force-lease'),
+  pushCustom: (command: string) => ipcRenderer.invoke('git-push-custom', command),
+  pushDryRun: (options?: any) => ipcRenderer.invoke('git-push-dry-run', options)
 });
 
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown

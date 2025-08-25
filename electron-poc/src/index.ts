@@ -348,6 +348,192 @@ const registerGitHandlers = () => {
     }
   });
 
+  // Push with options support
+  ipcMain.handle('git-push-with-options', async (_event, options: any) => {
+    logger.info('[Main] git-push-with-options IPC called with:', options);
+    if (!gitManager) {
+      throw new Error('No folder open');
+    }
+    
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      // Get the repository path
+      let repoPath: string;
+      if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+        repoPath = gitManager.getRepoPath();
+      } else {
+        repoPath = (gitManager as any).repoPath;
+      }
+      
+      // Build git push command with options
+      let command = 'git push';
+      
+      if (options.forceWithLease) {
+        command += ' --force-with-lease';
+      }
+      if (options.includeTags) {
+        command += ' --tags';
+      }
+      if (options.setUpstream) {
+        // Get current branch name
+        const status = await gitManager.getStatus();
+        const branch = status.current || 'main';
+        command += ` -u origin ${branch}`;
+      }
+      if (options.atomic) {
+        command += ' --atomic';
+      }
+      if (options.signPush) {
+        command += ' --signed';
+      }
+      if (options.thinPack) {
+        command += ' --thin';
+      }
+      if (options.commitLimit) {
+        // Push only last N commits
+        const status = await gitManager.getStatus();
+        const branch = status.current || 'main';
+        command = `git push origin HEAD~${options.commitLimit}:${branch}`;
+        
+        // Add other options if commit limit is set
+        if (options.forceWithLease) command += ' --force-with-lease';
+        if (options.atomic) command += ' --atomic';
+      }
+      
+      logger.info('[Main] Executing push command:', command);
+      const result = await execAsync(command, { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 });
+      
+      logger.info('[Main] Push with options completed successfully');
+      return result.stdout || 'Push completed successfully';
+    } catch (error: any) {
+      logger.error('[Main] git-push-with-options failed:', error);
+      throw error;
+    }
+  });
+
+  // Push with --force-with-lease
+  ipcMain.handle('git-push-force-lease', async () => {
+    logger.info('[Main] git-push-force-lease IPC called');
+    if (!gitManager) {
+      throw new Error('No folder open');
+    }
+    
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      let repoPath: string;
+      if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+        repoPath = gitManager.getRepoPath();
+      } else {
+        repoPath = (gitManager as any).repoPath;
+      }
+      
+      const result = await execAsync('git push --force-with-lease', { 
+        cwd: repoPath,
+        maxBuffer: 10 * 1024 * 1024 
+      });
+      
+      logger.info('[Main] Force with lease push completed successfully');
+      return result.stdout || 'Force push with lease completed successfully';
+    } catch (error: any) {
+      logger.error('[Main] git-push-force-lease failed:', error);
+      throw error;
+    }
+  });
+
+  // Push custom command
+  ipcMain.handle('git-push-custom', async (_event, command: string) => {
+    logger.info('[Main] git-push-custom IPC called with:', command);
+    if (!gitManager) {
+      throw new Error('No folder open');
+    }
+    
+    // Security check - ensure command starts with "git push"
+    if (!command.trim().startsWith('git push')) {
+      throw new Error('Custom command must start with "git push" for security');
+    }
+    
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      let repoPath: string;
+      if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+        repoPath = gitManager.getRepoPath();
+      } else {
+        repoPath = (gitManager as any).repoPath;
+      }
+      
+      logger.info('[Main] Executing custom push command:', command);
+      const result = await execAsync(command, { 
+        cwd: repoPath,
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: 600000 // 10 minute timeout for large pushes
+      });
+      
+      logger.info('[Main] Custom push completed successfully');
+      return result.stdout || 'Custom push completed successfully';
+    } catch (error: any) {
+      logger.error('[Main] git-push-custom failed:', error);
+      throw error;
+    }
+  });
+
+  // Push dry run
+  ipcMain.handle('git-push-dry-run', async (_event, options: any) => {
+    logger.info('[Main] git-push-dry-run IPC called with:', options);
+    if (!gitManager) {
+      throw new Error('No folder open');
+    }
+    
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      let repoPath: string;
+      if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+        repoPath = gitManager.getRepoPath();
+      } else {
+        repoPath = (gitManager as any).repoPath;
+      }
+      
+      // Build command with --dry-run
+      let command = 'git push --dry-run --porcelain';
+      
+      if (options?.forceWithLease) {
+        command += ' --force-with-lease';
+      }
+      if (options?.includeTags) {
+        command += ' --tags';
+      }
+      if (options?.setUpstream) {
+        const status = await gitManager.getStatus();
+        const branch = status.current || 'main';
+        command += ` -u origin ${branch}`;
+      }
+      
+      logger.info('[Main] Executing dry run:', command);
+      const result = await execAsync(command, { cwd: repoPath });
+      
+      logger.info('[Main] Dry run completed');
+      return result.stdout || 'Dry run completed - no changes made';
+    } catch (error: any) {
+      // Dry run often returns non-zero exit code, but that's OK
+      if (error.stdout) {
+        return error.stdout;
+      }
+      logger.error('[Main] git-push-dry-run failed:', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('git-pull', async () => {
     if (!gitManager) {
       throw new Error('No folder open');

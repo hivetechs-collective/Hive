@@ -2406,6 +2406,234 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
 - **In-place DOM updates** without tree rebuilds
 - **Handles both `working_dir` and `working` properties** from different Git libraries
 
+### Smart Push System Architecture
+
+#### Overview
+**Purpose**: Intelligent git push handling for repositories of any size, with special focus on large repositories (>2GB) that exceed GitHub's limits.
+
+#### Core Components
+
+##### 1. Push Strategy Analyzer
+**Location**: `src/git-push-strategy.ts`
+**Responsibilities**:
+- Analyzes repository characteristics (size, commit count, branch status)
+- Determines optimal push strategy based on repository analysis
+- Provides multiple strategy options with clear recommendations
+
+**Strategy Types**:
+```typescript
+enum PushStrategy {
+  REGULAR = 'regular',        // Standard git push
+  CHUNKED = 'chunked',        // Break into batches for large repos
+  FORCE = 'force',            // Force push (with warnings)
+  FRESH_BRANCH = 'fresh-branch', // Create new branch
+  SQUASH = 'squash',          // Squash commits first
+  BUNDLE = 'bundle',          // Create bundle file
+  CLEANUP_FIRST = 'cleanup-first' // Clean history before push
+}
+```
+
+##### 2. Smart Push Dialog
+**Location**: `src/git-push-dialog.ts`
+**Features**:
+- **Repository Statistics**: Shows repo size, commit count, branch status
+- **AI Recommendations**: Displays best strategies for the specific situation
+- **Push Options Section**: Common git flags accessible via checkboxes
+- **Advanced Options**: Collapsible section for power users
+- **No Confidence Scores**: Removed confusing percentages in favor of clear recommendations
+
+**Dialog Structure**:
+```
+┌─────────────────────────────────────────────────┐
+│ Smart Push - [Repository Stats]                 │
+├─────────────────────────────────────────────────┤
+│ 📊 RECOMMENDED STRATEGIES                       │
+│ ┌─────────────────────────────────────────────┐│
+│ │ [Strategy Cards with RECOMMENDED badge]     ││
+│ │ - Icon, Name, Description                   ││
+│ │ - Pros/Cons lists                          ││
+│ │ - Estimated time                           ││
+│ └─────────────────────────────────────────────┘│
+│                                                 │
+│ ⚙️ PUSH OPTIONS                                │
+│ □ Force with lease (--force-with-lease)        │
+│ □ Include tags (--tags)                        │
+│ □ Set upstream (-u)                            │
+│ □ Dry run first (--dry-run)                    │
+│                                                 │
+│ ▼ Advanced Options                             │
+│   - Commit limit (HEAD~N)                      │
+│   - Custom git command                         │
+│   - Atomic, Sign, Thin pack                    │
+└─────────────────────────────────────────────────┘
+```
+
+##### 3. Push Executor
+**Location**: `src/git-push-executor.ts`
+**Capabilities**:
+- Executes selected strategy with user options
+- Shows progress dialog during execution
+- Handles failures with automatic fallbacks
+- Supports dry run for previewing operations
+
+**Option Handling**:
+```typescript
+interface PushOptions {
+  forceWithLease?: boolean;  // Safer force push
+  includeTags?: boolean;      // Push tags with commits
+  setUpstream?: boolean;      // Set tracking branch
+  dryRun?: boolean;          // Preview without pushing
+  commitLimit?: number;       // Push only last N commits
+  customCommand?: string;     // Override with custom command
+  atomic?: boolean;          // All refs must succeed
+  signPush?: boolean;        // GPG sign the push
+  thinPack?: boolean;        // Optimize pack size
+}
+```
+
+##### 4. Git Consensus Advisor
+**Location**: `src/git-consensus-advisor.ts`
+**Purpose**: AI-powered strategy recommendations (future enhancement)
+- Analyzes repository state
+- Provides intelligent recommendations
+- Explains reasoning for each strategy
+- Lists potential risks
+
+#### Push Implementation Details
+
+##### Standard Push
+- Uses `git push` with selected options
+- Automatically falls back to chunked if size limit hit
+- Supports all standard git push flags
+
+##### Smart Chunked Push
+**Algorithm**:
+1. Analyzes repository size and commit count
+2. Breaks commits into manageable batches
+3. Pushes batches sequentially (50, 25, 10, 5, 1)
+4. Handles partial failures gracefully
+5. Provides detailed progress feedback
+
+**Implementation**: `src/index.ts::handleGitPushChunked()`
+```typescript
+// Batch sizes for progressive pushing
+const batchSizes = [50, 25, 10, 5, 1];
+// Push commits in progressively smaller batches
+for (const batchSize of batchSizes) {
+  // Push HEAD~N:branch incrementally
+}
+```
+
+##### Force Push Variants
+- **Force with Lease**: Safer, checks remote hasn't changed
+- **Force**: Overwrites remote (requires confirmation)
+- **Force with Includes**: Git 2.30+ safety feature
+
+##### Special Operations
+- **Fresh Branch**: Creates new branch for clean push
+- **Squash & Push**: Combines commits before pushing
+- **Bundle Creation**: Exports repo for manual transfer
+- **Cleanup First**: Guides through BFG/filter-branch
+
+#### IPC Communication
+
+##### Main Process Handlers
+**Location**: `src/index.ts`
+```typescript
+// Basic push operations
+ipcMain.handle('git-push', handleGitPush);
+ipcMain.handle('git-push-chunked', handleGitPushChunked);
+ipcMain.handle('git-push-with-options', handleGitPushWithOptions);
+
+// Advanced operations (to be implemented)
+ipcMain.handle('git-push-force-lease', handleGitPushForceLease);
+ipcMain.handle('git-push-range', handleGitPushRange);
+ipcMain.handle('git-push-custom', handleGitPushCustom);
+ipcMain.handle('git-push-dry-run', handleGitPushDryRun);
+```
+
+##### Renderer API
+**Location**: `src/preload.ts`
+```typescript
+gitAPI: {
+  // Existing
+  push: () => ipcRenderer.invoke('git-push'),
+  pushChunked: () => ipcRenderer.invoke('git-push-chunked'),
+  
+  // To be added
+  pushWithOptions: (options: PushOptions) => 
+    ipcRenderer.invoke('git-push-with-options', options),
+  pushForceWithLease: () => 
+    ipcRenderer.invoke('git-push-force-lease'),
+  pushRange: (range: string) => 
+    ipcRenderer.invoke('git-push-range', range),
+  pushCustom: (command: string) => 
+    ipcRenderer.invoke('git-push-custom', command),
+  pushDryRun: (options: PushOptions) => 
+    ipcRenderer.invoke('git-push-dry-run', options)
+}
+```
+
+#### User Experience Flow
+
+1. **User clicks Push button** in SCM toolbar
+2. **System analyzes repository**:
+   - Gets size via `git count-objects -vH`
+   - Counts commits ahead/behind
+   - Checks branch tracking status
+3. **Smart Push Dialog appears** with:
+   - Repository statistics
+   - Recommended strategies (no confusing percentages)
+   - Push options checkboxes
+   - Advanced options (collapsed)
+4. **User selects strategy** and optionally customizes options
+5. **Executor runs push** with progress feedback
+6. **Success/failure handling** with clear messages
+
+#### Large Repository Optimization
+
+##### Problem
+- GitHub has 2GB pack size limit
+- Repositories >2GB fail with standard push
+- Users need guidance for large repo handling
+
+##### Solution
+- **Automatic detection** of large repositories
+- **Smart Chunked Push** as default for >2GB
+- **Progressive batch sizes** (50→25→10→5→1)
+- **Automatic fallback** from regular to chunked
+- **Clear user communication** about what's happening
+
+##### Performance Considerations
+- Chunked push takes longer but ensures success
+- Network interruptions handled with resume capability
+- Progress feedback keeps users informed
+- Partial success tracking for recovery
+
+#### Future Enhancements
+
+1. **Full Option Implementation**:
+   - Implement all git push flags in main process
+   - Add IPC handlers for each option type
+   - Support complex scenarios (partial push, range push)
+
+2. **AI Integration**:
+   - Connect to Consensus Engine for recommendations
+   - Learn from user patterns
+   - Predict optimal strategy based on history
+
+3. **Advanced Features**:
+   - Git LFS detection and migration
+   - Shallow clone recommendations
+   - Bundle file upload to cloud storage
+   - Automated history cleanup workflows
+
+4. **UI Improvements**:
+   - Command preview with syntax highlighting
+   - Visual progress bars for batch operations
+   - History of push operations
+   - Saved push configurations
+
 ### Event-Driven Update Architecture
 
 #### Philosophy
