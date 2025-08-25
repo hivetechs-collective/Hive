@@ -1534,6 +1534,9 @@ export class VSCodeSCMView {
       // Switch branch
       await window.gitAPI.switchBranch(branchName);
       
+      // Small delay to ensure Git has fully switched
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Update notification
       notifications.update(notificationId, {
         title: 'Branch Switched',
@@ -1542,8 +1545,19 @@ export class VSCodeSCMView {
         duration: 3000
       });
       
-      // Refresh the Git panel
+      // Refresh the Git panel - force a complete re-render
       await this.refresh();
+      
+      // Double-check the current branch
+      const status = await window.gitAPI.getStatus();
+      console.log('[SCM] After branch switch, current branch is:', status.branch);
+      
+      // If the displayed branch doesn't match, force another render
+      if (this.gitStatus?.branch !== status.branch) {
+        console.log('[SCM] Branch mismatch detected after switch, forcing re-render');
+        this.gitStatus = status;
+        this.render();
+      }
       
       // Also refresh file explorer to update decorations
       if (window.fileExplorer) {
@@ -1720,8 +1734,14 @@ export class VSCodeSCMView {
         duration: 0
       });
       
-      // Create the branch
+      // Create the branch (this also switches to it)
       await window.gitAPI.createBranch(branchName);
+      
+      // Small delay to ensure Git has fully switched
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Force a fresh status check
+      console.log('[SCM] Branch created, forcing refresh...');
       
       // Update notification
       notifications.update(notificationId, {
@@ -1731,8 +1751,19 @@ export class VSCodeSCMView {
         duration: 3000
       });
       
-      // Refresh the Git panel
+      // Refresh the Git panel - force a complete re-render
       await this.refresh();
+      
+      // Double-check the current branch
+      const status = await window.gitAPI.getStatus();
+      console.log('[SCM] After branch creation, current branch is:', status.branch);
+      
+      // If the displayed branch doesn't match, force another render
+      if (this.gitStatus?.branch !== status.branch) {
+        console.log('[SCM] Branch mismatch detected, forcing re-render');
+        this.gitStatus = status;
+        this.render();
+      }
       
       // Also refresh file explorer
       if (window.fileExplorer) {
@@ -1779,6 +1810,9 @@ export class VSCodeSCMView {
         // Note: This might need additional git command support in the backend
       }
       
+      // Small delay to ensure Git has fully switched
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Update notification
       notifications.update(notificationId, {
         title: 'Branch Checked Out',
@@ -1787,8 +1821,19 @@ export class VSCodeSCMView {
         duration: 3000
       });
       
-      // Refresh the Git panel
+      // Refresh the Git panel - force a complete re-render
       await this.refresh();
+      
+      // Double-check the current branch
+      const status = await window.gitAPI.getStatus();
+      console.log('[SCM] After remote checkout, current branch is:', status.branch);
+      
+      // If the displayed branch doesn't match, force another render
+      if (this.gitStatus?.branch !== status.branch) {
+        console.log('[SCM] Branch mismatch detected after remote checkout, forcing re-render');
+        this.gitStatus = status;
+        this.render();
+      }
       
       // Also refresh file explorer
       if (window.fileExplorer) {
