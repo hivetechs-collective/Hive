@@ -465,7 +465,7 @@ export class GitGraphView {
             return `
                 <div class="git-graph-commit ${isSelected ? 'selected' : ''}" 
                      data-hash="${commit.hash}"
-                     onclick="window.gitGraph?.toggleCommit('${commit.hash}')">
+                     onclick="window.gitGraph.toggleCommit('${commit.hash}')">
                     <div class="git-graph-visual">
                         ${index < this.commits.length - 1 ? '<div class="git-graph-line"></div>' : ''}
                         <div class="git-graph-node"></div>
@@ -488,10 +488,10 @@ export class GitGraphView {
                         <span>COMMITS</span>
                     </div>
                     <div class="git-graph-actions">
-                        <button class="git-graph-action-btn" title="Refresh" onclick="window.gitGraph?.refresh()">
+                        <button class="git-graph-action-btn" title="Refresh" onclick="window.gitGraph.refresh()">
                             <span class="codicon codicon-refresh"></span>
                         </button>
-                        <button class="git-graph-action-btn" title="Load More Commits" onclick="window.scmView?.loadMoreCommits()" style="font-family: inherit; font-size: 11px; padding: 2px 4px;">
+                        <button class="git-graph-action-btn" title="Load More Commits" onclick="window.scmView.loadMoreCommits()" style="font-family: inherit; font-size: 11px; padding: 2px 4px;">
                             More
                         </button>
                     </div>
@@ -514,7 +514,7 @@ export class GitGraphView {
                         <span>COMMITS</span>
                     </div>
                     <div class="git-graph-actions">
-                        <button class="git-graph-action-btn" title="Refresh" onclick="window.gitGraph?.refresh()">
+                        <button class="git-graph-action-btn" title="Refresh" onclick="window.gitGraph.refresh()">
                             <span class="codicon codicon-refresh"></span>
                         </button>
                     </div>
