@@ -166,11 +166,14 @@ export class GitChunkedPushMain {
   /**
    * Get repository statistics for decision making
    */
-  static async getRepoStats(repoPath: string): Promise<{ 
+  static async getRepoStats(repoPath: string, gitStatus?: any): Promise<{ 
     totalSize: string;
     largestPack: string;
     commitCount: number;
     recommendation: string;
+    pushSize?: string;
+    pushSizeMB?: number;
+    commitsAhead?: number;
   }> {
     try {
       // Get pack size
@@ -195,33 +198,78 @@ export class GitChunkedPushMain {
       
       const count = parseInt(commitCount.trim());
       
-      // Parse size for recommendation
+      // Calculate actual push size if we have git status
+      let pushSize = '0';
+      let pushSizeMB = 0;
+      let commitsAhead = gitStatus?.ahead || 0;
+      
+      if (gitStatus && gitStatus.ahead > 0) {
+        try {
+          // Get the size of objects that would be pushed
+          // This simulates what would be sent in a push
+          const { stdout: pushObjects } = await execAsync(
+            `git rev-list --objects origin/${gitStatus.branch}..HEAD 2>/dev/null | git cat-file --batch-check='%(objectsize) %(objectname)' | awk '{sum+=$1} END {print sum}'`,
+            { cwd: repoPath, shell: true }
+          );
+          
+          const pushBytes = parseInt(pushObjects.trim()) || 0;
+          pushSizeMB = pushBytes / (1024 * 1024);
+          
+          // Format push size for display
+          if (pushSizeMB < 1) {
+            pushSize = `${(pushBytes / 1024).toFixed(2)} KiB`;
+          } else if (pushSizeMB < 1024) {
+            pushSize = `${pushSizeMB.toFixed(2)} MiB`;
+          } else {
+            pushSize = `${(pushSizeMB / 1024).toFixed(2)} GiB`;
+          }
+          
+          console.log(`[GitChunkedPushMain] Push size calculated: ${pushSize} (${commitsAhead} commits)`);
+        } catch (e) {
+          console.log('[GitChunkedPushMain] Could not calculate push size:', e);
+          // Fallback: estimate based on commit count
+          // Average commit size is roughly 5-10KB
+          pushSizeMB = (commitsAhead * 0.01); // ~10KB per commit
+          pushSize = `~${pushSizeMB.toFixed(2)} MiB (estimated)`;
+        }
+      }
+      
+      // Parse total repo size for comparison
       const sizeInMB = parseFloat(totalSize.replace(/[^\d.]/g, ''));
       const unit = totalSize.match(/[KMGT]iB/)?.[0] || 'B';
       const multiplier = unit === 'GiB' ? 1024 : unit === 'MiB' ? 1 : 0.001;
       const actualSizeMB = sizeInMB * multiplier;
       
+      // Base recommendation on PUSH SIZE, not repo size
       let recommendation = '';
-      if (actualSizeMB > 1800) {
-        recommendation = 'Repository exceeds 1.8GB. Use chunked push or clean history.';
-      } else if (actualSizeMB > 1000) {
-        recommendation = 'Repository is large. Consider using chunked push.';
+      if (commitsAhead === 0) {
+        recommendation = 'No commits to push. Use custom command for special operations.';
+      } else if (pushSizeMB > 100) {
+        recommendation = `Push size: ${pushSize}. GitHub limit is 100MB. Use chunked push.`;
+      } else if (pushSizeMB > 50) {
+        recommendation = `Push size: ${pushSize}. Consider using chunked push for safety.`;
       } else {
-        recommendation = 'Repository size is manageable. Standard push should work.';
+        recommendation = `Push size: ${pushSize}. Standard push should work fine.`;
       }
       
       return {
         totalSize,
         largestPack,
         commitCount: count,
-        recommendation
+        recommendation,
+        pushSize,
+        pushSizeMB,
+        commitsAhead
       };
     } catch (error: any) {
       return {
         totalSize: 'Unknown',
         largestPack: 'Unknown', 
         commitCount: 0,
-        recommendation: 'Could not analyze repository'
+        recommendation: 'Could not analyze repository',
+        pushSize: 'Unknown',
+        pushSizeMB: 0,
+        commitsAhead: 0
       };
     }
   }

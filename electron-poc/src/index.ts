@@ -338,8 +338,11 @@ const registerGitHandlers = () => {
         repoPath = (gitManager as any).repoPath;
       }
       
+      // Get current git status to know how many commits to push
+      const gitStatus = await gitManager.getStatus();
+      
       logger.info('[Main] Using repository path for stats:', repoPath);
-      const stats = await GitChunkedPushMain.getRepoStats(repoPath);
+      const stats = await GitChunkedPushMain.getRepoStats(repoPath, gitStatus);
       logger.info('[Main] Repository stats:', stats);
       return stats;
     } catch (error: any) {

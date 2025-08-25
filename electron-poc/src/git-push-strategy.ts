@@ -15,6 +15,8 @@ export interface RepositoryAnalysis {
   recommendation: PushStrategy;
   reasoning: string[];
   risks: string[];
+  pushSize?: string;
+  pushSizeMB?: number;
 }
 
 export enum PushStrategy {
@@ -61,9 +63,13 @@ export class GitPushStrategyAnalyzer {
    * Analyze repository and recommend best push strategy
    */
   static analyzeRepository(stats: any, gitStatus: any): RepositoryAnalysis {
-    // Parse size
+    // Parse size - Use PUSH SIZE if available, otherwise fall back to total size
+    const pushSizeMB = stats.pushSizeMB || 0;
+    const pushSize = stats.pushSize || '0';
+    
+    // Also parse total repo size for context
     const sizeMatch = stats.totalSize.match(/([\d.]+)\s*([KMGT]iB)?/);
-    let sizeInMB = 0;
+    let repoSizeInMB = 0;
     if (sizeMatch) {
       const value = parseFloat(sizeMatch[1]);
       const unit = sizeMatch[2] || 'B';
@@ -74,8 +80,11 @@ export class GitPushStrategyAnalyzer {
         'GiB': 1024,
         'TiB': 1024 * 1024
       };
-      sizeInMB = value * (multipliers[unit] || 1);
+      repoSizeInMB = value * (multipliers[unit] || 1);
     }
+    
+    // Use push size for decisions if available, otherwise use repo size
+    const sizeInMB = pushSizeMB > 0 ? pushSizeMB : repoSizeInMB;
 
     // Determine branch status
     let branchStatus: 'new' | 'existing' | 'diverged' = 'existing';
@@ -160,7 +169,7 @@ export class GitPushStrategyAnalyzer {
 
     return {
       totalSize: stats.totalSize,
-      sizeInMB,
+      sizeInMB: repoSizeInMB,  // Keep repo size for reference
       commitCount: stats.commitCount,
       hasLargeFiles: sizeInMB > 100,
       hasUnpushedCommits: gitStatus.ahead || 0,
@@ -168,7 +177,9 @@ export class GitPushStrategyAnalyzer {
       isMainBranch,
       recommendation,
       reasoning,
-      risks
+      risks,
+      pushSize: pushSize || stats.pushSize,
+      pushSizeMB: pushSizeMB || stats.pushSizeMB || 0
     };
   }
 

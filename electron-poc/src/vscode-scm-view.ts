@@ -212,8 +212,12 @@ export class VSCodeSCMView {
           <div class="scm-status-branch" style="position: relative;">
             <span class="codicon codicon-git-branch"></span>
             <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView?.showBranchSwitcher?.()">${this.gitStatus.branch}</span>
-            ${this.gitStatus.ahead > 0 ? `<span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px;">↑${this.gitStatus.ahead}</span>` : ''}
-            ${this.gitStatus.behind > 0 ? `<span class="badge" style="background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px;">↓${this.gitStatus.behind}</span>` : ''}
+            <span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px; cursor: ${(this.gitStatus.ahead || 0) > 0 ? 'pointer' : 'default'};" 
+                  onclick="${(this.gitStatus.ahead || 0) > 0 ? 'window.scmView?.push()' : ''}"
+                  title="${(this.gitStatus.ahead || 0) > 0 ? 'Click to push' : 'Nothing to push'}">↑${this.gitStatus.ahead || 0}</span>
+            <span class="badge" style="background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px; cursor: ${(this.gitStatus.behind || 0) > 0 ? 'pointer' : 'default'};" 
+                  onclick="${(this.gitStatus.behind || 0) > 0 ? 'window.scmView?.pullAndPush()' : ''}"
+                  title="${(this.gitStatus.behind || 0) > 0 ? 'Click to sync (pull then push)' : 'Up to date'}">↓${this.gitStatus.behind || 0}</span>
           </div>
           <div class="scm-status-actions">
             <!-- Removed redundant sync and refresh buttons -->
@@ -1076,6 +1080,67 @@ export class VSCodeSCMView {
         message: error?.message || 'An error occurred during sync',
         type: 'error',
         duration: 5000
+      });
+    }
+  }
+  
+  public async pullAndPush() {
+    console.log('[SCM] Pull and push requested from behind badge click');
+    
+    // First fetch to ensure we have latest
+    try {
+      await window.gitAPI.fetch();
+      console.log('[SCM] Fetch completed');
+    } catch (error) {
+      console.log('[SCM] Fetch failed, continuing anyway:', error);
+    }
+    
+    // Refresh to get latest status
+    await this.refresh();
+    
+    // If still behind, pull first
+    if ((this.gitStatus?.behind || 0) > 0) {
+      try {
+        const notificationId = notifications.show({
+          title: 'Syncing with remote',
+          message: `Pulling ${this.gitStatus.behind} commits from remote...`,
+          type: 'info',
+          duration: 0
+        });
+        
+        await window.gitAPI.pull();
+        
+        notifications.update(notificationId, {
+          title: 'Pull completed',
+          message: `Successfully pulled ${this.gitStatus.behind} commits`,
+          type: 'success',
+          duration: 3000
+        });
+        
+        // Refresh status after pull
+        await this.refresh();
+      } catch (error: any) {
+        console.error('[SCM] Pull failed:', error);
+        notifications.show({
+          title: 'Pull failed',
+          message: error?.message || 'Failed to pull from remote',
+          type: 'error',
+          duration: 5000
+        });
+        return;
+      }
+    }
+    
+    // Now check if we have anything to push
+    if ((this.gitStatus?.ahead || 0) > 0) {
+      // Open push dialog
+      await this.push();
+    } else {
+      notifications.show({
+        title: 'Up to date',
+        message: 'Your branch is now synchronized with remote',
+        type: 'success',
+        duration: 3000
       });
     }
   }
