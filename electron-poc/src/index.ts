@@ -369,38 +369,48 @@ const registerGitHandlers = () => {
       }
       
       // Build git push command with options
-      let command = 'git push';
+      let command: string;
       
-      if (options.forceWithLease) {
-        command += ' --force-with-lease';
-      }
-      if (options.includeTags) {
-        command += ' --tags';
-      }
-      if (options.setUpstream) {
-        // Get current branch name
-        const status = await gitManager.getStatus();
-        const branch = status.current || 'main';
-        command += ` -u origin ${branch}`;
-      }
-      if (options.atomic) {
-        command += ' --atomic';
-      }
-      if (options.signPush) {
-        command += ' --signed';
-      }
-      if (options.thinPack) {
-        command += ' --thin';
-      }
-      if (options.commitLimit) {
-        // Push only last N commits
-        const status = await gitManager.getStatus();
-        const branch = status.current || 'main';
-        command = `git push origin HEAD~${options.commitLimit}:${branch}`;
+      // Check if we have a custom command FIRST
+      if (options.customCommand) {
+        command = options.customCommand;
+        // Custom command should already have all necessary options
+        logger.info('[Main] Using custom command:', command);
+      } else {
+        // Build standard git push command
+        command = 'git push';
         
-        // Add other options if commit limit is set
-        if (options.forceWithLease) command += ' --force-with-lease';
-        if (options.atomic) command += ' --atomic';
+        if (options.forceWithLease) {
+          command += ' --force-with-lease';
+        }
+        if (options.includeTags) {
+          command += ' --tags';
+        }
+        if (options.setUpstream) {
+          // Get current branch name
+          const status = await gitManager.getStatus();
+          const branch = status.current || 'main';
+          command += ` -u origin ${branch}`;
+        }
+        if (options.atomic) {
+          command += ' --atomic';
+        }
+        if (options.signPush) {
+          command += ' --signed';
+        }
+        if (options.thinPack) {
+          command += ' --thin';
+        }
+        if (options.commitLimit) {
+          // Push only last N commits
+          const status = await gitManager.getStatus();
+          const branch = status.current || 'main';
+          command = `git push origin HEAD~${options.commitLimit}:${branch}`;
+          
+          // Add other options if commit limit is set
+          if (options.forceWithLease) command += ' --force-with-lease';
+          if (options.atomic) command += ' --atomic';
+        }
       }
       
       logger.info('[Main] Executing push command:', command);
@@ -504,19 +514,34 @@ const registerGitHandlers = () => {
         repoPath = (gitManager as any).repoPath;
       }
       
-      // Build command with --dry-run
-      let command = 'git push --dry-run --porcelain';
+      let command: string;
       
-      if (options?.forceWithLease) {
-        command += ' --force-with-lease';
-      }
-      if (options?.includeTags) {
-        command += ' --tags';
-      }
-      if (options?.setUpstream) {
-        const status = await gitManager.getStatus();
-        const branch = status.current || 'main';
-        command += ` -u origin ${branch}`;
+      // Check if we have a custom command
+      if (options?.customCommand) {
+        command = options.customCommand;
+        // Add --dry-run if not already present
+        if (!command.includes('--dry-run')) {
+          command += ' --dry-run';
+        }
+        // Add --porcelain for consistent output
+        if (!command.includes('--porcelain')) {
+          command += ' --porcelain';
+        }
+      } else {
+        // Build command with --dry-run
+        command = 'git push --dry-run --porcelain';
+        
+        if (options?.forceWithLease) {
+          command += ' --force-with-lease';
+        }
+        if (options?.includeTags) {
+          command += ' --tags';
+        }
+        if (options?.setUpstream) {
+          const status = await gitManager.getStatus();
+          const branch = status.current || 'main';
+          command += ` -u origin ${branch}`;
+        }
       }
       
       logger.info('[Main] Executing dry run:', command);
