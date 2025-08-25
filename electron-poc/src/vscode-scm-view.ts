@@ -763,27 +763,14 @@ export class VSCodeSCMView {
         input.value = '';
       }
       
-      // Force a complete refresh with fetch to update ahead/behind counts
-      console.log('[SCM] Commit successful, forcing full refresh with fetch...');
+      // Simply recreate the entire panel to ensure fresh state
+      console.log('[SCM] Commit successful, recreating panel...');
       
       // Small delay to ensure Git has updated
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Fetch to get latest remote status
-      try {
-        await window.gitAPI.fetch();
-        console.log('[SCM] Post-commit fetch completed');
-      } catch (error) {
-        console.log('[SCM] Post-commit fetch failed (may be offline):', error);
-      }
-      
-      // Get fresh status
-      this.gitStatus = await window.gitAPI.getStatus();
-      console.log('[SCM] Post-commit status - ahead:', this.gitStatus?.ahead, 'behind:', this.gitStatus?.behind);
-      
-      // Force complete re-render
-      this.render();
-      console.log('[SCM] Post-commit render complete');
+      // Recreate the entire panel with fresh data
+      await this.recreatePanel();
       
       notifications.update(notificationId, {
         title: 'Commit Successful',
@@ -837,7 +824,8 @@ export class VSCodeSCMView {
       // Get repository stats
       console.log('[SCM] Getting repository stats...');
       const stats = await (window.gitAPI as any).getRepoStats();
-      console.log('[SCM] Repository stats:', stats);
+      console.log('[SCM] Repository stats:', JSON.stringify(stats, null, 2));
+      console.log('[SCM] Push size from stats:', stats.pushSize, 'Push size MB:', stats.pushSizeMB);
       
       // Analyze and get strategy recommendations
       const analysis = GitPushStrategyAnalyzer.analyzeRepository(stats, this.gitStatus!);
@@ -944,8 +932,14 @@ export class VSCodeSCMView {
         });
       }
       
-      // Refresh status after successful push
-      await this.refresh();
+      // Simply recreate the entire panel after push
+      console.log('[SCM] Push completed, recreating panel...');
+      
+      // Small delay to ensure Git and remote are updated
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Recreate the entire panel with fresh data
+      await this.recreatePanel();
       
     } catch (error: any) {
       console.error('[SCM] Smart push failed:', error);
@@ -1166,6 +1160,22 @@ export class VSCodeSCMView {
         duration: 3000
       });
     }
+  }
+  
+  public async recreatePanel() {
+    console.log('[SCM] Recreating entire Source Control panel...');
+    
+    // Clear and recreate the entire panel
+    const container = this.container;
+    container.innerHTML = '';
+    
+    // Get fresh status
+    this.gitStatus = await window.gitAPI.getStatus();
+    console.log('[SCM] Fresh status for recreated panel - ahead:', this.gitStatus?.ahead, 'behind:', this.gitStatus?.behind);
+    
+    // Render fresh
+    this.render();
+    console.log('[SCM] Panel recreated successfully');
   }
   
   public async showBranchSwitcher() {
