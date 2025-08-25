@@ -416,7 +416,7 @@ export class GitPushDialog {
         // If we have a custom command, execute it
         if (finalCustomCommand) {
           const customStrategy: PushStrategyOption = {
-            strategy: 'custom' as any,
+            strategy: PushStrategy.REGULAR, // Use REGULAR as base, custom command overrides it
             label: 'Custom Command',
             description: finalCustomCommand,
             icon: '⚡',
