@@ -162,8 +162,14 @@ class TTYDTerminalPanel {
             entry.style.marginBottom = '2px';
             entry.textContent = `[${timestamp}] [${prefix}] ${message}`;
             logElement.appendChild(entry);
-            // Auto-scroll to bottom
-            logElement.scrollTop = logElement.scrollHeight;
+            // Auto-scroll to bottom - use requestAnimationFrame for smooth scrolling
+            requestAnimationFrame(() => {
+                if (logElement && logElement.scrollHeight) {
+                    logElement.scrollTop = logElement.scrollHeight;
+                    // Force a reflow to ensure scroll happens
+                    logElement.scrollIntoView({ behavior: 'auto', block: 'end' });
+                }
+            });
             // Limit log entries to prevent memory issues
             while (logElement.children.length > 1000) {
                 logElement.removeChild(logElement.firstChild);

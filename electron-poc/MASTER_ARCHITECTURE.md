@@ -14,8 +14,9 @@
 11. [Performance & Optimization](#performance--optimization)
 12. [Development & Deployment](#development--deployment)
 13. [CLI Tools Management](#cli-tools-management)
-14. [CLI Tools Management UI](#cli-tools-management-ui)
-15. [Future Enhancements](#future-enhancements)
+14. [AI Tools Launch Tracking & Database](#ai-tools-launch-tracking--database)
+15. [CLI Tools Management UI](#cli-tools-management-ui)
+16. [Future Enhancements](#future-enhancements)
 
 ---
 
@@ -4338,6 +4339,7 @@ The CLI Tools Management system provides automated installation, updates, and in
 **Purpose**: Manage lifecycle of external AI CLI tools with full Memory Service integration
 **Integration**: Direct connection to Memory Service via REST API and MCP protocol
 **Detection**: `src/utils/cli-tool-detector.ts` - Real-time tool detection and version checking
+**Launch Tracking**: `src/services/AIToolsDatabase.ts` - Track tool launches per repository for intelligent resume
 
 ### Components
 
@@ -5108,6 +5110,200 @@ const enhancedPath = `${pathAdditions.join(':')}:${process.env.PATH}`;
    - Stable vs beta channels
    - Version pinning
    - Downgrade capability
+
+---
+
+## AI Tools Launch Tracking & Database
+
+### Overview
+The AI Tools Launch Tracking system records which AI CLI tools have been launched in which repositories, enabling intelligent features like resume detection, usage analytics, and per-repository tool preferences. This system uses the unified SQLite database (`~/.hive/hive-ai.db`) shared with the main application.
+
+### Architecture
+
+#### AIToolsDatabase Service
+**Location**: `src/services/AIToolsDatabase.ts`
+**Purpose**: Track and manage AI tool launch history per repository
+**Database**: Uses the unified `hive-ai.db` SQLite database
+**Integration**: Singleton service integrated with main process
+
+#### Database Schema
+
+##### Table: `ai_tool_launches`
+```sql
+CREATE TABLE IF NOT EXISTS ai_tool_launches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool_id TEXT NOT NULL,                    -- e.g., 'claude-code', 'grok', 'cline'
+  repository_path TEXT NOT NULL,            -- e.g., '/Users/veronelazio/Developer/Private/hive'
+  launch_count INTEGER DEFAULT 1,           -- Increments on each launch
+  first_launched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  last_launched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  status TEXT DEFAULT 'active',             -- 'active', 'closed', or 'crashed'
+  session_metadata TEXT,                    -- JSON metadata about the session
+  user_id TEXT DEFAULT 'default',          
+  tool_version TEXT,                        -- Version of the tool at launch
+  launch_context TEXT,                      -- JSON context data (e.g., launch flags)
+  UNIQUE(tool_id, repository_path, user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+)
+```
+
+##### Indexes for Performance
+```sql
+-- Fast lookup by tool and repository
+CREATE INDEX idx_ai_tool_launches_lookup 
+ON ai_tool_launches(tool_id, repository_path);
+
+-- Recent launches query optimization
+CREATE INDEX idx_ai_tool_launches_recent 
+ON ai_tool_launches(last_launched_at DESC);
+
+-- Active sessions filtering
+CREATE INDEX idx_ai_tool_launches_active 
+ON ai_tool_launches(status) WHERE status = 'active';
+```
+
+### Launch Tracking Flow
+
+#### 1. Tool Launch Detection
+When a user clicks an AI CLI tool in the UI:
+```typescript
+// Main process (src/index.ts)
+ipcMain.handle('launch-ai-tool', async (event, toolId) => {
+  // 1. Show folder selection dialog
+  const { filePaths } = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: `Select folder for ${toolName}`
+  });
+  
+  // 2. Get AIToolsDatabase instance (uses unified db connection)
+  const aiToolsDb = AIToolsDatabase.getInstance(db);
+  
+  // 3. Check launch history
+  const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(
+    toolId, 
+    selectedPath
+  );
+  
+  // 4. Determine command (e.g., 'claude' vs 'claude --continue')
+  const command = hasBeenLaunched ? 
+    `${baseCommand} --continue` : 
+    baseCommand;
+  
+  // 5. Record the launch
+  aiToolsDb.recordLaunch(toolId, selectedPath, {
+    version: detectedVersion,
+    context: { resumed: hasBeenLaunched }
+  });
+  
+  // 6. Send event to renderer to create terminal tab
+  mainWindow.webContents.send('launch-ai-tool-terminal', {
+    toolId,
+    command,
+    cwd: selectedPath
+  });
+});
+```
+
+#### 2. Terminal Tab Creation
+The renderer process receives the launch event and creates a TTYD terminal tab:
+```typescript
+// Renderer process (src/renderer.ts)
+window.electronAPI.onLaunchAIToolTerminal((data) => {
+  // Create new terminal tab in TTYDTerminalPanel
+  terminal.createAIToolTab({
+    id: data.toolId,
+    title: data.toolName,
+    command: data.command,
+    cwd: data.cwd,
+    port: allocatedPort
+  });
+});
+```
+
+#### 3. Session Management
+```typescript
+// Track active sessions
+aiToolsDb.recordLaunch(toolId, repoPath, {
+  status: 'active',
+  sessionData: { pid: process.pid, port: allocatedPort }
+});
+
+// Close session when terminal exits
+process.on('exit', () => {
+  aiToolsDb.closeSession(toolId, repoPath);
+});
+```
+
+### Key Features
+
+#### 1. Intelligent Resume Detection
+- Tracks if a tool has been launched in a repository before
+- Enables tools like Claude Code to use `--continue` flag automatically
+- Preserves context across sessions
+
+#### 2. Usage Analytics
+```typescript
+// Get comprehensive usage statistics
+const stats = aiToolsDb.getUsageStats();
+// Returns:
+{
+  totalLaunches: 142,
+  uniqueRepositories: 23,
+  mostUsedTool: 'claude-code',
+  activeSessions: 3
+}
+```
+
+#### 3. Repository-Specific History
+```typescript
+// Get all tools launched in a specific repository
+const launches = aiToolsDb.getRepositoryLaunches('/path/to/repo');
+// Returns array of launch records with timestamps and counts
+```
+
+#### 4. Recent Activity Tracking
+```typescript
+// Get recent launches across all repositories
+const recent = aiToolsDb.getRecentLaunches(10);
+// Returns last 10 launches with full details
+```
+
+### Integration Points
+
+#### 1. Unified Database Connection
+- Uses the same SQLite database as the main application
+- Database initialized in main process: `~/.hive/hive-ai.db`
+- Shared connection passed to AIToolsDatabase singleton
+- No separate database connections or files
+
+#### 2. Error Handling
+- Graceful degradation if database operations fail
+- Tools still launch even without tracking
+- Errors logged but don't block user workflow
+
+#### 3. Cleanup & Maintenance
+```typescript
+// Periodic cleanup of old records (90+ days)
+aiToolsDb.cleanupOldRecords(90);
+// Removes closed sessions older than 90 days
+```
+
+### Benefits
+
+1. **Enhanced User Experience**
+   - Tools remember they've been used in a project
+   - Automatic context restoration where supported
+   - No manual flag management needed
+
+2. **Analytics & Insights**
+   - Track tool usage patterns
+   - Identify most-used tools per project
+   - Understand developer workflows
+
+3. **Future Capabilities**
+   - Tool recommendations based on project type
+   - Automatic tool configuration per repository
+   - Team usage analytics for enterprise
 
 ---
 
@@ -8056,6 +8252,13 @@ hive-2025-08-20T19-30-45-123Z.log
 
 ## Recent Improvements (2025-08-25)
 
+### AI Tools Launch Tracking System
+- **Launch History Database**: Track AI tool launches per repository
+- **Intelligent Resume**: Automatic `--continue` flag for previously used tools
+- **Unified Database**: Uses main `hive-ai.db` for all tracking
+- **Usage Analytics**: Comprehensive statistics on tool usage patterns
+- **Error Recovery**: Graceful degradation if database operations fail
+
 ### Smart Git Push System
 - **Intelligent Strategy Analysis**: Analyzes repository and calculates actual push size (not repo size)
 - **7 Push Strategies**: Standard, Chunked, Force, Fresh Branch, Squash, Bundle, Cleanup
@@ -8075,6 +8278,7 @@ hive-2025-08-20T19-30-45-123Z.log
 - **Panel Refresh System**: `recreatePanel()` method for reliable updates
 - **DOM Safety**: Auto-recovery for missing elements
 - **Event-Driven Updates**: No polling, fully reactive
+- **System Log Auto-Scroll**: Fixed with requestAnimationFrame for reliable scrolling
 - **Badge Interactions**: Click ahead/behind badges for smart actions
 
 ### Terminal Tab Fixes

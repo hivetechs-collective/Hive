@@ -3,47 +3,24 @@
  * AI Tools Database Service
  * Manages tracking of AI tool launches per repository for intelligent resume detection
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIToolsDatabase = void 0;
-const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
-const path = __importStar(require("path"));
-const os = __importStar(require("os"));
 const SafeLogger_1 = require("../utils/SafeLogger");
 class AIToolsDatabase {
-    constructor() {
-        // Use the shared database at ~/.hive/hive-ai.db
-        const dbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
-        this.db = new better_sqlite3_1.default(dbPath);
+    constructor(database) {
+        // Use the existing database connection from main process
+        this.db = database;
         this.initializeSchema();
     }
     /**
-     * Get singleton instance
+     * Get singleton instance with database connection
      */
-    static getInstance() {
-        if (!AIToolsDatabase.instance) {
-            AIToolsDatabase.instance = new AIToolsDatabase();
+    static getInstance(database) {
+        if (!database && !AIToolsDatabase.instance) {
+            throw new Error('AIToolsDatabase requires a database connection on first initialization');
+        }
+        if (!AIToolsDatabase.instance && database) {
+            AIToolsDatabase.instance = new AIToolsDatabase(database);
         }
         return AIToolsDatabase.instance;
     }

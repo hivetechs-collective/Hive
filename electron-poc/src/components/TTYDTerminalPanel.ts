@@ -193,7 +193,7 @@ export class TTYDTerminalPanel {
                 if (logElement && logElement.scrollHeight) {
                     logElement.scrollTop = logElement.scrollHeight;
                     // Force a reflow to ensure scroll happens
-                    logElement.scrollIntoView({ behavior: 'instant', block: 'end' });
+                    logElement.scrollIntoView({ behavior: 'auto', block: 'end' });
                 }
             });
             

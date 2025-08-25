@@ -2860,12 +2860,13 @@ server.start();
       
       logger.info(`[Main] Selected folder: ${selectedPath}`);
       
-      // Get the AI tools database instance
-      logger.info(`[Main] Getting AIToolsDatabase instance...`);
+      // Get the AI tools database instance with unified database connection
+      logger.info(`[Main] Getting AIToolsDatabase instance with unified database...`);
       let aiToolsDb: any;
       try {
-        aiToolsDb = AIToolsDatabase.getInstance();
-        logger.info(`[Main] AIToolsDatabase instance obtained`);
+        // Pass the existing database connection to AIToolsDatabase
+        aiToolsDb = AIToolsDatabase.getInstance(db);
+        logger.info(`[Main] AIToolsDatabase instance obtained with unified hive-ai.db`);
       } catch (dbError: any) {
         logger.error(`[Main] Failed to get AIToolsDatabase instance:`, dbError);
         logger.error(`[Main] AIToolsDatabase error message:`, dbError?.message);

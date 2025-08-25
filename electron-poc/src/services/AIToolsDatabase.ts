@@ -3,9 +3,6 @@
  * Manages tracking of AI tool launches per repository for intelligent resume detection
  */
 
-import Database from 'better-sqlite3';
-import * as path from 'path';
-import * as os from 'os';
 import { logger } from '../utils/SafeLogger';
 
 export interface AIToolLaunch {
@@ -23,24 +20,26 @@ export interface AIToolLaunch {
 }
 
 export class AIToolsDatabase {
-  private db: Database.Database;
+  private db: any; // Will be the better-sqlite3 database instance from main process
   private static instance: AIToolsDatabase | null = null;
 
-  private constructor() {
-    // Use the shared database at ~/.hive/hive-ai.db
-    const dbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
-    this.db = new Database(dbPath);
+  private constructor(database: any) {
+    // Use the existing database connection from main process
+    this.db = database;
     this.initializeSchema();
   }
 
   /**
-   * Get singleton instance
+   * Get singleton instance with database connection
    */
-  public static getInstance(): AIToolsDatabase {
-    if (!AIToolsDatabase.instance) {
-      AIToolsDatabase.instance = new AIToolsDatabase();
+  public static getInstance(database?: any): AIToolsDatabase {
+    if (!database && !AIToolsDatabase.instance) {
+      throw new Error('AIToolsDatabase requires a database connection on first initialization');
     }
-    return AIToolsDatabase.instance;
+    if (!AIToolsDatabase.instance && database) {
+      AIToolsDatabase.instance = new AIToolsDatabase(database);
+    }
+    return AIToolsDatabase.instance as AIToolsDatabase;
   }
 
   /**
