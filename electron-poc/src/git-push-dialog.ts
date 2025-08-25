@@ -234,14 +234,16 @@ export class GitPushDialog {
         <!-- Push to Different Branch -->
         <div style="margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.15); border-radius: 4px;">
           <label style="display: flex; align-items: center; font-size: 12px; cursor: pointer; margin-bottom: 8px;">
-            <input type="checkbox" id="push-opt-different-branch" style="margin-right: 6px;" />
+            <input type="checkbox" id="push-opt-different-branch" style="margin-right: 6px;" 
+                   onchange="var tb = document.getElementById('push-opt-target-branch'); if(tb) { tb.style.opacity = this.checked ? '1' : '0.3'; tb.disabled = !this.checked; if(this.checked) tb.focus(); }" />
             <span>Push to different branch <span style="opacity: 0.6;">(e.g., push feature to main)</span></span>
           </label>
           <input type="text" id="push-opt-target-branch" placeholder="Target branch (e.g., main)" 
+                 disabled
                  style="width: 200px; padding: 4px; background: var(--vscode-input-background, #3c3c3c); 
                         border: 1px solid var(--vscode-input-border, #3c3c3c); 
                         color: var(--vscode-input-foreground, #ccc); border-radius: 2px; font-size: 11px;
-                        display: none; margin-left: 22px;" />
+                        margin-left: 22px; opacity: 0.3; transition: opacity 0.2s;" />
         </div>
         
         <!-- Advanced Options (Collapsible) -->
@@ -360,18 +362,30 @@ export class GitPushDialog {
         });
       });
       
-      // Handle push to different branch checkbox
-      const differentBranchCheckbox = document.getElementById('push-opt-different-branch') as HTMLInputElement;
-      const targetBranchInput = document.getElementById('push-opt-target-branch') as HTMLInputElement;
-      
-      if (differentBranchCheckbox && targetBranchInput) {
-        differentBranchCheckbox.addEventListener('change', () => {
-          targetBranchInput.style.display = differentBranchCheckbox.checked ? 'block' : 'none';
-          if (differentBranchCheckbox.checked) {
-            targetBranchInput.focus();
-          }
-        });
-      }
+      // Handle push to different branch checkbox (backup event listener in case inline fails)
+      setTimeout(() => {
+        const differentBranchCheckbox = document.getElementById('push-opt-different-branch') as HTMLInputElement;
+        const targetBranchInput = document.getElementById('push-opt-target-branch') as HTMLInputElement;
+        
+        if (differentBranchCheckbox && targetBranchInput) {
+          // Ensure the input is visible but disabled initially
+          targetBranchInput.style.opacity = '0.3';
+          targetBranchInput.disabled = true;
+          
+          // Add event listener as backup
+          differentBranchCheckbox.addEventListener('change', () => {
+            console.log('Checkbox changed:', differentBranchCheckbox.checked);
+            targetBranchInput.disabled = !differentBranchCheckbox.checked;
+            targetBranchInput.style.opacity = differentBranchCheckbox.checked ? '1' : '0.3';
+            if (differentBranchCheckbox.checked) {
+              targetBranchInput.focus();
+              targetBranchInput.value = targetBranchInput.value || 'main'; // Suggest 'main' as default
+            }
+          });
+        } else {
+          console.warn('Could not find push-to-different-branch elements');
+        }
+      }, 100);
       
       // Handle dry run checkbox to update button text
       const dryRunCheckbox = document.getElementById('push-opt-dry-run') as HTMLInputElement;
@@ -475,6 +489,16 @@ export class GitPushDialog {
       
       // Show dialog
       document.body.appendChild(overlay);
+      
+      // Additional setup after dialog is shown
+      setTimeout(() => {
+        // Make absolutely sure the event handlers are attached
+        const diffBranchCheck = document.getElementById('push-opt-different-branch') as HTMLInputElement;
+        const targetInput = document.getElementById('push-opt-target-branch') as HTMLInputElement;
+        if (diffBranchCheck && targetInput) {
+          console.log('Dialog ready, elements found');
+        }
+      }, 50);
       
       // Focus first strategy
       (strategyElements[0] as HTMLElement)?.focus();
