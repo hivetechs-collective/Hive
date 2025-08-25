@@ -26,6 +26,8 @@ export class GitGraphView {
     private refreshInterval: NodeJS.Timeout | null = null;
     private expandedCommits: Set<string> = new Set();
     private selectedCommit: string | null = null;
+    private currentOffset: number = 0;
+    private readonly commitsPerPage: number = 20;
 
     constructor(container: HTMLElement) {
         console.log('[GitGraph] Constructor called with container:', container);
@@ -345,12 +347,13 @@ export class GitGraphView {
         document.head.appendChild(style);
     }
 
-    private async loadCommits() {
-        console.log('[GitGraph] loadCommits called');
+    private async loadCommits(append: boolean = false) {
+        console.log('[GitGraph] loadCommits called, append:', append, 'offset:', this.currentOffset);
         try {
             // Get commit log with graph information
             const log = await window.gitAPI.getLog({
-                maxCount: 20,  // Reduced from 200 to prevent freezing
+                maxCount: this.commitsPerPage,
+                skip: append ? this.currentOffset : 0,
                 graph: true
             }) as string;
             
@@ -362,7 +365,15 @@ export class GitGraphView {
             console.log('[GitGraph] Parsed commits:', parsedCommits.length);
             if (parsedCommits.length > 0) {
                 console.log('[GitGraph] First commit:', parsedCommits[0]);
-                this.commits = parsedCommits;
+                if (append) {
+                    // Append new commits to existing ones
+                    this.commits = [...this.commits, ...parsedCommits];
+                    this.currentOffset += parsedCommits.length;
+                } else {
+                    // Replace commits (initial load)
+                    this.commits = parsedCommits;
+                    this.currentOffset = parsedCommits.length;
+                }
                 this.render();
             } else {
                 console.error('[GitGraph] No commits parsed from log');
@@ -470,7 +481,7 @@ export class GitGraphView {
         }).join('');
         
         this.container.innerHTML = `
-            <div class="git-graph">
+            <div class="git-graph" style="display: flex; flex-direction: column; height: 100%;">
                 <div class="git-graph-header">
                     <div class="git-graph-title">
                         <span class="codicon codicon-git-commit"></span>
@@ -480,12 +491,12 @@ export class GitGraphView {
                         <button class="git-graph-action-btn" title="Refresh" onclick="window.gitGraph?.refresh()">
                             <span class="codicon codicon-refresh"></span>
                         </button>
-                        <button class="git-graph-action-btn" title="View Git Graph" onclick="window.gitGraph?.openFullGraph()">
-                            <span class="codicon codicon-graph"></span>
+                        <button class="git-graph-action-btn" title="Load More Commits" onclick="window.scmView?.loadMoreCommits()" style="font-family: inherit; font-size: 11px; padding: 2px 4px;">
+                            More
                         </button>
                     </div>
                 </div>
-                <div class="git-graph-content">
+                <div class="git-graph-content" style="flex: 1; overflow-y: auto;">
                     <div class="git-graph-commits">
                         ${commitsHtml}
                     </div>
@@ -838,6 +849,11 @@ export class GitGraphView {
         // This could open a more detailed graph view in a new tab
         console.log('[GitGraph] Opening full graph view...');
         alert('Full Git Graph view would open here (like Git Graph extension)');
+    }
+
+    public async loadMoreCommits() {
+        console.log('[GitGraph] Loading more commits...');
+        await this.loadCommits(true); // Load with append flag
     }
 
     public destroy() {

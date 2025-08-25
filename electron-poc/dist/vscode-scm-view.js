@@ -160,7 +160,7 @@ class VSCodeSCMView {
       <div class="scm-view" style="
         display: flex;
         flex-direction: column;
-        height: calc(100vh - 22px);
+        height: calc(100vh - 32px);
         overflow: hidden;
       ">
         <!-- Branch Status Bar - Always visible at top -->
@@ -226,23 +226,51 @@ class VSCodeSCMView {
         <!-- All scrollable content including resource groups and commits -->
         <div style="
           flex: 1;
-          overflow-y: auto;
-          overflow-x: hidden;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
           min-height: 0;
+          padding-bottom: 15px;
         ">
           <!-- Resource Groups -->
-          <div class="scm-view-content">
+          <div class="scm-view-content" style="
+            flex-shrink: 0;
+            overflow-y: auto;
+            max-height: 50%;
+          ">
             ${groups.map(group => this.renderResourceGroup(group)).join('')}
           </div>
           
           <!-- Git Graph Container for commits -->
-          <div id="git-graph-container" style="
+          <div style="
             margin-top: 10px;
-            max-height: 200px;
-            overflow-y: auto;
-            overflow-x: hidden;
-            padding-bottom: 5px;
-          "></div>
+            flex: 1 1 auto;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--vscode-sideBarSectionHeader-border, #3c3c3c);
+            border-radius: 4px;
+            background: var(--vscode-editor-background, #1e1e1e);
+          ">
+            <div style="
+              padding: 8px;
+              background: var(--vscode-sideBarSectionHeader-background, #252526);
+              border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #3c3c3c);
+              font-weight: bold;
+              font-size: 11px;
+              text-transform: uppercase;
+              color: var(--vscode-sideBarSectionHeader-foreground, #cccccc);
+            ">
+              Commits
+            </div>
+            <div id="git-graph-container" style="
+              flex: 1;
+              overflow-y: auto;
+              overflow-x: hidden;
+              padding-bottom: 10px;
+              min-height: 80px;
+            "></div>
+          </div>
         </div>
       </div>
     `;

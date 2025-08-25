@@ -221,7 +221,7 @@ export class GitManager {
     }
   }
 
-  async getLog(options: { maxCount?: number; graph?: boolean; oneline?: boolean; limit?: number } = {}): Promise<string> {
+  async getLog(options: { maxCount?: number; skip?: number; graph?: boolean; oneline?: boolean; limit?: number } = {}): Promise<string> {
     if (!this.repoPath || !this.isRepo || !this.git) {
       console.log('[GitManager] Not a repo or no folder open, returning empty log');
       return '';
@@ -230,6 +230,12 @@ export class GitManager {
     try {
       // Use raw git command for more control over format
       const args = ['log'];
+      
+      // Add skip parameter if provided
+      if (options.skip && options.skip > 0) {
+        args.push(`--skip=${options.skip}`);
+        console.log('[GitManager] Skipping commits:', options.skip);
+      }
       
       const maxCount = options.maxCount || options.limit || 50;
       console.log('[GitManager] Using maxCount:', maxCount);

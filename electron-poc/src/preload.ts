@@ -136,7 +136,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 contextBridge.exposeInMainWorld('gitAPI', {
   getStatus: () => ipcRenderer.invoke('git-status'),
   getBranches: () => ipcRenderer.invoke('git-branches'),
-  getLog: (options?: { maxCount?: number; graph?: boolean; oneline?: boolean; limit?: number }) => ipcRenderer.invoke('git-log', options),
+  getLog: (options?: { maxCount?: number; skip?: number; graph?: boolean; oneline?: boolean; limit?: number }) => ipcRenderer.invoke('git-log', options),
   getDiff: (file?: string) => ipcRenderer.invoke('git-diff', file),
   getStagedDiff: (file?: string) => ipcRenderer.invoke('git-staged-diff', file),
   stage: (files: string[]) => ipcRenderer.invoke('git-stage', files),
