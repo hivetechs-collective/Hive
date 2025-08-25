@@ -89,6 +89,8 @@ export class VSCodeSCMView {
   }
 
   private render() {
+    console.log('[SCM] Rendering with status - ahead:', this.gitStatus?.ahead, 'behind:', this.gitStatus?.behind, 'branch:', this.gitStatus?.branch);
+    
     if (!this.gitStatus || !this.gitStatus.isRepo) {
       // VS Code-style welcome message for Source Control
       this.container.innerHTML = `
@@ -760,7 +762,28 @@ export class VSCodeSCMView {
       if (input) {
         input.value = '';
       }
-      await this.refresh();
+      
+      // Force a complete refresh with fetch to update ahead/behind counts
+      console.log('[SCM] Commit successful, forcing full refresh with fetch...');
+      
+      // Small delay to ensure Git has updated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Fetch to get latest remote status
+      try {
+        await window.gitAPI.fetch();
+        console.log('[SCM] Post-commit fetch completed');
+      } catch (error) {
+        console.log('[SCM] Post-commit fetch failed (may be offline):', error);
+      }
+      
+      // Get fresh status
+      this.gitStatus = await window.gitAPI.getStatus();
+      console.log('[SCM] Post-commit status - ahead:', this.gitStatus?.ahead, 'behind:', this.gitStatus?.behind);
+      
+      // Force complete re-render
+      this.render();
+      console.log('[SCM] Post-commit render complete');
       
       notifications.update(notificationId, {
         title: 'Commit Successful',
