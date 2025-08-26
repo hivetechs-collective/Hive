@@ -105,8 +105,15 @@ impl OpenRouterClient {
         default_headers.insert("HTTP-Referer".to_string(), "https://hive.ai".to_string());
         default_headers.insert("X-Title".to_string(), "Hive AI".to_string());
 
+        // Create HTTP client with production-ready timeout settings
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(60)) // 60 second timeout for consensus queries
+            .connect_timeout(std::time::Duration::from_secs(10)) // 10 second connection timeout
+            .build()
+            .unwrap_or_else(|_| Client::new()); // Fallback to default if builder fails
+
         Self {
-            client: Client::new(),
+            client,
             api_key,
             base_url: "https://openrouter.ai/api/v1".to_string(),
             default_headers,

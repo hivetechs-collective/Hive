@@ -144,8 +144,15 @@ pub struct ModelManager {
 
 impl ModelManager {
     pub fn new(openrouter_api_key: Option<String>) -> Self {
+        // Create HTTP client with production-ready timeout settings
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30)) // 30 second timeout for all requests
+            .connect_timeout(Duration::from_secs(10)) // 10 second connection timeout
+            .build()
+            .unwrap_or_else(|_| Client::new()); // Fallback to default if builder fails
+        
         Self {
-            client: Client::new(),
+            client,
             openrouter_api_key,
             cache_duration: Duration::from_secs(3600), // 1 hour cache
             last_sync: None,

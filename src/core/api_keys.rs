@@ -237,7 +237,9 @@ impl ApiKeyManager {
         let db_path = crate::core::config::get_hive_config_dir().join("hive-ai.db");
 
         if db_path.exists() {
-            if let Ok(conn) = Connection::open(&db_path) {
+            // Use blocking task to prevent hanging the async runtime
+            let result = tokio::task::spawn_blocking(move || -> Result<ApiKeyConfig> {
+                let conn = Connection::open(&db_path)?;
                 // Check if configurations table exists
                 let table_exists: i32 = conn.query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='configurations'",
@@ -293,6 +295,22 @@ impl ApiKeyManager {
                             anthropic_key,
                         });
                     }
+                }
+                
+                // No keys found in database
+                Ok(ApiKeyConfig {
+                    openrouter_key: None,
+                    hive_key: None,
+                    anthropic_key: None,
+                })
+            })
+            .await
+            .context("Failed to run blocking database task")?;
+            
+            // Check if we got keys from the database
+            if let Ok(config) = result {
+                if config.openrouter_key.is_some() || config.hive_key.is_some() || config.anthropic_key.is_some() {
+                    return Ok(config);
                 }
             }
         }
@@ -353,12 +371,21 @@ impl ApiKeyManager {
 
     /// Get OpenRouter API key from database or config
     pub async fn get_openrouter_key() -> Result<String> {
-        // Try loading from database first (this now properly checks database)
-        let config = Self::load_from_database().await?;
-        if let Some(key) = config.openrouter_key {
-            if !key.is_empty() && Self::validate_openrouter_format(&key).is_ok() {
-                debug!("Found OpenRouter key in database");
-                return Ok(key);
+        // Try loading from database first with timeout to prevent hanging
+        match timeout(Duration::from_secs(5), Self::load_from_database()).await {
+            Ok(Ok(config)) => {
+                if let Some(key) = config.openrouter_key {
+                    if !key.is_empty() && Self::validate_openrouter_format(&key).is_ok() {
+                        debug!("Found OpenRouter key in database");
+                        return Ok(key);
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                warn!("Failed to load API key from database: {}", e);
+            }
+            Err(_) => {
+                warn!("Timeout loading API key from database after 5 seconds");
             }
         }
 

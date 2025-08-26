@@ -1383,13 +1383,42 @@ const initializeProcessManager = () => {
   function registerWebSocketBackend() {
     logger.info('[ProcessManager] Registering WebSocket backend at:', consensusBackendPath);
     
-    // In production, use the wrapper script that handles minimal mode
-    const bundledModelScript = app.isPackaged
-      ? path.join(process.resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'resources', 'python-runtime', 'models', 'model_service_wrapper.py')
-      : path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service_wrapper.py');
+    // In production, create symlinks to avoid spaces in Python paths
+    let finalPythonPath = bundledPythonPath;
+    let finalModelScript: string;
     
-    logger.info('[ProcessManager] Bundled Python path:', bundledPythonPath);
-    logger.info('[ProcessManager] Bundled model script:', bundledModelScript);
+    if (app.isPackaged) {
+      // Production: Create symlinks without spaces
+      const fs = require('fs');
+      const pythonRuntimePath = path.join(process.resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'resources', 'python-runtime');
+      const symlinkBase = '/tmp/hive-python-runtime';
+      
+      try {
+        // Create or update symlink
+        if (fs.existsSync(symlinkBase)) {
+          try { fs.unlinkSync(symlinkBase); } catch {}
+        }
+        fs.symlinkSync(pythonRuntimePath, symlinkBase);
+        logger.info(`[ProcessManager] Created Python runtime symlink: ${symlinkBase} -> ${pythonRuntimePath}`);
+        
+        // Use symlink paths (no spaces)
+        finalPythonPath = path.join(symlinkBase, 'python', 'bin', 'python3');
+        finalModelScript = path.join(symlinkBase, 'models', 'model_service_wrapper.py');
+        
+        logger.info('[ProcessManager] Using symlink Python path:', finalPythonPath);
+        logger.info('[ProcessManager] Using symlink model script:', finalModelScript);
+      } catch (err) {
+        logger.error('[ProcessManager] Failed to create symlinks, using original paths:', err);
+        // Fallback to original paths
+        finalModelScript = path.join(pythonRuntimePath, 'models', 'model_service_wrapper.py');
+      }
+    } else {
+      // Development: use paths as-is
+      finalModelScript = path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service_wrapper.py');
+    }
+    
+    logger.info('[ProcessManager] Final Python path:', finalPythonPath);
+    logger.info('[ProcessManager] Final model script:', finalModelScript);
     
     processManager.registerProcess({
       name: 'websocket-backend',
@@ -1398,8 +1427,10 @@ const initializeProcessManager = () => {
       env: {
         RUST_LOG: 'info',
         NODE_ENV: app.isPackaged ? 'production' : 'development',
-        HIVE_BUNDLED_PYTHON: bundledPythonPath,
-        HIVE_BUNDLED_MODEL_SCRIPT: bundledModelScript
+        HIVE_BUNDLED_PYTHON: finalPythonPath,
+        HIVE_BUNDLED_MODEL_SCRIPT: finalModelScript,
+        // Pass the database location explicitly
+        HIVE_HOME: path.join(os.homedir(), '.hive')
       },
       port: 1, // Just indicates this service needs a port - actual port allocated dynamically
       autoRestart: true,

@@ -318,8 +318,21 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state);
 
     // Get port from environment variable or use default
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8765".to_string());
-    let addr = format!("0.0.0.0:{}", port);
+    let port = std::env::var("PORT")
+        .map(|p| {
+            info!("📍 Using PORT environment variable: {}", p);
+            p
+        })
+        .unwrap_or_else(|_| {
+            warn!("⚠️ PORT environment variable not set, using default 8765");
+            "8765".to_string()
+        });
+    
+    // Validate port is numeric
+    let port_num: u16 = port.parse()
+        .expect(&format!("Invalid PORT value: '{}' - must be a number between 1-65535", port));
+    
+    let addr = format!("0.0.0.0:{}", port_num);
     
     // Log that we're about to start
     info!("🚀 Starting Enhanced Backend Server on http://{}", addr);

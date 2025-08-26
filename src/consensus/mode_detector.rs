@@ -302,8 +302,18 @@ impl ModeDetector {
     /// Detect the appropriate execution mode for a request
     /// Returns the mode and the time taken for classification in seconds
     pub async fn detect_mode_with_timing(&self, request: &str) -> (ExecutionMode, Option<f64>) {
-        tracing::debug!("🔍 Mode detector analyzing request: '{}'", request);
+        tracing::info!("🔍 Mode detector analyzing request: '{}'", request);
         let classification_start = std::time::Instant::now();
+        
+        // Log the current configuration state
+        tracing::info!("📊 Mode detector configuration:");
+        tracing::info!("  - OpenRouter client: {}", if self.openrouter_client.is_some() { "✅ Available" } else { "❌ Missing" });
+        tracing::info!("  - Generator model: {}", if let Some(ref model) = self.generator_model { 
+            format!("✅ {}", model) 
+        } else { 
+            "❌ Not configured".to_string() 
+        });
+        tracing::info!("  - AI Helpers: {}", if self.ai_helpers.is_some() { "✅ Available" } else { "❌ Missing" });
         
         // Use the Generator model from the current profile to make routing decision
         if let (Some(client), Some(model)) = (&self.openrouter_client, &self.generator_model) {
@@ -358,9 +368,16 @@ Response:"#,
                 provider: None,
             };
             
+            // Log the request we're about to make
+            tracing::info!("📤 Sending classification request to OpenRouter");
+            tracing::info!("  - Model: {}", model);
+            tracing::info!("  - Max tokens: 10");
+            tracing::info!("  - Temperature: 0.1");
+            
             // Make the classification request
             match client.chat_completion(req).await {
                 Ok(response) => {
+                    tracing::info!("✅ Received response from OpenRouter");
                     let raw_response = response.choices.first()
                         .and_then(|c| c.message.as_ref())
                         .map(|m| m.content.clone())
@@ -409,10 +426,15 @@ Response:"#,
                 Err(e) => {
                     let latency = classification_start.elapsed().as_secs_f64();
                     tracing::error!("❌ Classification request failed after {:.2}s: {}", latency, e);
+                    tracing::error!("  - Error details: {:?}", e);
                     tracing::warn!("⚠️ Falling back to Consensus mode for safety");
                     return (ExecutionMode::Consensus, Some(latency));
                 }
             }
+        } else {
+            tracing::warn!("⚠️ Mode detector not properly configured:");
+            tracing::warn!("  - OpenRouter client available: {}", self.openrouter_client.is_some());
+            tracing::warn!("  - Generator model configured: {}", self.generator_model.is_some());
         }
         
         // If we get here, we don't have proper LLM configuration
