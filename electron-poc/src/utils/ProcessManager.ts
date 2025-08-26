@@ -5,6 +5,7 @@
 
 import { ChildProcess, fork, spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import { app } from 'electron';
 import path from 'path';
 import { PortManager } from './PortManager';
 import { PidTracker } from './PidTracker';
@@ -81,17 +82,13 @@ export class ProcessManager extends EventEmitter {
     this.emit('process:starting', name);
     
     try {
-      // Allocate port if needed - PortManager will find an available port
-      let port = config.port;
-      if (port) {
-        // PortManager will intelligently find an available port
-        port = await PortManager.allocatePort({
-          port,
-          serviceName: name,
-          alternativePorts: config.alternativePorts
-        });
+      // Allocate port dynamically if service needs one
+      let port: number | undefined;
+      if (config.port !== undefined) {
+        // Use the new dynamic allocation - just need the service name!
+        port = await PortManager.allocatePortForService(name);
         info.port = port;
-        logger.info(`[ProcessManager] ${name} will use port ${port}`);
+        logger.info(`[ProcessManager] ${name} allocated port ${port} (dynamic)`);
       }
       
       // Prepare environment
@@ -108,37 +105,154 @@ export class ProcessManager extends EventEmitter {
       let binaryReadyPromise: Promise<boolean> | null = null;
       
       if (config.scriptPath.endsWith('.ts')) {
-        // For TypeScript files, we need to use fork with ts-node to get IPC
-        // Create a wrapper that uses ts-node/register
-        const tsNodePath = require.resolve('ts-node/register');
-        childProcess = fork(config.scriptPath, config.args || [], {
-          env,
-          silent: false,
-          detached: false,
-          execArgv: ['-r', tsNodePath]
-        });
+        // CRITICAL: In production Electron app, we CANNOT use fork() as it tries to use Electron's Node
+        // We must use spawn with the system's Node.js executable
+        if (app.isPackaged) {
+          // In production, use spawn with node to avoid Electron helper issues
+          const tsNodePath = require.resolve('ts-node/register');
+          childProcess = spawn('node', ['-r', tsNodePath, config.scriptPath, ...(config.args || [])], {
+            env,
+            stdio: ['pipe', 'pipe', 'pipe', 'ipc'],  // Enable IPC channel
+            detached: false
+          });
+        } else {
+          // In development, fork works fine
+          const tsNodePath = require.resolve('ts-node/register');
+          childProcess = fork(config.scriptPath, config.args || [], {
+            env,
+            silent: true,  // Capture stdout/stderr so we can log errors
+            detached: false,
+            execArgv: ['-r', tsNodePath]
+          });
+        }
+        
+        // Capture stderr to see why it's crashing
+        if (childProcess.stderr) {
+          childProcess.stderr.on('data', (data: Buffer) => {
+            logger.error(`[ProcessManager] ${name} stderr:`, data.toString());
+          });
+        }
+        
+        // Capture stdout too for debugging
+        if (childProcess.stdout) {
+          childProcess.stdout.on('data', (data: Buffer) => {
+            logger.info(`[ProcessManager] ${name} stdout:`, data.toString());
+          });
+        }
       } else if (config.scriptPath.endsWith('.js')) {
-        // For JavaScript files, use fork normally
-        childProcess = fork(config.scriptPath, config.args || [], {
-          env,
-          silent: false,
-          detached: false
-        });
+        // CRITICAL: In production Electron app, we CANNOT use fork() as it tries to use Electron's Node
+        // We must use spawn with the system's Node.js executable
+        if (app.isPackaged) {
+          // In production, use spawn with node to avoid Electron helper issues  
+          childProcess = spawn('node', [config.scriptPath, ...(config.args || [])], {
+            env,
+            stdio: ['pipe', 'pipe', 'pipe', 'ipc'],  // Enable IPC channel
+            detached: false
+          });
+        } else {
+          // In development, fork works fine
+          childProcess = fork(config.scriptPath, config.args || [], {
+            env,
+            silent: true,  // Capture stdout/stderr so we can log errors
+            detached: false
+          });
+        }
+        
+        // Capture stderr to see why it's crashing
+        if (childProcess.stderr) {
+          childProcess.stderr.on('data', (data: Buffer) => {
+            logger.error(`[ProcessManager] ${name} stderr:`, data.toString());
+          });
+        }
+        
+        // Capture stdout too for debugging
+        if (childProcess.stdout) {
+          childProcess.stdout.on('data', (data: Buffer) => {
+            logger.info(`[ProcessManager] ${name} stdout:`, data.toString());
+          });
+        }
       } else {
         // For binary executables (Rust, Go, etc.), use spawn
         logger.info(`[ProcessManager] Spawning binary executable: ${config.scriptPath}`);
+        
+        // CRITICAL: In production, binaries lose execute permissions when unpacked from asar
+        // We need to ensure they're executable before spawning
+        if (app.isPackaged) {
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+          try {
+            // Check if file exists and make it executable
+            if (fs.existsSync(config.scriptPath)) {
+              logger.info(`[ProcessManager] Setting execute permissions on ${config.scriptPath}`);
+              fs.chmodSync(config.scriptPath, 0o755);
+              
+              // On macOS, also remove quarantine attribute if present
+              // This prevents "cannot be opened because the developer cannot be verified" errors
+              if (process.platform === 'darwin') {
+                try {
+                  execSync(`xattr -d com.apple.quarantine "${config.scriptPath}" 2>/dev/null || true`);
+                  logger.info(`[ProcessManager] Removed quarantine attribute from ${config.scriptPath}`);
+                } catch (e) {
+                  // Ignore if xattr fails (file might not have the attribute)
+                }
+              }
+            } else {
+              logger.error(`[ProcessManager] Binary does not exist at path: ${config.scriptPath}`);
+              throw new Error(`Binary not found: ${config.scriptPath}`);
+            }
+          } catch (error) {
+            logger.error(`[ProcessManager] Failed to prepare binary:`, error);
+            throw error;
+          }
+        }
+        
         // Use 'inherit' for stdio to allow subprocess communication (e.g., Python processes spawned by AI Helpers)
         // CRITICAL: AI Helpers spawn Python subprocesses that require full stdio access
-        childProcess = spawn(config.scriptPath, config.args || [], {
-          env,
-          stdio: 'inherit',  // Allow full stdio inheritance for subprocess communication
-          detached: false
-        });
-        
-        // With 'inherit' stdio, we can't capture output, so we won't have a binaryReadyPromise
-        // We'll rely solely on port checking for readiness detection
-        logger.info(`[ProcessManager] Binary process ${name} spawned with inherited stdio`);
-        logger.info(`[ProcessManager] Will use port checking for readiness (port ${port})`);
+        try {
+          childProcess = spawn(config.scriptPath, config.args || [], {
+            env,
+            stdio: 'inherit',  // Allow full stdio inheritance for subprocess communication
+            detached: false,
+            shell: false  // Don't use shell to avoid issues with spaces in paths
+          });
+          
+          // With 'inherit' stdio, we can't capture output, so we won't have a binaryReadyPromise
+          // We'll rely solely on port checking for readiness detection
+          logger.info(`[ProcessManager] Binary process ${name} spawned with inherited stdio`);
+          logger.info(`[ProcessManager] Binary PID: ${childProcess.pid}`);
+          logger.info(`[ProcessManager] Will use port checking for readiness (port ${port})`);
+        } catch (spawnError: any) {
+          logger.error(`[ProcessManager] Failed to spawn binary ${name}:`, spawnError);
+          logger.error(`[ProcessManager] Path: ${config.scriptPath}`);
+          logger.error(`[ProcessManager] Error code: ${spawnError.code}`);
+          logger.error(`[ProcessManager] Error message: ${spawnError.message}`);
+          
+          // Try to provide more helpful error messages
+          if (spawnError.code === 'ENOENT') {
+            logger.error(`[ProcessManager] Binary not found at path. Checking if file exists...`);
+            const fs = require('fs');
+            if (fs.existsSync(config.scriptPath)) {
+              logger.error(`[ProcessManager] File exists but cannot be executed. This might be a permission or code signing issue.`);
+              // Try executing with explicit /bin/sh
+              logger.info(`[ProcessManager] Attempting to run binary directly with execFile...`);
+              const { execFile } = require('child_process');
+              childProcess = execFile(config.scriptPath, config.args || [], {
+                env,
+                maxBuffer: 10 * 1024 * 1024  // 10MB buffer for output
+              }, (error: any, stdout: any, stderr: any) => {
+                if (error) {
+                  logger.error(`[ProcessManager] execFile also failed:`, error);
+                }
+              });
+            } else {
+              logger.error(`[ProcessManager] File does not exist at path: ${config.scriptPath}`);
+            }
+          }
+          
+          if (!childProcess) {
+            throw spawnError;
+          }
+        }
         
         // Note: childProcess.stdout and childProcess.stderr are null with 'inherit'
         // These blocks won't execute with 'inherit' stdio, but keeping them for future reference
@@ -173,8 +287,10 @@ export class ProcessManager extends EventEmitter {
       
       // Set up event handlers - now the ready promise is already created
       childProcess.on('message', (msg: any) => {
+        logger.info(`[ProcessManager] Message received from ${name}:`, msg);
         // Handle ready message first if we're waiting for it
         if (readyResolver && msg.type === 'ready') {
+          logger.info(`[ProcessManager] Got ready message from ${name}`);
           if (readyTimeout) clearTimeout(readyTimeout);
           readyResolver(true);
           readyResolver = null; // Clear so we don't resolve twice
@@ -202,7 +318,9 @@ export class ProcessManager extends EventEmitter {
       
       if (readyPromise) {
         // For Node.js processes, wait for IPC 'ready' message
+        logger.info(`[ProcessManager] Waiting for IPC ready message from ${name}...`);
         isReady = await readyPromise;
+        logger.info(`[ProcessManager] IPC ready check complete for ${name}: ${isReady}`);
       } else if (binaryReadyPromise) {
         // For binary processes with captured output, wait for our custom ready detection
         const timeoutPromise = new Promise<boolean>((resolve) => {
@@ -262,6 +380,20 @@ export class ProcessManager extends EventEmitter {
         // Keep checking until the service is ready - no timeout
         while (!portReady) {
           attempts++;
+          
+          // CRITICAL: Check if the process has already crashed
+          // Refresh info to get current status
+          const currentInfo = this.processes.get(name);
+          if (!currentInfo || !currentInfo.process || currentInfo.process.killed || currentInfo.status === 'crashed' || currentInfo.status === 'stopped') {
+            logger.error(`[ProcessManager] Process ${name} has crashed/stopped while waiting for port ${port}`);
+            this.emit('process:progress', {
+              name,
+              status: 'failed',
+              message: `Service crashed during startup`,
+              port
+            });
+            return false; // Return false to indicate startup failed
+          }
           
           // Quick check if port is listening
           portReady = await PortManager.waitForService(port, checkInterval);

@@ -235,7 +235,11 @@ export class CliToolsDetector {
       }
       
       // Check if the token is valid by querying the Memory Service
-      const memoryServicePort = endpoint?.match(/:(\d+)/)?.[1] || '3457';
+      const memoryServicePort = endpoint?.match(/:(\d+)/)?.[1];
+      if (!memoryServicePort) {
+        logger.error(`[CliToolsDetector] Invalid endpoint format: ${endpoint}`);
+        return false;
+      }
       
       // Use node's http module instead of fetch for compatibility
       const http = require('http');

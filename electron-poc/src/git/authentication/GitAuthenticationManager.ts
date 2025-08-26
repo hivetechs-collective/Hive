@@ -42,10 +42,20 @@ export class GitAuthenticationManager {
     const tempDir = os.tmpdir();
     const sessionId = crypto.randomBytes(8).toString('hex');
     
+    // Create a session-specific directory for Git authentication scripts
+    const gitAuthDir = path.join(tempDir, 'hive-consensus-git-auth', sessionId);
+    
+    // Ensure the directory exists
+    const fs = require('fs');
+    if (!fs.existsSync(gitAuthDir)) {
+      fs.mkdirSync(gitAuthDir, { recursive: true });
+    }
+    
     this.pipePath = path.join(tempDir, `git-askpass-${sessionId}.pipe`);
-    this.askpassPath = path.join(__dirname, 'askpass.sh');
-    this.sshAskpassPath = path.join(__dirname, 'ssh-askpass.sh');
-    this.askpassMainPath = path.join(__dirname, 'askpass-main.js');
+    // Store askpass scripts in temp directory instead of __dirname (which is inside asar in production)
+    this.askpassPath = path.join(gitAuthDir, 'askpass.sh');
+    this.sshAskpassPath = path.join(gitAuthDir, 'ssh-askpass.sh');
+    this.askpassMainPath = path.join(gitAuthDir, 'askpass-main.js');
   }
   
   /**

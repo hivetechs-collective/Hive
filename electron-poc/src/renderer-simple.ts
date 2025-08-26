@@ -35,7 +35,8 @@ document.getElementById('test-rust')?.addEventListener('click', async () => {
   status.style.color = '#ffcc00';
   
   try {
-    const response = await fetch('http://localhost:8765/test', {
+    const wsPort = await (window as any).api.invoke('websocket-backend-port');
+    const response = await fetch(`http://localhost:${wsPort}/test`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify("Hello from Electron")
@@ -62,7 +63,8 @@ document.getElementById('test-consensus')?.addEventListener('click', async () =>
   status.style.color = '#ffcc00';
   
   try {
-    const response = await fetch('http://localhost:8765/api/consensus', {
+    const wsPort = await (window as any).api.invoke('websocket-backend-port');
+    const response = await fetch(`http://localhost:${wsPort}/api/consensus`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ query: "What is the capital of France?" })
@@ -88,12 +90,13 @@ setTimeout(async () => {
   console.log('Auto-testing Rust connection...');
   
   try {
-    const response = await fetch('http://localhost:8765/health');
+    const wsPort = await (window as any).api.invoke('websocket-backend-port');
+    const response = await fetch(`http://localhost:${wsPort}/health`);
     const health = await response.json();
     console.log('Backend health check:', health);
     results.textContent = `Backend is healthy!\n${JSON.stringify(health, null, 2)}`;
   } catch (error) {
     console.error('Backend not reachable:', error);
-    results.textContent = `Backend not reachable. Is it running on port 8765?\n${error}`;
+    results.textContent = `Backend not reachable. Is it running?\n${error}`;
   }
 }, 1000);

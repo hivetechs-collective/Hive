@@ -1186,8 +1186,8 @@ const createApplicationMenu = () => {
 
 // ========== MEMORY SERVICE INTEGRATION ==========
 // Memory Service management - uses the shared ProcessManager instance
-let memoryServicePort = 3457;
-let websocketBackendPort = 8765; // Dynamic port for WebSocket backend
+// Ports are now fully dynamic - allocated by PortManager at runtime
+// No hardcoded port values needed!
 
 // CLI Tools Manager for AI CLI integration
 // Note: The manager is now initialized as a singleton in registerCliToolHandlers()
@@ -1294,18 +1294,44 @@ function updateAllMCPConfigurations(actualPort: number) {
 
 // Initialize ProcessManager and register all managed processes
 const initializeProcessManager = () => {
-  // Register Memory Service configuration with ts-node
+  // Determine the correct path for Memory Service based on packaging
+  let memoryServicePath: string;
+  if (app.isPackaged) {
+    // Production: Extract memory-service from asar to temp directory for execution
+    // Node.js child processes can't run directly from asar archives
+    const fs = require('fs');
+    const tempDir = path.join(app.getPath('temp'), 'hive-consensus', 'memory-service');
+    
+    // Ensure temp directory exists
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    // Copy memory-service from asar to temp
+    const sourceFile = path.join(app.getAppPath(), '.webpack', 'main', 'memory-service', 'index.js');
+    const targetFile = path.join(tempDir, 'index.js');
+    
+    // Read from asar and write to filesystem
+    const content = fs.readFileSync(sourceFile, 'utf8');
+    fs.writeFileSync(targetFile, content);
+    
+    memoryServicePath = targetFile;
+    logger.info(`[Main] Memory Service extracted to: ${memoryServicePath}`);
+  } else {
+    // Development: Use TypeScript version with ts-node
+    memoryServicePath = path.join(app.getAppPath(), 'src', 'memory-service', 'index.ts');
+  }
+  
+  // Register Memory Service configuration
   processManager.registerProcess({
     name: 'memory-service',
-    scriptPath: path.join(app.getAppPath(), 'src', 'memory-service', 'index.ts'),
+    scriptPath: memoryServicePath,
     args: [],
     env: {
-      MEMORY_SERVICE_PORT: memoryServicePort.toString(),
-      NODE_ENV: 'development',
-      TS_NODE_TRANSPILE_ONLY: 'true'  // Use env var instead of arg
+      NODE_ENV: app.isPackaged ? 'production' : 'development',
+      TS_NODE_TRANSPILE_ONLY: 'true'  // Use env var instead of arg (only for dev)
     },
-    port: memoryServicePort,
-    alternativePorts: Array.from({length: 50}, (_, i) => memoryServicePort + i + 1), // Dynamic range
+    port: 1, // Just indicates this service needs a port - actual port allocated dynamically
     autoRestart: true,
     maxRestarts: 2, // Reduced for faster failure detection
     restartDelay: 500 // Reduced for faster recovery
@@ -1313,57 +1339,72 @@ const initializeProcessManager = () => {
   });
   
   // Register WebSocket Consensus Backend with bundled Python support
-  const consensusBackendPath = path.join(
-    '/Users/veronelazio/Developer/Private/hive',
-    'target', 'debug', 'hive-backend-server-enhanced'
-  );
+  // In production, the backend server should be bundled with the app
+  let consensusBackendPath: string;
+  let bundledPythonPath: string;
   
-  logger.info('[ProcessManager] Registering WebSocket backend at:', consensusBackendPath);
+  if (app.isPackaged) {
+    // Production: Use bundled backend server
+    const resourcesPath = process.resourcesPath;
+    consensusBackendPath = path.join(resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'binaries', 'hive-backend-server-enhanced');
+    // Python will be bundled in future release, for now use empty path
+    bundledPythonPath = '';
+  } else {
+    // Development: Use local development paths
+    consensusBackendPath = path.join(
+      '/Users/veronelazio/Developer/Private/hive',
+      'target', 'debug', 'hive-backend-server-enhanced'
+    );
+    bundledPythonPath = '/Users/veronelazio/Developer/Private/hive/venv/bin/python3';
+  }
   
-  // For now, use the actual venv Python from the hive directory
-  // TODO: In production, bundle a portable Python distribution
-  const bundledPythonPath = '/Users/veronelazio/Developer/Private/hive/venv/bin/python3';
-  const bundledModelScript = path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
+  // Always register the backend - ProcessManager will handle errors gracefully
+  registerWebSocketBackend();
   
-  logger.info('[ProcessManager] Bundled Python path:', bundledPythonPath);
-  logger.info('[ProcessManager] Bundled model script:', bundledModelScript);
-  
-  processManager.registerProcess({
-    name: 'websocket-backend',
-    scriptPath: consensusBackendPath,
-    args: [],
-    env: {
-      PORT: '8765', // Will be overridden by actual allocated port
-      RUST_LOG: 'info',
-      NODE_ENV: 'development',
-      HIVE_BUNDLED_PYTHON: bundledPythonPath,
-      HIVE_BUNDLED_MODEL_SCRIPT: bundledModelScript
-    },
-    port: 8765,
-    alternativePorts: Array.from({length: 100}, (_, i) => 8765 + i + 1), // Dynamic range: 8766-8865
-    autoRestart: true,
-    maxRestarts: 2, // Reduced for faster failure detection
-    restartDelay: 1000 // Reduced for faster recovery
-    // Health checks disabled - causing startup issues
-  });
+  function registerWebSocketBackend() {
+    logger.info('[ProcessManager] Registering WebSocket backend at:', consensusBackendPath);
+    
+    const bundledModelScript = path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
+    
+    logger.info('[ProcessManager] Bundled Python path:', bundledPythonPath);
+    logger.info('[ProcessManager] Bundled model script:', bundledModelScript);
+    
+    processManager.registerProcess({
+      name: 'websocket-backend',
+      scriptPath: consensusBackendPath,
+      args: [],
+      env: {
+        RUST_LOG: 'info',
+        NODE_ENV: app.isPackaged ? 'production' : 'development',
+        HIVE_BUNDLED_PYTHON: bundledPythonPath,
+        HIVE_BUNDLED_MODEL_SCRIPT: bundledModelScript
+      },
+      port: 1, // Just indicates this service needs a port - actual port allocated dynamically
+      autoRestart: true,
+      maxRestarts: 2, // Reduced for faster failure detection
+      restartDelay: 1000 // Reduced for faster recovery
+      // Health checks disabled - causing startup issues
+    });
+  }
   
   // Listen for process messages
   processManager.on('process:message', (name: string, msg: any) => {
     if (name === 'memory-service') {
       if (msg.type === 'ready') {
         logger.info('[Main] Memory Service ready on port:', msg.port);
-        memoryServicePort = msg.port || memoryServicePort;
         
         // Update MCP configurations for all tools with the actual dynamic port
-        updateAllMCPConfigurations(memoryServicePort);
+        const port = msg.port || processManager.getProcessStatus('memory-service')?.port;
+        if (port) {
+          updateAllMCPConfigurations(port);
+        }
       } else if (msg.type === 'db-query') {
         handleMemoryServiceDbQuery(msg);
       }
     } else if (name === 'websocket-backend') {
       if (msg.type === 'ready') {
         logger.info('[Main] WebSocket backend ready on port:', msg.port);
-        // Store the actual port for WebSocket connections
-        websocketBackendPort = msg.port;
+        // Port is already stored in ProcessManager
       }
     }
   });
@@ -1407,8 +1448,11 @@ ipcMain.handle('get-service-port', async (_, serviceName: string) => {
 // IPC handler to get WebSocket backend port specifically
 ipcMain.handle('get-websocket-port', async () => {
   const processInfo = processManager.getProcessStatus('websocket-backend');
-  // Return the actual allocated port, or default if not running
-  return processInfo?.port || 8765;
+  const port = processInfo?.port;
+  if (!port) {
+    throw new Error('WebSocket backend not running or port not allocated');
+  }
+  return port;
 });
 
 // IPC handler to get full process manager status report
@@ -1489,10 +1533,10 @@ const registerMemoryServiceHandlers = () => {
       const started = await processManager.startProcess('memory-service');
       
       if (started) {
-        // Update port if it changed
+        // Port is now stored in ProcessManager - no need to track separately
         const processInfo = processManager.getProcessStatus('memory-service');
         if (processInfo?.port) {
-          memoryServicePort = processInfo.port;
+          logger.info(`[Main] Memory Service started on dynamic port ${processInfo.port}`);
         }
       }
       
@@ -1518,7 +1562,9 @@ const registerMemoryServiceHandlers = () => {
 
   ipcMain.handle('memory-service-stats', async () => {
     try {
-      const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/stats`);
+      const port = processManager.getProcessStatus('memory-service')?.port;
+      if (!port) throw new Error('Memory Service not running');
+      const response = await fetch(`http://localhost:${port}/api/v1/memory/stats`);
       if (response.ok) {
         return await response.json();
       }
@@ -1539,7 +1585,9 @@ const registerMemoryServiceHandlers = () => {
 
   ipcMain.handle('memory-service-tools', async () => {
     try {
-      const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/tools`);
+      const port = processManager.getProcessStatus('memory-service')?.port;
+      if (!port) throw new Error('Memory Service not running');
+      const response = await fetch(`http://localhost:${port}/api/v1/memory/tools`);
       if (response.ok) {
         const data = await response.json();
         return data.tools || [];
@@ -1552,7 +1600,9 @@ const registerMemoryServiceHandlers = () => {
 
   ipcMain.handle('memory-service-activity', async (_, limit: number = 50) => {
     try {
-      const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/activity?limit=${limit}`);
+      const port = processManager.getProcessStatus('memory-service')?.port;
+      if (!port) throw new Error('Memory Service not running');
+      const response = await fetch(`http://localhost:${port}/api/v1/memory/activity?limit=${limit}`);
       if (response.ok) {
         const data = await response.json();
         return data.activity || [];
@@ -1962,7 +2012,12 @@ const registerSimpleCliToolHandlers = () => {
           
           try {
             // Get memory service configuration
-            const memoryServiceEndpoint = process.env.MEMORY_SERVICE_ENDPOINT || 'http://localhost:11437';
+            const memoryServicePort = processManager.getProcessStatus('memory-service')?.port;
+            if (!memoryServicePort) {
+              logger.error('[Main] Memory service port not allocated');
+              return { success: false, error: 'Memory service not running' };
+            }
+            const memoryServiceEndpoint = process.env.MEMORY_SERVICE_ENDPOINT || `http://localhost:${memoryServicePort}`;
             const token = crypto.randomBytes(32).toString('hex');
             
             // Create MCP wrapper for the tool
@@ -2579,9 +2634,12 @@ server.start();
         // Continue with Memory Service configuration for all tools
       }
       
-      // 1. Get Memory Service port from ProcessManager
+      // 1. Get Memory Service port from ProcessManager (fully dynamic)
       const memoryServiceInfo = processManager.getProcessStatus('memory-service');
-      const memoryServicePort = memoryServiceInfo?.port || 3457;
+      const memoryServicePort = memoryServiceInfo?.port;
+      if (!memoryServicePort) {
+        throw new Error('Memory Service not running - cannot configure MCP');
+      }
       const memoryServiceEndpoint = `http://localhost:${memoryServicePort}`;
       
       // 2. Register with Memory Service to get a token
@@ -3263,7 +3321,10 @@ process.on('unhandledRejection', async (reason) => {
 ipcMain.handle('backend-health', async () => {
   try {
     const backendInfo = processManager.getProcessStatus('websocket-backend');
-    const backendPort = backendInfo?.port || 8765;
+    const backendPort = backendInfo?.port;
+    if (!backendPort) {
+      throw new Error('Backend service not running or port not allocated');
+    }
     const response = await fetch(`http://localhost:${backendPort}/health`);
     return await response.json();
   } catch (error) {
@@ -3274,7 +3335,10 @@ ipcMain.handle('backend-health', async () => {
 ipcMain.handle('backend-test', async () => {
   try {
     const backendInfo = processManager.getProcessStatus('websocket-backend');
-    const backendPort = backendInfo?.port || 8765;
+    const backendPort = backendInfo?.port;
+    if (!backendPort) {
+      throw new Error('Backend service not running or port not allocated');
+    }
     const response = await fetch(`http://localhost:${backendPort}/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3289,7 +3353,10 @@ ipcMain.handle('backend-test', async () => {
 ipcMain.handle('backend-consensus', async (_, query: string) => {
   try {
     const backendInfo = processManager.getProcessStatus('websocket-backend');
-    const backendPort = backendInfo?.port || 8765;
+    const backendPort = backendInfo?.port;
+    if (!backendPort) {
+      throw new Error('Backend service not running or port not allocated');
+    }
     const response = await fetch(`http://localhost:${backendPort}/api/consensus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3304,7 +3371,10 @@ ipcMain.handle('backend-consensus', async (_, query: string) => {
 ipcMain.handle('backend-consensus-quick', async (_, data: {query: string, profile?: string}) => {
   try {
     const backendInfo = processManager.getProcessStatus('websocket-backend');
-    const backendPort = backendInfo?.port || 8765;
+    const backendPort = backendInfo?.port;
+    if (!backendPort) {
+      throw new Error('Backend service not running or port not allocated');
+    }
     const response = await fetch(`http://127.0.0.1:${backendPort}/api/consensus/quick`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3329,12 +3399,20 @@ ipcMain.handle('websocket-connect', async (event, url: string) => {
         wsConnection.close();
       }
       
-      // If the URL is for our backend, use the dynamic port
-      if (url.includes('127.0.0.1:8765') || url.includes('localhost:8765')) {
-        const backendInfo = processManager.getProcessStatus('websocket-backend');
-        const backendPort = backendInfo?.port || 8765;
+      // Always use dynamic port for backend WebSocket connections
+      const backendInfo = processManager.getProcessStatus('websocket-backend');
+      const backendPort = backendInfo?.port;
+      
+      if (!backendPort) {
+        logger.error('[Main] No WebSocket backend port allocated!');
+        reject(new Error('WebSocket backend not running or port not allocated'));
+        return;
+      }
+      
+      // Replace any legacy hardcoded ports with dynamic port
+      if (url.includes(':8765')) {
         url = url.replace(':8765', `:${backendPort}`);
-        logger.info(`[Main] Using dynamic WebSocket port: ${backendPort}`);
+        logger.info(`[Main] Replaced hardcoded port with dynamic port: ${backendPort}`);
       }
       
       wsConnection = new WebSocket(url);
@@ -3383,7 +3461,12 @@ ipcMain.handle('websocket-send', async (_, message: string) => {
       if (!wsConnection || wsConnection.readyState === WebSocket.CLOSED) {
         // Get the actual backend port dynamically
         const backendInfo = processManager.getProcessStatus('websocket-backend');
-        const backendPort = backendInfo?.port || 8765;
+        const backendPort = backendInfo?.port;
+        
+        if (!backendPort) {
+          reject(new Error('WebSocket backend not running or port not allocated'));
+          return;
+        }
         
         // Reconnect to WebSocket using dynamic port
         wsConnection = new WebSocket(`ws://127.0.0.1:${backendPort}/ws`);

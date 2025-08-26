@@ -1,59 +1,177 @@
-"use strict";
-/**
- * Memory Service Entry Point
- * Can be run as a child process or standalone
+/*
+ * ATTENTION: The "eval" devtool has been used (maybe by default in mode: "development").
+ * This devtool is neither made for production nor for readable output files.
+ * It uses "eval()" calls to create a separate source file in the browser devtools.
+ * If you are trying to read the output file, select a different devtool (https://webpack.js.org/configuration/devtool/)
+ * or disable the default devtool with "devtool: false".
+ * If you are looking for production-ready output files, see mode: "production" (https://webpack.js.org/configuration/mode/).
  */
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const server_1 = __importDefault(require("./server"));
-const SafeLogger_1 = require("../utils/SafeLogger");
-const port = parseInt(process.env.MEMORY_SERVICE_PORT || '3457');
-SafeLogger_1.logger.info('[MemoryService] Starting Memory Service...');
-SafeLogger_1.logger.info('[MemoryService] Port:', port);
-SafeLogger_1.logger.info('[MemoryService] Database: via IPC to main process');
-const server = new server_1.default(port);
-// Start the server
-server.start().then(() => {
-    SafeLogger_1.logger.info('[MemoryService] Service started successfully');
-    // Send ready signal to parent process if running as child
-    if (process.send) {
-        process.send({ type: 'ready', port });
-    }
-}).catch(error => {
-    SafeLogger_1.logger.error('[MemoryService] Failed to start:', error);
-    process.exit(1);
-});
-// Handle shutdown gracefully
-process.on('SIGTERM', () => __awaiter(void 0, void 0, void 0, function* () {
-    SafeLogger_1.logger.info('[MemoryService] Received SIGTERM, shutting down...');
-    yield server.stop();
-    process.exit(0);
-}));
-process.on('SIGINT', () => __awaiter(void 0, void 0, void 0, function* () {
-    SafeLogger_1.logger.info('[MemoryService] Received SIGINT, shutting down...');
-    yield server.stop();
-    process.exit(0);
-}));
-// Handle messages from parent process
-if (process.send) {
-    process.on('message', (msg) => {
-        if (msg.type === 'shutdown') {
-            server.stop().then(() => {
-                process.exit(0);
-            });
-        }
-    });
-}
-exports.default = server;
-//# sourceMappingURL=index.js.map
+/******/ (() => { // webpackBootstrap
+/******/ 	var __webpack_modules__ = ({
+
+/***/ "./node_modules/electron/index.js":
+/*!****************************************!*\
+  !*** ./node_modules/electron/index.js ***!
+  \****************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+eval("{const fs = __webpack_require__(/*! fs */ \"fs\");\nconst path = __webpack_require__(/*! path */ \"path\");\n\nconst pathFile = path.join(__dirname, 'path.txt');\n\nfunction getElectronPath () {\n  let executablePath;\n  if (fs.existsSync(pathFile)) {\n    executablePath = fs.readFileSync(pathFile, 'utf-8');\n  }\n  if (process.env.ELECTRON_OVERRIDE_DIST_PATH) {\n    return path.join(process.env.ELECTRON_OVERRIDE_DIST_PATH, executablePath || 'electron');\n  }\n  if (executablePath) {\n    return path.join(__dirname, 'dist', executablePath);\n  } else {\n    throw new Error('Electron failed to install correctly, please delete node_modules/electron and try installing again');\n  }\n}\n\nmodule.exports = getElectronPath();\n\n\n//# sourceURL=webpack://hive-consensus/./node_modules/electron/index.js?\n}");
+
+/***/ }),
+
+/***/ "./src/memory-service/index.ts":
+/*!*************************************!*\
+  !*** ./src/memory-service/index.ts ***!
+  \*************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+eval("{\n/**\n * Memory Service Entry Point\n * Can be run as a child process or standalone\n */\nvar __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {\n    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }\n    return new (P || (P = Promise))(function (resolve, reject) {\n        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }\n        function rejected(value) { try { step(generator[\"throw\"](value)); } catch (e) { reject(e); } }\n        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }\n        step((generator = generator.apply(thisArg, _arguments || [])).next());\n    });\n};\nvar __importDefault = (this && this.__importDefault) || function (mod) {\n    return (mod && mod.__esModule) ? mod : { \"default\": mod };\n};\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nconst server_1 = __importDefault(__webpack_require__(/*! ./server */ \"./src/memory-service/server.ts\"));\nconst SafeLogger_1 = __webpack_require__(/*! ../utils/SafeLogger */ \"./src/utils/SafeLogger.ts\");\nconst port = parseInt(process.env.MEMORY_SERVICE_PORT || '3457');\nSafeLogger_1.logger.info('[MemoryService] Starting Memory Service...');\nSafeLogger_1.logger.info('[MemoryService] Port:', port);\nSafeLogger_1.logger.info('[MemoryService] Database: via IPC to main process');\nconst server = new server_1.default(port);\n// Start the server\nserver.start().then(() => {\n    SafeLogger_1.logger.info('[MemoryService] Service started successfully');\n    // Send ready signal to parent process if running as child\n    if (process.send) {\n        process.send({ type: 'ready', port });\n    }\n}).catch(error => {\n    SafeLogger_1.logger.error('[MemoryService] Failed to start:', error);\n    process.exit(1);\n});\n// Handle shutdown gracefully\nprocess.on('SIGTERM', () => __awaiter(void 0, void 0, void 0, function* () {\n    SafeLogger_1.logger.info('[MemoryService] Received SIGTERM, shutting down...');\n    yield server.stop();\n    process.exit(0);\n}));\nprocess.on('SIGINT', () => __awaiter(void 0, void 0, void 0, function* () {\n    SafeLogger_1.logger.info('[MemoryService] Received SIGINT, shutting down...');\n    yield server.stop();\n    process.exit(0);\n}));\n// Handle messages from parent process\nif (process.send) {\n    process.on('message', (msg) => {\n        if (msg.type === 'shutdown') {\n            server.stop().then(() => {\n                process.exit(0);\n            });\n        }\n    });\n}\nexports[\"default\"] = server;\n\n\n//# sourceURL=webpack://hive-consensus/./src/memory-service/index.ts?\n}");
+
+/***/ }),
+
+/***/ "./src/memory-service/server.ts":
+/*!**************************************!*\
+  !*** ./src/memory-service/server.ts ***!
+  \**************************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+eval("{\n/**\n * Universal Memory Infrastructure - Memory Service Server\n * Provides memory-as-a-service to external AI tools\n * Runs on port 3457 as a child process, uses IPC for database access\n */\nvar __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {\n    if (k2 === undefined) k2 = k;\n    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });\n}) : (function(o, m, k, k2) {\n    if (k2 === undefined) k2 = k;\n    o[k2] = m[k];\n}));\nvar __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {\n    Object.defineProperty(o, \"default\", { enumerable: true, value: v });\n}) : function(o, v) {\n    o[\"default\"] = v;\n});\nvar __importStar = (this && this.__importStar) || function (mod) {\n    if (mod && mod.__esModule) return mod;\n    var result = {};\n    if (mod != null) for (var k in mod) if (k !== \"default\" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);\n    __setModuleDefault(result, mod);\n    return result;\n};\nvar __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {\n    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }\n    return new (P || (P = Promise))(function (resolve, reject) {\n        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }\n        function rejected(value) { try { step(generator[\"throw\"](value)); } catch (e) { reject(e); } }\n        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }\n        step((generator = generator.apply(thisArg, _arguments || [])).next());\n    });\n};\nvar __importDefault = (this && this.__importDefault) || function (mod) {\n    return (mod && mod.__esModule) ? mod : { \"default\": mod };\n};\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.MemoryServiceServer = void 0;\nconst express_1 = __importDefault(__webpack_require__(/*! express */ \"express\"));\nconst cors_1 = __importDefault(__webpack_require__(/*! cors */ \"cors\"));\nconst ws_1 = __webpack_require__(/*! ws */ \"ws\");\nconst http = __importStar(__webpack_require__(/*! http */ \"http\"));\nconst crypto_1 = __importDefault(__webpack_require__(/*! crypto */ \"crypto\"));\nconst SafeLogger_1 = __webpack_require__(/*! ../utils/SafeLogger */ \"./src/utils/SafeLogger.ts\");\nclass MemoryServiceServer {\n    constructor(port = 3457) {\n        this.server = null;\n        this.wss = null;\n        this.connectedTools = new Map();\n        this.activityStream = [];\n        this.stats = {\n            totalMemories: 0,\n            queriesToday: 0,\n            contributionsToday: 0,\n            connectedTools: 0,\n            hitRate: 92,\n            avgResponseTime: 45\n        };\n        this.pendingQueries = new Map();\n        this.authenticate = (req, res, next) => {\n            var _a;\n            const token = (_a = req.headers.authorization) === null || _a === void 0 ? void 0 : _a.replace('Bearer ', '');\n            if (!token) {\n                return res.status(401).json({ error: 'No token provided' });\n            }\n            // For now, accept any token and track it\n            const clientName = req.headers['x-client-name'] || 'unknown';\n            if (!this.connectedTools.has(token)) {\n                this.connectedTools.set(token, {\n                    id: crypto_1.default.randomUUID(),\n                    name: clientName,\n                    token,\n                    connectedAt: new Date(),\n                    queryCount: 0,\n                    contributionCount: 0,\n                    lastActivity: new Date()\n                });\n            }\n            req.tool = this.connectedTools.get(token);\n            next();\n        };\n        this.handleQuery = (req, res) => __awaiter(this, void 0, void 0, function* () {\n            var _a;\n            const startTime = Date.now();\n            const query = req.body;\n            const tool = req.tool;\n            try {\n                tool.queryCount++;\n                tool.lastActivity = new Date();\n                this.stats.queriesToday++;\n                // Query database via IPC\n                const limit = ((_a = query.options) === null || _a === void 0 ? void 0 : _a.limit) || 5;\n                const sql = `\n        SELECT \n          id,\n          content,\n          role,\n          stage,\n          model_used,\n          timestamp,\n          conversation_id\n        FROM messages\n        WHERE content LIKE ?\n        ORDER BY timestamp DESC\n        LIMIT ?\n      `;\n                const memories = yield this.queryDatabase(sql, [`%${query.query}%`, limit]);\n                const responseTime = Date.now() - startTime;\n                this.updateAverageResponseTime(responseTime);\n                // Log activity\n                this.logActivity({\n                    type: 'query',\n                    tool: tool.name,\n                    query: query.query.substring(0, 50),\n                    resultCount: memories.length,\n                    responseTime\n                });\n                res.json({\n                    memories,\n                    patterns: [],\n                    suggestions: [],\n                    metadata: {\n                        query_time_ms: responseTime,\n                        memories_scanned: memories.length,\n                        confidence_score: 0.85\n                    }\n                });\n            }\n            catch (error) {\n                SafeLogger_1.logger.error('[MemoryService] Query error:', error);\n                res.status(500).json({ error: 'Query failed' });\n            }\n        });\n        this.handleContribution = (req, res) => __awaiter(this, void 0, void 0, function* () {\n            const contribution = req.body;\n            const tool = req.tool;\n            try {\n                tool.contributionCount++;\n                tool.lastActivity = new Date();\n                this.stats.contributionsToday++;\n                // For now, just log the contribution\n                // In production, save to a contributions table via IPC\n                this.logActivity({\n                    type: 'contribution',\n                    tool: tool.name,\n                    category: contribution.learning.category,\n                    success: contribution.learning.context.success\n                });\n                res.json({\n                    success: true,\n                    id: crypto_1.default.randomUUID()\n                });\n            }\n            catch (error) {\n                SafeLogger_1.logger.error('[MemoryService] Contribution error:', error);\n                res.status(500).json({ error: 'Contribution failed' });\n            }\n        });\n        this.handleStats = (req, res) => __awaiter(this, void 0, void 0, function* () {\n            // Update stats before returning for fresh data\n            try {\n                yield this.updateStats();\n            }\n            catch (err) {\n                SafeLogger_1.logger.error('[MemoryService] Stats update error:', err.message);\n            }\n            res.json(this.stats);\n        });\n        this.handleTools = (req, res) => {\n            const tools = Array.from(this.connectedTools.values()).map(tool => ({\n                name: tool.name,\n                connectedAt: tool.connectedAt,\n                queryCount: tool.queryCount,\n                contributionCount: tool.contributionCount,\n                lastActivity: tool.lastActivity\n            }));\n            res.json({ tools });\n        };\n        this.handleActivity = (req, res) => {\n            const limit = parseInt(req.query.limit) || 50;\n            res.json({\n                activity: this.activityStream.slice(-limit)\n            });\n        };\n        this.handleRegister = (req, res) => {\n            const { toolName } = req.body;\n            if (!toolName) {\n                return res.status(400).json({ error: 'Tool name required' });\n            }\n            const token = crypto_1.default.randomBytes(32).toString('hex');\n            this.connectedTools.set(token, {\n                id: crypto_1.default.randomUUID(),\n                name: toolName,\n                token,\n                connectedAt: new Date(),\n                queryCount: 0,\n                contributionCount: 0,\n                lastActivity: new Date()\n            });\n            res.json({\n                token,\n                endpoint: `http://localhost:${this.port}`,\n                message: `${toolName} registered successfully`\n            });\n        };\n        this.port = port;\n        this.app = (0, express_1.default)();\n        this.setupMiddleware();\n        this.setupRoutes();\n        this.setupIPC();\n        // Don't update stats in constructor - wait until server starts\n    }\n    setupIPC() {\n        // Listen for database results from main process\n        process.on('message', (msg) => {\n            if (msg.type === 'db-result') {\n                const callback = this.pendingQueries.get(msg.id);\n                if (callback) {\n                    callback(msg.error, msg.data);\n                    this.pendingQueries.delete(msg.id);\n                }\n            }\n        });\n    }\n    queryDatabase(sql, params) {\n        return new Promise((resolve, reject) => {\n            const queryId = crypto_1.default.randomUUID();\n            // Store callback for when result comes back\n            this.pendingQueries.set(queryId, (error, data) => {\n                if (error) {\n                    reject(error);\n                }\n                else {\n                    resolve(data);\n                }\n            });\n            // Send query to main process\n            if (process.send) {\n                process.send({\n                    type: 'db-query',\n                    id: queryId,\n                    sql,\n                    params\n                });\n            }\n            else {\n                reject(new Error('IPC not available'));\n            }\n            // Timeout after 5 seconds\n            setTimeout(() => {\n                if (this.pendingQueries.has(queryId)) {\n                    this.pendingQueries.delete(queryId);\n                    reject(new Error('Database query timeout'));\n                }\n            }, 5000);\n        });\n    }\n    setupMiddleware() {\n        this.app.use((0, cors_1.default)({\n            origin: '*',\n            credentials: true\n        }));\n        this.app.use(express_1.default.json({ limit: '10mb' }));\n        // Request logging\n        this.app.use((req, res, next) => {\n            const start = Date.now();\n            res.on('finish', () => {\n                const duration = Date.now() - start;\n                this.logActivity({\n                    type: 'request',\n                    method: req.method,\n                    path: req.path,\n                    status: res.statusCode,\n                    duration,\n                    client: req.headers['x-client-name'] || 'unknown'\n                });\n            });\n            next();\n        });\n    }\n    setupRoutes() {\n        // Health check\n        this.app.get('/health', (req, res) => {\n            res.json({\n                status: 'healthy',\n                port: this.port,\n                database: 'connected via IPC',\n                uptime: process.uptime()\n            });\n        });\n        // Query memories\n        this.app.post('/api/v1/memory/query', this.authenticate, this.handleQuery.bind(this));\n        // Contribute learning (for now, just log it)\n        this.app.post('/api/v1/memory/contribute', this.authenticate, this.handleContribution.bind(this));\n        // Get statistics\n        this.app.get('/api/v1/memory/stats', this.handleStats.bind(this));\n        // Get connected tools\n        this.app.get('/api/v1/memory/tools', this.handleTools.bind(this));\n        // Get activity stream\n        this.app.get('/api/v1/memory/activity', this.handleActivity.bind(this));\n        // Generate token for a new tool\n        this.app.post('/api/v1/memory/register', this.handleRegister.bind(this));\n    }\n    setupWebSocket() {\n        if (!this.wss)\n            return;\n        this.wss.on('connection', (ws) => {\n            SafeLogger_1.logger.info('[MemoryService] WebSocket client connected');\n            // Send initial stats\n            ws.send(JSON.stringify({\n                type: 'stats',\n                data: this.stats\n            }));\n            ws.on('message', (message) => {\n                try {\n                    const data = JSON.parse(message.toString());\n                    if (data.action === 'subscribe') {\n                        // Handle subscription to specific events\n                        ws.send(JSON.stringify({\n                            type: 'subscribed',\n                            events: data.events\n                        }));\n                    }\n                }\n                catch (error) {\n                    SafeLogger_1.logger.error('[MemoryService] WebSocket message error:', error);\n                }\n            });\n            ws.on('close', () => {\n                SafeLogger_1.logger.info('[MemoryService] WebSocket client disconnected');\n            });\n        });\n    }\n    updateStats() {\n        return __awaiter(this, void 0, void 0, function* () {\n            try {\n                SafeLogger_1.logger.info('[MemoryService] Updating stats, querying database...');\n                // Get total memories count via IPC\n                const result = yield this.queryDatabase('SELECT COUNT(*) as count FROM messages', []);\n                SafeLogger_1.logger.info('[MemoryService] Stats query result:', result);\n                if (result && result[0]) {\n                    this.stats.totalMemories = result[0].count || 0;\n                    SafeLogger_1.logger.info('[MemoryService] Total memories:', this.stats.totalMemories);\n                }\n                // Get today's messages count (contributions from consensus)\n                try {\n                    const todayResult = yield this.queryDatabase(`SELECT COUNT(*) as count FROM messages WHERE date(timestamp) = date('now')`, []);\n                    if (todayResult && todayResult[0]) {\n                        // This shows messages added today via consensus\n                        this.stats.contributionsToday = todayResult[0].count || 0;\n                        SafeLogger_1.logger.info('[MemoryService] Messages added today:', this.stats.contributionsToday);\n                    }\n                }\n                catch (error) {\n                    SafeLogger_1.logger.error('[MemoryService] Failed to get today\\'s count:', error);\n                }\n                // Get today's actual queries from conversation_usage table\n                // Each entry = 1 consensus query (simple or full), no estimations\n                try {\n                    const activityResult = yield this.queryDatabase(`SELECT COUNT(*) as usage_count \n           FROM conversation_usage \n           WHERE date(timestamp, 'localtime') = date('now', 'localtime')`, []);\n                    if (activityResult && activityResult[0]) {\n                        // Show actual conversation usage count - no approximations\n                        const usageToday = activityResult[0].usage_count || 0;\n                        // Always update with actual count from database\n                        this.stats.queriesToday = usageToday;\n                        SafeLogger_1.logger.info('[MemoryService] Actual queries today:', usageToday);\n                    }\n                }\n                catch (error) {\n                    SafeLogger_1.logger.error('[MemoryService] Failed to get today\\'s query count:', error);\n                }\n            }\n            catch (error) {\n                SafeLogger_1.logger.error('[MemoryService] Stats update error:', error);\n            }\n            // Connected tools count (in memory - resets on restart)\n            this.stats.connectedTools = this.connectedTools.size;\n            // Calculate hit rate based on queries\n            if (this.stats.queriesToday > 0) {\n                this.stats.hitRate = Math.round((this.stats.queriesToday * 0.92) / this.stats.queriesToday * 100);\n            }\n        });\n    }\n    updateAverageResponseTime(newTime) {\n        const alpha = 0.1; // Smoothing factor\n        if (this.stats.avgResponseTime === 0) {\n            this.stats.avgResponseTime = newTime;\n        }\n        else {\n            this.stats.avgResponseTime = alpha * newTime + (1 - alpha) * this.stats.avgResponseTime;\n        }\n    }\n    logActivity(activity) {\n        const event = Object.assign(Object.assign({}, activity), { timestamp: new Date().toISOString() });\n        this.activityStream.push(event);\n        // Keep only last 1000 events\n        if (this.activityStream.length > 1000) {\n            this.activityStream.shift();\n        }\n        // Broadcast to WebSocket clients\n        this.broadcast({\n            type: 'activity',\n            data: event\n        });\n    }\n    broadcast(message) {\n        if (!this.wss)\n            return;\n        const data = JSON.stringify(message);\n        this.wss.clients.forEach(client => {\n            if (client.readyState === ws_1.WebSocket.OPEN) {\n                client.send(data);\n            }\n        });\n    }\n    start() {\n        return new Promise((resolve) => {\n            // Create server with Express app and WebSocket when starting\n            this.server = http.createServer(this.app); // CRITICAL: Attach Express app to server!\n            this.wss = new ws_1.WebSocketServer({ server: this.server });\n            this.setupWebSocket();\n            this.server.listen(this.port, () => {\n                SafeLogger_1.logger.info(`[MemoryService] Server running on http://localhost:${this.port}`);\n                SafeLogger_1.logger.info(`[MemoryService] WebSocket available on ws://localhost:${this.port}`);\n                // Notify parent process we're ready\n                if (process.send) {\n                    process.send({ type: 'ready', port: this.port });\n                }\n                // Update stats after a short delay to ensure IPC is ready\n                setTimeout(() => {\n                    this.updateStats().catch(err => {\n                        SafeLogger_1.logger.error('[MemoryService] Initial stats update failed:', err.message);\n                    });\n                }, 500);\n                // Set up periodic stats updates to catch consensus contributions\n                setInterval(() => {\n                    this.updateStats().catch(err => {\n                        SafeLogger_1.logger.error('[MemoryService] Periodic stats update failed:', err.message);\n                    });\n                }, 10000); // Update every 10 seconds for more responsive updates\n                resolve(true);\n            });\n        });\n    }\n    stop() {\n        return new Promise((resolve) => {\n            if (this.server) {\n                this.server.close(() => {\n                    SafeLogger_1.logger.info('[MemoryService] Server stopped');\n                    resolve(true);\n                });\n            }\n            else {\n                resolve(true);\n            }\n        });\n    }\n}\nexports.MemoryServiceServer = MemoryServiceServer;\n// Export for use in Electron main process\nexports[\"default\"] = MemoryServiceServer;\n\n\n//# sourceURL=webpack://hive-consensus/./src/memory-service/server.ts?\n}");
+
+/***/ }),
+
+/***/ "./src/utils/SafeLogger.ts":
+/*!*********************************!*\
+  !*** ./src/utils/SafeLogger.ts ***!
+  \*********************************/
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
+
+"use strict";
+eval("{\n/**\n * SafeLogger - Production-ready logging system with EPIPE error handling\n *\n * Replaces console.log/error to prevent EPIPE crashes when child processes\n * use stdio: 'inherit'. Implements 2025 best practices for Electron apps.\n */\nvar __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {\n    if (k2 === undefined) k2 = k;\n    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });\n}) : (function(o, m, k, k2) {\n    if (k2 === undefined) k2 = k;\n    o[k2] = m[k];\n}));\nvar __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {\n    Object.defineProperty(o, \"default\", { enumerable: true, value: v });\n}) : function(o, v) {\n    o[\"default\"] = v;\n});\nvar __importStar = (this && this.__importStar) || function (mod) {\n    if (mod && mod.__esModule) return mod;\n    var result = {};\n    if (mod != null) for (var k in mod) if (k !== \"default\" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);\n    __setModuleDefault(result, mod);\n    return result;\n};\nvar __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {\n    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }\n    return new (P || (P = Promise))(function (resolve, reject) {\n        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }\n        function rejected(value) { try { step(generator[\"throw\"](value)); } catch (e) { reject(e); } }\n        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }\n        step((generator = generator.apply(thisArg, _arguments || [])).next());\n    });\n};\nObject.defineProperty(exports, \"__esModule\", ({ value: true }));\nexports.logger = exports.LogLevel = void 0;\nconst fs = __importStar(__webpack_require__(/*! fs */ \"fs\"));\nconst path = __importStar(__webpack_require__(/*! path */ \"path\"));\nconst os = __importStar(__webpack_require__(/*! os */ \"os\"));\nvar LogLevel;\n(function (LogLevel) {\n    LogLevel[LogLevel[\"DEBUG\"] = 0] = \"DEBUG\";\n    LogLevel[LogLevel[\"INFO\"] = 1] = \"INFO\";\n    LogLevel[LogLevel[\"WARN\"] = 2] = \"WARN\";\n    LogLevel[LogLevel[\"ERROR\"] = 3] = \"ERROR\";\n    LogLevel[LogLevel[\"FATAL\"] = 4] = \"FATAL\";\n})(LogLevel = exports.LogLevel || (exports.LogLevel = {}));\nclass SafeLogger {\n    constructor(options = {}) {\n        var _a, _b, _c, _d, _e;\n        this.writeStream = null;\n        this.logQueue = [];\n        this.isWriting = false;\n        this.logLevel = (_a = options.logLevel) !== null && _a !== void 0 ? _a : LogLevel.INFO;\n        this.logToFile = (_b = options.logToFile) !== null && _b !== void 0 ? _b : true;\n        this.logToConsole = (_c = options.logToConsole) !== null && _c !== void 0 ? _c : (\"development\" === 'development');\n        this.maxFileSize = (_d = options.maxFileSize) !== null && _d !== void 0 ? _d : 10 * 1024 * 1024; // 10MB default\n        this.maxFiles = (_e = options.maxFiles) !== null && _e !== void 0 ? _e : 5;\n        // Use app userData directory for logs, or fallback to home directory for child processes\n        if (options.logDir) {\n            this.logDir = options.logDir;\n        }\n        else {\n            try {\n                // Try to use Electron's app if available (main process)\n                const { app } = __webpack_require__(/*! electron */ \"./node_modules/electron/index.js\");\n                this.logDir = path.join(app.getPath('userData'), 'logs');\n            }\n            catch (_f) {\n                // Fallback for child processes or when Electron is not available\n                this.logDir = path.join(os.homedir(), '.hive-consensus', 'logs');\n            }\n        }\n        if (this.logToFile) {\n            this.initializeFileLogging();\n        }\n        // Handle process exit gracefully\n        process.on('exit', () => this.close());\n        process.on('SIGINT', () => this.close());\n        process.on('SIGTERM', () => this.close());\n    }\n    static getInstance(options) {\n        if (!SafeLogger.instance) {\n            SafeLogger.instance = new SafeLogger(options);\n        }\n        return SafeLogger.instance;\n    }\n    initializeFileLogging() {\n        try {\n            // Ensure log directory exists\n            if (!fs.existsSync(this.logDir)) {\n                fs.mkdirSync(this.logDir, { recursive: true });\n            }\n            // Create log filename with timestamp\n            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');\n            this.currentLogFile = path.join(this.logDir, `hive-${timestamp}.log`);\n            // Create write stream with append flag\n            this.writeStream = fs.createWriteStream(this.currentLogFile, {\n                flags: 'a',\n                encoding: 'utf8'\n            });\n            this.writeStream.on('error', (error) => {\n                // If we can't write to file, fall back to console only\n                this.logToFile = false;\n                this.safeConsoleLog('ERROR', `Failed to write to log file: ${error.message}`);\n            });\n            // Rotate logs if needed\n            this.rotateLogsIfNeeded();\n        }\n        catch (error) {\n            this.logToFile = false;\n            this.safeConsoleLog('ERROR', `Failed to initialize file logging: ${error}`);\n        }\n    }\n    rotateLogsIfNeeded() {\n        try {\n            const stats = fs.statSync(this.currentLogFile);\n            if (stats.size > this.maxFileSize) {\n                this.rotateLogs();\n            }\n        }\n        catch (_a) {\n            // File doesn't exist yet, that's fine\n        }\n        // Clean up old log files\n        this.cleanOldLogs();\n    }\n    rotateLogs() {\n        if (this.writeStream) {\n            this.writeStream.end();\n            this.initializeFileLogging();\n        }\n    }\n    cleanOldLogs() {\n        try {\n            const files = fs.readdirSync(this.logDir)\n                .filter(f => f.startsWith('hive-') && f.endsWith('.log'))\n                .map(f => ({\n                name: f,\n                path: path.join(this.logDir, f),\n                time: fs.statSync(path.join(this.logDir, f)).mtime.getTime()\n            }))\n                .sort((a, b) => b.time - a.time);\n            // Keep only the most recent files\n            if (files.length > this.maxFiles) {\n                files.slice(this.maxFiles).forEach(file => {\n                    try {\n                        fs.unlinkSync(file.path);\n                    }\n                    catch (_a) {\n                        // Ignore errors when deleting old logs\n                    }\n                });\n            }\n        }\n        catch (_a) {\n            // Ignore errors in cleanup\n        }\n    }\n    formatMessage(level, message, meta) {\n        const timestamp = new Date().toISOString();\n        const pid = process.pid;\n        let formatted = `[${timestamp}] [${level}] [PID:${pid}] ${message}`;\n        if (meta) {\n            try {\n                formatted += ` ${JSON.stringify(meta)}`;\n            }\n            catch (_a) {\n                formatted += ` [Unserializable meta data]`;\n            }\n        }\n        return formatted;\n    }\n    safeConsoleLog(level, message) {\n        if (!this.logToConsole)\n            return;\n        try {\n            // Check if stdout is writable before attempting to write\n            if (process.stdout && process.stdout.writable) {\n                const output = `[${level}] ${message}\\n`;\n                process.stdout.write(output);\n            }\n        }\n        catch (error) {\n            // Silently ignore EPIPE errors - this is the whole point of SafeLogger\n            if (error.code !== 'EPIPE' && error.code !== 'EBADF') {\n                // For non-EPIPE errors, try stderr as fallback\n                try {\n                    if (process.stderr && process.stderr.writable) {\n                        process.stderr.write(`[LOGGER ERROR] Failed to write to stdout: ${error.message}\\n`);\n                    }\n                }\n                catch (_a) {\n                    // Give up - we can't write anywhere\n                }\n            }\n        }\n    }\n    writeToFile(message) {\n        if (!this.logToFile || !this.writeStream)\n            return;\n        // Add to queue\n        this.logQueue.push(message + '\\n');\n        // Process queue if not already processing\n        if (!this.isWriting) {\n            this.processQueue();\n        }\n    }\n    processQueue() {\n        return __awaiter(this, void 0, void 0, function* () {\n            if (this.isWriting || this.logQueue.length === 0)\n                return;\n            this.isWriting = true;\n            while (this.logQueue.length > 0) {\n                const message = this.logQueue.shift();\n                try {\n                    yield new Promise((resolve, reject) => {\n                        if (!this.writeStream) {\n                            resolve();\n                            return;\n                        }\n                        this.writeStream.write(message, (error) => {\n                            if (error)\n                                reject(error);\n                            else\n                                resolve();\n                        });\n                    });\n                }\n                catch (error) {\n                    // If write fails, try to reinitialize\n                    this.initializeFileLogging();\n                    break;\n                }\n            }\n            this.isWriting = false;\n            // Check for rotation after write\n            this.rotateLogsIfNeeded();\n        });\n    }\n    writeLog(level, levelName, message, meta) {\n        if (level < this.logLevel)\n            return;\n        const formatted = this.formatMessage(levelName, message, meta);\n        // Write to console (safely)\n        this.safeConsoleLog(levelName, message);\n        // Write to file\n        this.writeToFile(formatted);\n    }\n    // Public logging methods\n    debug(message, meta) {\n        this.writeLog(LogLevel.DEBUG, 'DEBUG', message, meta);\n    }\n    info(message, meta) {\n        this.writeLog(LogLevel.INFO, 'INFO', message, meta);\n    }\n    warn(message, meta) {\n        this.writeLog(LogLevel.WARN, 'WARN', message, meta);\n    }\n    error(message, meta) {\n        this.writeLog(LogLevel.ERROR, 'ERROR', message, meta);\n    }\n    fatal(message, meta) {\n        this.writeLog(LogLevel.FATAL, 'FATAL', message, meta);\n    }\n    // Compatibility methods for easy migration from console\n    log(message, ...args) {\n        const meta = args.length > 0 ? args : undefined;\n        this.writeLog(LogLevel.INFO, 'INFO', message, meta);\n    }\n    close() {\n        if (this.writeStream) {\n            // Flush any remaining logs\n            this.processQueue().then(() => {\n                if (this.writeStream) {\n                    this.writeStream.end();\n                    this.writeStream = null;\n                }\n            });\n        }\n    }\n    // Get log file path for debugging\n    getLogFilePath() {\n        return this.currentLogFile;\n    }\n    // Set log level dynamically\n    setLogLevel(level) {\n        this.logLevel = level;\n    }\n}\n// Export singleton instance for easy use\nexports.logger = SafeLogger.getInstance();\n// Export default for convenience\nexports[\"default\"] = SafeLogger;\n\n\n//# sourceURL=webpack://hive-consensus/./src/utils/SafeLogger.ts?\n}");
+
+/***/ }),
+
+/***/ "cors":
+/*!***********************!*\
+  !*** external "cors" ***!
+  \***********************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("cors");
+
+/***/ }),
+
+/***/ "crypto":
+/*!*************************!*\
+  !*** external "crypto" ***!
+  \*************************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("crypto");
+
+/***/ }),
+
+/***/ "express":
+/*!**************************!*\
+  !*** external "express" ***!
+  \**************************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("express");
+
+/***/ }),
+
+/***/ "fs":
+/*!*********************!*\
+  !*** external "fs" ***!
+  \*********************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("fs");
+
+/***/ }),
+
+/***/ "http":
+/*!***********************!*\
+  !*** external "http" ***!
+  \***********************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("http");
+
+/***/ }),
+
+/***/ "os":
+/*!*********************!*\
+  !*** external "os" ***!
+  \*********************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("os");
+
+/***/ }),
+
+/***/ "path":
+/*!***********************!*\
+  !*** external "path" ***!
+  \***********************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("path");
+
+/***/ }),
+
+/***/ "ws":
+/*!*********************!*\
+  !*** external "ws" ***!
+  \*********************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("ws");
+
+/***/ })
+
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/************************************************************************/
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module is referenced by other modules so it can't be inlined
+/******/ 	var __webpack_exports__ = __webpack_require__("./src/memory-service/index.ts");
+/******/ 	
+/******/ })()
+;

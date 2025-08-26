@@ -8,14 +8,34 @@ export class MemoryDashboard {
   private ws: WebSocket | null = null;
   private updateInterval: NodeJS.Timeout | null = null;
   private activityBuffer: any[] = [];
+  private memoryServicePort: number | null = null;
   
   constructor() {
-    this.setupWebSocket();
+    this.initializePort();
+  }
+  
+  private async initializePort() {
+    try {
+      // Get dynamic port from main process via IPC
+      this.memoryServicePort = await (window as any).api.invoke('memory-service-port');
+      console.log('[MemoryDashboard] Got memory service port:', this.memoryServicePort);
+      this.setupWebSocket();
+    } catch (error) {
+      console.error('[MemoryDashboard] Failed to get memory service port:', error);
+      // Retry in 2 seconds
+      setTimeout(() => this.initializePort(), 2000);
+    }
   }
   
   private setupWebSocket() {
+    if (!this.memoryServicePort) {
+      console.error('[MemoryDashboard] No port available, waiting...');
+      return;
+    }
+    
     try {
-      this.ws = new WebSocket('ws://localhost:3457');
+      this.ws = new WebSocket(`ws://localhost:${this.memoryServicePort}`);
+      console.log('[MemoryDashboard] Connecting to WebSocket on port', this.memoryServicePort);
       
       this.ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -150,7 +170,7 @@ export class MemoryDashboard {
           <span>Memory Service: ${stats.totalMemories > 0 ? 'Active' : 'Starting...'}</span>
         </div>
         <div class="status-item">
-          <span>Port: 3457</span>
+          <span>Port: ${this.memoryServicePort || 'Loading...'}</span>
         </div>
         <div class="status-item">
           <span>Database: ~/.hive/hive-ai.db</span>
@@ -230,15 +250,15 @@ export class MemoryDashboard {
         <div class="integration-steps">
           <div class="integration-step">
             <strong>1. Register Your Tool:</strong>
-            <code>curl -X POST http://localhost:3457/api/v1/memory/register -d '{"toolName":"my-tool"}'</code>
+            <code>curl -X POST http://localhost:${this.memoryServicePort || '[PORT]'}/api/v1/memory/register -d '{"toolName":"my-tool"}'</code>
           </div>
           <div class="integration-step">
             <strong>2. Query Memories:</strong>
-            <code>curl -X POST http://localhost:3457/api/v1/memory/query -H "Authorization: Bearer YOUR_TOKEN" -d '{"query":"oauth implementation"}'</code>
+            <code>curl -X POST http://localhost:${this.memoryServicePort || '[PORT]'}/api/v1/memory/query -H "Authorization: Bearer YOUR_TOKEN" -d '{"query":"oauth implementation"}'</code>
           </div>
           <div class="integration-step">
             <strong>3. Contribute Learning:</strong>
-            <code>curl -X POST http://localhost:3457/api/v1/memory/contribute -H "Authorization: Bearer YOUR_TOKEN" -d '{"learning":{...}}'</code>
+            <code>curl -X POST http://localhost:${this.memoryServicePort || '[PORT]'}/api/v1/memory/contribute -H "Authorization: Bearer YOUR_TOKEN" -d '{"learning":{...}}'</code>
           </div>
         </div>
       </div>

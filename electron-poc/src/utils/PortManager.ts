@@ -1,6 +1,6 @@
 /**
- * PortManager - Handles port allocation and conflicts for production services
- * Ensures clean startup and shutdown of services
+ * PortManager - Optimized port allocation for diverse environments
+ * Pre-scans ports at startup for instant allocation without delays
  */
 
 import * as net from 'net';
@@ -17,8 +17,170 @@ export interface PortConfig {
   alternativePorts?: number[];
 }
 
+interface PortRange {
+  name: string;
+  start: number;
+  end: number;
+  priority: number;
+}
+
+interface AvailablePort {
+  port: number;
+  range: string;
+  scanTime: number;
+}
+
 export class PortManager {
   private static allocatedPorts: Map<string, number> = new Map();
+  private static availablePortPool: Map<string, AvailablePort[]> = new Map();
+  private static scanComplete = false;
+  private static scanPromise: Promise<void> | null = null;
+  
+  // Port ranges loaded from configuration - NEVER hardcoded
+  private static PORT_RANGES: PortRange[] = [];
+  
+  /**
+   * Discover available port ranges dynamically
+   * NO HARDCODED DEFAULTS - discovers what's available on the system
+   */
+  private static async discoverPortRanges(): Promise<PortRange[]> {
+    const ranges: PortRange[] = [];
+    
+    // Common port ranges to scan for availability
+    // These are DISCOVERY ranges, not assumptions
+    const discoveryRanges = [
+      { start: 3000, end: 4000, step: 100 },  // Lower range
+      { start: 7000, end: 8000, step: 100 },  // Mid range
+      { start: 8000, end: 9000, step: 100 },  // Higher range
+      { start: 9000, end: 10000, step: 100 }, // Upper range
+      { start: 14000, end: 15000, step: 100 }, // Alternative range
+      { start: 19000, end: 20000, step: 100 }, // High alternative
+    ];
+    
+    // Discover available blocks in each range
+    for (const discovery of discoveryRanges) {
+      const availableBlock = await this.findAvailableBlock(discovery.start, discovery.end, discovery.step);
+      if (availableBlock) {
+        // Assign to service based on what we found
+        if (ranges.length === 0) {
+          ranges.push({ name: 'memory-service', start: availableBlock.start, end: availableBlock.end, priority: 1 });
+        } else if (ranges.length === 1) {
+          ranges.push({ name: 'backend-server', start: availableBlock.start, end: availableBlock.end, priority: 1 });
+        } else if (ranges.length === 2) {
+          ranges.push({ name: 'ttyd-terminals', start: availableBlock.start, end: availableBlock.end, priority: 1 });
+        } else {
+          ranges.push({ name: `service-${ranges.length}`, start: availableBlock.start, end: availableBlock.end, priority: 1 });
+        }
+      }
+    }
+    
+    if (ranges.length === 0) {
+      throw new Error('No available port ranges found on system! Cannot start services.');
+    }
+    
+    logger.info('[PortManager] Discovered port ranges:', ranges);
+    return ranges;
+  }
+  
+  /**
+   * Find an available block of ports in a range
+   */
+  private static async findAvailableBlock(start: number, end: number, blockSize: number): Promise<{start: number, end: number} | null> {
+    for (let blockStart = start; blockStart < end; blockStart += blockSize) {
+      const blockEnd = Math.min(blockStart + blockSize - 1, end);
+      
+      // Quick check if first few ports in block are available
+      let available = true;
+      for (let port = blockStart; port < blockStart + 5 && port <= blockEnd; port++) {
+        if (!await this.isPortAvailable(port)) {
+          available = false;
+          break;
+        }
+      }
+      
+      if (available) {
+        return { start: blockStart, end: blockEnd };
+      }
+    }
+    return null;
+  }
+  
+  /**
+   * Initialize and pre-scan all port ranges at startup
+   */
+  static async initialize(): Promise<void> {
+    if (this.scanPromise) {
+      return this.scanPromise;
+    }
+    
+    // Discover available port ranges dynamically
+    this.PORT_RANGES = await this.discoverPortRanges();
+    
+    this.scanPromise = this.performInitialScan();
+    return this.scanPromise;
+  }
+  
+  private static async performInitialScan(): Promise<void> {
+    const startTime = Date.now();
+    logger.info('[PortManager] Starting optimized parallel port scan...');
+    
+    // Scan all ranges in parallel
+    const scanPromises = this.PORT_RANGES.map(range => this.scanRange(range));
+    await Promise.all(scanPromises);
+    
+    const scanTime = Date.now() - startTime;
+    const totalPorts = Array.from(this.availablePortPool.values())
+      .reduce((sum, ports) => sum + ports.length, 0);
+    
+    logger.info(`[PortManager] Scan complete in ${scanTime}ms. Found ${totalPorts} available ports`);
+    this.scanComplete = true;
+  }
+  
+  private static async scanRange(range: PortRange): Promise<void> {
+    const ports: AvailablePort[] = [];
+    const batchSize = 10;
+    const totalPorts = Math.min(20, range.end - range.start + 1); // Scan up to 20 ports per range
+    
+    for (let i = 0; i < totalPorts; i += batchSize) {
+      const batch = [];
+      for (let j = 0; j < batchSize && (i + j) < totalPorts; j++) {
+        const port = range.start + i + j;
+        batch.push(this.checkPortQuick(port).then(available => {
+          if (available) {
+            ports.push({ port, range: range.name, scanTime: Date.now() });
+          }
+        }));
+      }
+      await Promise.all(batch);
+      if (ports.length >= 10) break; // Stop if we found enough
+    }
+    
+    const existing = this.availablePortPool.get(range.name) || [];
+    this.availablePortPool.set(range.name, [...existing, ...ports]);
+  }
+  
+  private static async checkPortQuick(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const server = net.createServer();
+      const timeout = setTimeout(() => {
+        server.close();
+        resolve(false);
+      }, 50); // Quick 50ms timeout
+      
+      server.once('error', () => {
+        clearTimeout(timeout);
+        resolve(false);
+      });
+      
+      server.once('listening', () => {
+        clearTimeout(timeout);
+        server.close();
+        resolve(true);
+      });
+      
+      server.listen(port, '127.0.0.1');
+    });
+  }
   
   /**
    * Check if a port is available
@@ -46,34 +208,139 @@ export class PortManager {
   }
   
   /**
-   * Find an available port starting from a preferred port
+   * Find the first available port - uses pre-scanned pool for instant allocation
    */
   static async findAvailablePort(
-    preferredPort: number,
-    alternativePorts?: number[]
+    portRangeStart: number,
+    portRangeEnd?: number
   ): Promise<number> {
-    // Try preferred port first
-    if (await this.isPortAvailable(preferredPort)) {
-      return preferredPort;
+    // Ensure pool is initialized
+    if (!this.scanComplete) {
+      await this.initialize();
     }
     
-    // Try alternative ports
-    if (alternativePorts) {
-      for (const port of alternativePorts) {
-        if (await this.isPortAvailable(port)) {
-          return port;
-        }
-      }
+    // Try to get from pool first
+    const serviceName = this.getServiceNameForPort(portRangeStart);
+    const poolName = this.getPoolNameForService(serviceName);
+    const pool = this.availablePortPool.get(poolName) || [];
+    
+    if (pool.length > 0) {
+      const portInfo = pool.shift()!;
+      logger.info(`[PortManager] Allocated port ${portInfo.port} from pool (instant)`);
+      return portInfo.port;
     }
     
-    // Find next available port
-    for (let port = preferredPort + 1; port < preferredPort + 100; port++) {
+    // Fallback to scanning if pool is empty
+    const rangeEnd = portRangeEnd || portRangeStart + 100;
+    for (let port = portRangeStart; port <= rangeEnd; port++) {
       if (await this.isPortAvailable(port)) {
+        logger.info(`[PortManager] Found port ${port} via fallback scan`);
         return port;
       }
     }
     
-    throw new Error(`No available ports found near ${preferredPort}`);
+    throw new Error(`No available ports in range ${portRangeStart}-${rangeEnd}`);
+  }
+  
+  /**
+   * New simplified method: Allocate a port by service name only
+   * No need to specify any port numbers - fully dynamic
+   */
+  static async allocatePortForService(serviceName: string): Promise<number> {
+    // Ensure pool is initialized
+    if (!this.scanComplete) {
+      await this.initialize();
+    }
+    
+    // Check if already allocated
+    if (this.allocatedPorts.has(serviceName)) {
+      const existingPort = this.allocatedPorts.get(serviceName)!;
+      if (await this.isPortAvailable(existingPort)) {
+        logger.info(`[PortManager] Reusing port ${existingPort} for ${serviceName}`);
+        return existingPort;
+      }
+      this.allocatedPorts.delete(serviceName);
+    }
+    
+    // Get from appropriate pool
+    const poolName = this.getPoolNameForService(serviceName);
+    const pools = poolName === 'memory-service' 
+      ? ['memory-service', 'memory-service-alt']
+      : poolName === 'backend-server'
+      ? ['backend-server', 'backend-server-alt']
+      : [poolName];
+    
+    for (const pool of pools) {
+      const availablePorts = this.availablePortPool.get(pool) || [];
+      if (availablePorts.length > 0) {
+        const portInfo = availablePorts.shift()!;
+        // Double-check it's still available
+        if (await this.checkPortQuick(portInfo.port)) {
+          this.allocatedPorts.set(serviceName, portInfo.port);
+          logger.info(`[PortManager] Allocated port ${portInfo.port} to ${serviceName} (instant from ${pool} pool)`);
+          return portInfo.port;
+        }
+      }
+    }
+    
+    // If no ports in pool, request an ephemeral port from OS
+    const ephemeralPort = await this.getEphemeralPort();
+    this.allocatedPorts.set(serviceName, ephemeralPort);
+    logger.info(`[PortManager] Allocated ephemeral port ${ephemeralPort} to ${serviceName}`);
+    return ephemeralPort;
+  }
+  
+  /**
+   * Get an ephemeral port from the OS (guaranteed available)
+   */
+  private static async getEphemeralPort(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const server = net.createServer();
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        if (address && typeof address === 'object') {
+          const port = address.port;
+          server.close(() => resolve(port));
+        } else {
+          reject(new Error('Failed to allocate ephemeral port'));
+        }
+      });
+    });
+  }
+  
+  /**
+   * Legacy method for backwards compatibility
+   * @deprecated Use allocatePortForService() instead
+   */
+  static async allocatePort(config: PortConfig): Promise<number> {
+    // Just use the service name, ignore the port numbers
+    return this.allocatePortForService(config.serviceName);
+  }
+  
+  /**
+   * Helper: Get service name from port number
+   */
+  private static getServiceNameForPort(port: number): string {
+    // Check all ranges to identify service
+    for (const range of this.PORT_RANGES) {
+      if (port >= range.start && port <= range.end) {
+        if (range.name.includes('memory')) return 'memory-service';
+        if (range.name.includes('backend')) return 'websocket-backend';
+        if (range.name.includes('ttyd')) return 'ttyd';
+        if (range.name.includes('debug')) return 'debug-server';
+      }
+    }
+    return 'generic';
+  }
+  
+  /**
+   * Helper: Get pool name for service
+   */
+  private static getPoolNameForService(serviceName: string): string {
+    if (serviceName === 'memory-service') return 'memory-service';
+    if (serviceName === 'websocket-backend') return 'backend-server';
+    if (serviceName.startsWith('ttyd')) return 'ttyd-terminals';
+    return 'memory-service'; // Default pool
   }
   
   /**
@@ -123,83 +390,6 @@ export class PortManager {
       logger.error('[PortManager] Error finding process on port:', error);
       return false;
     }
-  }
-  
-  /**
-   * Allocate a port for a service with automatic conflict resolution
-   */
-  static async allocatePort(config: PortConfig): Promise<number> {
-    const { port, serviceName, alternativePorts } = config;
-    
-    // Check if service already has an allocated port that's still free
-    if (this.allocatedPorts.has(serviceName)) {
-      const existingPort = this.allocatedPorts.get(serviceName)!;
-      if (await this.isPortAvailable(existingPort)) {
-        logger.info(`[PortManager] Reusing existing port ${existingPort} for ${serviceName}`);
-        return existingPort;
-      }
-      // Release the old allocation since it's no longer valid
-      this.allocatedPorts.delete(serviceName);
-    }
-    
-    // Start with preferred port
-    let currentPort = port;
-    let portToUse: number | null = null;
-    
-    // Check if preferred port is already allocated to another service
-    const isPortAllocatedToAnother = Array.from(this.allocatedPorts.values()).includes(currentPort);
-    
-    // Check preferred port first
-    if (!isPortAllocatedToAnother && await this.isPortAvailable(currentPort)) {
-      portToUse = currentPort;
-      logger.info(`[PortManager] Port ${currentPort} is available for ${serviceName}`);
-    } else {
-      if (isPortAllocatedToAnother) {
-        logger.info(`[PortManager] Port ${currentPort} is allocated to another service, finding next available port...`);
-      } else {
-        logger.info(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
-      }
-      
-      // Try alternative ports if provided
-      if (alternativePorts && alternativePorts.length > 0) {
-        for (const altPort of alternativePorts) {
-          // Check if this port is allocated to another service
-          const isAltPortAllocated = Array.from(this.allocatedPorts.values()).includes(altPort);
-          if (!isAltPortAllocated && await this.isPortAvailable(altPort)) {
-            portToUse = altPort;
-            logger.info(`[PortManager] Using alternative port ${altPort} for ${serviceName}`);
-            break;
-          }
-        }
-      }
-      
-      // If still no port, scan for the next available port
-      if (!portToUse) {
-        currentPort = port + 1;
-        const maxPort = port + 100; // Search up to 100 ports ahead
-        
-        while (currentPort < maxPort) {
-          // Check if this port is allocated to another service
-          const isCurrentPortAllocated = Array.from(this.allocatedPorts.values()).includes(currentPort);
-          if (!isCurrentPortAllocated && await this.isPortAvailable(currentPort)) {
-            portToUse = currentPort;
-            logger.info(`[PortManager] Found available port ${currentPort} for ${serviceName}`);
-            break;
-          }
-          currentPort++;
-        }
-      }
-    }
-    
-    if (!portToUse) {
-      // This should never happen unless all 100 ports are taken
-      throw new Error(`Could not find any available port for ${serviceName} (searched ${port} to ${port + 100})`);
-    }
-    
-    // Allocate the port
-    this.allocatedPorts.set(serviceName, portToUse);
-    logger.info(`[PortManager] ✅ Port ${portToUse} allocated for ${serviceName}`);
-    return portToUse;
   }
   
   /**

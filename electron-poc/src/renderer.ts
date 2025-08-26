@@ -898,15 +898,31 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                             window.gitAPI.setFolder(currentOpenedFolder).then(() => {
                                 // Add a delay to ensure Git status is fully ready
                                 setTimeout(() => {
-                                    // Create the Git UI after setting the folder
-                                    window.gitUI = new VSCodeSCMView(container);
-                                    window.scmView = window.gitUI;
+                                    try {
+                                        // Create the Git UI after setting the folder
+                                        console.log('Creating VSCodeSCMView for folder:', currentOpenedFolder);
+                                        window.gitUI = new VSCodeSCMView(container);
+                                        window.scmView = window.gitUI;
+                                        console.log('VSCodeSCMView created successfully');
+                                    } catch (error) {
+                                        console.error('Failed to create VSCodeSCMView:', error);
+                                        console.error('Error stack:', error.stack);
+                                    }
                                 }, 300);
+                            }).catch(error => {
+                                console.error('Failed to set Git folder:', error);
                             });
                         } else {
-                            // No folder open, create Git UI which will show welcome
-                            window.gitUI = new VSCodeSCMView(container);
-                            window.scmView = window.gitUI;
+                            try {
+                                // No folder open, create Git UI which will show welcome
+                                console.log('Creating VSCodeSCMView (no folder)');
+                                window.gitUI = new VSCodeSCMView(container);
+                                window.scmView = window.gitUI;
+                                console.log('VSCodeSCMView created successfully (no folder)');
+                            } catch (error) {
+                                console.error('Failed to create VSCodeSCMView (no folder):', error);
+                                console.error('Error stack:', error.stack);
+                            }
                         }
                     } else if (currentOpenedFolder && window.gitAPI) {
                         // Git UI exists but we need to ensure it's showing the right folder
@@ -1415,9 +1431,9 @@ runConsensusViaREST = async (query: string) => {
     
     // Check if it's a network error
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      addLogEntry(`❌ Network error: Cannot connect to backend at http://127.0.0.1:8765`, 'error');
+      addLogEntry(`❌ Network error: Cannot connect to backend service`, 'error');
       addLogEntry(`💡 Make sure the backend server is running`, 'warning');
-      addChatMessage(`Network Error: Cannot reach the backend server. Please ensure it's running on port 8765.`, true);
+      addChatMessage(`Network Error: Cannot reach the backend server. Please ensure it's running.`, true);
     } else {
       addLogEntry(`❌ Consensus failed: ${error}`, 'error');
       addChatMessage(`Error: ${error}`, true);
@@ -1443,8 +1459,8 @@ async function initializeWebSocket() {
     return;
   }
   
-  // Get dynamic backend port from IPC
-  let backendPort = 8765; // default fallback
+  // Get dynamic backend port from IPC - NO FALLBACK
+  let backendPort: number;
   try {
     if ((window as any).backendAPI?.getBackendPort) {
       backendPort = await (window as any).backendAPI.getBackendPort();
@@ -1455,9 +1471,13 @@ async function initializeWebSocket() {
       if (backendLine) {
         backendLine.textContent = `[${new Date().toLocaleTimeString()}] Backend server: http://localhost:${backendPort}`;
       }
+    } else {
+      throw new Error('Backend API not available');
     }
   } catch (error) {
-    console.warn('Failed to get dynamic backend port, using default:', error);
+    console.error('Failed to get backend port - cannot connect:', error);
+    addLogEntry('❌ Backend service not available', 'error');
+    return; // Don't attempt connection without port
   }
   
   const wsUrl = `ws://127.0.0.1:${backendPort}/ws`;
@@ -1782,9 +1802,22 @@ if (testWSBtn) {
   testWSBtn.addEventListener('click', async () => {
     addLogEntry('🧪 Testing WebSocket connection directly...', 'info');
     
+    // Get dynamic WebSocket port from ProcessManager
+    let wsPort;
+    try {
+      wsPort = await (window as any).api.invoke('websocket-backend-port');
+      if (!wsPort) {
+        throw new Error('No WebSocket port allocated');
+      }
+      addLogEntry(`📡 Using WebSocket port: ${wsPort}`, 'info');
+    } catch (error) {
+      addLogEntry(`❌ Failed to get WebSocket port: ${error}`, 'error');
+      return;
+    }
+    
     // Test with a simple WebSocket first
     try {
-      const testWS = new WebSocket('ws://localhost:8765/ws-test');
+      const testWS = new WebSocket(`ws://localhost:${wsPort}/ws-test`);
       testWS.onopen = () => {
         addLogEntry('✅ Test WebSocket connected!', 'success');
         testWS.send('Hello from Electron');
@@ -1807,9 +1840,20 @@ if (testWSBtn) {
 }
 
 // Make WebSocket test function available globally for console debugging
-(window as any).testWebSocket = () => {
+(window as any).testWebSocket = async () => {
   console.log('Testing WebSocket connection...');
-  const ws = new WebSocket('ws://localhost:8765/ws-test');
+  let wsPort;
+  try {
+    wsPort = await (window as any).api.invoke('websocket-backend-port');
+    if (!wsPort) {
+      throw new Error('No WebSocket port allocated');
+    }
+    console.log(`Using WebSocket port: ${wsPort}`);
+  } catch (error) {
+    console.error(`Failed to get WebSocket port: ${error}`);
+    return null;
+  }
+  const ws = new WebSocket(`ws://localhost:${wsPort}/ws-test`);
   ws.onopen = () => console.log('✅ WebSocket opened!');
   ws.onerror = (e) => console.error('❌ WebSocket error:', e);
   ws.onclose = (e) => console.log('WebSocket closed:', e.code, e.reason);

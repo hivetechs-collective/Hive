@@ -2,6 +2,7 @@ import { BrowserWindow, app, ipcMain } from 'electron';
 import * as path from 'path';
 import { logger } from '../utils/SafeLogger';
 import { PidTracker } from '../utils/PidTracker';
+import { PortManager } from '../utils/PortManager';
 
 interface ServiceCheck {
     id: string;
@@ -70,11 +71,27 @@ export class StartupOrchestrator {
                 this.initFunctions.registerDialogHandlers();
                 this.initFunctions.registerSimpleCliToolHandlers();
                 
-                // Register WebSocket backend port handler
+                // Register WebSocket backend port handler (fully dynamic)
                 ipcMain.handle('websocket-backend-port', async () => {
                     const backendInfo = this.initFunctions.processManager.getProcessStatus('websocket-backend');
-                    const port = backendInfo?.port || 8765;
+                    const port = backendInfo?.port;
+                    if (!port) {
+                        logger.warn('[Startup] WebSocket backend port requested but not available');
+                        throw new Error('WebSocket backend not running');
+                    }
                     logger.info(`[Main] WebSocket backend port requested: ${port}`);
+                    return port;
+                });
+                
+                // Register Memory Service port handler (fully dynamic)
+                ipcMain.handle('memory-service-port', async () => {
+                    const memoryInfo = this.initFunctions.processManager.getProcessStatus('memory-service');
+                    const port = memoryInfo?.port;
+                    if (!port) {
+                        logger.warn('[Startup] Memory Service port requested but not available');
+                        throw new Error('Memory Service not running');
+                    }
+                    logger.info(`[Main] Memory Service port requested: ${port}`);
                     return port;
                 });
             },
@@ -89,7 +106,7 @@ export class StartupOrchestrator {
                 await this.startMemoryService();
             },
             weight: 20,
-            required: false
+            required: true  // Memory Service is REQUIRED - core functionality
         },
         {
             id: 'backendServer',
@@ -99,7 +116,7 @@ export class StartupOrchestrator {
                 await this.startBackendServer();
             },
             weight: 25,
-            required: true
+            required: true  // Backend is required - we'll bundle it properly
         },
         {
             id: 'cliTools',
@@ -118,7 +135,11 @@ export class StartupOrchestrator {
             // Create splash window
             this.createSplashWindow();
             
-            // Initialize all services
+            // Pre-scan ports for optimized allocation (MUST complete before services start)
+            this.updateSplash(5, 'Scanning available ports...');
+            await PortManager.initialize(); // Wait for port scan to complete FIRST
+            
+            // NOW initialize services with pre-scanned ports available
             await this.initializeServices();
             
             // Final preparation
@@ -147,6 +168,23 @@ export class StartupOrchestrator {
     }
     
     private createSplashWindow(): void {
+        // In production, startup files are in the unpacked directory
+        const isPackaged = app.isPackaged;
+        let preloadPath: string;
+        let startupPath: string;
+        
+        if (isPackaged) {
+            // Production: files are in .webpack/renderer/ inside the asar
+            // Electron can load directly from asar, no need to unpack
+            const appPath = app.getAppPath();
+            preloadPath = path.join(appPath, '.webpack', 'renderer', 'startup-preload.js');
+            startupPath = path.join(appPath, '.webpack', 'renderer', 'startup.html');
+        } else {
+            // Development: files are in .webpack/renderer/
+            preloadPath = path.join(__dirname, '..', '..', 'startup-preload.js');
+            startupPath = path.join(__dirname, '..', '..', 'startup.html');
+        }
+        
         this.splashWindow = new BrowserWindow({
             width: 600,
             height: 500,
@@ -159,11 +197,10 @@ export class StartupOrchestrator {
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
-                preload: path.join(__dirname, '..', '..', 'startup-preload.js')
+                preload: preloadPath
             }
         });
         
-        const startupPath = path.join(__dirname, '..', '..', 'startup.html');
         this.splashWindow.loadFile(startupPath);
         
         // Prevent closing during startup
@@ -177,13 +214,21 @@ export class StartupOrchestrator {
     private async initializeServices(): Promise<void> {
         let progress = 0;
         
+        logger.info(`[StartupOrchestrator] Starting service initialization, ${this.requiredServices.length} services to start`);
+        
         for (const service of this.requiredServices) {
             try {
+                logger.info(`[StartupOrchestrator] Starting service: ${service.name} (id: ${service.id})`);
+                
                 // Update status
                 this.updateSplash(progress, `Starting ${service.name}...`);
                 
                 // Initialize service
+                const startTime = Date.now();
+                logger.info(`[StartupOrchestrator] Calling init() for ${service.name}...`);
                 await service.init();
+                const duration = Date.now() - startTime;
+                logger.info(`[StartupOrchestrator] ${service.name} init() completed in ${duration}ms`);
                 
                 // No timeout - just wait for ProcessManager to report success
                 // The service.init() already waits for ProcessManager to confirm the service is ready
@@ -191,36 +236,49 @@ export class StartupOrchestrator {
                 // Update progress
                 progress += service.weight;
                 this.updateSplash(progress, `${service.name} ready`);
+                logger.info(`[StartupOrchestrator] ${service.name} ready, progress: ${progress}%`);
                 
                 // Small delay for visual feedback
                 await this.delay(100);
                 
+                logger.info(`[StartupOrchestrator] Moving to next service after ${service.name}...`);
+                
             } catch (error) {
+                logger.error(`[StartupOrchestrator] Service ${service.name} failed:`, error);
                 if (service.required) {
                     throw new Error(`Failed to start ${service.name}: ${error}`);
                 } else {
-                    logger.warn(`[Startup] Optional service ${service.name} failed:`, error);
+                    logger.warn(`[StartupOrchestrator] Optional service ${service.name} failed (continuing):`, error);
                     progress += service.weight; // Still add progress for optional services
                 }
             }
         }
+        
+        logger.info('[StartupOrchestrator] All services initialized successfully');
     }
     
     private async startMemoryService(): Promise<void> {
         const processManager = this.initFunctions.processManager;
         
+        logger.info('[StartupOrchestrator] Starting Memory Service initialization...');
+        
         // Set up progress listener for memory service
         const progressHandler = (data: any) => {
+            logger.info('[StartupOrchestrator] Memory Service progress event:', data);
             if (data.name === 'memory-service') {
                 const basePercent = 45; // Start at 45% for memory service
                 
                 switch (data.status) {
                     case 'port-check':
+                        logger.info(`[StartupOrchestrator] Memory Service checking port ${data.port}`);
                         this.updateSplash(basePercent + 5, `Memory Service on port ${data.port}...`);
                         break;
                     case 'ready':
+                        logger.info('[StartupOrchestrator] Memory Service reported ready');
                         this.updateSplash(basePercent + 15, 'Memory Service ready');
                         break;
+                    default:
+                        logger.info(`[StartupOrchestrator] Memory Service status: ${data.status}`);
                 }
             }
         };
@@ -228,17 +286,30 @@ export class StartupOrchestrator {
         processManager.on('process:progress', progressHandler);
         
         try {
+            logger.info('[StartupOrchestrator] Calling processManager.startProcess("memory-service")...');
             // Start the memory service through ProcessManager
             const started = await processManager.startProcess('memory-service');
+            logger.info(`[StartupOrchestrator] Memory Service start result: ${started}`);
+            
             if (!started) {
+                logger.error('[StartupOrchestrator] Memory Service failed to start');
                 throw new Error('Failed to start Memory Service');
             }
+            
+            logger.info('[StartupOrchestrator] Memory Service started successfully, returning from startMemoryService()');
+        } catch (error) {
+            logger.error('[StartupOrchestrator] Error starting Memory Service:', error);
+            throw error;
         } finally {
             processManager.off('process:progress', progressHandler);
+            logger.info('[StartupOrchestrator] Memory Service initialization complete');
         }
     }
     
     private async startBackendServer(): Promise<void> {
+        logger.info('[StartupOrchestrator] ============= BACKEND SERVER START =============');
+        logger.info('[StartupOrchestrator] Starting Backend Server initialization...');
+        
         // Listen for backend server progress updates
         const processManager = this.initFunctions.processManager;
         
@@ -287,11 +358,20 @@ export class StartupOrchestrator {
         processManager.on('process:progress', progressHandler);
         
         try {
+            logger.info('[StartupOrchestrator] Calling processManager.startProcess("websocket-backend")...');
             // Start the backend server - ProcessManager will wait as long as needed
             const started = await processManager.startProcess('websocket-backend');
+            logger.info(`[StartupOrchestrator] Backend Server start result: ${started}`);
+            
             if (!started) {
+                logger.error('[StartupOrchestrator] Backend Server failed to start');
                 throw new Error('Failed to start Backend Server');
             }
+            
+            logger.info('[StartupOrchestrator] Backend Server started successfully');
+        } catch (error) {
+            logger.error('[StartupOrchestrator] Error starting Backend Server:', error);
+            throw error;
         } finally {
             // Clean up listener
             processManager.off('process:progress', progressHandler);

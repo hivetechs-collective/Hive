@@ -68,13 +68,12 @@ export class TTYDManager extends EventEmitter {
     logger.info(`[TTYDManager] Creating terminal: ${config.title}`);
     
     // Allocate port through ProcessManager's PortManager
-    // Dynamic port allocation: Start from 7100 (avoiding common system ports like 7000)
-    // PortManager will automatically find the next available port if primary is taken
-    const port = await PortManager.allocatePort({
-      port: 7100,  // Start from 7100 (after common system services)
-      serviceName: `ttyd-${config.id}`,
-      alternativePorts: Array.from({ length: 900 }, (_, i) => 7100 + i)  // Large range: 7100-7999
-    });
+    // No hardcoded ports - PortManager handles allocation from configured pools
+    const port = await PortManager.allocatePortForService(`ttyd-${config.id}`);
+    
+    if (!port) {
+      throw new Error(`No ports available for terminal ${config.id}`);
+    }
     
     logger.info(`[TTYDManager] Allocated port ${port} for ${config.title}`);
     

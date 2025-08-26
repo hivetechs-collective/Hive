@@ -14,7 +14,9 @@ import { rendererConfig } from './webpack.renderer.config';
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      unpack: '**/{*.node,node_modules/node-pty/**,node_modules/better-sqlite3/**,node_modules/sqlite3/**,.webpack/main/binaries/**}'
+    },
     icon: './resources/icon', // Don't include file extension
     name: 'Hive Consensus',
     appBundleId: 'com.hivetechs.consensus',

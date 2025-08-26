@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startMemoryService: () => ipcRenderer.invoke('memory-service-start'),
   stopMemoryService: () => ipcRenderer.invoke('memory-service-stop'),
   isMemoryServiceRunning: () => ipcRenderer.invoke('memory-service-status'),
+  getMemoryServicePort: () => ipcRenderer.invoke('memory-service-port'),
   getMemoryStats: () => ipcRenderer.invoke('memory-service-stats'),
   getConnectedTools: () => ipcRenderer.invoke('memory-service-tools'),
   getMemoryActivity: (limit?: number) => ipcRenderer.invoke('memory-service-activity', limit),
@@ -206,6 +207,11 @@ contextBridge.exposeInMainWorld('fileAPI', {
 });
 
 // Terminal API
+// Compatibility API for components expecting window.api
+contextBridge.exposeInMainWorld('api', {
+  invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
+});
+
 contextBridge.exposeInMainWorld('terminalAPI', {
   // Create a new terminal process
   createTerminalProcess: (options: {

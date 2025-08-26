@@ -1,7 +1,7 @@
 /**
  * Universal Memory Infrastructure - Memory Service Server
  * Provides memory-as-a-service to external AI tools
- * Runs on port 3457 as a child process, uses IPC for database access
+ * Runs on dynamically allocated port as a child process, uses IPC for database access
  */
 
 import express from 'express';
@@ -86,7 +86,7 @@ export class MemoryServiceServer {
   private port: number;
   private pendingQueries: Map<string, Function> = new Map();
 
-  constructor(port: number = 3457) {
+  constructor(port: number) {
     this.port = port;
     this.app = express();
     this.setupMiddleware();

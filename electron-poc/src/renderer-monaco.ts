@@ -46,13 +46,14 @@ const editor = monaco.editor.create(editorContainer, {
 console.log("✅ Monaco editor loaded successfully!");
 
 // Test 1: Monaco works in Electron
-// Test 2: Connect to Rust backend on :8765
+// Test 2: Connect to Rust backend on dynamic port
 // Test 3: Make real consensus call
 // Test 4: Display consensus result
 
 async function testRustConnection() {
   try {
-    const response = await fetch('http://localhost:8765/test', {
+    const wsPort = await (window as any).api.invoke('websocket-backend-port');
+    const response = await fetch(\`http://localhost:\${wsPort}/test\`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify("Hello from Electron")
@@ -68,7 +69,8 @@ async function testRustConnection() {
 
 async function testConsensus(query) {
   try {
-    const response = await fetch('http://localhost:8765/api/consensus', {
+    const wsPort = await (window as any).api.invoke('websocket-backend-port');
+    const response = await fetch(\`http://localhost:\${wsPort}/api/consensus\`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ query })
@@ -101,7 +103,8 @@ document.getElementById('test-rust')?.addEventListener('click', async () => {
   }
   
   try {
-    const response = await fetch('http://localhost:8765/test', {
+    const wsPort = await (window as any).api.invoke('websocket-backend-port');
+    const response = await fetch(`http://localhost:${wsPort}/test`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify("Hello from Electron")
@@ -118,7 +121,7 @@ document.getElementById('test-rust')?.addEventListener('click', async () => {
     editor.setValue(currentValue + `\n\n// Rust backend test successful!\n// Response: ${JSON.stringify(result)}`);
   } catch (error) {
     if (status) {
-      status.textContent = '❌ Failed to connect to Rust backend (is it running on :8765?)';
+      status.textContent = '❌ Failed to connect to Rust backend (is it running?)';
       status.style.color = '#ff6b6b';
     }
   }
@@ -132,7 +135,8 @@ document.getElementById('test-consensus')?.addEventListener('click', async () =>
   }
   
   try {
-    const response = await fetch('http://localhost:8765/api/consensus', {
+    const wsPort = await (window as any).api.invoke('websocket-backend-port');
+    const response = await fetch(`http://localhost:${wsPort}/api/consensus`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ query: "What is the capital of France?" })
