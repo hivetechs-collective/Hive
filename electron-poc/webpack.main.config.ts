@@ -1,12 +1,16 @@
 import type { Configuration } from 'webpack';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
 const BuildMemoryServicePlugin = require('./webpack-plugins/BuildMemoryServicePlugin');
+const FixPythonPermissionsPlugin = require('./webpack-plugins/FixPythonPermissionsPlugin');
 
 import { rules } from './webpack.rules';
 import { plugins } from './webpack.plugins';
 
 // Add plugin to build Memory Service during webpack compilation
 plugins.push(new BuildMemoryServicePlugin());
+
+// Add plugin to fix Python binary permissions after copying
+plugins.push(new FixPythonPermissionsPlugin());
 
 // Add CopyWebpackPlugin to copy binaries and startup files
 plugins.push(new CopyWebpackPlugin({

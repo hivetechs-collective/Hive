@@ -1865,7 +1865,6 @@ export class VSCodeSCMView {
       console.log('[SCM] Opening file:', fullPath);
       
       // Check if file has changes (modified, staged, etc.)
-      const currentFolder = (window as any).currentOpenedFolder || process.cwd();
       const fileStatus = this.gitStatus?.files.find(f => 
         f.path === path || `${currentFolder}/${f.path}` === fullPath
       );
