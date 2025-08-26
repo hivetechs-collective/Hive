@@ -52,17 +52,37 @@ if __name__ == "__main__":
         mode = "minimal"
     
     if mode == "minimal":
-        # Run in minimal mode - just echo back decisions
-        print(json.dumps(init_minimal_mode()))
+        # Run in minimal mode - handle all expected request types
+        # Don't print init message - wait for requests instead
+        sys.stderr.write("Python minimal mode started, waiting for requests...\n")
+        sys.stderr.flush()
         
-        # Simple routing decision based on query length and keywords
+        # Main request handling loop
         while True:
             try:
                 line = input()
+                if not line:
+                    continue
+                    
                 request = json.loads(line)
+                request_type = request.get("type")
+                request_id = request.get("request_id", "unknown")
                 
-                # Simple heuristic for routing decision
-                if request.get("type") == "route_decision":
+                # Handle health check requests
+                if request_type == "health":
+                    response = {
+                        "type": "health_result",
+                        "request_id": request_id,
+                        "status": "ready",
+                        "models_loaded": []  # No ML models in minimal mode
+                    }
+                    print(json.dumps(response))
+                    sys.stdout.flush()
+                    sys.stderr.write(f"Responded to health check: {request_id}\n")
+                    sys.stderr.flush()
+                    
+                # Handle route decision requests
+                elif request_type == "route_decision":
                     query = request.get("query", "")
                     # Simple queries are short and don't have complex keywords
                     is_simple = (
@@ -75,21 +95,51 @@ if __name__ == "__main__":
                     
                     response = {
                         "type": "route_decision",
-                        "request_id": request.get("request_id"),
+                        "request_id": request_id,
                         "mode": "simple" if is_simple else "complex",
                         "confidence": 0.8
                     }
                     print(json.dumps(response))
                     sys.stdout.flush()
+                    sys.stderr.write(f"Routed query as: {'simple' if is_simple else 'complex'}\n")
+                    sys.stderr.flush()
+                    
+                # Handle unknown request types
+                else:
+                    response = {
+                        "type": "error",
+                        "request_id": request_id,
+                        "error": f"Unknown request type: {request_type}"
+                    }
+                    print(json.dumps(response))
+                    sys.stdout.flush()
+                    sys.stderr.write(f"Unknown request type: {request_type}\n")
+                    sys.stderr.flush()
+                    
             except EOFError:
+                sys.stderr.write("EOF received, exiting...\n")
+                sys.stderr.flush()
                 break
+            except json.JSONDecodeError as e:
+                error_response = {
+                    "type": "error",
+                    "request_id": "decode_error",
+                    "error": f"JSON decode error: {str(e)}"
+                }
+                print(json.dumps(error_response))
+                sys.stdout.flush()
+                sys.stderr.write(f"JSON decode error: {str(e)}\n")
+                sys.stderr.flush()
             except Exception as e:
                 error_response = {
                     "type": "error",
+                    "request_id": request_id if 'request_id' in locals() else "unknown",
                     "error": str(e)
                 }
                 print(json.dumps(error_response))
                 sys.stdout.flush()
+                sys.stderr.write(f"Exception: {str(e)}\n")
+                sys.stderr.flush()
     else:
         # Full mode with ML packages - import the real service
         from model_service import main

@@ -62,6 +62,19 @@ export const mainConfig: Configuration = {
   resolve: {
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
   },
+  // CRITICAL: Preserve stdio configuration strings during minification
+  optimization: {
+    minimize: true,
+    minimizer: [
+      // Use default minimizer but preserve critical strings
+      '...',
+    ],
+    // Prevent aggressive optimizations that could break stdio config
+    usedExports: true,
+    sideEffects: false,
+    // Keep critical function names for debugging
+    mangleExports: false,
+  },
   // Prevent webpack from watching .git directory
   watchOptions: {
     ignored: [

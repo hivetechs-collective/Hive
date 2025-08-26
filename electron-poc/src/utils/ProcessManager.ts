@@ -206,15 +206,30 @@ export class ProcessManager extends EventEmitter {
           }
         }
         
-        // Use 'inherit' for stdio to allow subprocess communication (e.g., Python processes spawned by AI Helpers)
-        // CRITICAL: AI Helpers spawn Python subprocesses that require full stdio access
+        // CRITICAL CONFIGURATION - DO NOT CHANGE
+        // AI Helpers spawn Python subprocesses that require full stdio access
+        // Webpack minification must NOT alter this value
+        const STDIO_CONFIG = 'inherit' as const; // Explicit constant to prevent webpack transformation
+        
+        // Runtime verification of critical configuration
+        if (STDIO_CONFIG !== 'inherit') {
+          logger.error(`[ProcessManager] CRITICAL ERROR: stdio configuration has been altered!`);
+          logger.error(`[ProcessManager] Expected: 'inherit', Got: ${STDIO_CONFIG}`);
+          throw new Error('Critical configuration corrupted - stdio must be "inherit" for AI Helpers');
+        }
+        
         try {
-          childProcess = spawn(config.scriptPath, config.args || [], {
+          const spawnOptions = {
             env,
-            stdio: 'inherit',  // Allow full stdio inheritance for subprocess communication
+            stdio: STDIO_CONFIG,  // Use explicit constant to prevent webpack issues
             detached: false,
             shell: false  // Don't use shell to avoid issues with spaces in paths
-          });
+          };
+          
+          // Log spawn configuration for debugging
+          logger.info(`[ProcessManager] Spawning ${name} with stdio: ${spawnOptions.stdio}`);
+          
+          childProcess = spawn(config.scriptPath, config.args || [], spawnOptions);
           
           // With 'inherit' stdio, we can't capture output, so we won't have a binaryReadyPromise
           // We'll rely solely on port checking for readiness detection

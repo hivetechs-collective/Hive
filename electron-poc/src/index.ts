@@ -3249,6 +3249,29 @@ server.start();
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
   try {
+    // CRITICAL: Verify runtime configurations before any initialization
+    const { verifyCriticalConfigurations, createDiagnosticReport } = await import('./utils/RuntimeVerification');
+    const verificationResult = verifyCriticalConfigurations();
+    
+    if (!verificationResult.passed) {
+      logger.error('[Main] Critical configuration verification failed!');
+      logger.error('[Main] Diagnostic Report:\n' + createDiagnosticReport());
+      
+      dialog.showErrorBox(
+        'Critical Configuration Error',
+        'The application detected corrupted critical configurations.\n\n' +
+        'This is likely due to webpack bundling issues.\n\n' +
+        'Errors:\n' + verificationResult.errors.join('\n') +
+        '\n\nPlease rebuild the application with:\n' +
+        'npm run clean && npm run package:verified'
+      );
+      
+      app.quit();
+      return;
+    }
+    
+    logger.info('[Main] ✓ Critical configurations verified successfully');
+    
     // Use StartupOrchestrator for clean, visual startup
     const orchestrator = new StartupOrchestrator({
       initDatabase,

@@ -7,9 +7,13 @@
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
+    "verify-build": "node scripts/verify-build.js",
+    "package:verified": "npm run package && npm run verify-build",
     "bundle-python": "node scripts/bundle-python-lite.js",
     "prebuild": "npm run bundle-python",
-    "make": "npm run prebuild && electron-forge make",
+    "make": "npm run prebuild && electron-forge make && npm run verify-build",
+    "clean": "rm -rf .webpack/ out/ node_modules/.cache/ dist/ .electron-forge/",
+    "build:fresh": "npm run clean && npm run package:verified",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx ."
   },

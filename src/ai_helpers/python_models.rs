@@ -196,6 +196,26 @@ impl PythonModelService {
         tracing::info!("🐍 Starting Python model service...");
         tracing::info!("Python path: {}", self.config.python_path);
         tracing::info!("Script path: {}", self.config.service_script);
+        tracing::info!("Model cache dir: {}", self.config.model_cache_dir);
+        
+        // Verify files exist before spawning
+        if !std::path::Path::new(&self.config.python_path).exists() {
+            tracing::error!("❌ Python executable not found at: {}", self.config.python_path);
+            anyhow::bail!("Python executable not found at: {}", self.config.python_path);
+        }
+        
+        if !std::path::Path::new(&self.config.service_script).exists() {
+            tracing::error!("❌ Service script not found at: {}", self.config.service_script);
+            anyhow::bail!("Service script not found at: {}", self.config.service_script);
+        }
+        
+        tracing::info!("✅ Python executable exists at: {}", self.config.python_path);
+        tracing::info!("✅ Service script exists at: {}", self.config.service_script);
+        
+        // Log current working directory
+        if let Ok(cwd) = std::env::current_dir() {
+            tracing::info!("Current working directory: {:?}", cwd);
+        }
         
         let mut cmd = Command::new(&self.config.python_path);
         cmd.arg(&self.config.service_script)
@@ -212,9 +232,23 @@ impl PythonModelService {
             .env("HF_HOME", &self.config.model_cache_dir);
         
         tracing::info!("🚀 Spawning Python subprocess with enhanced environment...");
+        tracing::info!("Command: {} {} --model-cache-dir {}", 
+            self.config.python_path, 
+            self.config.service_script, 
+            self.config.model_cache_dir);
         
-        let mut child = cmd.spawn()
-            .context("Failed to spawn Python model service")?;
+        let mut child = match cmd.spawn() {
+            Ok(child) => {
+                tracing::info!("✅ Python subprocess spawned successfully");
+                child
+            }
+            Err(e) => {
+                tracing::error!("❌ Failed to spawn Python subprocess: {}", e);
+                tracing::error!("Error kind: {:?}", e.kind());
+                tracing::error!("Raw OS error: {:?}", e.raw_os_error());
+                return Err(anyhow::anyhow!("Failed to spawn Python subprocess: {}", e));
+            }
+        };
         
         tracing::info!("✅ Python subprocess spawned with PID: {:?}", child.id());
         
@@ -232,14 +266,16 @@ impl PythonModelService {
         
         // Start stderr handler to capture Python errors
         tokio::spawn(async move {
+            tracing::info!("📝 Starting Python stderr handler...");
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             
             while let Ok(Some(line)) = lines.next_line().await {
-                if !line.trim().is_empty() {
-                    tracing::warn!("🐍 Python stderr: {}", line);
-                }
+                // Log all stderr output, even empty lines (for debugging)
+                tracing::warn!("🐍 Python stderr: [{}]", line);
             }
+            
+            tracing::warn!("⚠️ Python stderr handler stopped (process likely exited)");
         });
         
         // Start response handler
@@ -279,15 +315,59 @@ impl PythonModelService {
     async fn wait_for_ready(&self) -> Result<()> {
         tracing::info!("⏳ Waiting for Python service to be ready...");
         
+        // First check if process is still running
+        if let Some(child) = self.process.lock().await.as_mut() {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    tracing::error!("❌ Python process already exited with status: {:?}", status);
+                    anyhow::bail!("Python process exited immediately with status: {:?}", status);
+                }
+                Ok(None) => {
+                    tracing::info!("✅ Python process is still running");
+                }
+                Err(e) => {
+                    tracing::warn!("⚠️ Could not check Python process status: {}", e);
+                }
+            }
+        }
+        
         let request_id = uuid::Uuid::new_v4().to_string();
+        tracing::info!("📤 Sending health check request with ID: {}", request_id);
         
         // Add timeout to health check to prevent hanging
-        let response = tokio::time::timeout(
+        let response = match tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            self.send_request(ModelRequest::HealthCheck { request_id })
-        ).await
-        .context("Python service health check timed out after 10 seconds")?
-        .context("Python service health check failed")?;
+            self.send_request(ModelRequest::HealthCheck { request_id: request_id.clone() })
+        ).await {
+            Ok(Ok(response)) => {
+                tracing::info!("📥 Received health check response");
+                response
+            }
+            Ok(Err(e)) => {
+                tracing::error!("❌ Health check request failed: {}", e);
+                return Err(anyhow::anyhow!("Health check request failed: {}", e));
+            }
+            Err(_) => {
+                tracing::error!("❌ Health check timed out after 10 seconds");
+                
+                // Check if process is still alive after timeout
+                if let Some(child) = self.process.lock().await.as_mut() {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            tracing::error!("Python process died during health check with status: {:?}", status);
+                        }
+                        Ok(None) => {
+                            tracing::error!("Python process is still running but not responding");
+                        }
+                        Err(e) => {
+                            tracing::error!("Could not check process status: {}", e);
+                        }
+                    }
+                }
+                
+                return Err(anyhow::anyhow!("Python service health check timed out after 10 seconds"));
+            }
+        };
         
         match response {
             ModelResponse::HealthResult { status, .. } => {
