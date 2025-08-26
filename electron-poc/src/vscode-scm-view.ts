@@ -1858,14 +1858,16 @@ export class VSCodeSCMView {
 
   public async openFile(path: string) {
     try {
-      // Convert relative path to absolute path for electron-poc
-      const fullPath = path.startsWith('/') ? path : `/Users/veronelazio/Developer/Private/hive/${path}`;
+      // Convert relative path to absolute path using current working directory
+      const currentFolder = (window as any).currentOpenedFolder || process.cwd();
+      const fullPath = path.startsWith('/') ? path : `${currentFolder}/${path}`;
       
       console.log('[SCM] Opening file:', fullPath);
       
       // Check if file has changes (modified, staged, etc.)
+      const currentFolder = (window as any).currentOpenedFolder || process.cwd();
       const fileStatus = this.gitStatus?.files.find(f => 
-        f.path === path || `/Users/veronelazio/Developer/Private/hive/${f.path}` === fullPath
+        f.path === path || `${currentFolder}/${f.path}` === fullPath
       );
       
       // Check if this is a submodule (directories like dioxus-fork or src/hive_ui)
@@ -2008,7 +2010,8 @@ export class VSCodeSCMView {
   
   private async showDiffView(path: string, fileStatus: any) {
     try {
-      const fullPath = path.startsWith('/') ? path : `/Users/veronelazio/Developer/Private/hive/${path}`;
+      const currentFolder = (window as any).currentOpenedFolder || process.cwd();
+      const fullPath = path.startsWith('/') ? path : `${currentFolder}/${path}`;
       
       // Get the diff for this file
       let diff: string;
@@ -2036,7 +2039,8 @@ export class VSCodeSCMView {
     } catch (error) {
       console.error('[SCM] Failed to show diff view:', error);
       // Fallback to normal file opening
-      const fullPath = path.startsWith('/') ? path : `/Users/veronelazio/Developer/Private/hive/${path}`;
+      const currentFolder = (window as any).currentOpenedFolder || process.cwd();
+      const fullPath = path.startsWith('/') ? path : `${currentFolder}/${path}`;
       const content = await window.fileAPI.readFile(fullPath);
       
       if (window.editorTabs) {

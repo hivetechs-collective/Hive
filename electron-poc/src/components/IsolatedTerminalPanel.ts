@@ -282,7 +282,7 @@ export class IsolatedTerminalPanel {
             if (terminalAPI) {
                 // Use the user's home directory as default working directory
                 // In Electron renderer, we need to use a proper path, not /
-                const cwd = '/Users/veronelazio';  // Use actual home directory
+                const cwd = process.env.HOME || process.cwd();  // Use home directory or current working directory
                 const result = await terminalAPI.createTerminalProcess({
                     terminalId: tabId,
                     cwd: cwd

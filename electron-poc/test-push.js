@@ -8,7 +8,7 @@ const { GitManagerV2 } = require('./dist/git-manager-v2.js');
 async function testPush() {
   console.log('=== Testing Git Push Operation ===\n');
   
-  const repoPath = '/Users/veronelazio/Developer/Private/hive';
+  const repoPath = process.argv[2] || path.resolve(__dirname, '..', '..');
   const manager = new GitManagerV2(repoPath);
   
   console.log('1. Getting status...');

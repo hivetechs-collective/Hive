@@ -15,7 +15,7 @@ import { rendererConfig } from './webpack.renderer.config';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: {
-      unpack: '**/{*.node,node_modules/node-pty/**,node_modules/better-sqlite3/**,node_modules/sqlite3/**,.webpack/main/binaries/**}'
+      unpack: '**/{*.node,node_modules/node-pty/**,node_modules/better-sqlite3/**,node_modules/sqlite3/**,.webpack/main/binaries/**,.webpack/main/resources/python-runtime/**}'
     },
     icon: './resources/icon', // Don't include file extension
     name: 'Hive Consensus',

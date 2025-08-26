@@ -1344,18 +1344,37 @@ const initializeProcessManager = () => {
   let bundledPythonPath: string;
   
   if (app.isPackaged) {
-    // Production: Use bundled backend server
+    // Production: Use bundled backend server and Python runtime
     const resourcesPath = process.resourcesPath;
     consensusBackendPath = path.join(resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'binaries', 'hive-backend-server-enhanced');
-    // Python will be bundled in future release, for now use empty path
-    bundledPythonPath = '';
+    // Use bundled Python runtime for AI Helpers
+    const pythonRuntimePath = path.join(resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'resources', 'python-runtime', 'python');
+    bundledPythonPath = process.platform === 'win32'
+      ? path.join(pythonRuntimePath, 'python.exe')
+      : path.join(pythonRuntimePath, 'bin', 'python3');
   } else {
-    // Development: Use local development paths
+    // Development: Use relative paths that work for any developer
+    const hiveProjectRoot = path.resolve(__dirname, '..', '..', '..');
     consensusBackendPath = path.join(
-      '/Users/veronelazio/Developer/Private/hive',
+      hiveProjectRoot,
       'target', 'debug', 'hive-backend-server-enhanced'
     );
-    bundledPythonPath = '/Users/veronelazio/Developer/Private/hive/venv/bin/python3';
+    // Try to find Python in common locations
+    const possiblePythonPaths = [
+      path.join(hiveProjectRoot, 'venv', 'bin', 'python3'),
+      path.join(hiveProjectRoot, '.venv', 'bin', 'python3'),
+      '/usr/bin/python3',
+      '/usr/local/bin/python3',
+      'python3' // Fall back to system Python
+    ];
+    bundledPythonPath = possiblePythonPaths.find(p => {
+      try {
+        require('child_process').execFileSync(p, ['--version']);
+        return true;
+      } catch {
+        return false;
+      }
+    }) || 'python3';
   }
   
   // Always register the backend - ProcessManager will handle errors gracefully
@@ -1364,7 +1383,10 @@ const initializeProcessManager = () => {
   function registerWebSocketBackend() {
     logger.info('[ProcessManager] Registering WebSocket backend at:', consensusBackendPath);
     
-    const bundledModelScript = path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
+    // In production, model_service.py is in the unpacked resources
+    const bundledModelScript = app.isPackaged
+      ? path.join(process.resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'resources', 'python-runtime', 'models', 'model_service.py')
+      : path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
     
     logger.info('[ProcessManager] Bundled Python path:', bundledPythonPath);
     logger.info('[ProcessManager] Bundled model script:', bundledModelScript);

@@ -7,7 +7,7 @@ app.on('ready', () => {
   try {
     const shell = '/bin/zsh';
     const args = [];
-    const cwd = '/Users/veronelazio';
+    const cwd = process.env.HOME || process.cwd();
     
     console.log(`Spawning: ${shell} with args: ${JSON.stringify(args)} in ${cwd}`);
     

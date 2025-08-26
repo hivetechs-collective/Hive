@@ -1560,49 +1560,78 @@ PidTracker.cleanupOrphans()
 ## Python Runtime & AI Helpers Architecture
 
 ### Overview
-The Electron app bundles a complete Python runtime with all ML dependencies to ensure AI Helpers work without requiring users to install Python or any packages. This is critical for production deployment.
+The Electron app bundles a complete Python runtime with all ML dependencies to ensure AI Helpers work without requiring users to install Python or any packages. This is critical for production deployment and consensus routing decisions.
 
 ### Architecture Philosophy
 - **Self-Contained**: Everything needed ships with the app
 - **No System Dependencies**: Users don't need Python installed
 - **Platform-Agnostic**: Same approach works across macOS/Windows/Linux
 - **Production-Ready**: Works on clean systems out of the box
+- **Lightweight**: 102MB bundle with essential packages only
 
-### Directory Structure
+### Production Bundle Structure
 ```
-electron-poc/
-├── resources/
-│   └── python-runtime/
-│       ├── venv/                    # Python virtual environment
-│       │   ├── bin/
-│       │   │   └── python3          # Python executable
-│       │   └── lib/
-│       │       └── python3.13/
-│       │           └── site-packages/
-│       │               ├── numpy/
-│       │               ├── torch/
-│       │               ├── transformers/
-│       │               └── sentence_transformers/
-│       └── models/
-│           └── model_service.py     # AI Helper service script
+Hive Consensus.app/Contents/Resources/
+└── app.asar.unpacked/
+    └── .webpack/main/
+        ├── binaries/
+        │   └── hive-backend-server-enhanced  # Rust backend
+        └── resources/python-runtime/
+            ├── bundle.json                    # Bundle metadata
+            ├── models/
+            │   ├── model_service.py          # AI Helper service
+            │   └── model_service_wrapper.py  # Graceful degradation
+            └── python/
+                └── bin/
+                    └── python3                # Python 3.11.7 executable
 ```
+
+### Python Bundling Script
+The production Python bundler (`scripts/bundle-python-lite.js`) handles:
+1. **Download**: Standalone Python from indygreg/python-build-standalone
+2. **Extract**: Platform-specific Python runtime
+3. **Install**: Essential packages (numpy, requests)
+4. **Optimize**: Remove tests and unnecessary files
+5. **Package**: Include in Electron build via webpack
 
 ### Implementation Details
 
-#### 1. Environment Variable Configuration
-The Electron main process passes Python paths to the Rust backend via environment variables:
+#### 1. Production vs Development Path Resolution
 ```typescript
-// In electron-poc/src/index.ts
-const bundledPythonPath = '/path/to/venv/bin/python3';
-const bundledModelScript = path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
-
-processManager.registerProcess({
-  name: 'websocket-backend',
-  env: {
-    HIVE_BUNDLED_PYTHON: bundledPythonPath,
-    HIVE_BUNDLED_MODEL_SCRIPT: bundledModelScript
-  }
-});
+// Critical: Different paths for production vs development
+if (app.isPackaged) {
+  // Production: Bundled paths in app.asar.unpacked
+  const resourcesPath = process.resourcesPath;
+  consensusBackendPath = path.join(resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'binaries', 'hive-backend-server-enhanced');
+  const pythonRuntimePath = path.join(resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'resources', 'python-runtime', 'python');
+  bundledPythonPath = process.platform === 'win32'
+    ? path.join(pythonRuntimePath, 'python.exe')
+    : path.join(pythonRuntimePath, 'bin', 'python3');
+  bundledModelScript = path.join(resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'resources', 'python-runtime', 'models', 'model_service.py');
+} else {
+  // Development: Dynamic paths that work for any developer
+  const hiveProjectRoot = path.resolve(__dirname, '..', '..', '..');
+  consensusBackendPath = path.join(hiveProjectRoot, 'target', 'debug', 'hive-backend-server-enhanced');
+  
+  // Python discovery with fallback chain
+  const possiblePythonPaths = [
+    path.join(hiveProjectRoot, 'venv', 'bin', 'python3'),
+    path.join(hiveProjectRoot, '.venv', 'bin', 'python3'),
+    '/usr/bin/python3',
+    '/usr/local/bin/python3',
+    'python3'
+  ];
+  bundledPythonPath = possiblePythonPaths.find(p => {
+    try {
+      require('child_process').execFileSync(p, ['--version']);
+      return true;
+    } catch {
+      return false;
+    }
+  }) || 'python3';
+  
+  bundledModelScript = path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
+}
 ```
 
 #### 2. Rust Backend Python Detection
@@ -3324,10 +3353,31 @@ User Action → Event Trigger → Targeted Update → DOM Manipulation
 
 ## Consensus Engine Architecture
 
-### 4-Stage Pipeline
+### Routing Decision Flow (Critical - Requires Python/AI Helpers)
+The consensus engine uses the Generator model THREE times before the main pipeline:
+1. **Memory Check**: Searches for relevant past conversations
+2. **Context Building**: Gathers thematic memories and context
+3. **Routing Decision**: AI Helpers determine simple vs complex query
+
 ```
-1. Generator Stage
-   ├── Input: User prompt
+User Query
+    ↓
+Generator LLM (1st call) → Memory Check
+    ↓
+Generator LLM (2nd call) → Context Building
+    ↓
+Generator LLM (3rd call) + AI Helpers → Routing Decision
+    ↓                           ↓
+Simple Query              Complex Query
+    ↓                           ↓
+Direct Mode               Full Consensus
+(Single LLM)              (4-Stage Pipeline)
+```
+
+### 4-Stage Consensus Pipeline (Complex Queries)
+```
+1. Generator Stage (4th call if complex)
+   ├── Input: User prompt + context
    ├── Model: Selected generator model
    └── Output: Initial response
 
@@ -3347,10 +3397,18 @@ User Action → Event Trigger → Targeted Update → DOM Manipulation
    └── Output: Final response
 ```
 
+### AI Helpers & Python Dependency
+**Critical**: The routing decision between simple/direct mode and complex/consensus mode requires:
+- Python runtime with AI Helper models
+- Working subprocess communication via stdio inheritance
+- Proper environment variables (HIVE_BUNDLED_PYTHON, HIVE_BUNDLED_MODEL_SCRIPT)
+
+Without Python/AI Helpers, the consensus gets stuck at "router stage" and cannot proceed.
+
 ### Model Selection
-- **323+ models** via OpenRouter
-- **Direct mode** for simple queries (single model)
-- **Full consensus** for complex queries (4 stages)
+- **323+ models** via OpenRouter API
+- **Direct mode** for simple queries (single Generator model call)
+- **Full consensus** for complex queries (4-stage pipeline)
 - **Custom profiles** for specialized workflows
 
 ### Streaming Architecture
@@ -3454,15 +3512,215 @@ const resizeObserver = new ResizeObserver(() => {
 
 #### Production Build Process
 ```bash
+# Pre-build: Bundle Python runtime (NEW - Critical for AI Helpers)
+npm run bundle-python  # Creates 102MB Python bundle with essential packages
+
 # Pre-build: Compile Memory Service
 node scripts/build-memory-service.js
 
 # Pre-build: Copy backend binary
 cp ../hive/target/release/hive-backend-server-enhanced binaries/
 
-# Build production app
+# Build production app with all dependencies
 npm run make
 ```
+
+#### Production-Specific Architecture (Critical Discoveries)
+
+##### 1. Process Spawning: fork() vs spawn() in Production
+**Issue**: Electron's fork() fails in production with "Unable to find helper app"
+**Root Cause**: fork() tries to spawn Electron Helper processes which don't exist in production
+**Solution**: Use spawn('node') for production, fork() for development
+
+```typescript
+// ProcessManager.ts - Critical production fix
+if (app.isPackaged) {
+  // Production: Use spawn with node to avoid Electron helper issues
+  childProcess = spawn('node', [config.scriptPath, ...(config.args || [])], {
+    env,
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    detached: false
+  });
+} else {
+  // Development: Use fork for better debugging
+  childProcess = fork(config.scriptPath, config.args || [], {
+    env,
+    silent: false,
+    detached: false
+  });
+}
+```
+
+##### 2. Binary Permissions in Production
+**Issue**: Binaries lose execute permissions when packaged
+**Solution**: Runtime chmod and quarantine removal
+
+```typescript
+// ProcessManager.ts - Binary permission fixes
+if (app.isPackaged && config.scriptPath.includes('binaries')) {
+  // Make binary executable
+  await fs.promises.chmod(config.scriptPath, 0o755);
+  
+  // Remove macOS quarantine attribute
+  if (process.platform === 'darwin') {
+    execSync(`xattr -d com.apple.quarantine "${config.scriptPath}" 2>/dev/null || true`);
+  }
+}
+```
+
+##### 3. Git Authentication in Production
+**Issue**: askpass.sh tries to write to read-only asar archive
+**Solution**: Write authentication scripts to temp directory
+
+```typescript
+// GitAuthenticationManager.ts - Production temp directory usage
+const tempDir = os.tmpdir();
+const sessionId = crypto.randomBytes(8).toString('hex');
+const gitAuthDir = path.join(tempDir, 'hive-consensus-git-auth', sessionId);
+
+// Store askpass scripts in temp directory instead of __dirname
+this.askpassPath = path.join(gitAuthDir, 'askpass.sh');
+this.sshAskpassPath = path.join(gitAuthDir, 'ssh-askpass.sh');
+```
+
+##### 4. IPC API Compatibility
+**Issue**: Different components expect different API names (window.api vs window.electronAPI)
+**Solution**: Expose both APIs in preload
+
+```typescript
+// preload.ts - Compatibility layer
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+
+// Also expose as 'api' for components expecting window.api
+contextBridge.exposeInMainWorld('api', {
+  invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
+});
+```
+
+##### 5. Webpack Asset Packaging
+**Critical**: Resources must be in `.webpack/main/` for production
+
+```typescript
+// webpack.main.config.ts - Correct resource copying
+new CopyWebpackPlugin({
+  patterns: [
+    {
+      from: 'resources/python-runtime',
+      to: 'resources/python-runtime',  // Goes to .webpack/main/resources/
+      noErrorOnMissing: false
+    }
+  ]
+})
+```
+
+##### 6. Asar Unpacking Configuration
+**Required**: Native modules and binaries must be unpacked from asar
+
+```typescript
+// forge.config.ts - Critical unpack patterns
+packagerConfig: {
+  asar: {
+    unpack: '**/{*.node,node_modules/node-pty/**,node_modules/better-sqlite3/**,node_modules/sqlite3/**,.webpack/main/binaries/**,.webpack/main/resources/python-runtime/**}'
+  }
+}
+```
+
+##### 7. Dynamic Path Resolution (Cross-Platform Compatibility)
+**Critical**: All paths must be dynamic to work on any user's machine
+
+**Production Paths**: Use Electron's built-in path resolution
+```typescript
+// index.ts - Production path resolution (works on ANY machine)
+if (app.isPackaged) {
+  // process.resourcesPath adapts to installation location:
+  // - Windows: C:\Program Files\Hive Consensus\resources\
+  // - macOS: /Applications/Hive Consensus.app/Contents/Resources/
+  // - Linux: /opt/hive-consensus/resources/
+  const resourcesPath = process.resourcesPath;
+  
+  // Backend binary path
+  consensusBackendPath = path.join(
+    resourcesPath, 
+    'app.asar.unpacked', 
+    '.webpack', 
+    'main', 
+    'binaries', 
+    'hive-backend-server-enhanced'
+  );
+  
+  // Python runtime path (cross-platform)
+  const pythonRuntimePath = path.join(
+    resourcesPath, 
+    'app.asar.unpacked', 
+    '.webpack', 
+    'main', 
+    'resources', 
+    'python-runtime', 
+    'python'
+  );
+  
+  // Platform-specific Python executable
+  bundledPythonPath = process.platform === 'win32'
+    ? path.join(pythonRuntimePath, 'python.exe')
+    : path.join(pythonRuntimePath, 'bin', 'python3');
+}
+```
+
+**Development Paths**: Use relative resolution (no hardcoded paths)
+```typescript
+// index.ts - Development path resolution (works for any developer)
+else {
+  // Dynamically find project root relative to current file
+  const hiveProjectRoot = path.resolve(__dirname, '..', '..', '..');
+  
+  // Backend path relative to project root
+  consensusBackendPath = path.join(
+    hiveProjectRoot,
+    'target', 
+    'debug', 
+    'hive-backend-server-enhanced'
+  );
+  
+  // Python discovery with fallback chain
+  const possiblePythonPaths = [
+    path.join(hiveProjectRoot, 'venv', 'bin', 'python3'),
+    path.join(hiveProjectRoot, '.venv', 'bin', 'python3'),
+    '/usr/bin/python3',
+    '/usr/local/bin/python3',
+    'python3' // System Python fallback
+  ];
+  
+  // Find first available Python
+  bundledPythonPath = possiblePythonPaths.find(p => {
+    try {
+      require('child_process').execFileSync(p, ['--version']);
+      return true;
+    } catch {
+      return false;
+    }
+  }) || 'python3';
+}
+```
+
+**Frontend Path Resolution**: Use dynamic current folder
+```typescript
+// vscode-scm-view.ts - Dynamic path resolution for Git operations
+const currentFolder = (window as any).currentOpenedFolder || process.cwd();
+const fullPath = path.startsWith('/') ? path : `${currentFolder}/${path}`;
+```
+
+**Terminal Working Directory**: Use environment variables
+```typescript
+// terminal-ipc-handlers.ts, native-terminal.ts
+const cwd = options.cwd || process.env.HOME || process.cwd();
+```
+
+**Key Principles**:
+1. **NEVER hardcode user-specific paths** like `/Users/username/`
+2. **Use Electron's built-in variables** (`app.getPath()`, `process.resourcesPath`)
+3. **Provide fallback chains** for development environments
+4. **Test with different installation locations** to ensure portability
+5. **Use relative path resolution** from known reference points
 
 #### Optimized Dynamic Port Architecture (Revolutionary Design)
 

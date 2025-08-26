@@ -253,7 +253,7 @@ fi
         id,
         title,
         toolId: options.toolId,
-        cwd: options.cwd || process.env.HOME || '/Users/veronelazio',
+        cwd: options.cwd || process.env.HOME || process.cwd(),
         command: actualCommand,
         env: options.env
       });

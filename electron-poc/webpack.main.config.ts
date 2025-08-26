@@ -25,6 +25,18 @@ plugins.push(new CopyWebpackPlugin({
         minimized: false
       }
     },
+    // Copy Python runtime for AI Helpers (preserve structure and permissions)
+    {
+      from: 'resources/python-runtime',
+      to: 'resources/python-runtime',
+      noErrorOnMissing: false,
+      // Preserve execute permissions on Python binaries
+      globOptions: {
+        dot: true,
+        gitignore: false,
+        ignore: ['**/__pycache__/**', '**/*.pyc']
+      }
+    },
     // Copy startup files for main process
     { from: 'startup.html', to: 'startup.html' },
     { from: 'startup-neural.js', to: 'startup-neural.js' },

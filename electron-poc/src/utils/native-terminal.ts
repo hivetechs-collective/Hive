@@ -12,7 +12,7 @@ export class NativeTerminal {
      */
     static openInTerminal(command: string, workingDirectory?: string): Promise<void> {
         return new Promise((resolve, reject) => {
-            const cwd = workingDirectory || process.env.HOME || '/Users/veronelazio';
+            const cwd = workingDirectory || process.env.HOME || process.cwd();
             
             // AppleScript to open Terminal and run command
             const script = `
@@ -37,7 +37,7 @@ export class NativeTerminal {
      */
     static openInITerm(command: string, workingDirectory?: string): Promise<void> {
         return new Promise((resolve, reject) => {
-            const cwd = workingDirectory || process.env.HOME || '/Users/veronelazio';
+            const cwd = workingDirectory || process.env.HOME || process.cwd();
             
             // AppleScript for iTerm2
             const script = `
