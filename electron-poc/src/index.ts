@@ -1383,10 +1383,10 @@ const initializeProcessManager = () => {
   function registerWebSocketBackend() {
     logger.info('[ProcessManager] Registering WebSocket backend at:', consensusBackendPath);
     
-    // In production, model_service.py is in the unpacked resources
+    // In production, use the wrapper script that handles minimal mode
     const bundledModelScript = app.isPackaged
-      ? path.join(process.resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'resources', 'python-runtime', 'models', 'model_service.py')
-      : path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
+      ? path.join(process.resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'resources', 'python-runtime', 'models', 'model_service_wrapper.py')
+      : path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service_wrapper.py');
     
     logger.info('[ProcessManager] Bundled Python path:', bundledPythonPath);
     logger.info('[ProcessManager] Bundled model script:', bundledModelScript);
