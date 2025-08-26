@@ -9641,3 +9641,17 @@ electron-poc/
   - Introduced deferred consensus initialization
   - Enhanced ProcessManager with comprehensive status reporting
   - Documented 2025 best practices for process management
+
+- **v1.0.0 (2025-08-26)**: Production Consensus Routing Fix & Architecture Documentation
+  - **Critical Production Bug Investigation**: Resolved consensus routing failure in production builds
+  - **Root Cause Discovery**: Python AI Helper protocol mismatch (not webpack bundling issue)
+  - **Two-Layer Architecture Clarification**: 
+    - Layer 1: Electron→Rust uses stdio:'inherit'
+    - Layer 2: Rust→Python uses JSON protocol over pipes
+  - **Build System Enhancements**:
+    - Created `scripts/verify-build.js` for webpack output validation
+    - Added `src/utils/RuntimeVerification.ts` for production diagnostics
+    - Enhanced webpack configuration to preserve critical strings
+  - **Python Protocol Fix**: Updated `model_service_wrapper.py` to handle JSON health checks
+  - **Documentation**: Added comprehensive debugging section with lessons learned
+  - **Preventive Measures**: Build verification, runtime checks, enhanced logging at boundaries
