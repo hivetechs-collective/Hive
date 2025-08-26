@@ -90,3 +90,29 @@ typings/
 
 # Electron-Forge
 out/
+
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+develop-eggs/
+.installed.cfg
+*.manifest
+*.spec
+
+# Python runtime - keep the source files but ignore compiled bytecode
+resources/python-runtime/python/**/*.pyc
+resources/python-runtime/python/**/__pycache__/
