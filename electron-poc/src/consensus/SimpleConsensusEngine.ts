@@ -2,6 +2,8 @@ import { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { MemoryContextDatabase, Memory, ContextFramework, MemoryContextLog } from '../database/MemoryContextDatabase';
+import { OptimizedMemoryService } from '../database/OptimizedMemoryService';
 
 interface ConversationMessage {
   speaker: 'generator' | 'refiner' | 'validator';
@@ -25,11 +27,17 @@ export class SimpleConsensusEngine {
   private modelCosts: Map<string, {input: number, output: number}> = new Map();
   private costsLoaded: Promise<void>;
   private conversation: Conversation | null = null;
+  private memoryDb: MemoryContextDatabase;
+  private optimizedMemory: OptimizedMemoryService;
+  private conversationId: string | null = null;
+  private userMessageId: string | null = null;
 
   constructor(database: any) {
     this.db = database;
     this.modelCosts = new Map();
     this.costsLoaded = this.loadModelCosts();
+    this.memoryDb = new MemoryContextDatabase(database);
+    this.optimizedMemory = new OptimizedMemoryService(database);
   }
 
   private async loadModelCosts(): Promise<void> {
@@ -142,6 +150,9 @@ export class SimpleConsensusEngine {
       // Generate unique consensus_id (timestamp + random)
       const consensusId = `consensus_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
+      // Generate conversation ID if not provided
+      this.conversationId = request.conversationId || `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
       this.conversation = {
         consensus_id: consensusId,
         user_question: request.query,
@@ -151,6 +162,38 @@ export class SimpleConsensusEngine {
         total_tokens: 0,
         total_cost: 0
       };
+      
+      // Store the user's question in the database using optimized service
+      try {
+        console.log('🚀 Storing user message via optimized service');
+        this.userMessageId = await this.optimizedMemory.storeMessage({
+          conversationId: this.conversationId,
+          role: 'user',
+          content: request.query
+        });
+        console.log(`💾 Stored user question with ID: ${this.userMessageId}`);
+        // Memory Service stats are automatically updated via database triggers
+      } catch (error) {
+        console.error('❌ Failed to store user message:', error);
+      }
+
+      // MEMORY STAGE - Retrieve relevant past conversations
+      console.log('\n🧠 MEMORY STAGE - Retrieving relevant memories');
+      this.sendStageUpdate('memory', 'running');
+      this.sendProgressUpdate(request.requestId, 'Searching memory for relevant context...', 0.02);
+      
+      const relevantMemories = await this.retrieveRelevantMemories(request.query);
+      console.log(`📚 Found ${relevantMemories.length} relevant memories`);
+      this.sendStageUpdate('memory', 'completed');
+
+      // CONTEXT STAGE - Build contextual framework
+      console.log('\n🔍 CONTEXT STAGE - Building contextual framework');
+      this.sendStageUpdate('context', 'running');
+      this.sendProgressUpdate(request.requestId, 'Analyzing context and patterns...', 0.04);
+      
+      const contextFramework = await this.buildContextFramework(request.query, relevantMemories);
+      console.log(`📝 Context framework built with ${contextFramework.patterns.length} patterns identified`);
+      this.sendStageUpdate('context', 'completed');
 
       // ROUTING STAGE - Determine if question is simple or complex
       console.log('\n🔄 ROUTING STAGE - Determining question complexity');
@@ -158,6 +201,8 @@ export class SimpleConsensusEngine {
       this.sendProgressUpdate(request.requestId, 'Analyzing question complexity...', 0.05);
       
       const routingPrompt = `Analyze this question and determine if it requires simple or complex reasoning.
+
+${contextFramework.summary ? `Context from past conversations:\n${contextFramework.summary}\n` : ''}
 
 A SIMPLE question:
 - Has a straightforward, factual answer
@@ -190,9 +235,16 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         console.log('✨ SIMPLE QUESTION - Using direct response path');
         this.sendProgressUpdate(request.requestId, 'Generating direct response...', 0.2);
         
-        // Get single response from Generator
+        // Get single response from Generator with context
         this.sendStageUpdate('generator', 'running');
-        const simpleResult = await this.callOpenRouter(apiKey, profile.generator_model, request.query);
+        
+        // Build context-enhanced prompt
+        let enhancedPrompt = request.query;
+        if (contextFramework.summary) {
+          enhancedPrompt = `Context from previous conversations: ${contextFramework.summary}\n\nCurrent question: ${request.query}`;
+        }
+        
+        const simpleResult = await this.callOpenRouter(apiKey, profile.generator_model, enhancedPrompt);
         this.sendStageUpdate('generator', 'completed');
         
         // Update conversation stats
@@ -220,12 +272,31 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         console.log('  Total tokens:', this.conversation.total_tokens);
         console.log('  Total cost: $' + this.conversation.total_cost.toFixed(4));
         
+        // Store the assistant's response in the database using optimized service
+        try {
+          console.log('🚀 Storing assistant response via optimized service');
+          const assistantMessageId = await this.optimizedMemory.storeMessage({
+            conversationId: this.conversationId,
+            role: 'assistant',
+            content: simpleResult.content,
+            model: profile.generator_model,
+            tokensUsed: this.conversation.total_tokens,
+            cost: this.conversation.total_cost,
+            consensusPath: 'SIMPLE',
+            consensusRounds: 1,
+            parentMessageId: this.userMessageId || undefined
+          });
+          console.log(`💾 Stored assistant response with ID: ${assistantMessageId}`);
+        } catch (error) {
+          console.error('❌ Failed to store assistant message:', error);
+        }
+        
         // Send completion
         this.sendConsensusComplete({
           response: simpleResult.content,
           totalTokens: this.conversation.total_tokens,
           totalCost: this.conversation.total_cost,
-          conversationId: request.requestId,
+          conversationId: this.conversationId,
           rounds: 1,
           consensusAchieved: true
         });
@@ -258,8 +329,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         // Send round update to renderer
         this.sendRoundUpdate(this.conversation.rounds_completed);
         
-        // Execute one round of Generator → Refiner → Validator
-        await this.executeDeliberationRound(apiKey, profile);
+        // Execute one round of Generator → Refiner → Validator with context
+        await this.executeDeliberationRound(apiKey, profile, contextFramework);
         
         // Check consensus after each round
         await this.checkConsensus(apiKey, profile);
@@ -298,12 +369,32 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       console.log('  Rounds:', this.conversation.rounds_completed);
       console.log('  Consensus:', this.conversation.consensus_achieved ? 'YES' : 'NO');
 
+      // Store the assistant's response in the database for future memory retrieval
+      try {
+        const modelUsed = this.conversation.consensus_achieved ? profile.curator_model : profile.validator_model;
+        console.log('🚀 Storing consensus response via optimized service');
+        const assistantMessageId = await this.optimizedMemory.storeMessage({
+          conversationId: this.conversationId,
+          role: 'assistant',
+          content: finalResponse,
+          model: modelUsed,
+          tokensUsed: this.conversation.total_tokens,
+          cost: this.conversation.total_cost,
+          consensusPath: 'COMPLEX',
+          consensusRounds: this.conversation.rounds_completed,
+          parentMessageId: this.userMessageId || undefined
+        });
+        console.log(`💾 Stored assistant response with ID: ${assistantMessageId}`);
+      } catch (error) {
+        console.error('❌ Failed to store assistant message:', error);
+      }
+
       // Send to renderer
       this.sendConsensusComplete({
         response: finalResponse,
         totalTokens: this.conversation.total_tokens,
         totalCost: this.conversation.total_cost,
-        conversationId: request.requestId,
+        conversationId: this.conversationId,
         rounds: this.conversation.rounds_completed,
         consensusAchieved: this.conversation.consensus_achieved
       });
@@ -423,6 +514,116 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
     });
   }
 
+  private async retrieveRelevantMemories(query: string): Promise<Memory[]> {
+    const startTime = Date.now();
+    
+    try {
+      // Use optimized parallel memory retrieval with connection pool
+      console.log('🚀 Using optimized parallel memory retrieval');
+      
+      // Execute optimized parallel query
+      const memories = await this.optimizedMemory.retrieveMemories(query, this.conversationId || undefined);
+      
+      const endTime = Date.now();
+      console.log(`⚡ Optimized memory retrieval took ${endTime - startTime}ms`);
+      
+      // Get performance metrics
+      const metrics = this.optimizedMemory.getPerformanceMetrics();
+      console.log(`📊 Performance Stats:`);
+      console.log(`  - Cache size: ${metrics.cacheSize}`);
+      console.log(`  - Connection pool: ${metrics.connectionPoolSize} connections`);
+      
+      // Log memory counts by layer for verification
+      const recentCount = memories.filter((m: any) => m.recencyScore === 4).length;
+      const todayCount = memories.filter((m: any) => m.recencyScore === 3).length;
+      const weekCount = memories.filter((m: any) => m.recencyScore === 2).length;
+      const semanticCount = memories.filter((m: any) => m.recencyScore === 1).length;
+      
+      console.log(`📊 Memory Distribution:`);
+      console.log(`  - Recent (2h): ${recentCount} memories`);
+      console.log(`  - Today (24h): ${todayCount} memories`);
+      console.log(`  - This Week: ${weekCount} memories`);
+      console.log(`  - Semantic: ${semanticCount} memories`);
+      
+      // Log the memory retrieval operation
+      const logId = `memlog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await this.memoryDb.logMemoryContextOperation({
+        log_id: logId,
+        request_id: this.conversation?.consensus_id || 'unknown',
+        conversation_id: this.conversationId || undefined,
+        memories_retrieved: {
+          recent: recentCount,
+          today: todayCount,
+          week: weekCount,
+          semantic: semanticCount
+        },
+        performance_ms: {
+          memory: endTime - startTime,
+          context: 0 // Will be updated in buildContextFramework
+        }
+      });
+      
+      return memories;
+    } catch (error) {
+      console.error('❌ Error in memory retrieval:', error);
+      return [];
+    }
+  }
+  
+  private async buildContextFramework(query: string, memories: Memory[]): Promise<ContextFramework> {
+    const startTime = Date.now();
+    
+    const framework = {
+      summary: '',
+      patterns: [] as string[],
+      relevantTopics: [] as string[],
+      userPreferences: [] as string[]
+    };
+    
+    if (memories.length === 0) {
+      console.log('📝 No memories found, using empty context framework');
+      return framework;
+    }
+    
+    // Extract patterns and topics
+    const topics = new Set<string>();
+    const patterns = new Set<string>();
+    
+    memories.forEach(memory => {
+      const words = memory.content.toLowerCase().split(' ');
+      words.forEach((word: string) => {
+        if (word.length > 5 && !['about', 'would', 'could', 'should', 'which', 'where', 'there'].includes(word)) {
+          topics.add(word);
+        }
+      });
+      
+      // Identify patterns
+      if (memory.content.includes('?')) patterns.add('questions');
+      if (/function|const|class|def|import/.test(memory.content)) patterns.add('code-related');
+      if (/create|build|implement|develop/.test(memory.content)) patterns.add('creation-tasks');
+      if (/fix|debug|solve|error/.test(memory.content)) patterns.add('debugging');
+      if (/optimize|improve|enhance/.test(memory.content)) patterns.add('optimization');
+    });
+    
+    framework.patterns = Array.from(patterns);
+    framework.relevantTopics = Array.from(topics).slice(0, 10);
+    
+    // Build summary
+    if (framework.relevantTopics.length > 0) {
+      framework.summary = `Past discussions include: ${framework.relevantTopics.slice(0, 5).join(', ')}. `;
+      framework.summary += `Common patterns: ${framework.patterns.join(', ')}.`;
+    }
+    
+    const endTime = Date.now();
+    console.log(`⚡ Context building took ${endTime - startTime}ms`);
+    console.log('📊 Context Framework:');
+    console.log(`  - Patterns: ${framework.patterns.join(', ')}`);
+    console.log(`  - Topics: ${framework.relevantTopics.join(', ')}`);
+    console.log(`  - Summary: ${framework.summary ? framework.summary.substring(0, 100) + '...' : 'No summary'}`);
+    
+    return framework;
+  }
+
   private async callOpenRouter(apiKey: string, model: string, query: string): Promise<{content: string, usage: any}> {
     console.log('🎯 Calling OpenRouter with model:', model);
     
@@ -482,7 +683,7 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
     throw new Error('Invalid response from OpenRouter');
   }
 
-  private async executeDeliberationRound(apiKey: string, profile: any): Promise<void> {
+  private async executeDeliberationRound(apiKey: string, profile: any, contextFramework?: any): Promise<void> {
     const round = this.conversation!.rounds_completed;
     
     // GENERATOR
@@ -491,8 +692,11 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
     
     let generatorPrompt: string;
     if (round === 1) {
-      // First round: just the original question
+      // First round: original question with context if available
       generatorPrompt = this.conversation!.user_question;
+      if (contextFramework && contextFramework.summary) {
+        generatorPrompt = `Context from previous conversations: ${contextFramework.summary}\n\nCurrent question: ${this.conversation!.user_question}`;
+      }
     } else {
       // Subsequent rounds: Generator uses consensus evaluation question
       const lastValidatorMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
@@ -889,5 +1093,19 @@ Final Curated Response:`;
     } catch (error) {
       console.error('❌ Failed to log iteration:', error);
     }
+  }
+
+  /**
+   * Cleanup resources when engine is destroyed
+   */
+  async cleanup() {
+    console.log('🧹 Cleaning up SimpleConsensusEngine resources');
+    
+    // Cleanup optimized memory service
+    if (this.optimizedMemory) {
+      this.optimizedMemory.cleanup();
+    }
+    
+    console.log('✅ SimpleConsensusEngine cleanup complete');
   }
 }
