@@ -60,6 +60,12 @@ export class OptimizedMemoryService extends EventEmitter {
   async retrieveMemories(query: string, conversationId?: string): Promise<any[]> {
     const startTime = Date.now();
     
+    console.log(`🔍 [OptimizedMemory] Retrieving memories for:`, {
+      query: query.substring(0, 50),
+      conversationId,
+      timestamp: new Date().toISOString()
+    });
+    
     // Check cache first
     const cacheKey = `${query}_${conversationId || 'none'}`;
     const cached = this.getFromCache(cacheKey);
@@ -68,13 +74,30 @@ export class OptimizedMemoryService extends EventEmitter {
       return cached;
     }
 
-    // Define layer queries
-    const layers = [
-      { name: 'RECENT', sql: this.getRecentQuery(conversationId), params: conversationId ? [conversationId] : [] },
+    // Define layer queries - prioritize conversation context
+    const layers = [];
+    
+    // Always get current conversation messages first if we have a conversationId
+    if (conversationId) {
+      layers.push({ 
+        name: 'CONVERSATION', 
+        sql: this.getRecentQuery(conversationId), 
+        params: [conversationId] 
+      });
+    } else {
+      layers.push({ 
+        name: 'RECENT', 
+        sql: this.getRecentQuery(), 
+        params: [] 
+      });
+    }
+    
+    // Add other layers for broader context
+    layers.push(
       { name: 'TODAY', sql: this.getTodayQuery(query), params: this.extractSearchParams(query) },
       { name: 'WEEK', sql: this.getWeekQuery(query), params: this.extractSearchParams(query) },
       { name: 'SEMANTIC', sql: this.getSemanticQuery(query), params: this.extractSearchParams(query) }
-    ];
+    );
 
     // Execute queries in parallel using different connections
     const layerPromises = layers.map((layer, index) => {
@@ -84,7 +107,18 @@ export class OptimizedMemoryService extends EventEmitter {
 
     try {
       const results = await Promise.all(layerPromises);
+      
+      // Log what we retrieved from each layer
+      results.forEach((layerResults, index) => {
+        console.log(`📚 Layer ${layers[index].name}: Retrieved ${layerResults.length} memories`);
+        if (layerResults.length > 0 && layers[index].name === 'CONVERSATION') {
+          console.log(`  First message:`, layerResults[0].content?.substring(0, 50));
+        }
+      });
+      
       const combined = this.combineResults(results, query);
+      
+      console.log(`✨ [OptimizedMemory] Combined ${combined.length} total memories`);
       
       // Cache the result
       this.setCache(cacheKey, combined);
@@ -141,15 +175,30 @@ export class OptimizedMemoryService extends EventEmitter {
         params.parentMessageId || null
       ];
       
-      this.db.run(sql, values, (err) => {
+      console.log('📝 Attempting to store message:', {
+        messageId,
+        conversationId: params.conversationId,
+        role: params.role,
+        contentLength: params.content?.length,
+        model: params.model,
+        tokensUsed: params.tokensUsed,
+        cost: params.cost,
+        consensusPath: params.consensusPath
+      });
+      
+      this.db.run(sql, values, function(err: Error | null) {
         if (err) {
+          console.error('❌ Failed to store message in database:', err);
+          console.error('SQL:', sql);
+          console.error('Values:', values);
           reject(err);
         } else {
+          console.log(`✅ Message stored successfully! ID: ${messageId}, Changes: ${this.changes}`);
           // Update Memory Service stats
           this.updateMemoryServiceStats();
           resolve(messageId);
         }
-      });
+      }.bind(this));
     });
   }
 
@@ -157,15 +206,26 @@ export class OptimizedMemoryService extends EventEmitter {
    * Build SQL queries for each layer
    */
   private getRecentQuery(conversationId?: string): string {
+    // Prioritize current conversation messages, then other recent messages
+    if (conversationId) {
+      return `
+        SELECT id, conversation_id, role, content, timestamp, 
+               tokens_used, cost, consensus_path, model_used
+        FROM messages
+        WHERE role IN ('user', 'assistant')
+          AND conversation_id = ?
+        ORDER BY timestamp DESC
+        LIMIT 10
+      `;
+    }
     return `
       SELECT id, conversation_id, role, content, timestamp, 
              tokens_used, cost, consensus_path, model_used
       FROM messages
       WHERE role IN ('user', 'assistant')
         AND datetime(timestamp) > datetime('now', '-2 hours')
-        ${conversationId ? 'AND conversation_id = ?' : ''}
       ORDER BY timestamp DESC
-      LIMIT 5
+      LIMIT 10
     `;
   }
 
@@ -184,7 +244,7 @@ export class OptimizedMemoryService extends EventEmitter {
         AND datetime(timestamp) <= datetime('now', '-2 hours')
         ${searchCondition}
       ORDER BY timestamp DESC
-      LIMIT 5
+      LIMIT 10
     `;
   }
 
@@ -203,7 +263,7 @@ export class OptimizedMemoryService extends EventEmitter {
         AND datetime(timestamp) <= datetime('now', '-24 hours')
         ${searchCondition}
       ORDER BY timestamp DESC
-      LIMIT 5
+      LIMIT 10
     `;
   }
 
@@ -221,7 +281,7 @@ export class OptimizedMemoryService extends EventEmitter {
         AND datetime(timestamp) <= datetime('now', '-7 days')
         AND (${searchTerms.map(() => 'LOWER(content) LIKE ?').join(' OR ')})
       ORDER BY timestamp DESC
-      LIMIT 5
+      LIMIT 10
     `;
   }
 
@@ -267,7 +327,7 @@ export class OptimizedMemoryService extends EventEmitter {
         combinedScore: (m.recencyScore * 0.6) + (m.relevanceScore * 0.4)
       }))
       .sort((a, b) => b.combinedScore - a.combinedScore)
-      .slice(0, 20);
+      .slice(0, 30);  // Increased from 20 to 30 for better context
   }
 
   /**

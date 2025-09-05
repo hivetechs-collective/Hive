@@ -585,41 +585,71 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       return framework;
     }
     
-    // Extract patterns and topics
+    // Separate conversation messages from the same conversation
+    const conversationMessages = memories.filter(m => m.conversationId === this.conversationId);
+    const otherMemories = memories.filter(m => m.conversationId !== this.conversationId);
+    
+    console.log(`📚 Building context from ${conversationMessages.length} conversation messages and ${otherMemories.length} other memories`);
+    
+    // Extract the actual conversation context
+    const recentContext: string[] = [];
+    conversationMessages.forEach(memory => {
+      if (memory.role === 'user') {
+        recentContext.push(`User asked: "${memory.content}"`);
+      } else if (memory.role === 'assistant') {
+        // Extract key topics from assistant responses
+        const shortContent = memory.content.substring(0, 150);
+        recentContext.push(`Previously discussed: ${shortContent}...`);
+      }
+    });
+    
+    // Extract patterns and topics from ALL memories
     const topics = new Set<string>();
     const patterns = new Set<string>();
     
     memories.forEach(memory => {
-      const words = memory.content.toLowerCase().split(' ');
-      words.forEach((word: string) => {
-        if (word.length > 5 && !['about', 'would', 'could', 'should', 'which', 'where', 'there'].includes(word)) {
-          topics.add(word);
-        }
-      });
+      // Extract meaningful topics (not just words)
+      if (/PowerShell|powershell/i.test(memory.content)) topics.add('PowerShell');
+      if (/Python|python/i.test(memory.content)) topics.add('Python');
+      if (/JavaScript|javascript|JS/i.test(memory.content)) topics.add('JavaScript');
+      if (/TypeScript|typescript|TS/i.test(memory.content)) topics.add('TypeScript');
+      if (/React|Vue|Angular/i.test(memory.content)) topics.add('Web Frameworks');
+      if (/database|SQL|query/i.test(memory.content)) topics.add('Databases');
+      if (/API|REST|GraphQL/i.test(memory.content)) topics.add('APIs');
+      if (/example|examples/i.test(memory.content)) topics.add('Examples Requested');
       
-      // Identify patterns
+      // Identify conversation patterns
       if (memory.content.includes('?')) patterns.add('questions');
       if (/function|const|class|def|import/.test(memory.content)) patterns.add('code-related');
       if (/create|build|implement|develop/.test(memory.content)) patterns.add('creation-tasks');
       if (/fix|debug|solve|error/.test(memory.content)) patterns.add('debugging');
       if (/optimize|improve|enhance/.test(memory.content)) patterns.add('optimization');
+      if (/example|show me|how to/i.test(memory.content)) patterns.add('examples-needed');
     });
     
     framework.patterns = Array.from(patterns);
-    framework.relevantTopics = Array.from(topics).slice(0, 10);
+    framework.relevantTopics = Array.from(topics);
     
-    // Build summary
+    // Build comprehensive summary with actual conversation context
+    if (recentContext.length > 0) {
+      framework.summary = `Current conversation context: ${recentContext.join(' ')} `;
+    }
+    
     if (framework.relevantTopics.length > 0) {
-      framework.summary = `Past discussions include: ${framework.relevantTopics.slice(0, 5).join(', ')}. `;
-      framework.summary += `Common patterns: ${framework.patterns.join(', ')}.`;
+      framework.summary += `Topics being discussed: ${framework.relevantTopics.join(', ')}. `;
+    }
+    
+    if (framework.patterns.length > 0) {
+      framework.summary += `Conversation patterns: ${framework.patterns.join(', ')}.`;
     }
     
     const endTime = Date.now();
     console.log(`⚡ Context building took ${endTime - startTime}ms`);
     console.log('📊 Context Framework:');
+    console.log(`  - Conversation messages: ${conversationMessages.length}`);
     console.log(`  - Patterns: ${framework.patterns.join(', ')}`);
     console.log(`  - Topics: ${framework.relevantTopics.join(', ')}`);
-    console.log(`  - Summary: ${framework.summary ? framework.summary.substring(0, 100) + '...' : 'No summary'}`);
+    console.log(`  - Summary: ${framework.summary ? framework.summary.substring(0, 200) + '...' : 'No summary'}`);
     
     return framework;
   }
