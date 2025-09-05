@@ -74,25 +74,18 @@ export class OptimizedMemoryService extends EventEmitter {
       return cached;
     }
 
-    // Define layer queries - prioritize conversation context
+    // Define layer queries - use timestamps for continuity across conversations
     const layers: Array<{ name: string; sql: string; params: any[] }> = [];
     
-    // Always get current conversation messages first if we have a conversationId
-    if (conversationId) {
-      layers.push({ 
-        name: 'CONVERSATION', 
-        sql: this.getRecentQuery(conversationId), 
-        params: [conversationId] 
-      });
-    } else {
-      layers.push({ 
-        name: 'RECENT', 
-        sql: this.getRecentQuery(), 
-        params: [] 
-      });
-    }
+    // ALWAYS get recent messages by timestamp (not conversation ID)
+    // This maintains context even when conversation IDs change
+    layers.push({ 
+      name: 'RECENT', 
+      sql: this.getRecentQuery(), 
+      params: [] 
+    });
     
-    // Add other layers for broader context
+    // Add other layers for broader context and semantic matching
     layers.push(
       { name: 'TODAY', sql: this.getTodayQuery(query), params: this.extractSearchParams(query) },
       { name: 'WEEK', sql: this.getWeekQuery(query), params: this.extractSearchParams(query) },
@@ -206,18 +199,8 @@ export class OptimizedMemoryService extends EventEmitter {
    * Build SQL queries for each layer
    */
   private getRecentQuery(conversationId?: string): string {
-    // Prioritize current conversation messages, then other recent messages
-    if (conversationId) {
-      return `
-        SELECT id, conversation_id, role, content, timestamp, 
-               tokens_used, cost, consensus_path, model_used
-        FROM messages
-        WHERE role IN ('user', 'assistant')
-          AND conversation_id = ?
-        ORDER BY timestamp DESC
-        LIMIT 10
-      `;
-    }
+    // Always get most recent messages by timestamp, regardless of conversation
+    // This ensures we maintain context across conversation boundaries
     return `
       SELECT id, conversation_id, role, content, timestamp, 
              tokens_used, cost, consensus_path, model_used
@@ -225,7 +208,7 @@ export class OptimizedMemoryService extends EventEmitter {
       WHERE role IN ('user', 'assistant')
         AND datetime(timestamp) > datetime('now', '-2 hours')
       ORDER BY timestamp DESC
-      LIMIT 10
+      LIMIT 15
     `;
   }
 

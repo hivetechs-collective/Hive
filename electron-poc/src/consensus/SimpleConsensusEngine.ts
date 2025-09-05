@@ -589,15 +589,17 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       return framework;
     }
     
-    // Separate conversation messages from the same conversation
-    const conversationMessages = memories.filter(m => m.conversation_id === this.conversationId);
-    const otherMemories = memories.filter(m => m.conversation_id !== this.conversationId);
+    // Sort memories by timestamp (newest first) for chronological context
+    const sortedMemories = memories.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
     
-    console.log(`📚 Building context from ${conversationMessages.length} conversation messages and ${otherMemories.length} other memories`);
+    console.log(`📚 Building context from ${memories.length} memories (sorted by timestamp)`);
     
-    // Extract the actual conversation context
+    // Extract the actual conversation context from recent messages
     const recentContext: string[] = [];
-    conversationMessages.forEach(memory => {
+    // Take the most recent 10 messages for context building
+    sortedMemories.slice(0, 10).forEach(memory => {
       if (memory.role === 'user') {
         recentContext.push(`User asked: "${memory.content}"`);
       } else if (memory.role === 'assistant') {
