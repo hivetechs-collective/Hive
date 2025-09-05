@@ -172,7 +172,11 @@ export class SimpleConsensusEngine {
           content: request.query
         });
         console.log(`💾 Stored user question with ID: ${this.userMessageId}`);
-        // Memory Service stats are automatically updated via database triggers
+        
+        // Insert into conversation_usage for analytics and memory service tracking
+        const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // sales@hivetechs.io user ID
+        await this.recordConversationUsage(userId, this.conversationId);
+        console.log(`📊 Recorded conversation usage for analytics`);
       } catch (error) {
         console.error('❌ Failed to store user message:', error);
       }
@@ -1137,5 +1141,27 @@ Final Curated Response:`;
     }
     
     console.log('✅ SimpleConsensusEngine cleanup complete');
+  }
+  
+  private async recordConversationUsage(userId: string, conversationId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timestamp = new Date().toISOString();
+      const sql = `
+        INSERT INTO conversation_usage (
+          user_id, conversation_id, timestamp
+        ) VALUES (?, ?, ?)
+      `;
+      
+      this.db.run(sql, [userId, conversationId, timestamp], function(err: Error | null) {
+        if (err) {
+          console.error('❌ Failed to record conversation usage:', err);
+          // Don't reject - just log the error and continue
+          resolve();
+        } else {
+          console.log(`✅ Conversation usage recorded for analytics`);
+          resolve();
+        }
+      });
+    });
   }
 }
