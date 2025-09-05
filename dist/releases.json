@@ -1,0 +1,87 @@
+{
+  "latest_version": "2.0.2",
+  "last_updated": "2025-07-14T01:28:40Z",
+  "channels": {
+    "stable": {
+      "version": "2.0.2",
+      "release_date": "2025-07-14",
+      "platforms": {
+        "darwin": {
+          "arm64": {
+            "dmg": "stable/Hive-IDE-2.0.2.dmg",
+            "dmg_sha256": "stable/Hive-IDE-2.0.2.dmg.sha256",
+            "archive": "stable/hive-macos-arm64.app.tar.gz",
+            "archive_sha256": "stable/hive-macos-arm64.app.tar.gz.sha256",
+            "signed": true,
+            "notarized": false,
+            "size_mb": 15,
+            "requirements": "macOS 11.0+, Apple Silicon"
+          },
+          "x64": {
+            "dmg": "stable/Hive-IDE-2.0.2-Intel.dmg",
+            "dmg_sha256": "stable/Hive-IDE-2.0.2-Intel.dmg.sha256",
+            "archive": "stable/hive-macos-intel.app.tar.gz",
+            "archive_sha256": "stable/hive-macos-intel.app.tar.gz.sha256",
+            "signed": true,
+            "notarized": false,
+            "size_mb": 15,
+            "requirements": "macOS 11.0+, Intel"
+          }
+        },
+        "windows": {
+          "x64": {
+            "msi": "stable/Hive-IDE-2.0.2.msi",
+            "msi_sha256": "stable/Hive-IDE-2.0.2.msi.sha256",
+            "exe": "stable/hive-windows-x64.exe",
+            "exe_sha256": "stable/hive-windows-x64.exe.sha256",
+            "signed": false,
+            "size_mb": 12,
+            "requirements": "Windows 10/11 64-bit",
+            "install_notes": "One-time SmartScreen approval required"
+          }
+        },
+        "linux": {
+          "x64": {
+            "appimage": "stable/Hive-IDE-2.0.2-x86_64.AppImage",
+            "appimage_sha256": "stable/Hive-IDE-2.0.2-x86_64.AppImage.sha256",
+            "archive": "stable/hive-linux-x64.tar.gz",
+            "archive_sha256": "stable/hive-linux-x64.tar.gz.sha256",
+            "size_mb": 18,
+            "requirements": "64-bit Linux, glibc 2.17+"
+          }
+        }
+      }
+    },
+    "beta": {
+      "version": "2.0.2-beta",
+      "release_date": "2025-07-14",
+      "platforms": {
+        "darwin": {
+          "arm64": {
+            "dmg": "beta/Hive-IDE-2.0.2-beta.dmg",
+            "dmg_sha256": "beta/Hive-IDE-2.0.2-beta.dmg.sha256"
+          }
+        },
+        "windows": {
+          "x64": {
+            "msi": "beta/Hive-IDE-2.0.2-beta.msi",
+            "msi_sha256": "beta/Hive-IDE-2.0.2-beta.msi.sha256"
+          }
+        },
+        "linux": {
+          "x64": {
+            "appimage": "beta/Hive-IDE-2.0.2-beta-x86_64.AppImage",
+            "appimage_sha256": "beta/Hive-IDE-2.0.2-beta-x86_64.AppImage.sha256"
+          }
+        }
+      }
+    }
+  },
+  "checksums": {
+    "stable": "stable/checksums-2.0.2.sha256",
+    "beta": "beta/checksums-2.0.2-beta.sha256"
+  },
+  "release_notes_url": "https://github.com/hivetechs/hive/releases/tag/v2.0.2",
+  "documentation_url": "https://hivetechs.io/documentation",
+  "support_url": "https://hivetechs.io/support"
+}

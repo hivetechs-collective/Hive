@@ -1,0 +1,13 @@
+name = "hivetechs-releases"
+main = "r2-releases-worker.js"
+compatibility_date = "2025-07-13"
+
+# R2 bucket binding
+[[r2_buckets]]
+binding = "RELEASES_BUCKET"
+bucket_name = "releases-hivetechs"
+
+# Route configuration
+[[routes]]
+pattern = "releases.hivetechs.io/*"
+zone_name = "hivetechs.io"

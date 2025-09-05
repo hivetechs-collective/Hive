@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hive Settings</title>
+    <link rel="stylesheet" href="./settings.css" />
+  </head>
+  <body>
+    <div class="settings-container">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button class="close-btn" id="close-settings">×</button>
+      </div>
+      
+      <div class="settings-content">
+        <!-- API Keys Section -->
+        <div class="settings-section">
+          <h3>API Keys</h3>
+          
+          <div class="form-group">
+            <label for="openrouter-key">OpenRouter API Key</label>
+            <div class="input-group">
+              <input 
+                type="password" 
+                id="openrouter-key" 
+                placeholder="sk-or-v1-..." 
+                class="api-key-input"
+              />
+              <button class="toggle-visibility" data-target="openrouter-key">👁</button>
+            </div>
+            <small class="help-text">Your OpenRouter API key for AI model access</small>
+          </div>
+          
+          <div class="form-group">
+            <label for="hive-key">Hive License Key</label>
+            <div class="input-group">
+              <input 
+                type="password" 
+                id="hive-key" 
+                placeholder="hive-xxxx-xxxx-xxxx" 
+                class="api-key-input"
+              />
+              <button class="toggle-visibility" data-target="hive-key">👁</button>
+            </div>
+            <small class="help-text">Your Hive license key determines your subscription tier</small>
+            <div id="license-status" class="license-status"></div>
+          </div>
+          
+          <div class="button-group">
+            <button id="test-keys" class="btn btn-secondary">Test Keys</button>
+            <button id="save-keys" class="btn btn-primary">Save Keys</button>
+          </div>
+        </div>
+        
+        <!-- Consensus Profiles Section -->
+        <div class="settings-section">
+          <h3>Consensus Profiles</h3>
+          <p class="section-description">Select an expert profile for the 4-stage consensus pipeline</p>
+          
+          <div class="profiles-grid" id="profiles-grid">
+            <!-- Profiles will be dynamically loaded here -->
+          </div>
+          
+          <div class="button-group">
+            <button id="save-profile" class="btn btn-primary">Save Profile Selection</button>
+          </div>
+        </div>
+        
+        <!-- Advanced Settings -->
+        <div class="settings-section">
+          <h3>Advanced</h3>
+          
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="auto-save" />
+              Auto-save settings changes
+            </label>
+          </div>
+          
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="show-costs" />
+              Show cost estimates for consensus operations
+            </label>
+          </div>
+          
+          <div class="form-group">
+            <label for="max-daily-conversations">Max Daily Conversations</label>
+            <input 
+              type="number" 
+              id="max-daily-conversations" 
+              min="1" 
+              max="1000" 
+              value="100"
+            />
+            <small class="help-text">Based on your license tier</small>
+          </div>
+        </div>
+      </div>
+      
+      <div class="settings-footer">
+        <button id="reset-settings" class="btn btn-danger">Reset to Defaults</button>
+        <div class="footer-actions">
+          <button id="cancel-settings" class="btn btn-secondary">Cancel</button>
+          <button id="apply-settings" class="btn btn-primary">Apply</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

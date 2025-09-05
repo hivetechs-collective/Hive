@@ -1,0 +1,599 @@
+/* Neural Consciousness Awakening - Integrated AI Visualization */
+
+.neural-consciousness-container {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  margin: 10px auto;
+  z-index: 10;
+  background: transparent;
+  border-radius: 50%;
+  overflow: hidden;
+  opacity: 1;
+  transition: all 0.5s ease-in-out;
+}
+
+/* Idle state - gentle pulsing */
+.neural-consciousness-container.consciousness-idle {
+  animation: idle-pulse 6s ease-in-out infinite;
+}
+
+@keyframes idle-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.neural-consciousness-container.consciousness-awakening {
+  animation: consciousness-pulse 4s ease-in-out infinite;
+}
+
+@keyframes consciousness-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.consciousness-overlay {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+}
+
+.neural-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.7;
+}
+
+.consciousness-info {
+  position: absolute;
+  bottom: -25px; /* Position below the 200px circle */
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(100, 200, 255, 0.5);
+}
+
+@keyframes info-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.phase-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: none; /* Remove background */
+  font-size: 9px;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.phase-indicator:hover {
+  opacity: 1;
+}
+
+@keyframes phase-glow {
+  0%, 100% {
+    box-shadow: 0 0 30px rgba(100, 200, 255, 0.3),
+                inset 0 0 20px rgba(100, 200, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 50px rgba(100, 200, 255, 0.5),
+                inset 0 0 30px rgba(100, 200, 255, 0.2);
+  }
+}
+
+.phase-icon {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.phase-name {
+  font-size: 8px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(100, 200, 255, 0.8);
+}
+
+.phase-status {
+  font-size: 8px;
+  color: rgba(100, 200, 255, 0.6);
+  font-weight: 300;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+
+.consciousness-awakening .phase-status {
+  color: rgba(100, 200, 255, 0.9);
+  text-shadow: 0 0 20px rgba(100, 200, 255, 0.5);
+}
+
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.neural-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: 12px 24px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 30px;
+  backdrop-filter: blur(5px);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #64c8ff;
+  text-shadow: 0 0 10px rgba(100, 200, 255, 0.8);
+  transition: all 0.3s ease;
+}
+
+.stat-value.neurons-count {
+  color: #64c8ff;
+}
+
+.stat-value.connections-count {
+  color: #a78bfa;
+}
+
+.stat-value.energy-level {
+  color: #fbbf24;
+}
+
+.thought-stream {
+  display: none; /* Hide thought bubbles in compact mode */
+}
+
+.thought-bubble.thought-appear {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  animation: thought-pulse 2s ease-in-out infinite;
+}
+
+@keyframes thought-pulse {
+  0%, 100% {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+  }
+  50% {
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 40px rgba(255, 255, 255, 0.2);
+  }
+}
+
+.thought-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  font-style: italic;
+}
+
+.memory-thought .thought-icon {
+  filter: hue-rotate(200deg);
+}
+
+.synthesis-thought .thought-icon {
+  filter: hue-rotate(270deg);
+}
+
+.classification-thought .thought-icon {
+  filter: hue-rotate(50deg);
+}
+
+.generator-thought .thought-text {
+  background: linear-gradient(90deg, #ff6b6b, #4ecdc4, #45b7d1, #f9ca24);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: rainbow-text 3s ease-in-out infinite;
+}
+
+.refiner-thought .thought-text {
+  color: #ffd700;
+  text-shadow: 0 0 10px #ffd700;
+}
+
+.validator-thought .thought-text {
+  color: #00ff88;
+  text-shadow: 0 0 10px #00ff88;
+}
+
+.curator-thought .thought-text {
+  color: #ffd700;
+  font-weight: bold;
+  text-shadow: 0 0 15px #ffd700, 0 0 30px #ffaa00;
+}
+
+@keyframes rainbow-text {
+  0%, 100% { filter: hue-rotate(0deg); }
+  50% { filter: hue-rotate(180deg); }
+}
+
+/* Special effects for different phases */
+.neural-consciousness-container[data-phase="memory"] {
+  animation: memory-wave 3s ease-in-out infinite;
+}
+
+@keyframes memory-wave {
+  0%, 100% {
+    filter: hue-rotate(0deg) brightness(1);
+  }
+  50% {
+    filter: hue-rotate(10deg) brightness(1.1);
+  }
+}
+
+.neural-consciousness-container[data-phase="synthesis"] {
+  animation: synthesis-weave 4s ease-in-out infinite;
+}
+
+@keyframes synthesis-weave {
+  0%, 100% {
+    filter: hue-rotate(0deg) contrast(1);
+  }
+  25% {
+    filter: hue-rotate(-10deg) contrast(1.1);
+  }
+  75% {
+    filter: hue-rotate(10deg) contrast(1.1);
+  }
+}
+
+.neural-consciousness-container[data-phase="classification"] {
+  animation: classification-spark 2s ease-in-out infinite;
+}
+
+@keyframes classification-spark {
+  0%, 100% {
+    filter: brightness(1) contrast(1);
+  }
+  50% {
+    filter: brightness(1.3) contrast(1.2);
+  }
+}
+
+.neural-consciousness-container[data-phase="generator"] {
+  animation: generator-burst 4s ease-in-out infinite;
+  background: linear-gradient(135deg, 
+    rgba(25, 15, 45, 0.9) 0%,
+    rgba(15, 10, 35, 0.95) 50%,
+    rgba(10, 5, 25, 1) 100%);
+}
+
+@keyframes generator-burst {
+  0%, 100% {
+    filter: hue-rotate(0deg) saturate(1);
+  }
+  25% {
+    filter: hue-rotate(90deg) saturate(1.5);
+  }
+  50% {
+    filter: hue-rotate(180deg) saturate(2);
+  }
+  75% {
+    filter: hue-rotate(270deg) saturate(1.5);
+  }
+}
+
+.neural-consciousness-container[data-phase="refiner"] {
+  animation: refiner-crystallize 3s ease-in-out infinite;
+  background: linear-gradient(135deg, 
+    rgba(35, 25, 15, 0.9) 0%,
+    rgba(25, 20, 10, 0.95) 50%,
+    rgba(15, 10, 5, 1) 100%);
+}
+
+@keyframes refiner-crystallize {
+  0%, 100% {
+    filter: brightness(1) contrast(1);
+    box-shadow: 0 4px 20px rgba(255, 215, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+  50% {
+    filter: brightness(1.2) contrast(1.3);
+    box-shadow: 0 4px 40px rgba(255, 215, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+.neural-consciousness-container[data-phase="validator"] {
+  animation: validator-scan 2s linear infinite;
+  background: linear-gradient(135deg, 
+    rgba(15, 25, 20, 0.9) 0%,
+    rgba(10, 20, 15, 0.95) 50%,
+    rgba(5, 10, 10, 1) 100%);
+}
+
+@keyframes validator-scan {
+  0% {
+    background: linear-gradient(135deg, 
+      rgba(15, 25, 20, 0.9) 0%,
+      rgba(10, 20, 15, 0.95) 50%,
+      rgba(5, 10, 10, 1) 100%);
+  }
+  50% {
+    background: linear-gradient(135deg, 
+      rgba(20, 35, 25, 0.9) 0%,
+      rgba(15, 25, 20, 0.95) 50%,
+      rgba(10, 15, 15, 1) 100%);
+  }
+  100% {
+    background: linear-gradient(135deg, 
+      rgba(15, 25, 20, 0.9) 0%,
+      rgba(10, 20, 15, 0.95) 50%,
+      rgba(5, 10, 10, 1) 100%);
+  }
+}
+
+.neural-consciousness-container[data-phase="curator"] {
+  animation: curator-golden 3s ease-in-out infinite;
+  background: linear-gradient(135deg, 
+    rgba(45, 35, 15, 0.9) 0%,
+    rgba(35, 25, 10, 0.95) 50%,
+    rgba(25, 15, 5, 1) 100%);
+}
+
+@keyframes curator-golden {
+  0%, 100% {
+    filter: brightness(1) hue-rotate(0deg);
+    box-shadow: 0 4px 30px rgba(255, 215, 0, 0.4),
+                0 0 60px rgba(255, 215, 0, 0.2) inset;
+  }
+  50% {
+    filter: brightness(1.4) hue-rotate(10deg);
+    box-shadow: 0 4px 50px rgba(255, 215, 0, 0.6),
+                0 0 80px rgba(255, 215, 0, 0.3) inset;
+  }
+}
+
+.neural-consciousness-container[data-phase="completion"] {
+  animation: completion-celebration 3s ease-in-out;
+  background: radial-gradient(ellipse at center,
+    rgba(255, 215, 0, 0.2) 0%,
+    rgba(100, 200, 255, 0.15) 30%,
+    rgba(167, 139, 250, 0.1) 60%,
+    rgba(15, 15, 35, 0.95) 100%);
+}
+
+@keyframes completion-celebration {
+  0% {
+    filter: brightness(1) saturate(1);
+    box-shadow: 0 0 50px rgba(255, 215, 0, 0.8),
+                0 0 100px rgba(100, 200, 255, 0.6),
+                0 0 150px rgba(167, 139, 250, 0.4);
+  }
+  30% {
+    filter: brightness(1.5) saturate(1.5);
+    box-shadow: 0 0 80px rgba(255, 215, 0, 1),
+                0 0 160px rgba(100, 200, 255, 0.8),
+                0 0 240px rgba(167, 139, 250, 0.6);
+  }
+  70% {
+    filter: brightness(1.2) saturate(1.2);
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.6),
+                0 0 80px rgba(100, 200, 255, 0.4),
+                0 0 120px rgba(167, 139, 250, 0.3);
+  }
+  100% {
+    filter: brightness(0.8) saturate(0.8);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.2),
+                0 0 40px rgba(100, 200, 255, 0.1),
+                0 0 60px rgba(167, 139, 250, 0.05);
+  }
+}
+
+/* Hive Logo Center */
+.hive-logo-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 15;
+  pointer-events: none;
+}
+
+.hive-logo-center .hive-logo-img {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  border-radius: 12px;
+  animation: logo-pulse 4s ease-in-out infinite;
+}
+
+@keyframes logo-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 10px rgba(100, 200, 255, 0.5));
+  }
+  50% {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 20px rgba(100, 200, 255, 0.8));
+  }
+}
+
+.consciousness-idle .hive-logo-center .hive-logo-img {
+  animation: logo-idle-pulse 6s ease-in-out infinite;
+}
+
+@keyframes logo-idle-pulse {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+    filter: drop-shadow(0 0 5px rgba(100, 200, 255, 0.3));
+  }
+  50% {
+    transform: scale(1);
+    opacity: 0.9;
+    filter: drop-shadow(0 0 15px rgba(100, 200, 255, 0.6));
+  }
+}
+
+.consciousness-awakening .hive-logo-center .hive-logo-img {
+  animation: logo-active-pulse 2s ease-in-out infinite;
+}
+
+@keyframes logo-active-pulse {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 0 20px rgba(100, 200, 255, 0.8));
+  }
+  25% {
+    transform: scale(1.05) rotate(5deg);
+  }
+  50% {
+    transform: scale(1.1) rotate(0deg);
+    filter: drop-shadow(0 0 30px rgba(100, 200, 255, 1));
+  }
+  75% {
+    transform: scale(1.05) rotate(-5deg);
+  }
+}
+
+/* Processing Indicator (replaces logo during processing) */
+.processing-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 12px;
+  border: 1px solid rgba(100, 200, 255, 0.4);
+  animation: processing-pulse 2s ease-in-out infinite;
+}
+
+.stage-icon {
+  font-size: 24px;
+  margin-bottom: 2px;
+  animation: icon-glow 1.5s ease-in-out infinite;
+}
+
+.stage-name {
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(100, 200, 255, 0.9);
+  text-shadow: 0 0 10px rgba(100, 200, 255, 0.5);
+}
+
+@keyframes processing-pulse {
+  0%, 100% {
+    background: rgba(0, 0, 0, 0.7);
+    border-color: rgba(100, 200, 255, 0.4);
+    box-shadow: 0 0 10px rgba(100, 200, 255, 0.3);
+  }
+  50% {
+    background: rgba(20, 20, 40, 0.8);
+    border-color: rgba(100, 200, 255, 0.8);
+    box-shadow: 0 0 20px rgba(100, 200, 255, 0.6);
+  }
+}
+
+@keyframes icon-glow {
+  0%, 100% {
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+    transform: scale(1);
+  }
+  50% {
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+    transform: scale(1.1);
+  }
+}
+
+/* Stage-specific processing indicator colors */
+.neural-consciousness-container[data-phase="memory"] .processing-indicator {
+  border-color: rgba(100, 200, 255, 0.6);
+}
+
+.neural-consciousness-container[data-phase="synthesis"] .processing-indicator {
+  border-color: rgba(167, 139, 250, 0.6);
+}
+
+.neural-consciousness-container[data-phase="classification"] .processing-indicator {
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
+.neural-consciousness-container[data-phase="generator"] .processing-indicator {
+  border-color: rgba(255, 107, 107, 0.6);
+}
+
+.neural-consciousness-container[data-phase="refiner"] .processing-indicator {
+  border-color: rgba(255, 215, 0, 0.6);
+}
+
+.neural-consciousness-container[data-phase="validator"] .processing-indicator {
+  border-color: rgba(0, 255, 136, 0.6);
+}
+
+.neural-consciousness-container[data-phase="curator"] .processing-indicator {
+  border-color: rgba(255, 215, 0, 0.6);
+}
+
+/* No need to adjust chat content since Neural Consciousness is in corner */
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .phase-indicator {
+    padding: 12px 24px;
+  }
+  
+  .phase-name {
+    font-size: 16px;
+  }
+  
+  .neural-stats {
+    gap: 16px;
+    padding: 10px 20px;
+  }
+  
+  .stat-value {
+    font-size: 16px;
+  }
+  
+  .thought-stream {
+    bottom: 60px;
+  }
+}

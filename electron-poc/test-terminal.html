@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Terminal Test</title>
+    <link rel="stylesheet" href="node_modules/xterm/css/xterm.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1e1e1e;
+            font-family: monospace;
+        }
+        #terminal {
+            width: 100%;
+            height: 500px;
+            background: #000;
+        }
+        button {
+            margin: 10px 0;
+            padding: 10px 20px;
+            background: #007acc;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a9e;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="color: white;">Terminal Test</h1>
+    <button onclick="createTerminal()">Create Terminal</button>
+    <button onclick="sendCommand()">Send 'ls' Command</button>
+    <div id="terminal"></div>
+    
+    <script>
+        let terminal = null;
+        let terminalId = null;
+        
+        async function createTerminal() {
+            console.log('Creating terminal...');
+            
+            // Import xterm
+            const { Terminal } = await import('./node_modules/xterm/lib/xterm.js');
+            const { FitAddon } = await import('./node_modules/xterm-addon-fit/lib/xterm-addon-fit.js');
+            
+            // Create xterm.js terminal
+            terminal = new Terminal({
+                fontSize: 13,
+                fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                theme: {
+                    background: '#1e1e1e',
+                    foreground: '#cccccc',
+                    cursor: '#aeafad'
+                },
+                cursorBlink: true,
+                scrollback: 10000
+            });
+            
+            // Add fit addon
+            const fitAddon = new FitAddon();
+            terminal.loadAddon(fitAddon);
+            
+            // Open terminal in the div
+            const container = document.getElementById('terminal');
+            container.innerHTML = ''; // Clear existing content
+            terminal.open(container);
+            fitAddon.fit();
+            
+            // Create PTY process
+            terminalId = 'test-terminal-' + Date.now();
+            
+            if (window.terminalAPI) {
+                console.log('Creating PTY process...');
+                const result = await window.terminalAPI.createTerminalProcess({
+                    terminalId: terminalId,
+                    cwd: '/Users/veronelazio/Developer/Private/hive'
+                });
+                
+                console.log('PTY creation result:', result);
+                
+                if (result.success) {
+                    terminal.write('Terminal connected to PID ' + result.pid + '\r\n');
+                    
+                    // Listen for data from PTY
+                    window.terminalAPI.onTerminalData((id, data) => {
+                        if (id === terminalId) {
+                            terminal.write(data);
+                        }
+                    });
+                    
+                    // Send terminal input to PTY
+                    terminal.onData((data) => {
+                        window.terminalAPI.writeToTerminal(terminalId, data);
+                    });
+                    
+                    // Handle terminal resize
+                    terminal.onResize((size) => {
+                        window.terminalAPI.resizeTerminal(terminalId, size.cols, size.rows);
+                    });
+                    
+                    // Handle terminal exit
+                    window.terminalAPI.onTerminalExit((id, code) => {
+                        if (id === terminalId) {
+                            terminal.write(`\r\n[Process exited with code ${code}]\r\n`);
+                        }
+                    });
+                } else {
+                    terminal.write('\r\n\x1b[91mFailed to create PTY: ' + result.error + '\x1b[0m\r\n');
+                }
+            } else {
+                terminal.write('\r\n\x1b[93mTerminal API not available\x1b[0m\r\n');
+                terminal.write('This is a demo terminal without PTY support\r\n');
+            }
+        }
+        
+        function sendCommand() {
+            if (terminal && terminalId && window.terminalAPI) {
+                window.terminalAPI.writeToTerminal(terminalId, 'ls\r');
+            } else {
+                alert('Please create a terminal first');
+            }
+        }
+    </script>
+</body>
+</html>

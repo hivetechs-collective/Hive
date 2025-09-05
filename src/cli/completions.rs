@@ -1,0 +1,582 @@
+// Shell completion generation for Hive AI
+// Provides dynamic completions for all shells
+
+use crate::cli::args::Cli;
+use anyhow::{Context, Result};
+use clap::CommandFactory;
+use clap_complete::{generate, Shell};
+use std::io::{self, Write};
+use std::path::Path;
+
+/// Generate shell completions for the Hive AI CLI
+pub fn generate_completions(shell_name: &str, output_path: Option<&Path>) -> Result<()> {
+    let shell = parse_shell(shell_name)?;
+    let mut cmd = Cli::command();
+
+    match output_path {
+        Some(path) => {
+            let mut file = std::fs::File::create(path)
+                .with_context(|| format!("Failed to create output file: {}", path.display()))?;
+            generate(shell, &mut cmd, "hive", &mut file);
+            println!("Generated {} completions: {}", shell_name, path.display());
+        }
+        None => {
+            let mut stdout = io::stdout();
+            generate(shell, &mut cmd, "hive", &mut stdout);
+        }
+    }
+
+    Ok(())
+}
+
+/// Parse shell name into clap Shell enum
+fn parse_shell(shell_name: &str) -> Result<Shell> {
+    match shell_name.to_lowercase().as_str() {
+        "bash" => Ok(Shell::Bash),
+        "zsh" => Ok(Shell::Zsh),
+        "fish" => Ok(Shell::Fish),
+        "powershell" | "pwsh" => Ok(Shell::PowerShell),
+        "elvish" => Ok(Shell::Elvish),
+        _ => Err(anyhow::anyhow!("Unsupported shell: {}", shell_name)),
+    }
+}
+
+/// Install completions for the current user
+pub fn install_completions() -> Result<()> {
+    // Detect available shells and install completions
+    let shells_to_try = [
+        ("bash", get_bash_completion_dir()),
+        ("zsh", get_zsh_completion_dir()),
+        ("fish", get_fish_completion_dir()),
+    ];
+
+    for (shell_name, completion_dir) in shells_to_try {
+        if let Some(dir) = completion_dir {
+            if dir.exists() {
+                let filename = match shell_name {
+                    "bash" => "hive",
+                    "zsh" => "_hive",
+                    "fish" => "hive.fish",
+                    _ => continue,
+                };
+
+                let output_path = dir.join(filename);
+
+                if let Err(e) = generate_completions(shell_name, Some(&output_path)) {
+                    eprintln!(
+                        "Warning: Failed to install {} completions: {}",
+                        shell_name, e
+                    );
+                } else {
+                    println!("✅ Installed {} completions", shell_name);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Get bash completion directory
+fn get_bash_completion_dir() -> Option<std::path::PathBuf> {
+    // Try user-specific directory first
+    if let Ok(home) = std::env::var("HOME") {
+        let user_dir = std::path::PathBuf::from(home).join(".bash_completion.d");
+        if user_dir.exists() {
+            return Some(user_dir);
+        }
+    }
+
+    // Try system directories
+    for dir in &["/etc/bash_completion.d", "/usr/local/etc/bash_completion.d"] {
+        let path = std::path::PathBuf::from(dir);
+        if path.exists()
+            && path
+                .metadata()
+                .map_or(false, |m| !m.permissions().readonly())
+        {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
+/// Get zsh completion directory
+fn get_zsh_completion_dir() -> Option<std::path::PathBuf> {
+    if let Ok(home) = std::env::var("HOME") {
+        // Create user zsh completion directory if it doesn't exist
+        let zsh_dir = std::path::PathBuf::from(&home)
+            .join(".zsh")
+            .join("completions");
+        if !zsh_dir.exists() {
+            if std::fs::create_dir_all(&zsh_dir).is_ok() {
+                return Some(zsh_dir);
+            }
+        } else {
+            return Some(zsh_dir);
+        }
+
+        // Try other common zsh completion directories
+        let alt_dirs = [
+            format!("{}/.oh-my-zsh/completions", &home),
+            format!("{}/.config/zsh/completions", &home),
+        ];
+
+        for dir_str in &alt_dirs {
+            let dir = std::path::PathBuf::from(dir_str);
+            if dir.exists() {
+                return Some(dir);
+            }
+        }
+    }
+
+    None
+}
+
+/// Get fish completion directory
+fn get_fish_completion_dir() -> Option<std::path::PathBuf> {
+    if let Ok(home) = std::env::var("HOME") {
+        let config_home =
+            std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| format!("{}/.config", home));
+
+        let fish_dir = std::path::PathBuf::from(config_home)
+            .join("fish")
+            .join("completions");
+
+        if !fish_dir.exists() {
+            if std::fs::create_dir_all(&fish_dir).is_ok() {
+                return Some(fish_dir);
+            }
+        } else {
+            return Some(fish_dir);
+        }
+    }
+
+    None
+}
+
+/// Generate enhanced bash completions with dynamic context
+pub fn generate_enhanced_bash_completions() -> String {
+    format!(
+        r#"# Bash completion for hive
+# Generated by Hive AI
+
+_hive_completion() {{
+    local cur prev opts base
+    COMPREPLY=()
+    cur="${{COMP_WORDS[COMP_CWORD]}}"
+    prev="${{COMP_WORDS[COMP_CWORD-1]}}"
+
+    # Base commands
+    opts="analyze ask consensus plan execute improve search memory analytics tool serve index config trust hooks interactive tui status completion self-update help"
+
+    case "${{prev}}" in
+        analyze)
+            # Directory completion for analyze command
+            COMPREPLY=( $(compgen -d -- ${{cur}}) )
+            return 0
+            ;;
+        --profile)
+            COMPREPLY=( $(compgen -W "speed balanced cost elite" -- ${{cur}}) )
+            return 0
+            ;;
+        --format)
+            COMPREPLY=( $(compgen -W "text json yaml markdown" -- ${{cur}}) )
+            return 0
+            ;;
+        --depth)
+            COMPREPLY=( $(compgen -W "quick standard comprehensive" -- ${{cur}}) )
+            return 0
+            ;;
+        --focus)
+            COMPREPLY=( $(compgen -W "architecture quality security performance" -- ${{cur}}) )
+            return 0
+            ;;
+        completion)
+            COMPREPLY=( $(compgen -W "bash zsh fish powershell" -- ${{cur}}) )
+            return 0
+            ;;
+        config)
+            COMPREPLY=( $(compgen -W "show set get validate reset edit" -- ${{cur}}) )
+            return 0
+            ;;
+        memory)
+            COMPREPLY=( $(compgen -W "search stats export import clear knowledge" -- ${{cur}}) )
+            return 0
+            ;;
+        analytics)
+            COMPREPLY=( $(compgen -W "usage performance cost quality report trends" -- ${{cur}}) )
+            return 0
+            ;;
+        trust)
+            COMPREPLY=( $(compgen -W "list add remove clear check security import export" -- ${{cur}}) )
+            return 0
+            ;;
+        hooks)
+            COMPREPLY=( $(compgen -W "list add remove toggle test validate history" -- ${{cur}}) )
+            return 0
+            ;;
+        *)
+            ;;
+    esac
+
+    # File completion for certain flags
+    case "${{cur}}" in
+        -c|--config|--output|-o)
+            COMPREPLY=( $(compgen -f -- ${{cur}}) )
+            return 0
+            ;;
+        --context)
+            COMPREPLY=( $(compgen -f -- ${{cur}}) )
+            return 0
+            ;;
+    esac
+
+    # Default command completion
+    COMPREPLY=( $(compgen -W "${{opts}}" -- ${{cur}}) )
+    return 0
+}}
+
+# Register completion function
+complete -F _hive_completion hive
+
+# Smart context-aware completions
+_hive_smart_complete() {{
+    local current_dir=$(pwd)
+    local hive_context=""
+
+    # Check if we're in a git repository
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+        hive_context="git"
+    fi
+
+    # Check for specific file types in current directory
+    if ls *.rs > /dev/null 2>&1; then
+        hive_context="$hive_context rust"
+    fi
+
+    if ls *.ts *.js > /dev/null 2>&1; then
+        hive_context="$hive_context javascript"
+    fi
+
+    if ls *.py > /dev/null 2>&1; then
+        hive_context="$hive_context python"
+    fi
+
+    # Add context-specific suggestions
+    case "$hive_context" in
+        *rust*)
+            opts="$opts test build check clippy fmt doc"
+            ;;
+        *javascript*)
+            opts="$opts npm yarn test build lint"
+            ;;
+        *python*)
+            opts="$opts pytest requirements.txt setup.py"
+            ;;
+    esac
+}}
+
+# Aliases for common operations
+alias ha='hive analyze'
+alias hq='hive ask'
+alias hp='hive plan'
+alias hs='hive search'
+alias hm='hive memory search'
+alias ht='hive trust check .'
+"#
+    )
+}
+
+/// Generate enhanced zsh completions
+pub fn generate_enhanced_zsh_completions() -> String {
+    format!(
+        r#"#compdef hive
+# Zsh completion for hive
+# Generated by Hive AI
+
+_hive() {{
+    local context state line
+    typeset -A opt_args
+
+    _arguments -C \
+        '(-h --help){{-h,--help}}[Show help information]' \
+        '(-V --version){{-V,--version}}[Show version information]' \
+        '(-v --verbose){{-v,--verbose}}[Increase verbosity]' \
+        '(-q --quiet){{-q,--quiet}}[Suppress output]' \
+        '(--format)--format[Output format]:format:(text json yaml markdown)' \
+        '(--no-color)--no-color[Disable colored output]' \
+        '(-c --config){{-c,--config}}[Configuration file]:file:_files' \
+        '1: :_hive_commands' \
+        '*:: :->args'
+
+    case $state in
+        args)
+            case $words[1] in
+                analyze|a)
+                    _arguments \
+                        '(-d --depth){{-d,--depth}}[Analysis depth]:depth:(quick standard comprehensive)' \
+                        '(--focus)--focus[Focus areas]:focus:(architecture quality security performance)' \
+                        '(-o --output){{-o,--output}}[Save analysis to file]:file:_files' \
+                        '(--dependencies)--dependencies[Include dependency analysis]' \
+                        '(--recommendations)--recommendations[Generate recommendations]' \
+                        '1:target:_directories'
+                    ;;
+                ask)
+                    _arguments \
+                        '(-p --profile){{-p,--profile}}[Consensus profile]:profile:(speed balanced cost elite)' \
+                        '(--plan)--plan[Enable planning mode]' \
+                        '(-c --context){{-c,--context}}[Include file context]:file:_files' \
+                        '(--max-tokens)--max-tokens[Maximum response tokens]:tokens:' \
+                        '(--stream)--stream[Stream response]:bool:(true false)' \
+                        '1:question:'
+                    ;;
+                completion)
+                    _arguments \
+                        '(-o --output){{-o,--output}}[Output file]:file:_files' \
+                        '1:shell:(bash zsh fish powershell)'
+                    ;;
+                config)
+                    _hive_config_subcommands
+                    ;;
+                memory)
+                    _hive_memory_subcommands
+                    ;;
+                trust)
+                    _hive_trust_subcommands
+                    ;;
+                *)
+                    _message 'no more arguments'
+                    ;;
+            esac
+            ;;
+    esac
+}}
+
+_hive_commands() {{
+    local commands=(
+        'analyze:Analyze and understand any repository'
+        'ask:Ask the AI consensus a question'
+        'consensus:Run 4-stage consensus analysis'
+        'plan:Enter planning mode for complex tasks'
+        'execute:Execute a previously created plan'
+        'improve:Apply AI-suggested improvements to files'
+        'search:Search for symbols in the codebase'
+        'memory:Manage long-term memory and conversations'
+        'analytics:Generate comprehensive analytics reports'
+        'tool:Execute tools and tool chains'
+        'serve:Start IDE integration servers'
+        'index:Build semantic indices for fast search'
+        'config:Manage configuration settings'
+        'trust:Manage directory trust and security settings'
+        'hooks:Manage enterprise hooks and automation'
+        'interactive:Start interactive mode'
+        'tui:Launch full TUI interface'
+        'status:Show system status and health'
+        'completion:Generate shell completions'
+        'self-update:Self-update Hive AI binary'
+    )
+
+    _describe 'commands' commands
+}}
+
+_hive_config_subcommands() {{
+    local subcommands=(
+        'show:Show current configuration'
+        'set:Set a configuration value'
+        'get:Get a configuration value'
+        'validate:Validate configuration'
+        'reset:Reset configuration to defaults'
+        'edit:Edit configuration in default editor'
+    )
+
+    _describe 'config subcommands' subcommands
+}}
+
+_hive_memory_subcommands() {{
+    local subcommands=(
+        'search:Search conversation history'
+        'stats:Show memory statistics'
+        'export:Export conversation history'
+        'import:Import conversation history'
+        'clear:Clear memory'
+        'knowledge:Manage knowledge graph'
+    )
+
+    _describe 'memory subcommands' subcommands
+}}
+
+_hive_trust_subcommands() {{
+    local subcommands=(
+        'list:List all trusted directories'
+        'add:Add a directory to trusted paths'
+        'remove:Remove a directory from trusted paths'
+        'clear:Clear all trusted paths'
+        'check:Check trust status of a directory'
+        'security:Manage security configuration'
+        'import:Import trust settings from file'
+        'export:Export trust settings to file'
+    )
+
+    _describe 'trust subcommands' subcommands
+}}
+
+# Context-aware directory completion
+_hive_smart_directories() {{
+    # Prefer git repositories and common project directories
+    local -a dirs
+    dirs=($(find . -maxdepth 2 -type d -name ".git" -exec dirname {{}} \; 2>/dev/null))
+
+    if [[ $#dirs -eq 0 ]]; then
+        _directories
+    else
+        _alternative \
+            'git-repos:git repositories:compadd -a dirs' \
+            'directories:directories:_directories'
+    fi
+}}
+
+# Register the completion function
+compdef _hive hive
+
+# Useful aliases
+alias ha='hive analyze'
+alias hq='hive ask'
+alias hp='hive plan'
+alias hs='hive search'
+alias hm='hive memory search'
+alias ht='hive trust check .'
+"#
+    )
+}
+
+/// Generate fish completions
+pub fn generate_enhanced_fish_completions() -> String {
+    format!(
+        r#"# Fish completion for hive
+# Generated by Hive AI
+
+# Basic command completions
+complete -c hive -f
+
+# Global options
+complete -c hive -s h -l help -d "Show help information"
+complete -c hive -s V -l version -d "Show version information"
+complete -c hive -s v -l verbose -d "Increase verbosity"
+complete -c hive -s q -l quiet -d "Suppress output"
+complete -c hive -l format -d "Output format" -x -a "text json yaml markdown"
+complete -c hive -l no-color -d "Disable colored output"
+complete -c hive -s c -l config -d "Configuration file" -r
+
+# Main commands
+complete -c hive -n "__fish_use_subcommand" -a "analyze" -d "Analyze and understand any repository"
+complete -c hive -n "__fish_use_subcommand" -a "ask" -d "Ask the AI consensus a question"
+complete -c hive -n "__fish_use_subcommand" -a "consensus" -d "Run 4-stage consensus analysis"
+complete -c hive -n "__fish_use_subcommand" -a "plan" -d "Enter planning mode for complex tasks"
+complete -c hive -n "__fish_use_subcommand" -a "execute" -d "Execute a previously created plan"
+complete -c hive -n "__fish_use_subcommand" -a "improve" -d "Apply AI-suggested improvements to files"
+complete -c hive -n "__fish_use_subcommand" -a "search" -d "Search for symbols in the codebase"
+complete -c hive -n "__fish_use_subcommand" -a "memory" -d "Manage long-term memory and conversations"
+complete -c hive -n "__fish_use_subcommand" -a "analytics" -d "Generate comprehensive analytics reports"
+complete -c hive -n "__fish_use_subcommand" -a "tool" -d "Execute tools and tool chains"
+complete -c hive -n "__fish_use_subcommand" -a "serve" -d "Start IDE integration servers"
+complete -c hive -n "__fish_use_subcommand" -a "index" -d "Build semantic indices for fast search"
+complete -c hive -n "__fish_use_subcommand" -a "config" -d "Manage configuration settings"
+complete -c hive -n "__fish_use_subcommand" -a "trust" -d "Manage directory trust and security settings"
+complete -c hive -n "__fish_use_subcommand" -a "hooks" -d "Manage enterprise hooks and automation"
+complete -c hive -n "__fish_use_subcommand" -a "interactive" -d "Start interactive mode"
+complete -c hive -n "__fish_use_subcommand" -a "tui" -d "Launch full TUI interface"
+complete -c hive -n "__fish_use_subcommand" -a "status" -d "Show system status and health"
+complete -c hive -n "__fish_use_subcommand" -a "completion" -d "Generate shell completions"
+complete -c hive -n "__fish_use_subcommand" -a "self-update" -d "Self-update Hive AI binary"
+
+# Analyze command options
+complete -c hive -n "__fish_seen_subcommand_from analyze" -s d -l depth -d "Analysis depth" -x -a "quick standard comprehensive"
+complete -c hive -n "__fish_seen_subcommand_from analyze" -l focus -d "Focus areas" -x -a "architecture quality security performance"
+complete -c hive -n "__fish_seen_subcommand_from analyze" -s o -l output -d "Save analysis to file" -r
+complete -c hive -n "__fish_seen_subcommand_from analyze" -l dependencies -d "Include dependency analysis"
+complete -c hive -n "__fish_seen_subcommand_from analyze" -l recommendations -d "Generate recommendations"
+
+# Ask command options
+complete -c hive -n "__fish_seen_subcommand_from ask" -s p -l profile -d "Consensus profile" -x -a "speed balanced cost elite"
+complete -c hive -n "__fish_seen_subcommand_from ask" -l plan -d "Enable planning mode"
+complete -c hive -n "__fish_seen_subcommand_from ask" -s c -l context -d "Include file context" -r
+complete -c hive -n "__fish_seen_subcommand_from ask" -l max-tokens -d "Maximum response tokens" -x
+complete -c hive -n "__fish_seen_subcommand_from ask" -l stream -d "Stream response" -x -a "true false"
+
+# Completion command options
+complete -c hive -n "__fish_seen_subcommand_from completion" -s o -l output -d "Output file" -r
+complete -c hive -n "__fish_seen_subcommand_from completion" -a "bash zsh fish powershell" -d "Shell type"
+
+# Config subcommands
+complete -c hive -n "__fish_seen_subcommand_from config" -a "show" -d "Show current configuration"
+complete -c hive -n "__fish_seen_subcommand_from config" -a "set" -d "Set a configuration value"
+complete -c hive -n "__fish_seen_subcommand_from config" -a "get" -d "Get a configuration value"
+complete -c hive -n "__fish_seen_subcommand_from config" -a "validate" -d "Validate configuration"
+complete -c hive -n "__fish_seen_subcommand_from config" -a "reset" -d "Reset configuration to defaults"
+complete -c hive -n "__fish_seen_subcommand_from config" -a "edit" -d "Edit configuration in default editor"
+
+# Memory subcommands
+complete -c hive -n "__fish_seen_subcommand_from memory" -a "search" -d "Search conversation history"
+complete -c hive -n "__fish_seen_subcommand_from memory" -a "stats" -d "Show memory statistics"
+complete -c hive -n "__fish_seen_subcommand_from memory" -a "export" -d "Export conversation history"
+complete -c hive -n "__fish_seen_subcommand_from memory" -a "import" -d "Import conversation history"
+complete -c hive -n "__fish_seen_subcommand_from memory" -a "clear" -d "Clear memory"
+complete -c hive -n "__fish_seen_subcommand_from memory" -a "knowledge" -d "Manage knowledge graph"
+
+# Trust subcommands
+complete -c hive -n "__fish_seen_subcommand_from trust" -a "list" -d "List all trusted directories"
+complete -c hive -n "__fish_seen_subcommand_from trust" -a "add" -d "Add a directory to trusted paths"
+complete -c hive -n "__fish_seen_subcommand_from trust" -a "remove" -d "Remove a directory from trusted paths"
+complete -c hive -n "__fish_seen_subcommand_from trust" -a "clear" -d "Clear all trusted paths"
+complete -c hive -n "__fish_seen_subcommand_from trust" -a "check" -d "Check trust status of a directory"
+complete -c hive -n "__fish_seen_subcommand_from trust" -a "security" -d "Manage security configuration"
+complete -c hive -n "__fish_seen_subcommand_from trust" -a "import" -d "Import trust settings from file"
+complete -c hive -n "__fish_seen_subcommand_from trust" -a "export" -d "Export trust settings to file"
+
+# Self-update command options
+complete -c hive -n "__fish_seen_subcommand_from self-update" -l check-only -d "Check for updates only"
+complete -c hive -n "__fish_seen_subcommand_from self-update" -l force -d "Force update"
+complete -c hive -n "__fish_seen_subcommand_from self-update" -l version -d "Update to specific version" -x
+complete -c hive -n "__fish_seen_subcommand_from self-update" -l rollback -d "Rollback to previous version"
+complete -c hive -n "__fish_seen_subcommand_from self-update" -l list-versions -d "Show available versions"
+
+# Useful abbreviations
+abbr ha 'hive analyze'
+abbr hq 'hive ask'
+abbr hp 'hive plan'
+abbr hs 'hive search'
+abbr hm 'hive memory search'
+abbr ht 'hive trust check .'
+"#
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_parse_shell() {
+        assert!(matches!(parse_shell("bash"), Ok(Shell::Bash)));
+        assert!(matches!(parse_shell("zsh"), Ok(Shell::Zsh)));
+        assert!(matches!(parse_shell("fish"), Ok(Shell::Fish)));
+        assert!(matches!(parse_shell("powershell"), Ok(Shell::PowerShell)));
+        assert!(matches!(parse_shell("pwsh"), Ok(Shell::PowerShell)));
+        assert!(parse_shell("invalid").is_err());
+    }
+
+    #[test]
+    fn test_generate_completions() {
+        let temp_dir = TempDir::new().unwrap();
+        let output_path = temp_dir.path().join("completions");
+
+        assert!(generate_completions("bash", Some(&output_path)).is_ok());
+        assert!(output_path.exists());
+
+        let content = std::fs::read_to_string(&output_path).unwrap();
+        assert!(content.contains("hive"));
+    }
+}

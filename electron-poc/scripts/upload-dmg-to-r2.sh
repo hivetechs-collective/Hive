@@ -1,0 +1,91 @@
+#!/bin/bash
+set -e
+
+# Upload Hive Consensus DMG to R2
+# Usage: ./scripts/upload-dmg-to-r2.sh [stable|beta]
+
+CHANNEL=${1:-stable}
+BUCKET_NAME="releases-hivetechs"
+DMG_PATH="out/make/Hive Consensus.dmg"
+VERSION=$(node -p "require('./package.json').version")
+
+echo "🚀 Uploading Hive Consensus v$VERSION to R2 ($CHANNEL channel)..."
+
+# Check if wrangler is available
+if ! command -v wrangler &> /dev/null; then
+    echo "❌ Wrangler CLI not found. Please install it:"
+    echo "   npm install -g wrangler"
+    exit 1
+fi
+
+# Check if DMG exists
+if [ ! -f "$DMG_PATH" ]; then
+    echo "❌ DMG not found at $DMG_PATH"
+    echo "   Run 'npm run make' first"
+    exit 1
+fi
+
+# Get file size
+SIZE=$(stat -f%z "$DMG_PATH" 2>/dev/null || stat -c%s "$DMG_PATH")
+SIZE_MB=$(echo "scale=2; $SIZE / 1024 / 1024" | bc)
+
+echo "📦 Uploading DMG (${SIZE_MB}MB) to R2..."
+
+# Upload DMG to R2
+echo "  📱 Uploading macOS DMG..."
+wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/Hive-Consensus-v${VERSION}.dmg" \
+    --file="$DMG_PATH" \
+    --content-type="application/x-apple-diskimage"
+
+# Also upload as 'latest' for easy access
+echo "  📱 Uploading as latest..."
+wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/Hive-Consensus-latest.dmg" \
+    --file="$DMG_PATH" \
+    --content-type="application/x-apple-diskimage"
+
+# Create and upload version metadata
+cat > /tmp/electron-version.json <<EOF
+{
+    "version": "$VERSION",
+    "channel": "$CHANNEL",
+    "platform": "darwin",
+    "arch": "arm64",
+    "url": "https://releases.hivetechs.io/$CHANNEL/electron/Hive-Consensus-v${VERSION}.dmg",
+    "size": $SIZE,
+    "size_mb": "$SIZE_MB",
+    "date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+    "type": "electron-app"
+}
+EOF
+
+echo "  📋 Uploading version metadata..."
+wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/version.json" \
+    --file="/tmp/electron-version.json" \
+    --content-type="application/json"
+
+# Upload ZIP if it exists
+ZIP_PATH="out/make/zip/darwin/arm64/Hive Consensus-darwin-arm64-${VERSION}.zip"
+if [ -f "$ZIP_PATH" ]; then
+    echo "  📦 Uploading ZIP archive..."
+    wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/Hive-Consensus-v${VERSION}-darwin-arm64.zip" \
+        --file="$ZIP_PATH" \
+        --content-type="application/zip"
+fi
+
+echo ""
+echo "✅ Upload complete!"
+echo ""
+echo "📥 Download URLs:"
+echo "  DMG:      https://releases.hivetechs.io/$CHANNEL/electron/Hive-Consensus-v${VERSION}.dmg"
+echo "  Latest:   https://releases.hivetechs.io/$CHANNEL/electron/Hive-Consensus-latest.dmg"
+echo "  Metadata: https://releases.hivetechs.io/$CHANNEL/electron/version.json"
+if [ -f "$ZIP_PATH" ]; then
+    echo "  ZIP:      https://releases.hivetechs.io/$CHANNEL/electron/Hive-Consensus-v${VERSION}-darwin-arm64.zip"
+fi
+
+echo ""
+echo "📋 To list uploaded files:"
+echo "  wrangler r2 object list $BUCKET_NAME --prefix=$CHANNEL/electron/"
+
+# Clean up
+rm -f /tmp/electron-version.json

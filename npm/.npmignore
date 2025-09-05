@@ -1,0 +1,36 @@
+# Development files
+*.log
+*.tmp
+.DS_Store
+
+# Build artifacts  
+node_modules/
+target/
+dist/
+
+# Test files
+test/
+tests/
+*.test.js
+
+# Documentation source
+docs/
+*.md
+!README.md
+
+# Config files
+.git/
+.gitignore
+.npmrc
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tar.gz
+*.zip
+tmp/
+temp/

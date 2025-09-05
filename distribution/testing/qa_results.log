@@ -1,0 +1,115 @@
+QA Test Suite Started: Wed Jul  2 21:56:28 EDT 2025
+[TEST] Cargo.toml production profile configuration
+  ✅ PASS Production profile with size optimization configured
+[TEST] Build script executable permissions
+  ℹ️  INFO ✓ /Users/veronelazio/Developer/Private/hive/distribution/build_all.sh is executable
+  ℹ️  INFO ✓ /Users/veronelazio/Developer/Private/hive/distribution/installers/macos/create_pkg.sh is executable
+  ℹ️  INFO ✓ /Users/veronelazio/Developer/Private/hive/distribution/installers/linux/create_deb.sh is executable
+  ✅ PASS All build scripts are executable
+[TEST] Cross-compilation target support
+  ℹ️  INFO ✗ Target x86_64-apple-darwin not installed
+  ℹ️  INFO ✓ Target aarch64-apple-darwin is installed
+  ℹ️  INFO ✗ Target x86_64-unknown-linux-musl not installed
+  ℹ️  INFO ✗ Target x86_64-pc-windows-msvc not installed
+  ❌ FAIL Insufficient cross-compilation targets (1/4)
+[TEST] Homebrew formula validation
+  ✅ PASS Homebrew formula structure is valid
+[TEST] Chocolatey package specification
+  ✅ PASS Chocolatey package specification is valid
+[TEST] Debian package control file
+  ✅ PASS Debian control file is valid
+[TEST] Debian package scripts permissions
+  ℹ️  INFO ✓ postinst is executable
+  ℹ️  INFO ✓ prerm is executable
+  ℹ️  INFO ✓ postrm is executable
+  ✅ PASS All Debian package scripts are executable
+[TEST] Update server configuration
+  ✅ PASS Update server configuration is complete
+[TEST] Update server implementation
+  ✅ PASS Update server implementation includes rollback capability
+[TEST] Auto-update client integration
+  ✅ PASS Auto-update client implementation found
+[TEST] macOS code signing configuration
+  ✅ PASS macOS entitlements file is configured
+[TEST] macOS Info.plist configuration
+  ✅ PASS macOS Info.plist is properly configured
+[TEST] Security validation in build scripts
+  ✅ PASS macOS build script includes code signing
+[TEST] Checksum generation support
+  ✅ PASS Checksum generation is implemented
+[TEST] Universal installer script existence
+  ✅ PASS Universal install script found
+[TEST] Platform detection capability
+  ✅ PASS Platform detection implemented
+[TEST] Error handling in installer
+  ✅ PASS Error handling enabled in installer
+[TEST] Binary size optimization settings
+  ✅ PASS Size optimization configured
+[TEST] Link-time optimization
+  ✅ PASS Full LTO configured
+[TEST] Symbol stripping configuration
+  ✅ PASS Symbol stripping configured
+[TEST] Production build target
+  ✅ PASS Cargo supports custom profiles
+[TEST] GitHub Actions workflow
+  ✅ PASS Multi-platform build matrix configured
+[TEST] Release automation
+  ✅ PASS Release automation configured
+[TEST] Release directory README
+  ✅ PASS Release documentation is comprehensive
+[TEST] Installation instructions
+  ✅ PASS Universal installer command documented
+[TEST] Security documentation
+  ✅ PASS Security measures documented
+[TEST] Required directories exist
+  ℹ️  INFO ✓ build directory exists
+  ℹ️  INFO ✓ macos directory exists
+  ℹ️  INFO ✓ linux directory exists
+  ℹ️  INFO ✓ windows directory exists
+  ℹ️  INFO ✓ homebrew directory exists
+  ℹ️  INFO ✓ chocolatey directory exists
+  ℹ️  INFO ✓ debian directory exists
+  ℹ️  INFO ✓ scripts directory exists
+  ℹ️  INFO ✓ ci directory exists
+  ℹ️  INFO ✓ release directory exists
+  ℹ️  INFO ✓ update_server directory exists
+  ℹ️  INFO ✓ testing directory exists
+  ✅ PASS All required directories exist
+[TEST] Critical files present
+  ℹ️  INFO ✓ build_all.sh exists
+  ℹ️  INFO ✓ test_distribution.sh exists
+  ℹ️  INFO ✓ install.sh exists
+  ℹ️  INFO ✓ Cargo.toml exists
+  ✅ PASS All critical files are present
+[TEST] Build script syntax validation
+  ℹ️  INFO ✓ build_all.sh syntax is valid
+  ✅ PASS All build scripts have valid syntax
+[TEST] Package manager file validation
+  ✅ PASS Homebrew formula has valid Ruby syntax
+  ℹ️  INFO ✓ hive.nuspec is valid XML
+  ℹ️  INFO ✓ entitlements.plist is valid XML
+  ℹ️  INFO ✓ Info.plist is valid XML
+  ✅ PASS All XML files are valid
+[TEST] No hardcoded secrets in configuration files
+  ℹ️  INFO ⚠️  Potential secret found in config.toml
+  ℹ️  INFO ⚠️  Potential secret found in Cargo.toml
+  ℹ️  INFO ⚠️  Potential secret found in Cargo.toml
+  ℹ️  INFO ⚠️  Potential secret found in hive.rb
+  ❌ FAIL Potential hardcoded secrets found
+[TEST] File permissions security
+  ℹ️  INFO ✓ postinst has secure permissions (755)
+  ℹ️  INFO ✓ prerm has secure permissions (755)
+  ℹ️  INFO ✓ postrm has secure permissions (755)
+  ℹ️  INFO ✓ build_all.sh has secure permissions (755)
+  ℹ️  INFO ✓ install.sh has secure permissions (755)
+  ✅ PASS File permissions are secure
+
+TEST SUMMARY
+============
+Total Tests: 32
+Passed: 31
+Failed: 2
+Skipped: 0
+Duration: 0s
+Success Rate: 96%
+QA Test Suite Completed: Wed Jul  2 21:56:28 EDT 2025

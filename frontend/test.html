@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test</title>
+    <style>
+        body {
+            background: #1e1e1e;
+            color: white;
+            font-family: sans-serif;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐝 Tauri Test Page</h1>
+    <p>If you can see this, the webview is working!</p>
+    <button onclick="alert('Button works!')">Test Button</button>
+    <div id="time"></div>
+    <script>
+        console.log('Test page loaded!');
+        document.getElementById('time').innerText = 'Time: ' + new Date().toLocaleTimeString();
+        setInterval(() => {
+            document.getElementById('time').innerText = 'Time: ' + new Date().toLocaleTimeString();
+        }, 1000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Iterative Consensus</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #cccccc;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007acc;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin: 10px;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 10px;
+            background: #252526;
+            border: 1px solid #444;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Iterative Consensus</h1>
+    <p>Open this file in a browser, then open DevTools console and paste this into the Hive Consensus app console:</p>
+    
+    <div id="results">
+// Test queries that should trigger iterative deliberation
+const testQueries = [
+    "What is 2+2?",
+    "Explain quantum computing in simple terms",
+    "What is the capital of France?"
+];
+
+async function testConsensus(query) {
+    console.log(`\n🧪 Testing: "${query}"`);
+    console.log('=' .repeat(50));
+    
+    try {
+        // Call consensus through the API
+        const result = await window.backendAPI.runQuickConsensus({
+            query: query,
+            profile: 'Free Also'
+        });
+        
+        console.log('✅ Result received:');
+        console.log('Rounds completed:', result.rounds_completed);
+        console.log('Tokens used:', result.tokens_used);
+        console.log('Cost:', result.cost);
+        console.log('Response length:', result.response?.length || 0);
+        
+        return result;
+    } catch (error) {
+        console.error('❌ Error:', error);
+        return null;
+    }
+}
+
+// Run test
+console.log('🚀 Starting iterative consensus test...');
+console.log('Watch the logs for:');
+console.log('1. Round indicators (Round 1, Round 2, etc.)');
+console.log('2. Raw YES/NO responses from each model');
+console.log('3. Consensus check summaries');
+console.log('4. Whether consensus is achieved or max rounds reached');
+
+// Test with a simple query
+testConsensus("What is 2+2? Please provide a comprehensive explanation.");
+    </div>
+    
+    <h2>Manual Test Instructions:</h2>
+    <ol>
+        <li>Open Hive Consensus app</li>
+        <li>Open DevTools (Cmd+Option+I)</li>
+        <li>Copy the code above and paste into console</li>
+        <li>Watch the console for detailed consensus checking</li>
+        <li>Check the app logs at: ~/Library/Application Support/Hive Consensus/logs/</li>
+    </ol>
+    
+    <h2>What to Look For:</h2>
+    <ul>
+        <li>🔄 Multiple rounds (should see "Round 1", "Round 2", etc.)</li>
+        <li>📝 Raw responses like "NO, the response is comprehensive..."</li>
+        <li>✅/❌ Consensus status after each round</li>
+        <li>⚠️ "Maximum rounds (5) reached" if no consensus</li>
+        <li>🎯 Curator should only run ONCE at the end</li>
+    </ul>
+</body>
+</html>

@@ -1,0 +1,30 @@
+Package: hive-ai
+Version: 2.0.0
+Section: devel
+Priority: optional
+Architecture: amd64
+Essential: no
+Depends: libc6 (>= 2.17), libssl3 | libssl1.1, ca-certificates, curl
+Recommends: git
+Suggests: docker.io
+Maintainer: HiveTechs Collective <team@hivetechs.com>
+Homepage: https://hive.ai
+Description: AI-powered codebase intelligence platform with multi-model consensus
+ HiveTechs Consensus is a revolutionary AI-powered development assistant that
+ combines the intelligence of 320+ AI models to provide unparalleled codebase
+ understanding and transformation capabilities.
+ .
+ Key Features:
+  * Multi-Model Consensus: 4-stage AI pipeline for maximum accuracy
+  * Repository Intelligence: Complete codebase analysis and understanding
+  * Code Transformation: AI-powered refactoring and improvements
+  * Planning Mode: Task decomposition and execution planning
+  * Memory System: Context-aware conversations with thematic clustering
+  * TUI Interface: VS Code-like terminal experience
+  * MCP Integration: Claude Code compatibility
+ .
+ Performance:
+  * 10-40x faster than TypeScript implementation
+  * <100ms startup time
+  * <25MB memory usage
+  * 320+ AI models via OpenRouter integration

@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// This is a placeholder file that will be replaced during installation
+console.error("Hive binary not installed. Please run 'npm install' again.");
+process.exit(1);

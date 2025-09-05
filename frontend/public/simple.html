@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Test</title>
+    <style>
+        body { 
+            background: #1a1a1a; 
+            color: white; 
+            font-family: sans-serif; 
+            padding: 20px;
+        }
+        button { 
+            padding: 10px 20px; 
+            margin: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tauri Test Page</h1>
+    <p>If you can see this, the webview is working!</p>
+    <button onclick="testClick()">Click Me</button>
+    <div id="result"></div>
+    
+    <script>
+        console.log('Simple script loaded!');
+        document.getElementById('result').innerHTML = 'JavaScript is working!';
+        
+        function testClick() {
+            alert('Button clicked!');
+            if (window.__TAURI__) {
+                document.getElementById('result').innerHTML = 'Tauri API available!';
+            } else {
+                document.getElementById('result').innerHTML = 'Tauri API not found';
+            }
+        }
+    </script>
+</body>
+</html>

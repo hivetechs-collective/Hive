@@ -1,0 +1,777 @@
+//! AI Helper Ecosystem
+//! 
+//! This module implements the multi-layered AI architecture where specialized
+//! open-source models handle infrastructure and knowledge management, allowing
+//! the user's chosen consensus models to focus on their expertise.
+
+pub mod knowledge_indexer;
+pub mod context_retriever;
+pub mod pattern_recognizer;
+pub mod quality_analyzer;
+pub mod knowledge_synthesizer;
+pub mod vector_store;
+pub mod parallel_processor;
+pub mod model_downloader;
+pub mod monitoring;
+pub mod python_models;
+pub mod chroma_store;
+pub mod intelligent_context_orchestrator;
+pub mod scores;
+pub mod file_executor;
+pub mod code_translator;
+pub mod semantic_retriever;
+pub mod intelligent_executor;
+pub mod rollback_executor;
+pub mod autonomous_ai_helper;
+pub mod continuous_learner;
+
+use std::sync::Arc;
+use anyhow::Result;
+use tokio::sync::RwLock;
+
+// Re-export main components
+pub use knowledge_indexer::{
+    KnowledgeIndexer, IndexedOperation, OperationSimilarity, 
+    OperationSuccessPrediction, OperationStats
+};
+pub use context_retriever::{
+    ContextRetriever, OperationContextAnalysis, OperationPrecedent, 
+    SuccessRateAnalysis, FailureMode, SuccessTrend, TrendDirection
+};
+pub use pattern_recognizer::{
+    PatternRecognizer, SafetyPatternAnalysis, OperationSafetyPattern, 
+    SafetyPatternType, RepositorySafetyMetrics, SafetyTrend
+};
+pub use quality_analyzer::{
+    QualityAnalyzer, QualityMetrics, OperationRiskAssessment, RiskFactor,
+    RiskType, RiskSeverity
+};
+pub use knowledge_synthesizer::KnowledgeSynthesizer;
+pub use vector_store::ChromaVectorStore;
+pub use parallel_processor::{ParallelProcessor, ParallelConfig};
+pub use model_downloader::{ModelDownloader, DownloaderConfig, ModelInfo, DownloadEvent};
+pub use monitoring::{PerformanceMonitor, MonitoringConfig, OperationType, PerformanceStats};
+pub use python_models::{PythonModelService, PythonModelConfig};
+pub use chroma_store::{ChromaVectorStore as RealChromaVectorStore, ChromaConfig};
+pub use intelligent_context_orchestrator::{IntelligentContextOrchestrator, IntelligentContextDecision, QuestionCategory};
+pub use scores::{
+    KnowledgeIndexerScore, ContextRetrieverScore, PatternRecognizerScore,
+    QualityAnalyzerScore, KnowledgeSynthesizerScore
+};
+pub use code_translator::{
+    CodeTranslator, TranslationPlan, TranslationStrategy, TranslationRule,
+    TranslationContext, TranslationResult, TranslationWarning, WarningSeverity
+};
+pub use semantic_retriever::{
+    SemanticRetriever, RetrievalPlan, RetrievalType, RetrievalFilters,
+    TimeRange, RetrievedItem, ItemMetadata, RetrievalResult, SearchStats
+};
+pub use intelligent_executor::{
+    IntelligentExecutor, ExecutionMemory, CuratorUnderstanding, ExecutionResult,
+    ExecutionOutcome, Improvement, ImprovementType
+};
+pub use rollback_executor::{
+    AIHelperRollbackExecutor, RollbackPlan, RollbackOperation, RollbackAction,
+    RollbackSafetyLevel, RollbackResult, OperationResult
+};
+pub use autonomous_ai_helper::{
+    AutonomousAIHelper, AutonomousDecision, AutonomousAction
+};
+pub use continuous_learner::{
+    ContinuousLearner, LearningEvent, FeedbackType, LearnedKnowledge,
+    LearnedPattern, PatternCategory, LearnedContext, PastExperience,
+    ModelRecommendation, LearningWarning, LearningWarningSeverity
+};
+
+/// Processed knowledge from AI helpers
+#[derive(Debug, Clone)]
+pub struct ProcessedKnowledge {
+    pub indexed: IndexedKnowledge,
+    pub patterns: Vec<Pattern>,
+    pub quality: QualityReport,
+    pub insights: Vec<Insight>,
+}
+
+/// Indexed knowledge with embeddings
+#[derive(Debug, Clone)]
+pub struct IndexedKnowledge {
+    pub id: String,
+    pub content: String,
+    pub embedding: Vec<f32>,
+    pub metadata: serde_json::Value,
+}
+
+/// Discovered pattern
+#[derive(Debug, Clone)]
+pub struct Pattern {
+    pub pattern_type: PatternType,
+    pub description: String,
+    pub confidence: f64,
+    pub examples: Vec<String>,
+}
+
+/// Pattern types
+#[derive(Debug, Clone)]
+pub enum PatternType {
+    Recurring,
+    Evolution,
+    Contradiction,
+    Relationship,
+    Insight,
+}
+
+/// Quality analysis report
+#[derive(Debug, Clone)]
+pub struct QualityReport {
+    pub overall_score: f64,
+    pub consistency_score: f64,
+    pub completeness_score: f64,
+    pub accuracy_score: f64,
+    pub issues: Vec<QualityIssue>,
+}
+
+/// Quality issue
+#[derive(Debug, Clone)]
+pub struct QualityIssue {
+    pub issue_type: String,
+    pub description: String,
+    pub severity: Severity,
+}
+
+/// Severity levels
+#[derive(Debug, Clone)]
+pub enum Severity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// Generated insight
+#[derive(Debug, Clone)]
+pub struct Insight {
+    pub insight_type: InsightType,
+    pub content: String,
+    pub supporting_facts: Vec<String>,
+    pub confidence: f64,
+}
+
+/// Insight types
+#[derive(Debug, Clone)]
+pub enum InsightType {
+    Trend,
+    Anomaly,
+    Relationship,
+    Prediction,
+    Recommendation,
+}
+
+/// Stage-specific context
+#[derive(Debug, Clone)]
+pub struct StageContext {
+    pub stage: crate::consensus::types::Stage,
+    pub relevant_facts: Vec<String>,
+    pub patterns: Vec<Pattern>,
+    pub insights: Vec<Insight>,
+    pub custom_guidance: Option<String>,
+}
+
+/// Main AI Helper Ecosystem coordinator
+#[derive(Clone)]
+pub struct AIHelperEcosystem {
+    /// CodeBERT/CodeT5+ for indexing
+    pub knowledge_indexer: Arc<KnowledgeIndexer>,
+    
+    /// GraphCodeBERT + LangChain for retrieval
+    pub context_retriever: Arc<ContextRetriever>,
+    
+    /// UniXcoder for pattern recognition
+    pub pattern_recognizer: Arc<PatternRecognizer>,
+    
+    /// CodeT5+ for quality analysis
+    pub quality_analyzer: Arc<QualityAnalyzer>,
+    
+    /// Local LLM for synthesis
+    pub knowledge_synthesizer: Arc<KnowledgeSynthesizer>,
+    
+    /// Intelligent Context Orchestrator coordinating all AI helpers
+    pub intelligent_orchestrator: Arc<IntelligentContextOrchestrator>,
+    
+    /// Chroma for vector storage
+    pub vector_store: Arc<ChromaVectorStore>,
+    
+    /// Code translator for language-to-language translation
+    pub code_translator: Arc<CodeTranslator>,
+    
+    /// Semantic retriever for intelligent search
+    pub semantic_retriever: Arc<SemanticRetriever>,
+    
+    /// Intelligent executor for smart execution with learning
+    pub intelligent_executor: Arc<IntelligentExecutor>,
+    
+    /// Autonomous AI Helper for independent thinking
+    pub autonomous_helper: Option<Arc<AutonomousAIHelper>>,
+    
+    /// Continuous learner for learning from all interactions
+    pub continuous_learner: Arc<ContinuousLearner>,
+    
+    /// Python model service
+    python_service: Arc<PythonModelService>,
+    
+    /// Parallel processor for performance
+    parallel_processor: ParallelProcessor,
+    
+    /// Performance monitor
+    performance_monitor: Arc<PerformanceMonitor>,
+    
+    /// Shared state
+    state: Arc<RwLock<HelperState>>,
+    
+    /// OpenRouter client for making LLM calls
+    pub openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>,
+}
+
+/// Internal state for AI helpers
+struct HelperState {
+    /// Total facts indexed
+    total_facts: usize,
+    
+    /// Total patterns discovered
+    total_patterns: usize,
+    
+    /// Last processing time
+    last_processing_time: Option<std::time::Duration>,
+}
+
+impl AIHelperEcosystem {
+    /// Create a new AI Helper Ecosystem
+    pub async fn new(database: Arc<crate::core::database::DatabaseManager>) -> Result<Self> {
+        Self::new_with_client(database, None).await
+    }
+    
+    /// Create a new AI Helper Ecosystem with OpenRouter client
+    pub async fn new_with_client(
+        database: Arc<crate::core::database::DatabaseManager>,
+        openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>
+    ) -> Result<Self> {
+        tracing::info!("🚀 Initializing AI Helper Ecosystem (moving heavy work to background threads)");
+        
+        // First, ensure all required models are downloaded
+        // This is I/O heavy so move to blocking thread pool
+        let models_result = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(Self::ensure_models_available())
+        }).await??;
+        
+        // Initialize Python model service on a background thread
+        // This involves starting Python processes which is CPU-intensive
+        let python_config = PythonModelConfig::default();
+        let python_service = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(PythonModelService::new(python_config))
+        }).await??;
+        let python_service = Arc::new(python_service);
+        
+        // Initialize vector store on background thread
+        // This may involve network I/O or disk access
+        let vector_store = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(ChromaVectorStore::new())
+        }).await??;
+        let vector_store = Arc::new(vector_store);
+        
+        // Initialize helpers with Python service on background threads
+        let vs_clone = vector_store.clone();
+        let ps_clone = python_service.clone();
+        let knowledge_indexer = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(KnowledgeIndexer::new(
+                vs_clone,
+                ps_clone,
+            ))
+        }).await??;
+        let knowledge_indexer = Arc::new(knowledge_indexer);
+        let vs_clone2 = vector_store.clone();
+        let ps_clone2 = python_service.clone();
+        let context_retriever = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(ContextRetriever::new(
+                vs_clone2,
+                ps_clone2,
+            ))
+        }).await??;
+        let context_retriever = Arc::new(context_retriever);
+        
+        let ps_clone3 = python_service.clone();
+        let pattern_recognizer = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(PatternRecognizer::new(
+                ps_clone3,
+            ))
+        }).await??;
+        let pattern_recognizer = Arc::new(pattern_recognizer);
+        
+        let ps_clone4 = python_service.clone();
+        let quality_analyzer = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(QualityAnalyzer::new(
+                ps_clone4,
+            ))
+        }).await??;
+        let quality_analyzer = Arc::new(quality_analyzer);
+        
+        let ps_clone5 = python_service.clone();
+        let knowledge_synthesizer = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(KnowledgeSynthesizer::new(
+                ps_clone5,
+            ))
+        }).await??;
+        let knowledge_synthesizer = Arc::new(knowledge_synthesizer);
+        
+        // Create intelligent context orchestrator coordinating all AI helpers
+        let intelligent_orchestrator = Arc::new(IntelligentContextOrchestrator::new_with_client(
+            context_retriever.clone(),
+            pattern_recognizer.clone(),
+            quality_analyzer.clone(),
+            knowledge_synthesizer.clone(),
+            openrouter_client.clone(),
+        ));
+        
+        let state = Arc::new(RwLock::new(HelperState {
+            total_facts: 0,
+            total_patterns: 0,
+            last_processing_time: None,
+        }));
+        
+        // Create parallel processor with default config
+        let parallel_processor = ParallelProcessor::new(ParallelConfig::default());
+        
+        // Create performance monitor
+        let performance_monitor = Arc::new(PerformanceMonitor::new(MonitoringConfig::default()));
+        
+        // Create code translator
+        let code_translator = Arc::new(CodeTranslator::new(
+            python_service.clone(),
+            performance_monitor.clone(),
+        ));
+        
+        // Create semantic retriever
+        let semantic_retriever = Arc::new(SemanticRetriever::new(
+            vector_store.clone(),
+            python_service.clone(),
+            performance_monitor.clone(),
+        ));
+        
+        // Create intelligent executor
+        let intelligent_executor = Arc::new(IntelligentExecutor::new(
+            knowledge_indexer.clone(),
+            pattern_recognizer.clone(),
+            quality_analyzer.clone(),
+        ));
+        
+        // Create continuous learner on background thread
+        let vs_clone_final = vector_store.clone();
+        let ps_clone_final = python_service.clone();
+        let continuous_learner = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(ContinuousLearner::new(
+                vs_clone_final,
+                ps_clone_final,
+            ))
+        }).await??;
+        let continuous_learner = Arc::new(continuous_learner);
+        
+        Ok(Self {
+            knowledge_indexer,
+            context_retriever,
+            pattern_recognizer,
+            quality_analyzer,
+            knowledge_synthesizer,
+            intelligent_orchestrator,
+            vector_store,
+            code_translator,
+            semantic_retriever,
+            intelligent_executor,
+            autonomous_helper: None, // Will be set when repository context is available
+            continuous_learner,
+            python_service,
+            parallel_processor,
+            performance_monitor,
+            state,
+            openrouter_client,
+        })
+    }
+    
+    /// Ensure all required models are available
+    async fn ensure_models_available() -> Result<()> {
+        let downloader = ModelDownloader::new(DownloaderConfig::default()).await?;
+        let missing = downloader.check_missing_models().await;
+        
+        if !missing.is_empty() {
+            tracing::info!("First-time setup: downloading {} AI helper models", missing.len());
+            tracing::info!("This may take a while depending on your internet connection...");
+            
+            downloader.initialize_models().await?;
+            
+            tracing::info!("✓ All AI helper models downloaded successfully");
+        }
+        
+        Ok(())
+    }
+    
+    /// Process Curator output through all helpers
+    /// 
+    /// This is the PRIMARY learning method - we only learn from Curator output
+    /// as it represents the authoritative, validated, fact-checked final answer.
+    /// Earlier stages (Generator, Refiner, Validator) may contain incomplete
+    /// or unvalidated information and should NOT be used for learning.
+    pub async fn process_curator_output(
+        &self,
+        curator_output: &str,
+        source_question: &str,
+        conversation_id: &str,
+    ) -> Result<ProcessedKnowledge> {
+        // Start monitoring the overall operation
+        let op_id = self.performance_monitor
+            .start_operation(OperationType::ParallelProcessing, "AIHelperEcosystem")
+            .await;
+        
+        let result = async {
+            let start = std::time::Instant::now();
+            
+            // 1. Index the new knowledge (with monitoring)
+            let index_op_id = self.performance_monitor
+                .start_operation(OperationType::IndexKnowledge, "KnowledgeIndexer")
+                .await;
+            
+            let indexed = match self.knowledge_indexer
+                .index_output(curator_output, source_question, conversation_id)
+                .await
+            {
+                Ok(indexed) => {
+                    self.performance_monitor.complete_operation(
+                        &index_op_id, true, None, serde_json::json!({})
+                    ).await?;
+                    indexed
+                }
+                Err(e) => {
+                    self.performance_monitor.complete_operation(
+                        &index_op_id, false, Some(e.to_string()), serde_json::json!({})
+                    ).await?;
+                    return Err(e);
+                }
+            };
+            
+            // 2. Process patterns, quality, and insights in parallel
+            let parallel_result = self.parallel_processor
+                .process_parallel(
+                    &indexed,
+                    curator_output,
+                    self.pattern_recognizer.clone(),
+                    self.quality_analyzer.clone(),
+                    self.knowledge_synthesizer.clone(),
+                )
+                .await?;
+            
+            // Update state
+            let mut state = self.state.write().await;
+            state.total_facts += 1;
+            state.total_patterns += parallel_result.patterns.len();
+            state.last_processing_time = Some(start.elapsed());
+            
+            tracing::info!(
+                "Processed curator output in {:?} with {:.2}x parallel speedup",
+                parallel_result.processing_time,
+                parallel_result.parallel_speedup
+            );
+            
+            Ok(ProcessedKnowledge {
+                indexed,
+                patterns: parallel_result.patterns,
+                quality: parallel_result.quality,
+                insights: parallel_result.insights,
+            })
+        }.await;
+        
+        // Complete monitoring
+        match &result {
+            Ok(_) => {
+                self.performance_monitor.complete_operation(
+                    &op_id, true, None, 
+                    serde_json::json!({
+                        "source_length": curator_output.len(),
+                        "conversation_id": conversation_id
+                    })
+                ).await?;
+            }
+            Err(e) => {
+                self.performance_monitor.complete_operation(
+                    &op_id, false, Some(e.to_string()), serde_json::json!({})
+                ).await?;
+            }
+        }
+        
+        result
+    }
+    
+    /// Prepare context for a consensus stage
+    pub async fn prepare_stage_context(
+        &self,
+        question: &str,
+        stage: crate::consensus::types::Stage,
+        context_limit: usize,
+    ) -> Result<StageContext> {
+        // Retrieve relevant context based on stage needs
+        use crate::consensus::types::Stage;
+        
+        // Get base context from context retriever
+        let mut stage_context = match stage {
+            Stage::Generator => {
+                // Generator needs broad context
+                self.context_retriever
+                    .get_generator_context(question, context_limit)
+                    .await
+            }
+            Stage::Refiner => {
+                // Refiner needs quality examples
+                self.context_retriever
+                    .get_refiner_context(question, context_limit)
+                    .await
+            }
+            Stage::Validator => {
+                // Validator needs contradictions and edge cases
+                self.context_retriever
+                    .get_validator_context(question, context_limit)
+                    .await
+            }
+            Stage::Curator => {
+                // Curator needs synthesis opportunities
+                self.context_retriever
+                    .get_curator_context(question, context_limit)
+                    .await
+            }
+        }?;
+        
+        // Enhance with continuous learning insights
+        let learned_context = self.continuous_learner
+            .get_learned_context(question, stage, context_limit)
+            .await?;
+        
+        // Merge learned insights into stage context
+        for exp in learned_context.past_experiences {
+            if exp.question_similarity > 0.7 {
+                stage_context.relevant_facts.push(format!(
+                    "Similar question ({}% match) had outcome: {} - {}",
+                    (exp.question_similarity * 100.0) as i32,
+                    exp.outcome,
+                    exp.key_insights.join(", ")
+                ));
+            }
+        }
+        
+        // Add applicable patterns
+        for pattern in learned_context.applicable_patterns {
+            stage_context.patterns.push(Pattern {
+                pattern_type: match pattern.category {
+                    PatternCategory::QuestionType => PatternType::Recurring,
+                    PatternCategory::ModelBehavior => PatternType::Evolution,
+                    PatternCategory::UserPreference => PatternType::Insight,
+                    PatternCategory::OperationSuccess => PatternType::Relationship,
+                    PatternCategory::ErrorPattern => PatternType::Contradiction,
+                    PatternCategory::Performance => PatternType::Evolution,
+                },
+                description: pattern.description,
+                confidence: pattern.confidence,
+                examples: pattern.recommendations,
+            });
+        }
+        
+        // Add warnings as insights
+        for warning in learned_context.warnings {
+            stage_context.insights.push(Insight {
+                insight_type: match warning.severity {
+                    LearningWarningSeverity::Critical => InsightType::Anomaly,
+                    LearningWarningSeverity::High => InsightType::Anomaly,
+                    LearningWarningSeverity::Medium => InsightType::Trend,
+                    LearningWarningSeverity::Low => InsightType::Recommendation,
+                },
+                content: warning.message,
+                supporting_facts: vec![warning.pattern_source],
+                confidence: 0.8,
+            });
+        }
+        
+        // Add success strategies to custom guidance
+        if !learned_context.success_strategies.is_empty() {
+            let strategies = learned_context.success_strategies.join("\n- ");
+            let guidance = format!(
+                "Based on learning from similar past interactions:\n- {}",
+                strategies
+            );
+            
+            stage_context.custom_guidance = match stage_context.custom_guidance {
+                Some(existing) => Some(format!("{}\n\n{}", existing, guidance)),
+                None => Some(guidance),
+            };
+        }
+        
+        Ok(stage_context)
+    }
+    
+    /// Process multiple curator outputs in batch
+    pub async fn process_batch(
+        &self,
+        outputs: Vec<(String, String, String)>, // (curator_output, source_question, conversation_id)
+    ) -> Result<Vec<ProcessedKnowledge>> {
+        tracing::info!("Processing batch of {} curator outputs", outputs.len());
+        
+        let batch_results = self.parallel_processor
+            .process_batch(
+                outputs,
+                self.knowledge_indexer.clone(),
+                self.pattern_recognizer.clone(),
+                self.quality_analyzer.clone(),
+                self.knowledge_synthesizer.clone(),
+            )
+            .await?;
+        
+        // Convert to ProcessedKnowledge format
+        let processed: Vec<ProcessedKnowledge> = batch_results
+            .into_iter()
+            .map(|(indexed, result)| ProcessedKnowledge {
+                indexed,
+                patterns: result.patterns,
+                quality: result.quality,
+                insights: result.insights,
+            })
+            .collect();
+        
+        // Update state
+        let mut state = self.state.write().await;
+        state.total_facts += processed.len();
+        for p in &processed {
+            state.total_patterns += p.patterns.len();
+        }
+        
+        Ok(processed)
+    }
+    
+    /// Update repository facts for enhanced context preparation
+    pub async fn update_repository_facts(&self, facts: Option<crate::consensus::verification::RepositoryFacts>) -> Result<()> {
+        tracing::info!("Updating AI helper ecosystem with repository facts");
+        
+        // Update context retriever with repository facts
+        self.context_retriever.update_repository_facts(facts.clone()).await?;
+        
+        // Future: could also update other helpers like pattern recognizer and quality analyzer
+        // to be repository-aware
+        
+        if facts.is_some() {
+            tracing::info!("✅ AI helpers now have repository awareness for enhanced context");
+        } else {
+            tracing::warn!("Repository facts cleared from AI helpers");
+        }
+        
+        Ok(())
+    }
+    
+    /// Set repository context to enable autonomous AI Helper
+    pub async fn set_repository_context(&mut self, repository_context: Option<Arc<crate::consensus::repository_context::RepositoryContextManager>>) -> Result<()> {
+        if let Some(repo_ctx) = repository_context {
+            // Create autonomous helper with repository context
+            let autonomous_helper = AutonomousAIHelper::new(
+                Arc::new(self.clone()),
+                Some(repo_ctx),
+            )?;
+            
+            self.autonomous_helper = Some(Arc::new(autonomous_helper));
+            tracing::info!("✅ Autonomous AI Helper activated with repository context");
+        } else {
+            self.autonomous_helper = None;
+            tracing::info!("Autonomous AI Helper deactivated (no repository context)");
+        }
+        
+        Ok(())
+    }
+    
+    /// Learn from a consensus stage completion
+    /// 
+    /// NOTE: This should ONLY be called for Curator stage results!
+    /// The Curator provides the authoritative, fact-checked final answer.
+    /// Earlier stages may contain unvalidated or contradictory information.
+    pub async fn learn_from_stage_completion(
+        &self,
+        stage_result: &crate::consensus::types::StageResult,
+    ) -> Result<()> {
+        // Create learning event from stage result
+        let event = LearningEvent::StageCompleted {
+            stage: format!("{:?}", stage_result.stage_name),
+            question: stage_result.question.clone(),
+            answer: stage_result.answer.clone(),
+            model: stage_result.model.clone(),
+            duration_ms: 0, // TODO: Track actual duration
+            tokens_used: stage_result.usage.as_ref()
+                .map(|u| u.total_tokens as u64)
+                .unwrap_or(0),
+        };
+        
+        // Trigger continuous learning
+        self.continuous_learner.learn_from_event(event).await?;
+        
+        Ok(())
+    }
+    
+    /// Apply user feedback to improve learning
+    pub async fn apply_user_feedback(
+        &self,
+        conversation_id: &str,
+        feedback: FeedbackType,
+    ) -> Result<()> {
+        self.continuous_learner.apply_feedback(conversation_id, feedback).await
+    }
+    
+    /// Get system statistics
+    pub async fn get_stats(&self) -> HelperStats {
+        let state = self.state.read().await;
+        let parallel_stats = self.parallel_processor.get_stats().await;
+        let perf_stats = self.performance_monitor.get_stats().await;
+        let learning_stats = self.continuous_learner.get_stats().await;
+        
+        HelperStats {
+            total_facts: state.total_facts,
+            total_patterns: state.total_patterns,
+            last_processing_time: state.last_processing_time,
+            vector_store_size: self.vector_store.get_size().await.unwrap_or(0),
+            parallel_speedup: parallel_stats.parallel_speedup,
+            tasks_completed: parallel_stats.tasks_completed,
+            tasks_failed: parallel_stats.tasks_failed,
+            performance_stats: Some(perf_stats),
+            learning_events: learning_stats.total_events as usize,
+            learned_patterns: learning_stats.total_patterns as usize,
+        }
+    }
+
+    /// Create a mock instance for testing
+    pub fn new_mock() -> Self {
+        // Create simple mock for testing - temporarily unimplemented
+        // This will be properly implemented when needed for actual testing
+        unimplemented!("Mock AIHelperEcosystem not yet implemented - use real instance")
+    }
+}
+
+/// Statistics about the AI Helper system
+#[derive(Debug, Clone)]
+pub struct HelperStats {
+    pub total_facts: usize,
+    pub total_patterns: usize,
+    pub last_processing_time: Option<std::time::Duration>,
+    pub vector_store_size: usize,
+    pub parallel_speedup: f64,
+    pub tasks_completed: usize,
+    pub tasks_failed: usize,
+    pub performance_stats: Option<PerformanceStats>,
+    pub learning_events: usize,
+    pub learned_patterns: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[tokio::test]
+    async fn test_ai_helper_creation() {
+        // Test helper system initialization
+    }
+}

@@ -1,0 +1,569 @@
+/* VS Code-style File Explorer */
+.file-explorer-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1e1e1e;
+  color: #cccccc;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  user-select: none;
+}
+
+.file-explorer-header {
+  padding: 8px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #999;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-explorer-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.file-explorer-action {
+  background: transparent;
+  border: none;
+  color: #999;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.file-explorer-action:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+/* Virtual Scroller */
+.virtual-scroller {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.virtual-content {
+  position: relative;
+}
+
+/* File Nodes */
+.file-node {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.1s;
+}
+
+.file-node:hover {
+  background: #2a2d2e;
+}
+
+.file-node.selected {
+  background: #094771;
+}
+
+.file-node.selected:hover {
+  background: #094771;
+}
+
+.file-icon {
+  margin-right: 6px;
+  flex-shrink: 0;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-indicator {
+  margin-left: auto;
+  padding: 0 4px;
+  font-weight: 600;
+  font-size: 10px;
+  min-width: 14px;
+  text-align: center;
+  border-radius: 2px;
+}
+
+.git-indicator.modified {
+  color: #e2c08d;
+  background: rgba(226, 192, 141, 0.15);
+}
+
+.git-indicator.added {
+  color: #73c991;
+  background: rgba(115, 201, 145, 0.15);
+}
+
+.git-indicator.deleted {
+  color: #f48771;
+  background: rgba(244, 135, 113, 0.15);
+}
+
+.git-indicator.untracked {
+  color: #73c991;
+  background: rgba(115, 201, 145, 0.15);
+}
+
+.git-indicator.staged {
+  color: #007acc;
+  background: rgba(0, 122, 204, 0.15);
+}
+
+/* File name colors based on Git status */
+.monaco-list-row[data-git-status="modified"] .label-name {
+  color: #e2c08d;
+}
+
+.monaco-list-row[data-git-status="added"] .label-name {
+  color: #73c991;
+}
+
+.monaco-list-row[data-git-status="deleted"] .label-name {
+  color: #f48771;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.monaco-list-row[data-git-status="untracked"] .label-name {
+  color: #73c991;
+}
+
+.monaco-list-row[data-git-status="renamed"] .label-name {
+  color: #4fc3f7;
+}
+
+/* Parent folder indicators */
+.monaco-list-row[data-type="directory"][data-has-changes="true"] .label-name {
+  color: #e2c08d;
+  font-weight: 500;
+}
+
+/* Folder expand/collapse animation */
+.file-node[data-type="directory"] .file-icon {
+  transition: transform 0.2s;
+}
+
+.file-node[data-type="directory"].expanded .file-icon {
+  transform: rotate(90deg);
+}
+
+/* Editor Tabs Wrapper */
+.editor-tabs-wrapper {
+  display: flex;
+  align-items: center;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  height: 35px;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  flex-shrink: 0; /* Don't shrink the tab bar height */
+}
+
+/* Tab Navigation Buttons */
+.tab-nav-button {
+  display: flex !important; /* Force always visible */
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 35px;
+  background: #3e3e42;
+  border: none;
+  border-left: 1px solid #252526;
+  border-right: 1px solid #252526;
+  color: #ffffff;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: all 0.2s;
+  z-index: 10;
+  font-size: 18px;
+  font-weight: bold;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tab-nav-button.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  color: #5a5a5a;
+  pointer-events: none; /* Completely disable interaction */
+}
+
+.tab-nav-button:hover:not(.disabled) {
+  background: #505052;
+  color: #ffffff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+}
+
+.tab-nav-button:active:not(.disabled) {
+  background: #1e1e1e;
+  transform: scale(0.95);
+}
+
+.tab-nav-button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+/* Editor Tabs Bar */
+.editor-tabs-bar {
+  display: flex;
+  flex: 1 1 auto; /* Allow shrinking */
+  height: 35px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none; /* Hide scrollbar */
+  min-width: 0; /* Critical: Allow shrinking below content size */
+  max-width: 100%; /* Don't exceed container */
+}
+
+.editor-tabs-bar::-webkit-scrollbar {
+  display: none; /* Hide scrollbar */
+}
+
+/* Tab Actions */
+.tab-actions {
+  display: none; /* Hide for now since not functional */
+  align-items: center;
+  height: 35px;
+  padding: 0 4px;
+  background: #252526;
+  border-left: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+.tab-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: #969696;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.tab-action-button:hover {
+  background: #2a2a2a;
+  color: #cccccc;
+}
+
+.tab-action-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.editor-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: 35px;
+  background: #2d2d30;
+  border-right: 1px solid #252526;
+  cursor: pointer;
+  min-width: 100px;
+  max-width: 200px;
+  position: relative;
+  transition: background-color 0.1s;
+}
+
+.editor-tab:hover {
+  background: #353537;
+}
+
+.editor-tab.active {
+  background: #1e1e1e;
+  border-bottom: 2px solid #007acc;
+  box-shadow: inset 0 -2px 0 #007acc;
+  position: relative;
+}
+
+/* Add a top highlight for active tab */
+.editor-tab.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #007acc;
+}
+
+.tab-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #969696;
+  padding-right: 8px;
+  transition: color 0.1s ease;
+}
+
+.editor-tab.active .tab-name {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* Hover effect for inactive tabs */
+.editor-tab:not(.active):hover .tab-name {
+  color: #cccccc;
+}
+
+.tab-close {
+  background: transparent;
+  border: none;
+  color: #969696;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.2s;
+  border-radius: 3px;
+}
+
+.editor-tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+/* Editors Container */
+.editors-container {
+  flex: 1;
+  position: relative;
+  background: #1e1e1e;
+  min-height: 0; /* Important for flexbox child to work properly */
+  overflow: hidden;
+}
+
+.editor-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Monaco Editor Overrides */
+.monaco-editor {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace !important;
+}
+
+.monaco-editor .margin {
+  background: #1e1e1e !important;
+}
+
+.monaco-editor .minimap {
+  border-left: 1px solid #3c3c3c;
+}
+
+/* Diff Editor */
+.diff-editor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* File Explorer Toggle */
+.explorer-toggle {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 48px;
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  transition: all 0.2s;
+}
+
+.explorer-toggle:hover {
+  background: #3c3c3c;
+  width: 28px;
+}
+
+.explorer-toggle.hidden {
+  left: 200px;
+}
+
+/* Split View Layout */
+.split-view {
+  display: flex;
+  height: 100%;
+}
+
+.split-view .file-explorer-panel {
+  width: 240px;
+  min-width: 200px;
+  max-width: 400px;
+  resize: horizontal;
+  overflow: auto;
+  border-right: 1px solid #3c3c3c;
+}
+
+.split-view .editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Performance optimizations */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High DPI support */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .file-node,
+  .editor-tab {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Drag and Drop Styles */
+.monaco-list-row.dragging {
+  opacity: 0.5;
+  cursor: move;
+}
+
+.monaco-list-row.drop-target {
+  background: rgba(0, 122, 204, 0.2) !important;
+  border: 1px solid #007acc !important;
+  border-radius: 2px;
+}
+
+.monaco-list-row[data-type="directory"].drag-over {
+  background: rgba(0, 122, 204, 0.3) !important;
+  box-shadow: inset 0 0 0 2px #007acc;
+}
+
+/* Git Decoration Styles */
+.git-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  min-width: 14px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.git-indicator.modified {
+  background: rgba(226, 192, 141, 0.2);
+  color: #e2c08d;
+}
+
+.git-indicator.added {
+  background: rgba(115, 201, 145, 0.2);
+  color: #73c991;
+}
+
+.git-indicator.deleted {
+  background: rgba(244, 135, 113, 0.2);
+  color: #f48771;
+}
+
+.git-indicator.untracked {
+  background: rgba(107, 107, 107, 0.2);
+  color: #6b6b6b;
+}
+
+.git-indicator.conflicted {
+  background: rgba(253, 126, 20, 0.2);
+  color: #fd7e14;
+}
+
+.git-indicator.renamed {
+  background: rgba(79, 195, 247, 0.2);
+  color: #4fc3f7;
+}
+
+.git-indicator.staged {
+  background: rgba(0, 122, 204, 0.2);
+  color: #007acc;
+}
+
+/* File name color modifications for Git status */
+.label-name.git-modified {
+  color: #e2c08d !important;
+}
+
+.label-name.git-added {
+  color: #73c991 !important;
+}
+
+.label-name.git-deleted {
+  color: #f48771 !important;
+}
+
+.label-name.git-untracked {
+  color: #6b6b6b !important;
+}
+
+.label-name.git-conflicted {
+  color: #fd7e14 !important;
+}
+
+.label-name.git-renamed {
+  color: #4fc3f7 !important;
+}
+
+.label-name.git-staged {
+  color: #007acc !important;
+}

@@ -1,0 +1,135 @@
+/* App-specific styles */
+.app-container {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  overflow: hidden;
+  background: #1e1e1e;
+  color: #cccccc;
+}
+
+/* Main Layout */
+.main-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #1e1e1e;
+}
+
+/* Activity Bar - VS Code style */
+.activity-bar {
+  width: 48px;
+  background: #333333;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid #1a1a1a;
+}
+
+.activity-bar-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-bar-bottom {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 8px;
+}
+
+.activity-bar-item {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #858585;
+  position: relative;
+}
+
+.activity-bar-item:hover {
+  color: #cccccc;
+}
+
+.activity-bar-item.active {
+  color: #ffffff;
+}
+
+.activity-bar-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #007acc;
+}
+
+.main-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 240px;
+  min-width: 150px;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 400px;
+}
+
+.terminal-area {
+  height: 300px;
+  min-height: 100px;
+  max-height: 500px;
+}
+
+/* Splitter styles */
+.splitter {
+  background: var(--border-color);
+  position: relative;
+}
+
+.splitter:hover {
+  background: var(--accent-primary);
+}
+
+.splitter-vertical {
+  width: 1px;
+  cursor: col-resize;
+}
+
+.splitter-horizontal {
+  height: 1px;
+  cursor: row-resize;
+}
+
+/* Logo styles */
+.app-logo {
+  padding: 10px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.app-logo h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}

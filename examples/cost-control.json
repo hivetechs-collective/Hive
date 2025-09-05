@@ -1,0 +1,22 @@
+{
+  "name": "cost-control",
+  "description": "Require approval for expensive operations",
+  "events": ["cost_threshold_reached"],
+  "conditions": {
+    "type": "context_variable",
+    "key": "estimated_cost",
+    "operator": "greater_than",
+    "value": 0.10
+  },
+  "actions": [
+    {
+      "type": "approval_request",
+      "approvers": ["finance-team", "project-lead"],
+      "message": "Operation will cost $${estimated_cost}. Approval required.",
+      "timeout_minutes": 30
+    }
+  ],
+  "metadata": {
+    "tags": ["cost", "approval", "finance"]
+  }
+}

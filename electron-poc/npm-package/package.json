@@ -1,0 +1,32 @@
+{
+  "name": "@hivetechs/consensus",
+  "version": "1.0.0",
+  "description": "Hive Consensus - Advanced Git and AI-powered development assistant",
+  "main": "index.js",
+  "bin": {
+    "hive-consensus": "./bin/hive-consensus.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hivetechs-collective/hive.git"
+  },
+  "keywords": [
+    "git",
+    "ai",
+    "development",
+    "assistant",
+    "consensus",
+    "hive"
+  ],
+  "author": "HiveTechs",
+  "license": "MIT",
+  "homepage": "https://hivetechs.io",
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "tar": "^6.2.0",
+    "unzipper": "^0.10.14"
+  }
+}

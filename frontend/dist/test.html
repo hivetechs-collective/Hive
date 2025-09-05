@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Page</title>
+</head>
+<body>
+    <h1>Test Page</h1>
+    <button id="testBtn">Test Database</button>
+    <div id="result"></div>
+    <script type="module">
+        console.log('Test script loaded!');
+        document.getElementById('testBtn').addEventListener('click', async () => {
+            console.log('Button clicked!');
+            try {
+                const { invoke } = window.__TAURI__.core;
+                const result = await invoke('test_database');
+                document.getElementById('result').innerText = result;
+            } catch (e) {
+                document.getElementById('result').innerText = 'Error: ' + e;
+            }
+        });
+    </script>
+</body>
+</html>

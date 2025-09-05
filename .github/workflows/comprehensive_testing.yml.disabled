@@ -1,0 +1,376 @@
+name: Comprehensive Testing Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    # Run nightly tests at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  COVERAGE_THRESHOLD: 90
+
+jobs:
+  # Pre-flight checks
+  pre_flight:
+    name: Pre-flight Checks
+    runs-on: ubuntu-latest
+    outputs:
+      rust-version: ${{ steps.rust-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          
+      - name: Get Rust version
+        id: rust-version
+        run: echo "version=$(rustc --version)" >> $GITHUB_OUTPUT
+      
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      
+      - name: Check formatting
+        run: cargo fmt -- --check
+      
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      
+      - name: Validate project builds
+        run: cargo build --release
+
+  # Unit tests with coverage
+  unit_tests:
+    name: Unit Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: pre_flight
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Install cargo-llvm-cov (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo install cargo-llvm-cov
+      
+      - name: Install cargo-nextest
+        run: cargo install cargo-nextest
+      
+      - name: Run unit tests with coverage
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cargo llvm-cov nextest \
+            --lcov --output-path lcov.info \
+            --test-threads 4 \
+            --filter-expr 'test(unit_)'
+      
+      - name: Run unit tests (other OS)
+        if: matrix.os != 'ubuntu-latest'
+        run: |
+          cargo nextest run \
+            --test-threads 4 \
+            --filter-expr 'test(unit_)'
+      
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v3
+        with:
+          files: lcov.info
+          flags: unit-tests
+          name: unit-tests-coverage
+
+  # Integration tests
+  integration_tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: pre_flight
+    services:
+      # Add any required services (e.g., databases)
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hive_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Install cargo-nextest
+        run: cargo install cargo-nextest
+      
+      - name: Run integration tests (without real APIs)
+        run: |
+          cargo nextest run \
+            --test-threads 2 \
+            --filter-expr 'test(integration_)' \
+            --timeout 300
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost/hive_test
+      
+      - name: Run integration tests with real APIs
+        if: github.event_name == 'schedule' || contains(github.event.head_commit.message, '[test-apis]')
+        run: |
+          cargo nextest run \
+            --test-threads 1 \
+            --filter-expr 'test(integration_)' \
+            --timeout 600
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          REAL_API_TESTS: true
+
+  # Performance benchmarks
+  performance_tests:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: pre_flight
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Build release binary
+        run: cargo build --release
+      
+      - name: Run startup benchmarks
+        run: |
+          cargo test --test '*benchmark*' startup_ \
+            --release \
+            --test-threads 1 \
+            -- --nocapture
+      
+      - name: Run memory benchmarks
+        run: |
+          cargo test --test '*benchmark*' memory_ \
+            --release \
+            --test-threads 1 \
+            -- --nocapture
+      
+      - name: Run Criterion benchmarks
+        run: |
+          cargo bench --features performance-tests
+      
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: target/criterion/
+          retention-days: 30
+
+  # Security testing
+  security_tests:
+    name: Security Testing
+    runs-on: ubuntu-latest
+    needs: pre_flight
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Install security tools
+        run: |
+          cargo install cargo-audit
+          cargo install cargo-deny
+      
+      - name: Run security audit
+        run: cargo audit
+      
+      - name: Run cargo deny
+        run: cargo deny check
+      
+      - name: Run security tests
+        run: |
+          cargo test --test '*security*' security_ \
+            --test-threads 1 \
+            -- --nocapture
+
+  # User acceptance tests
+  acceptance_tests:
+    name: User Acceptance Tests
+    runs-on: ${{ matrix.os }}
+    needs: pre_flight
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Build release binary
+        run: cargo build --release
+      
+      - name: Run CLI acceptance tests
+        run: |
+          cargo test --test '*acceptance*' cli_ \
+            --test-threads 1 \
+            -- --nocapture
+      
+      - name: Test binary functionality
+        run: |
+          ./target/release/hive --version
+          ./target/release/hive --help
+          ./target/release/hive status
+
+  # Comprehensive test summary
+  test_summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit_tests, integration_tests, performance_tests, security_tests, acceptance_tests]
+    if: always()
+    
+    steps:
+      - name: Check test results
+        run: |
+          echo "Test Results Summary:"
+          echo "===================="
+          echo "Unit Tests: ${{ needs.unit_tests.result }}"
+          echo "Integration Tests: ${{ needs.integration_tests.result }}"
+          echo "Performance Tests: ${{ needs.performance_tests.result }}"
+          echo "Security Tests: ${{ needs.security_tests.result }}"
+          echo "Acceptance Tests: ${{ needs.acceptance_tests.result }}"
+          
+          # Fail if any critical tests failed
+          if [[ "${{ needs.unit_tests.result }}" != "success" ]]; then
+            echo "❌ Unit tests failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.integration_tests.result }}" != "success" ]]; then
+            echo "❌ Integration tests failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.security_tests.result }}" != "success" ]]; then
+            echo "❌ Security tests failed"
+            exit 1
+          fi
+          
+          echo "✅ All critical tests passed"
+
+  # Nightly comprehensive test
+  nightly_comprehensive:
+    name: Nightly Comprehensive Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      
+      - name: Install testing tools
+        run: |
+          cargo install cargo-llvm-cov
+          cargo install cargo-nextest
+          cargo install cargo-audit
+          cargo install cargo-deny
+      
+      - name: Run comprehensive test suite
+        run: ./scripts/run_comprehensive_tests.sh
+        env:
+          PERFORMANCE_TESTS: true
+          REAL_API_TESTS: true
+          SECURITY_TESTS: true
+          VERBOSE: true
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      
+      - name: Upload comprehensive test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: nightly-test-results
+          path: |
+            target/coverage/
+            target/criterion/
+            target/nextest/
+          retention-days: 7

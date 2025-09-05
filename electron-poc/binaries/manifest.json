@@ -1,0 +1,14 @@
+{
+  "bundled": [
+    "ttyd",
+    "git",
+    "node"
+  ],
+  "paths": {
+    "ttyd": "binaries/ttyd",
+    "git": "binaries/git-bundle/bin/git",
+    "node": "binaries/node"
+  },
+  "bundledAt": "2025-09-04T22:07:49.976Z",
+  "versions": {}
+}

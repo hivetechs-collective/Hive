@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>VS Code Icons Test</title>
+    <link rel="stylesheet" href="https://microsoft.github.io/vscode-codicons/dist/codicon.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1e1e1e;
+            color: #cccccc;
+            padding: 20px;
+        }
+        .icon-test {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        .icon-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            background: #252526;
+            border-radius: 4px;
+            min-width: 100px;
+        }
+        .icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        .label {
+            font-size: 12px;
+            color: #999;
+        }
+        h2 {
+            color: #fff;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <h1>VS Code Codicon Font Test</h1>
+    
+    <h2>Explorer Toolbar Icons</h2>
+    <div class="icon-test">
+        <div class="icon-item">
+            <span class="icon codicon codicon-new-file"></span>
+            <span class="label">New File</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-new-folder"></span>
+            <span class="label">New Folder</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-refresh"></span>
+            <span class="label">Refresh</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-collapse-all"></span>
+            <span class="label">Collapse All</span>
+        </div>
+    </div>
+
+    <h2>File/Folder Icons</h2>
+    <div class="icon-test">
+        <div class="icon-item">
+            <span class="icon codicon codicon-chevron-right"></span>
+            <span class="label">Chevron Collapsed</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-chevron-down"></span>
+            <span class="label">Chevron Expanded</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-folder"></span>
+            <span class="label">Folder Closed</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-folder-opened"></span>
+            <span class="label">Folder Open</span>
+        </div>
+    </div>
+
+    <h2>File Type Icons</h2>
+    <div class="icon-test">
+        <div class="icon-item">
+            <span class="icon codicon codicon-file"></span>
+            <span class="label">Generic File</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-file-code"></span>
+            <span class="label">Code File</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-json"></span>
+            <span class="label">JSON File</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-markdown"></span>
+            <span class="label">Markdown</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-file-media"></span>
+            <span class="label">Media File</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-file-pdf"></span>
+            <span class="label">PDF File</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-file-zip"></span>
+            <span class="label">Archive</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-git"></span>
+            <span class="label">Git File</span>
+        </div>
+    </div>
+
+    <h2>Other Useful Icons</h2>
+    <div class="icon-test">
+        <div class="icon-item">
+            <span class="icon codicon codicon-close"></span>
+            <span class="label">Close</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-search"></span>
+            <span class="label">Search</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-settings-gear"></span>
+            <span class="label">Settings</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-edit"></span>
+            <span class="label">Edit</span>
+        </div>
+        <div class="icon-item">
+            <span class="icon codicon codicon-save"></span>
+            <span class="label">Save</span>
+        </div>
+    </div>
+
+    <script>
+        console.log('Testing VS Code Codicon font loading...');
+        // Check if font is loaded
+        document.fonts.ready.then(() => {
+            console.log('Fonts loaded!');
+            const testIcon = document.querySelector('.codicon');
+            const computedStyle = window.getComputedStyle(testIcon, '::before');
+            console.log('Font family:', computedStyle.fontFamily);
+            console.log('Content:', computedStyle.content);
+        });
+    </script>
+</body>
+</html>

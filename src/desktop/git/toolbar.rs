@@ -1,0 +1,307 @@
+//! Git operations toolbar component
+//! 
+//! Provides VS Code-style git operation buttons (commit, push, pull, etc.)
+
+use dioxus::prelude::*;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use super::{GitOperations, GitOperation, GitOperationResult, GitOperationProgress, CancellationToken};
+use super::commit_box::{CommitBox, CommitBoxProps};
+use super::performance_monitor::{PerformanceMonitor, PerformanceMonitorProps};
+use super::performance::{PerformanceStats};
+
+/// State of a git operation
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperationState {
+    Idle,
+    Running(GitOperation, String),
+    Success(String),
+    Error(String),
+}
+
+/// Props for the git toolbar component
+#[derive(Props, Clone, PartialEq)]
+pub struct GitToolbarProps {
+    /// Current repository path
+    pub repo_path: Option<PathBuf>,
+    /// Number of staged changes
+    pub staged_count: usize,
+    /// Number of unstaged changes
+    pub unstaged_count: usize,
+    /// Current branch name
+    pub current_branch: Option<String>,
+    /// Shared git operation state signals
+    pub is_pushing: Signal<bool>,
+    pub is_pulling: Signal<bool>,
+    pub is_syncing: Signal<bool>,
+    pub operation_status: Signal<Option<String>>,
+    /// Callback when a git operation is performed
+    pub on_operation: EventHandler<GitOperation>,
+    /// Optional callback for operation progress
+    #[props(optional)]
+    pub on_progress: Option<EventHandler<GitOperationProgress>>,
+    /// Optional performance statistics for monitoring
+    #[props(optional)]
+    pub performance_stats: Option<PerformanceStats>,
+    /// Whether to show performance monitoring inline
+    #[props(default = false)]
+    pub show_performance_monitor: bool,
+}
+
+/// Git operations toolbar component
+#[component]
+pub fn GitToolbar(props: GitToolbarProps) -> Element {
+    let mut show_commit_box = use_signal(|| false);
+    
+    // Use the shared state signals from props
+    let mut is_pushing = props.is_pushing;
+    let mut is_pulling = props.is_pulling;
+    let mut is_syncing = props.is_syncing;
+    let mut operation_status = props.operation_status;
+    
+    let repo_path = props.repo_path.clone();
+    let has_repo = repo_path.is_some();
+    let has_staged = props.staged_count > 0;
+    let has_unstaged = props.unstaged_count > 0;
+    let current_branch = props.current_branch.clone().unwrap_or_else(|| "main".to_string());
+    let staged_count = props.staged_count;
+    let unstaged_count = props.unstaged_count;
+    
+    rsx! {
+        div {
+            class: "git-toolbar",
+            style: "padding: 8px; background: #252526; border-bottom: 1px solid #3e3e42;",
+            
+            // Status message
+            if let Some(status) = operation_status.read().as_ref() {
+                div {
+                    style: "margin-bottom: 8px; padding: 4px 8px; background: #1a472a; color: #4dff4d; border-radius: 3px; font-size: 12px;",
+                    "{status}"
+                }
+            }
+            
+            // Commit section
+            div {
+                style: "margin-bottom: 12px;",
+                
+                // Commit and stage buttons
+                div {
+                    style: "display: flex; align-items: center; gap: 8px;",
+                    
+                    button {
+                        style: if has_staged {
+                            "padding: 6px 12px; background: #0e639c; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px;"
+                        } else {
+                            "padding: 6px 12px; background: #3c3c3c; color: #888; border: none; border-radius: 3px; cursor: not-allowed; font-size: 13px;"
+                        },
+                        disabled: !has_staged || !has_repo,
+                        onclick: move |_| {
+                            if has_staged {
+                                *show_commit_box.write() = true;
+                            }
+                        },
+                        "✓ Commit ({staged_count})"
+                    }
+                    
+                    if has_unstaged {
+                        button {
+                            style: "padding: 4px 8px; background: transparent; color: #0e639c; border: 1px solid #0e639c; border-radius: 3px; cursor: pointer; font-size: 11px;",
+                            disabled: !has_repo,
+                            onclick: {
+                                let on_operation = props.on_operation.clone();
+                                move |_| {
+                                    on_operation.call(GitOperation::StageAll);
+                                }
+                            },
+                            "+ Stage All"
+                        }
+                    }
+                }
+            }
+            
+            // Remote operations section
+            div {
+                style: "display: flex; gap: 8px; flex-wrap: wrap;",
+                
+                // Sync button (VS Code style - pull + push)
+                button {
+                    style: if has_repo {
+                        "padding: 6px 12px; background: #0e639c; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; font-weight: 500;"
+                    } else {
+                        "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                    },
+                    disabled: !has_repo || *is_syncing.read() || *is_pushing.read() || *is_pulling.read(),
+                    title: "Sync Changes (Pull then Push)",
+                    onclick: {
+                        let on_operation = props.on_operation.clone();
+                        let branch = current_branch.clone();
+                        move |_| {
+                            if !*is_syncing.read() {
+                                on_operation.call(GitOperation::Sync);
+                                operation_status.set(Some(format!("Syncing with origin/{}...", branch)));
+                                is_syncing.set(true);
+                            }
+                        }
+                    },
+                    if *is_syncing.read() {
+                        "🔄 Syncing..."
+                    } else {
+                        "🔄 Sync"
+                    }
+                }
+                
+                // Push button
+                button {
+                    style: if has_repo {
+                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
+                    } else {
+                        "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                    },
+                    disabled: !has_repo || *is_pushing.read() || *is_syncing.read(),
+                    title: "Push to Remote",
+                    onmouseover: move |_| {},
+                    onclick: {
+                        let on_operation = props.on_operation.clone();
+                        let branch = current_branch.clone();
+                        move |_| {
+                            if !*is_pushing.read() {
+                                on_operation.call(GitOperation::Push);
+                                operation_status.set(Some(format!("Pushing to origin/{}...", branch)));
+                                is_pushing.set(true);
+                            }
+                        }
+                    },
+                    if *is_pushing.read() {
+                        "⬆ Pushing..."
+                    } else {
+                        "⬆ Push"
+                    }
+                }
+                
+                // Pull button
+                button {
+                    style: if has_repo {
+                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
+                    } else {
+                        "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                    },
+                    disabled: !has_repo || *is_pulling.read() || *is_syncing.read(),
+                    title: "Pull from Remote",
+                    onclick: {
+                        let on_operation = props.on_operation.clone();
+                        let branch = current_branch.clone();
+                        move |_| {
+                            if !*is_pulling.read() {
+                                on_operation.call(GitOperation::Pull);
+                                operation_status.set(Some(format!("Pulling from origin/{}...", branch)));
+                                is_pulling.set(true);
+                            }
+                        }
+                    },
+                    if *is_pulling.read() {
+                        "⬇ Pulling..."
+                    } else {
+                        "⬇ Pull"
+                    }
+                }
+                
+                // Fetch button
+                button {
+                    style: if has_repo {
+                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
+                    } else {
+                        "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                    },
+                    disabled: !has_repo,
+                    title: "Fetch from Remote",
+                    onclick: {
+                        let on_operation = props.on_operation.clone();
+                        move |_| {
+                            on_operation.call(GitOperation::Fetch);
+                            operation_status.set(Some("Fetching from origin...".to_string()));
+                        }
+                    },
+                    "↻ Fetch"
+                }
+                
+                // Stash button
+                button {
+                    style: if has_repo {
+                        "padding: 6px 12px; background: transparent; color: #f0ad4e; border: 1px solid #f0ad4e; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
+                    } else {
+                        "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                    },
+                    disabled: !has_repo,
+                    title: "Stash Changes",
+                    onclick: {
+                        let on_operation = props.on_operation.clone();
+                        move |_| {
+                            on_operation.call(GitOperation::StashSave("Quick stash".to_string()));
+                            operation_status.set(Some("Creating stash...".to_string()));
+                        }
+                    },
+                    "📦 Stash"
+                }
+                
+                // Discard all changes button (with confirmation)
+                if has_unstaged {
+                    button {
+                        style: "padding: 6px 12px; background: transparent; color: #f48771; border: 1px solid #f48771; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;",
+                        onclick: {
+                            let on_operation = props.on_operation.clone();
+                            move |_| {
+                                // TODO: Add confirmation dialog
+                                // For now, just call the discard all operation through LazyGit
+                                on_operation.call(GitOperation::DiscardAll);
+                                operation_status.set(Some("Discarding all changes...".to_string()));
+                            }
+                        },
+                        "⟲ Discard All"
+                    }
+                }
+            }
+            
+            // Branch info
+            div {
+                style: "margin-top: 12px; padding: 6px 8px; background: #1e1e1e; border-radius: 3px; font-size: 11px; color: #888;",
+                "Branch: {current_branch} • Staged: {staged_count} • Unstaged: {unstaged_count}"
+            }
+            
+            // Performance monitor (optional)
+            if props.show_performance_monitor {
+                if let Some(stats) = &props.performance_stats {
+                    div {
+                        style: "margin-top: 8px;",
+                        PerformanceMonitor {
+                            stats: stats.clone(),
+                            inline: true,
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Commit Box overlay
+        CommitBox {
+            visible: *show_commit_box.read(),
+            staged_count: staged_count,
+            on_commit: {
+                let on_operation = props.on_operation.clone();
+                let mut status_signal = operation_status.clone();
+                move |message: String| {
+                    let msg_display = if message.len() > 50 {
+                        format!("{}...", &message[..50])
+                    } else {
+                        message.clone()
+                    };
+                    on_operation.call(GitOperation::Commit(message));
+                    status_signal.set(Some(format!("Committed with message: {}", msg_display)));
+                }
+            },
+            on_close: move |_| {
+                *show_commit_box.write() = false;
+            }
+        }
+    }
+}

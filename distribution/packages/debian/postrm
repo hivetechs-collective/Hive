@@ -1,0 +1,36 @@
+#!/bin/bash
+# HiveTechs Consensus Post-Removal Script
+
+set -e
+
+case "$1" in
+    purge)
+        # Remove system directories and data
+        rm -rf /var/lib/hive
+        rm -rf /var/log/hive
+        rm -rf /etc/hive
+        
+        # Remove user group
+        if getent group hive >/dev/null; then
+            groupdel hive 2>/dev/null || true
+        fi
+        
+        # Remove shell completions
+        rm -f /usr/share/bash-completion/completions/hive
+        rm -f /usr/share/zsh/vendor-completions/_hive
+        rm -f /usr/share/fish/vendor_completions.d/hive.fish
+        
+        echo "HiveTechs Consensus has been completely removed."
+        ;;
+    
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Keep user data for potential reinstall
+        ;;
+    
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,35 @@
+{
+  "name": "security-scan",
+  "description": "Run security checks on code changes",
+  "events": ["before_code_modification"],
+  "conditions": {
+    "type": "or",
+    "conditions": [
+      {
+        "type": "file_pattern",
+        "pattern": "*.rs"
+      },
+      {
+        "type": "file_pattern",
+        "pattern": "*.js"
+      },
+      {
+        "type": "file_pattern",
+        "pattern": "*.py"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "type": "script",
+      "language": "bash",
+      "content": "#!/bin/bash\n# Security scan script\necho \"Running security scan on ${file_path}...\"\n# Add actual security scanning logic here\nexit 0"
+    }
+  ],
+  "security": {
+    "require_approval": true,
+    "approval_message": "Security scan will analyze: ${file_path}",
+    "allowed_commands": ["cargo", "npm", "pip"],
+    "max_execution_time": 300
+  }
+}
