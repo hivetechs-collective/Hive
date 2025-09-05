@@ -3465,6 +3465,7 @@ The Hive Consensus system implements a complete closed-loop memory architecture 
 USER QUESTION
      ↓
 [1] STORE USER MESSAGE → SQLite Database (messages table)
+     → Also insert into conversation_usage for analytics tracking
      ↓
 [2] MEMORY RETRIEVAL STAGE (Parallel Processing)
      ├── RECENT Layer (Last 2 hours) - Immediate context
@@ -3675,6 +3676,23 @@ Dashboard updates every 5 seconds
 - **Response Times**: Average consensus processing duration
 
 ### 🔧 Implementation Details
+
+#### Critical Requirements (v1.8.194+)
+
+**conversation_usage Table Tracking**:
+- **MUST** insert into `conversation_usage` for EVERY consensus query
+- Analytics and Memory Service dashboards depend on this table
+- Without entries, dashboards show 0 queries even when queries are processed
+
+**Memory Retrieval Priority**:
+- When conversationId exists, prioritize current conversation messages
+- Retrieve up to 10 messages per layer (increased from 5)
+- Build context from actual conversation content, not just keyword extraction
+
+**Context Building Enhancement**:
+- Extract actual conversation flow (User asked X, Previously discussed Y)
+- Identify meaningful topics (PowerShell, Python, etc.) not just words
+- Include conversation history in context summary for continuity
 
 #### Optimized Memory Service
 **File**: `src/database/OptimizedMemoryService.ts`

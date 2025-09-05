@@ -75,7 +75,7 @@ export class OptimizedMemoryService extends EventEmitter {
     }
 
     // Define layer queries - prioritize conversation context
-    const layers = [];
+    const layers: Array<{ name: string; sql: string; params: any[] }> = [];
     
     // Always get current conversation messages first if we have a conversationId
     if (conversationId) {

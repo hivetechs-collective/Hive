@@ -590,8 +590,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
     }
     
     // Separate conversation messages from the same conversation
-    const conversationMessages = memories.filter(m => m.conversationId === this.conversationId);
-    const otherMemories = memories.filter(m => m.conversationId !== this.conversationId);
+    const conversationMessages = memories.filter(m => m.conversation_id === this.conversationId);
+    const otherMemories = memories.filter(m => m.conversation_id !== this.conversationId);
     
     console.log(`📚 Building context from ${conversationMessages.length} conversation messages and ${otherMemories.length} other memories`);
     
