@@ -188,19 +188,21 @@ export class SimpleConsensusEngine {
       
       const relevantMemories = await this.retrieveRelevantMemories(request.query);
       console.log(`📚 Found ${relevantMemories.length} relevant memories`);
-      this.sendStageUpdate('memory', 'completed');
 
       // CONTEXT STAGE - Build contextual framework
       console.log('\n🔍 CONTEXT STAGE - Building contextual framework');
+      // Mark memory complete and context running at the same time
+      this.sendStageUpdate('memory', 'completed');
       this.sendStageUpdate('context', 'running');
       this.sendProgressUpdate(request.requestId, 'Analyzing context and patterns...', 0.04);
       
       const contextFramework = await this.buildContextFramework(request.query, relevantMemories);
       console.log(`📝 Context framework built with ${contextFramework.patterns.length} patterns identified`);
-      this.sendStageUpdate('context', 'completed');
 
       // ROUTING STAGE - Determine if question is simple or complex
       console.log('\n🔄 ROUTING STAGE - Determining question complexity');
+      // Mark context complete and route running at the same time
+      this.sendStageUpdate('context', 'completed');
       this.sendStageUpdate('route', 'running');
       this.sendProgressUpdate(request.requestId, 'Analyzing question complexity...', 0.05);
       
@@ -305,10 +307,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
           consensusAchieved: true
         });
         
-        // Mark all stages as completed for UI
-        this.sendStageUpdate('refiner', 'completed');
-        this.sendStageUpdate('validator', 'completed');
-        this.sendStageUpdate('curator', 'completed');
+        // For SIMPLE path, only generator runs - other stages don't run
+        // So we don't mark them as completed (they stay in pending/initial state)
         
         return;
       }
