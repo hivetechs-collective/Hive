@@ -775,13 +775,10 @@ ${lastValidatorMessage.content}`;
       round
     );
     
-    this.sendStageUpdate('generator', 'completed');
-    
-    // Small delay to ensure UI updates before starting refiner
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
     // REFINER
     console.log('🎯 Stage 2: Refiner');
+    // Mark generator complete and refiner running at the same time
+    this.sendStageUpdate('generator', 'completed');
     this.sendStageUpdate('refiner', 'running');
     
     // Refiner evaluates the Generator's response using the consensus question
@@ -822,13 +819,10 @@ ${generatorResult.content}`;
       round
     );
     
-    this.sendStageUpdate('refiner', 'completed');
-    
-    // Small delay to ensure UI updates before starting validator
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
     // VALIDATOR
     console.log('🎯 Stage 3: Validator');
+    // Mark refiner complete and validator running at the same time
+    this.sendStageUpdate('refiner', 'completed');
     this.sendStageUpdate('validator', 'running');
     
     // Validator evaluates for consensus
