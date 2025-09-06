@@ -199,6 +199,28 @@ export class SimpleConsensusEngine {
       const contextFramework = await this.buildContextFramework(request.query, relevantMemories);
       console.log(`📝 Context framework built with ${contextFramework.patterns.length} patterns identified`);
 
+      // Save context framework to database for review
+      const contextLogId = `ctxlog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await this.memoryDb.logMemoryContextOperation({
+        log_id: contextLogId,
+        request_id: request.requestId,
+        conversation_id: this.conversationId || undefined,
+        memories_retrieved: {
+          recent: relevantMemories.filter(m => m.source === 'recent').length,
+          today: relevantMemories.filter(m => m.source === 'today').length,
+          week: relevantMemories.filter(m => m.source === 'week').length,
+          semantic: relevantMemories.filter(m => m.source === 'semantic').length
+        },
+        context_summary: contextFramework.summary,
+        patterns_identified: contextFramework.patterns,
+        topics_extracted: contextFramework.relevantTopics,
+        performance_ms: {
+          memory: 0, // Already logged in memory retrieval
+          context: 0 // Will be updated separately
+        }
+      });
+      console.log(`💾 Context framework saved to database with ID: ${contextLogId}`);
+
       // ROUTING STAGE - Determine if question is simple or complex
       console.log('\n🔄 ROUTING STAGE - Determining question complexity');
       // Mark context complete and route running at the same time
@@ -230,6 +252,10 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       const routingDecision = routingResult.content.trim().toUpperCase();
       
       console.log(`📊 Routing Decision: ${routingDecision}`);
+      
+      // Update the context log with routing decision
+      await this.updateContextLogRouting(contextLogId, routingDecision);
+      
       this.sendStageUpdate('route', 'completed');
       
       // Add routing cost to conversation
@@ -1148,6 +1174,27 @@ Final Curated Response:`;
     console.log('✅ SimpleConsensusEngine cleanup complete');
   }
   
+  private async updateContextLogRouting(logId: string, routingDecision: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const sql = `
+        UPDATE memory_context_logs 
+        SET routing_decision = ?, 
+            context_influenced_routing = 1
+        WHERE log_id = ?
+      `;
+      
+      this.db.run(sql, [routingDecision, logId], (err) => {
+        if (err) {
+          console.error('❌ Error updating context log with routing:', err);
+          reject(err);
+        } else {
+          console.log(`✅ Updated context log ${logId} with routing: ${routingDecision}`);
+          resolve();
+        }
+      });
+    });
+  }
+
   private async recordConversationUsage(userId: string, conversationId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const timestamp = new Date().toISOString();
