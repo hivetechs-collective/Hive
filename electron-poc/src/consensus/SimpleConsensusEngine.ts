@@ -777,6 +777,9 @@ ${lastValidatorMessage.content}`;
     
     this.sendStageUpdate('generator', 'completed');
     
+    // Small delay to ensure UI updates before starting refiner
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     // REFINER
     console.log('🎯 Stage 2: Refiner');
     this.sendStageUpdate('refiner', 'running');
@@ -820,6 +823,9 @@ ${generatorResult.content}`;
     );
     
     this.sendStageUpdate('refiner', 'completed');
+    
+    // Small delay to ensure UI updates before starting validator
+    await new Promise(resolve => setTimeout(resolve, 50));
     
     // VALIDATOR
     console.log('🎯 Stage 3: Validator');
