@@ -307,8 +307,10 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
           consensusAchieved: true
         });
         
-        // For SIMPLE path, only generator runs - other stages don't run
-        // So we don't mark them as completed (they stay in pending/initial state)
+        // Mark all stages as completed for UI
+        this.sendStageUpdate('refiner', 'completed');
+        this.sendStageUpdate('validator', 'completed');
+        this.sendStageUpdate('curator', 'completed');
         
         return;
       }

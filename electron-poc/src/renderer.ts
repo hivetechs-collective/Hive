@@ -1047,6 +1047,8 @@ let activeProfile: any = null;
 let consensusWebSocket: ConsensusWebSocket | null = null;
 let neuralConsciousness: NeuralConsciousness | null = null;
 let currentStreamContent: Map<string, string> = new Map();
+// Track progress intervals to prevent overlapping animations
+let progressIntervals: Map<string, NodeJS.Timeout> = new Map();
 
 // Feature flag for Neural Consciousness (can be toggled without breaking app)
 let ENABLE_NEURAL_CONSCIOUSNESS = true;
@@ -1621,17 +1623,34 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
             console.warn('⚠️ Neural Graphic not initialized!');
           }
           
+          // Clear any existing interval for this stage
+          if (progressIntervals.has(data.stage)) {
+            clearInterval(progressIntervals.get(data.stage)!);
+            progressIntervals.delete(data.stage);
+            console.log(`🔍 CLEARED existing interval for stage: ${data.stage}`);
+          }
+          
           // Start animating progress from 0 to 90
+          console.log(`🔍 STARTING animation for stage: ${data.stage}`);
           updateStageProgress(data.stage, 0);
           let progress = 0;
           const interval = setInterval(() => {
             progress = Math.min(90, progress + 5);
+            console.log(`🔍 Animating ${data.stage} progress to ${progress}%`);
             updateStageProgress(data.stage, progress);
             if (progress >= 90) {
               clearInterval(interval);
+              progressIntervals.delete(data.stage);
             }
           }, 200);
+          progressIntervals.set(data.stage, interval);
         } else if (data.status === 'completed') {
+          console.log(`🔍 COMPLETING stage: ${data.stage}`);
+          // Clear any existing interval for this stage
+          if (progressIntervals.has(data.stage)) {
+            clearInterval(progressIntervals.get(data.stage)!);
+            progressIntervals.delete(data.stage);
+          }
           updateStageProgress(data.stage, 100);
         }
       });
@@ -2401,6 +2420,13 @@ function updateStageProgress(stage: string, percentage: number) {
 }
 
 function resetStageStatus() {
+  // Clear all progress intervals first
+  progressIntervals.forEach((interval, stage) => {
+    clearInterval(interval);
+    console.log(`🔍 Cleared interval for stage: ${stage}`);
+  });
+  progressIntervals.clear();
+  
   // Reset ALL stages to proper initial state
   // All stages should start as 'ready' when a new consensus begins
   ['generator', 'refiner', 'validator', 'curator'].forEach(stage => {
