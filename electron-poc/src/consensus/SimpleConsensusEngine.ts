@@ -39,18 +39,42 @@ export class SimpleConsensusEngine {
   private deliberationStartTime: number = 0;
   private deliberationTimer: NodeJS.Timeout | null = null;
   private conversationPhrases: string[] = [
-    "AI's rapping",
-    "Bots are chatting", 
-    "Minds are melding",
-    "Silicon syncing",
-    "Neural networking",
-    "Code conferencing",
-    "Digital debating",
-    "Algorithms arguing",
-    "Models mingling",
-    "Circuits discussing",
-    "Logic linking",
-    "Brains brainstorming"
+    "ai's rapping",
+    "bots are chatting", 
+    "minds are melding",
+    "silicon syncing",
+    "neural networking",
+    "code conferencing",
+    "digital debating",
+    "algorithms arguing",
+    "models mingling",
+    "circuits discussing",
+    "logic linking",
+    "brains brainstorming",
+    "neurons firing",
+    "data dancing",
+    "tokens talking",
+    "bits buzzing",
+    "chips chatting",
+    "servers syncing",
+    "cores computing",
+    "bytes bouncing",
+    "nodes networking",
+    "threads thinking",
+    "processes pondering",
+    "systems syncing",
+    "engines evolving",
+    "machines musing",
+    "robots reasoning",
+    "ai's analyzing",
+    "llms laughing",
+    "models meditating",
+    "agents agreeing",
+    "bots building",
+    "code collaborating",
+    "tech talking",
+    "digital discussing",
+    "cyber syncing"
   ];
   private currentPhraseIndex: number = 0;
 
@@ -379,17 +403,15 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         this.conversation.rounds_completed++;
         console.log(`\n🔄 Starting Round ${this.conversation.rounds_completed}`);
         
-        // Show "AI's Conversing" status with initial timer
-        const elapsed = Math.floor((Date.now() - this.deliberationStartTime) / 1000);
-        const minutes = Math.floor(elapsed / 60);
-        const seconds = elapsed % 60;
-        const timeDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        // Show "AI's Conversing" status with initial fun phrase
+        this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
+        const funPhrase = this.conversationPhrases[this.currentPhraseIndex];
         
         this.sendConsensusStatus({
           achieved: false,
           consensusType: 'conversing',
           round: this.conversation.rounds_completed,
-          elapsedTime: timeDisplay
+          funPhrase: funPhrase
         });
         
         // Reset stages to 'ready' for new round (visual sync)
@@ -1250,29 +1272,21 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private startDeliberationTimer() {
-    // Update timer every second during deliberation with random fun phrases
+    // Update fun phrases frequently like Claude Code CLI
     this.deliberationTimer = setInterval(() => {
-      if (this.consensusType === 'conversing' && this.deliberationStartTime > 0) {
-        const elapsed = Math.floor((Date.now() - this.deliberationStartTime) / 1000);
-        const minutes = Math.floor(elapsed / 60);
-        const seconds = elapsed % 60;
-        const timeDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        
-        // Change phrase every 5 seconds
-        if (elapsed % 5 === 0) {
-          this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
-        }
+      if (this.consensusType === 'conversing') {
+        // Change phrase frequently for dynamic feel
+        this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
         const funPhrase = this.conversationPhrases[this.currentPhraseIndex];
         
         this.sendConsensusStatus({
           achieved: false,
           consensusType: 'conversing',
           round: this.conversation?.rounds_completed || 0,
-          elapsedTime: timeDisplay,
           funPhrase: funPhrase
         });
       }
-    }, 200); // Update 5 times per second for smooth stopwatch effect
+    }, 400); // Update phrase every 400ms for dynamic feel like Claude Code CLI
   }
 
   private stopDeliberationTimer() {
