@@ -1601,7 +1601,8 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               break;
             case 'conversing':
               const funPhrase = data.funPhrase || "ai's chatting";
-              displayText = funPhrase;
+              const animatedIcon = data.animatedIcon || "●";
+              displayText = `${animatedIcon} ${funPhrase}`;
               color = '#FF9500'; // Orange like Claude Code CLI
               // Add breathing animation and pulsing effect
               consensusTypeElement.style.animation = 'breathe 1.5s ease-in-out infinite, glow 2s ease-in-out infinite';

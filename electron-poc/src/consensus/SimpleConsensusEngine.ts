@@ -38,6 +38,10 @@ export class SimpleConsensusEngine {
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
   private deliberationStartTime: number = 0;
   private deliberationTimer: NodeJS.Timeout | null = null;
+  private animatedIcons: string[] = [
+    "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
+  ];
+  private currentIconIndex: number = 0;
   private conversationPhrases: string[] = [
     "ai's rapping",
     "bots are chatting", 
@@ -1272,21 +1276,25 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private startDeliberationTimer() {
-    // Update fun phrases frequently like Claude Code CLI
+    // Update phrases and icons rapidly like Claude Code CLI
     this.deliberationTimer = setInterval(() => {
       if (this.consensusType === 'conversing') {
-        // Change phrase frequently for dynamic feel
+        // Change both phrase and icon rapidly
         this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
+        this.currentIconIndex = Math.floor(Math.random() * this.animatedIcons.length);
+        
         const funPhrase = this.conversationPhrases[this.currentPhraseIndex];
+        const animatedIcon = this.animatedIcons[this.currentIconIndex];
         
         this.sendConsensusStatus({
           achieved: false,
           consensusType: 'conversing',
           round: this.conversation?.rounds_completed || 0,
-          funPhrase: funPhrase
+          funPhrase: funPhrase,
+          animatedIcon: animatedIcon
         });
       }
-    }, 400); // Update phrase every 400ms for dynamic feel like Claude Code CLI
+    }, 150); // Update every 150ms for fast Claude Code CLI effect
   }
 
   private stopDeliberationTimer() {
