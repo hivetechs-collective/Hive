@@ -1136,13 +1136,12 @@ ${currentResponse}`;
       // Polish mode - consensus was reached, just polish the agreed response
       const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
       
-      curatorPrompt = `${this.conversation!.user_question}
+      curatorPrompt = `Please take the following question and examine this answer and update or correct it and provide me with a cleaned up version.
 
-Content to polish and improve:
+Question: ${this.conversation!.user_question}
 
-${finalMessage.content}
-
-Provide an enhanced version of the above content. Improve clarity, formatting, and presentation while preserving all meaning. Do not explain what you're doing or reference the polishing process.`;
+Answer:
+${finalMessage.content}`;
     } else {
       // Choose mode - no consensus reached, curator must choose from all 3 responses
       const round3Messages = this.conversation!.messages.filter(m => m.round === 3);
