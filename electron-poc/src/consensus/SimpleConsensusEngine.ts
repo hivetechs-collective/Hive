@@ -1320,14 +1320,14 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private startDeliberationTimer() {
-    // Rapidly cycle symbols and occasionally change phrases like Claude Code CLI
+    // Rapidly cycle symbols continuously, change phrases every ~1 minute
     this.deliberationTimer = setInterval(() => {
       if (this.consensusType === 'conversing') {
         // Cycle symbol rapidly every update (super fast like Claude Code CLI)
         this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
         
-        // Change phrase less frequently (every 2-3 seconds)
-        if (Math.random() < 0.1) { // 10% chance = change phrase roughly every 1-2 seconds
+        // Change phrase very rarely (~1 minute) - about 0.08% chance per 50ms = ~60 seconds
+        if (Math.random() < 0.0008) {
           this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
         }
         
@@ -1353,13 +1353,13 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private startRoutingTimer() {
-    // Show routing animation during route decision delays
+    // Show routing animation - rapid symbols, words change every ~1 minute
     this.routingTimer = setInterval(() => {
       // Cycle symbol rapidly every update
       this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
       
-      // Change routing phrase occasionally
-      if (Math.random() < 0.15) { // 15% chance = change phrase roughly every 1 second
+      // Change routing phrase very rarely (~1 minute) - about 0.08% chance per 50ms = ~60 seconds
+      if (Math.random() < 0.0008) {
         this.currentPhraseIndex = Math.floor(Math.random() * this.routingPhrases.length);
       }
       
