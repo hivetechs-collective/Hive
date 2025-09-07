@@ -396,12 +396,12 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       if (this.consensusType === 'unanimous') {
         // Unanimous consensus - curator just polishes the agreed response
         console.log('✅ UNANIMOUS CONSENSUS - Curator will polish the agreed response');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish', contextFramework);
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish');
         finalResponse = curatorResult.content;
       } else if (this.consensusType === 'majority') {
         // Majority consensus - curator polishes the majority-agreed response
         console.log('🤝 MAJORITY CONSENSUS - Curator will polish the majority response');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish', contextFramework);
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish');
         finalResponse = curatorResult.content;
       } else if (this.consensusType === 'curator_override') {
         // No consensus - curator must choose from all 3 responses
@@ -1117,7 +1117,7 @@ ${currentResponse}`;
       // Polish mode - consensus was reached, just polish the agreed response
       const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
       
-      curatorPrompt = `${contextFramework && contextFramework.summary ? `Context from previous conversations:\n${contextFramework.summary}\n\n` : ''}Current question: ${this.conversation!.user_question}
+      curatorPrompt = `${this.conversation!.user_question}
 
 Content to polish and improve:
 
