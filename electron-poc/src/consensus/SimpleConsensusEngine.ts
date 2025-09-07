@@ -34,7 +34,7 @@ export class SimpleConsensusEngine {
   private optimizedMemory: OptimizedMemoryService;
   private conversationId: string | null = null;
   private userMessageId: string | null = null;
-  private consensusType: 'unanimous' | 'majority' | 'curator_override' = 'unanimous';
+  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' = 'pending';
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
 
   constructor(database: any) {
@@ -1059,15 +1059,17 @@ ${currentResponse}`;
     console.log(`  Consensus Type: ${this.consensusType}`);
     console.log(`  Consensus Achieved: ${this.conversation!.consensus_achieved ? '✅ YES' : '❌ NO - Continue deliberation'}`);
     
-    // Send consensus status to renderer
-    this.sendConsensusStatus({
-      generator: opinions[0],
-      refiner: opinions[1],
-      validator: opinions[2],
-      achieved: this.conversation!.consensus_achieved,
-      consensusType: this.consensusType,
-      round: this.conversation!.rounds_completed
-    });
+    // Send consensus status to renderer only if consensus type is determined
+    if (this.conversation!.consensus_achieved && this.consensusType !== 'pending') {
+      this.sendConsensusStatus({
+        generator: opinions[0],
+        refiner: opinions[1],
+        validator: opinions[2],
+        achieved: this.conversation!.consensus_achieved,
+        consensusType: this.consensusType,
+        round: this.conversation!.rounds_completed
+      });
+    }
     
     // Ensure all stages show as completed after consensus check
     // (they might appear running during consensus voting)

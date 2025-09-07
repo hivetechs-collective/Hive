@@ -1595,6 +1595,10 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               displayText = 'Curator Decision';
               color = '#FF9800'; // Orange
               break;
+            case 'pending':
+              displayText = ''; // Don't show anything for pending state
+              color = '';
+              break;
             default:
               displayText = '';
               color = 'var(--accent-color)';
