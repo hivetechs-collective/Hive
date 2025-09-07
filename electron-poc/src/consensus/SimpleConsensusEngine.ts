@@ -1030,13 +1030,19 @@ ${currentResponse}`;
         console.log(`⏭️ No unanimous consensus in round ${this.conversation!.rounds_completed} - continuing to next round`);
       }
     } else if (this.conversation!.rounds_completed === this.maxConsensusRounds) {
-      // Final round: Accept majority vote or use curator judgment
-      if (acceptCount >= SimpleConsensusEngine.MAJORITY_THRESHOLD) {
+      // Final round: Check unanimous first, then majority, then curator override
+      if (opinions.every(opinion => opinion === 'YES')) {
+        // Unanimous consensus achieved in final round
+        console.log(`✅ Unanimous consensus (3/3) achieved in final round ${this.conversation!.rounds_completed}`);
+        this.conversation!.consensus_achieved = true;
+        this.consensusType = 'unanimous';
+      } else if (acceptCount >= SimpleConsensusEngine.MAJORITY_THRESHOLD) {
+        // Majority consensus achieved in final round
         console.log(`✅ Majority consensus (${acceptCount}/3) after ${this.conversation!.rounds_completed} rounds`);
         this.conversation!.consensus_achieved = true;
         this.consensusType = 'majority';
       } else {
-        // No majority - use curator judgment as fallback
+        // No consensus - use curator judgment as fallback
         console.log(`⚠️ No consensus after ${this.maxConsensusRounds} rounds - using curator judgment`);
         this.conversation!.consensus_achieved = true;
         this.consensusType = 'curator_override';
