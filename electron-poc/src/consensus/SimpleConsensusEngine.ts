@@ -1117,15 +1117,13 @@ ${currentResponse}`;
       // Polish mode - consensus was reached, just polish the agreed response
       const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
       
-      curatorPrompt = `Question: "${this.conversation!.user_question}"
+      curatorPrompt = `${this.conversation!.user_question}
 
-Here is the consensus response that needs final polishing:
+Content to polish and improve:
 
 ${finalMessage.content}
 
-Polish this response for optimal presentation while preserving all content and meaning. Ensure professional, clear, and engaging formatting.
-
-Polished Answer:`;
+Provide an enhanced version of the above content. Improve clarity, formatting, and presentation while preserving all meaning. Do not explain what you're doing or reference the polishing process.`;
     } else {
       // Choose mode - no consensus reached, curator must choose from all 3 responses
       const round3Messages = this.conversation!.messages.filter(m => m.round === 3);
@@ -1133,22 +1131,20 @@ Polished Answer:`;
       const refinerResponse = round3Messages.find(m => m.speaker === 'refiner')?.content || 'No response';
       const validatorResponse = round3Messages.find(m => m.speaker === 'validator')?.content || 'No response';
       
-      curatorPrompt = `Question: "${this.conversation!.user_question}"
+      curatorPrompt = `${this.conversation!.user_question}
 
-You are answering this question using insights from multiple AI perspectives. Here are three different approaches to consider:
+Reference materials from AI analysis:
 
-APPROACH 1:
+[REFERENCE 1]
 ${generatorResponse}
 
-APPROACH 2:
+[REFERENCE 2]  
 ${refinerResponse}
 
-APPROACH 3:
+[REFERENCE 3]
 ${validatorResponse}
 
-Using these perspectives as reference, provide your comprehensive answer to the original question. Combine the best insights, correct any errors, and present a polished response that fully addresses what was asked.
-
-Answer:`;
+Provide a comprehensive response that synthesizes the best elements from the references above. Do not explain your reasoning, analysis process, or which references you used. Answer directly and professionally as if responding to the original question for the first time.`;
     }
     
     const curatorResult = await this.callOpenRouter(apiKey, profile.curator_model, curatorPrompt);
