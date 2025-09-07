@@ -1599,6 +1599,10 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               displayText = ''; // Don't show anything for pending state
               color = '';
               break;
+            case 'conversing':
+              displayText = "AI's Conversing";
+              color = '#2196F3'; // Blue to indicate active deliberation
+              break;
             default:
               displayText = '';
               color = 'var(--accent-color)';
