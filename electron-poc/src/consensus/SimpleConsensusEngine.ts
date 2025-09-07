@@ -1116,7 +1116,9 @@ ${finalMessage.content}
 
 Your role is to polish this for optimal user experience. Ensure professional, clear, and engaging presentation while preserving the content.
 
-Final Curated Response:`;
+IMPORTANT: Provide ONLY the polished response. Do not include any meta-commentary, thinking process, or explanations about what you're doing. Start directly with the answer to the user's question.
+
+Response:`;
     } else {
       // Choose mode - no consensus reached, curator must choose from all 3 responses
       const round3Messages = this.conversation!.messages.filter(m => m.round === 3);
@@ -1144,7 +1146,9 @@ As the final arbiter, provide the best possible answer to the user's question. Y
 2. Combine the best parts of multiple responses
 3. Create a synthesized response that addresses the question optimally
 
-Final Curated Response:`;
+IMPORTANT: Provide ONLY the final answer. Do not include any meta-commentary about your decision process, which response you chose, or why. Do not say things like "I'm choosing..." or "The best response is...". Start directly with the answer to the user's question.
+
+Response:`;
     }
     
     const curatorResult = await this.callOpenRouter(apiKey, profile.curator_model, curatorPrompt);

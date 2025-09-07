@@ -14345,9 +14345,63 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
 
 ### 🔍 Consensus Analysis Queries
 
-#### 1. Trace Complete Consensus Flow for a Query
+#### 1. Complete Consensus Journey Analysis (Memory → Context → Route → Consensus → Result)
 ```sql
--- Get full consensus journey for a specific query
+-- Trace the FULL journey: Memory retrieval, context building, routing, consensus rounds, and final result
+WITH latest_conversation AS (
+    SELECT c.id, c.title, c.created_at, c.total_cost, 
+           c.total_tokens_input + c.total_tokens_output as total_tokens,
+           cp.profile_name, cp.max_consensus_rounds
+    FROM conversations c
+    LEFT JOIN consensus_profiles cp ON c.profile_id = cp.id
+    WHERE c.title LIKE '%powershell%'
+    ORDER BY c.created_at DESC
+    LIMIT 1
+)
+SELECT 
+    lc.title as query,
+    lc.profile_name,
+    lc.max_consensus_rounds as max_rounds_allowed,
+    datetime(lc.created_at, 'localtime') as asked_at,
+    -- Memory Stage
+    mcl.memories_retrieved_recent,
+    mcl.memories_retrieved_semantic,
+    mcl.memory_search_query,
+    mcl.memory_stage_duration_ms,
+    -- Context Stage  
+    mcl.patterns_identified,
+    mcl.topics_extracted,
+    mcl.context_summary,
+    mcl.context_stage_duration_ms,
+    -- Routing Decision
+    mcl.routing_decision as route_taken,
+    mcl.routing_confidence,
+    -- Consensus Rounds
+    COUNT(DISTINCT ci.round_number) as consensus_rounds_used,
+    MAX(ci.round_number) as final_round,
+    GROUP_CONCAT(DISTINCT ci.stage_name || ' (R' || ci.round_number || ')') as stages_by_round,
+    SUM(ci.tokens_used) as consensus_tokens,
+    -- Consensus Decision Type
+    CASE 
+        WHEN m.consensus_path = 'unanimous' THEN '✅ Unanimous Agreement'
+        WHEN m.consensus_path = 'majority' THEN '🟡 Majority Vote'
+        WHEN m.consensus_path = 'curator_override' THEN '🟠 Curator Decision'
+        ELSE m.consensus_path
+    END as consensus_type,
+    -- Final Metrics
+    lc.total_tokens,
+    printf('$%.4f', lc.total_cost) as total_cost,
+    LENGTH(m.content) as response_length
+FROM latest_conversation lc
+LEFT JOIN memory_context_logs mcl ON lc.id = mcl.conversation_id
+LEFT JOIN consensus_iterations ci ON lc.id = ci.consensus_id
+LEFT JOIN messages m ON lc.id = m.conversation_id AND m.role = 'assistant'
+GROUP BY lc.id;
+```
+
+#### 1a. Basic Consensus Flow (Simplified)
+```sql
+-- Simpler version focusing on key metrics
 SELECT 
     c.id as conversation_id,
     c.title as query,
@@ -14359,8 +14413,7 @@ SELECT
     ci.round_number,
     ci.tokens_used,
     ci.flag as rejected_improvement,
-    m.content as response_content,
-    m.consensus_rounds
+    m.consensus_path as consensus_type
 FROM conversations c
 LEFT JOIN consensus_iterations ci ON c.id = ci.consensus_id
 LEFT JOIN messages m ON c.id = m.conversation_id
@@ -14558,6 +14611,48 @@ FROM messages m
 JOIN conversations c ON m.conversation_id = c.id
 WHERE m.consensus_path IN ('unanimous', 'majority', 'curator_override')
 GROUP BY m.consensus_path;
+```
+
+#### 12a. Consensus Type Distribution with User Settings
+```sql
+-- See how consensus types relate to user-configured max rounds
+SELECT 
+    cp.profile_name,
+    cp.max_consensus_rounds as user_max_rounds_setting,
+    m.consensus_path,
+    COUNT(*) as occurrences,
+    AVG(CAST(json_extract(c.metadata, '$.rounds_used') as INTEGER)) as avg_rounds_used,
+    CASE 
+        WHEN m.consensus_path = 'unanimous' THEN 'Green (✅)'
+        WHEN m.consensus_path = 'majority' THEN 'Yellow (🟡)'
+        WHEN m.consensus_path = 'curator_override' THEN 'Orange (🟠)'
+        ELSE 'Unknown'
+    END as ui_color_indicator,
+    printf('%.2f%%', 100.0 * COUNT(*) / SUM(COUNT(*)) OVER()) as percentage_of_total
+FROM conversations c
+JOIN messages m ON c.id = m.conversation_id
+LEFT JOIN consensus_profiles cp ON c.profile_id = cp.id
+WHERE m.role = 'assistant' AND m.consensus_path IS NOT NULL
+GROUP BY cp.profile_name, cp.max_consensus_rounds, m.consensus_path
+ORDER BY cp.profile_name, occurrences DESC;
+```
+
+#### 12b. User Settings Impact Analysis
+```sql
+-- Analyze how different max_consensus_rounds settings affect outcomes
+SELECT 
+    cp.max_consensus_rounds as max_rounds_setting,
+    COUNT(DISTINCT c.id) as queries_processed,
+    AVG(CASE WHEN m.consensus_path = 'unanimous' THEN 1 ELSE 0 END) * 100 as unanimous_percentage,
+    AVG(CASE WHEN m.consensus_path = 'majority' THEN 1 ELSE 0 END) * 100 as majority_percentage,
+    AVG(CASE WHEN m.consensus_path = 'curator_override' THEN 1 ELSE 0 END) * 100 as curator_percentage,
+    AVG(c.total_cost) as avg_cost,
+    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens
+FROM consensus_profiles cp
+LEFT JOIN conversations c ON c.profile_id = cp.id
+LEFT JOIN messages m ON c.id = m.conversation_id AND m.role = 'assistant'
+GROUP BY cp.max_consensus_rounds
+ORDER BY cp.max_consensus_rounds;
 ```
 
 ### 🔧 Debugging & Troubleshooting Queries
