@@ -38,6 +38,21 @@ export class SimpleConsensusEngine {
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
   private deliberationStartTime: number = 0;
   private deliberationTimer: NodeJS.Timeout | null = null;
+  private conversationPhrases: string[] = [
+    "AI's rapping",
+    "Bots are chatting", 
+    "Minds are melding",
+    "Silicon syncing",
+    "Neural networking",
+    "Code conferencing",
+    "Digital debating",
+    "Algorithms arguing",
+    "Models mingling",
+    "Circuits discussing",
+    "Logic linking",
+    "Brains brainstorming"
+  ];
+  private currentPhraseIndex: number = 0;
 
   constructor(database: any) {
     this.db = database;
@@ -433,6 +448,13 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         const lastMessage = this.conversation.messages[this.conversation.messages.length - 1];
         finalResponse = lastMessage.content;
       }
+      
+      // NOW send final consensus status after curator completes
+      this.sendConsensusStatus({
+        achieved: true,
+        consensusType: this.consensusType,
+        round: this.conversation!.rounds_completed
+      });
       
       console.log('\n📊 FINAL STATISTICS:');
       console.log('  Total tokens:', this.conversation.total_tokens);
@@ -1078,17 +1100,8 @@ ${currentResponse}`;
     console.log(`  Consensus Type: ${this.consensusType}`);
     console.log(`  Consensus Achieved: ${this.conversation!.consensus_achieved ? '✅ YES' : '❌ NO - Continue deliberation'}`);
     
-    // Send consensus status to renderer only if consensus type is determined
-    if (this.conversation!.consensus_achieved && this.consensusType !== 'pending') {
-      this.sendConsensusStatus({
-        generator: opinions[0],
-        refiner: opinions[1],
-        validator: opinions[2],
-        achieved: this.conversation!.consensus_achieved,
-        consensusType: this.consensusType,
-        round: this.conversation!.rounds_completed
-      });
-    }
+    // DON'T send final consensus status yet - let fun phrases continue during curator stage
+    // Final status will be sent after curator completes
     
     // Ensure all stages show as completed after consensus check
     // (they might appear running during consensus voting)
@@ -1136,11 +1149,8 @@ ${currentResponse}`;
       // Polish mode - consensus was reached, just polish the agreed response
       const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
       
-      curatorPrompt = `Please take the following question and examine this answer and update or correct it and provide me with a cleaned up version.
+      curatorPrompt = `${this.conversation!.user_question}
 
-Question: ${this.conversation!.user_question}
-
-Answer:
 ${finalMessage.content}`;
     } else {
       // Choose mode - no consensus reached, curator must choose from all 3 responses
@@ -1240,7 +1250,7 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private startDeliberationTimer() {
-    // Update timer every second during deliberation
+    // Update timer every second during deliberation with random fun phrases
     this.deliberationTimer = setInterval(() => {
       if (this.consensusType === 'conversing' && this.deliberationStartTime > 0) {
         const elapsed = Math.floor((Date.now() - this.deliberationStartTime) / 1000);
@@ -1248,14 +1258,21 @@ Provide a comprehensive response that synthesizes the best elements from the ref
         const seconds = elapsed % 60;
         const timeDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
         
+        // Change phrase every 5 seconds
+        if (elapsed % 5 === 0) {
+          this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
+        }
+        const funPhrase = this.conversationPhrases[this.currentPhraseIndex];
+        
         this.sendConsensusStatus({
           achieved: false,
           consensusType: 'conversing',
           round: this.conversation?.rounds_completed || 0,
-          elapsedTime: timeDisplay
+          elapsedTime: timeDisplay,
+          funPhrase: funPhrase
         });
       }
-    }, 1000); // Update every second
+    }, 200); // Update 5 times per second for smooth stopwatch effect
   }
 
   private stopDeliberationTimer() {
