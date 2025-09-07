@@ -364,11 +364,17 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         this.conversation.rounds_completed++;
         console.log(`\n🔄 Starting Round ${this.conversation.rounds_completed}`);
         
-        // Show "AI's Conversing" status (timer will update automatically)
+        // Show "AI's Conversing" status with initial timer
+        const elapsed = Math.floor((Date.now() - this.deliberationStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timeDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
         this.sendConsensusStatus({
           achieved: false,
           consensusType: 'conversing',
-          round: this.conversation.rounds_completed
+          round: this.conversation.rounds_completed,
+          elapsedTime: timeDisplay
         });
         
         // Reset stages to 'ready' for new round (visual sync)

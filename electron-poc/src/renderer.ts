@@ -1601,7 +1601,11 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               break;
             case 'conversing':
               displayText = data.elapsedTime ? `AI's Conversing ${data.elapsedTime}` : "AI's Conversing";
-              color = '#2196F3'; // Blue to indicate active deliberation
+              color = '#00BCD4'; // Bright cyan for better visibility
+              // Add breathing animation
+              consensusTypeElement.style.animation = 'breathe 2s ease-in-out infinite';
+              consensusTypeElement.style.fontWeight = 'bold';
+              consensusTypeElement.style.textShadow = '0 0 10px rgba(0, 188, 212, 0.7)';
               break;
             default:
               displayText = '';
@@ -1610,6 +1614,13 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
           
           consensusTypeElement.textContent = displayText;
           consensusTypeElement.style.color = color;
+          
+          // Clear animations for non-conversing states
+          if (data.consensusType !== 'conversing') {
+            consensusTypeElement.style.animation = '';
+            consensusTypeElement.style.fontWeight = '';
+            consensusTypeElement.style.textShadow = '';
+          }
         }
         
         // Clear on reset/new query
@@ -5623,7 +5634,7 @@ window.cloneRepository = async () => {
     window.electronAPI.onMenuAbout(async () => {
         console.log('[Menu] About dialog requested');
         const version = await window.electronAPI.getVersion();
-        alert(`Hive Consensus\nVersion: ${version}\n\n🐝 Advanced AI-powered development environment\nwith 4-Stage Consensus Processing\n\nCopyright © 2025 HiveTechs`);
+        alert(`Hive Consensus\nVersion: ${version}\n\nAdvanced AI-powered development environment\nwith Multi-Stage Consensus Processing\n\nCopyright © 2025 HiveTechs`);
     });
     
     console.log('[Menu] Event handlers registered');
