@@ -1750,8 +1750,33 @@ $HIVE_BUNDLED_PYTHON $HIVE_BUNDLED_MODEL_SCRIPT --model-cache-dir ~/.hive/models
 
 ## Data Architecture
 
-### Database Schema (SQLite)
-**Location**: `~/Library/Application Support/Hive Consensus/hive-ai.db`
+### Unified Database (SQLite)
+**Primary Location**: `~/.hive/hive-ai.db`  
+**Type**: SQLite database containing all application data, settings, conversations, and metrics  
+**Size**: ~9MB (grows with usage)  
+
+> **IMPORTANT**: The unified database is ALWAYS at `~/.hive/hive-ai.db`. This is the single source of truth for all data.  
+> Do NOT look in `~/Library/Application Support/` - that location may contain empty placeholder files only.
+
+#### Unified Storage Directory Structure
+
+All application data is centralized under the `~/.hive/` directory:
+
+```
+~/.hive/
+├── hive-ai.db           # Main SQLite database (all data)
+├── logs/                # Application logs
+│   └── hive-*.log      # Timestamped log files
+├── config/              # Configuration files
+│   └── settings.json   # User preferences
+└── cache/               # Temporary cache files
+```
+
+**Key Points**:
+- **Single Location**: Everything is under `~/.hive/` for simplicity
+- **Cross-Platform**: Same structure on macOS, Linux, and Windows
+- **No Legacy Locations**: Ignore any references to Application Support directories
+- **Database First**: The SQLite database is the primary data store
 
 #### Core Tables
 
@@ -11623,9 +11648,11 @@ logger.info('Request received', {
 ```
 
 #### Log File Location:
-- **macOS**: `~/Library/Application Support/Hive Consensus/logs/`
-- **Windows**: `%APPDATA%/Hive Consensus/logs/`
-- **Linux**: `~/.config/Hive Consensus/logs/`
+- **macOS**: `~/.hive/logs/`
+- **Windows**: `%USERPROFILE%/.hive/logs/`
+- **Linux**: `~/.hive/logs/`
+
+> **Note**: All logs are stored in the unified `~/.hive/` directory structure alongside the database.
 
 #### Log File Format:
 ```
