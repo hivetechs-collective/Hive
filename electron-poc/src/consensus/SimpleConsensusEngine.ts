@@ -23,6 +23,10 @@ interface Conversation {
 }
 
 export class SimpleConsensusEngine {
+  // Consensus configuration
+  private static readonly MAX_CONSENSUS_ROUNDS = 3;
+  private static readonly MAJORITY_THRESHOLD = 2;
+  
   private db: any;
   private modelCosts: Map<string, {input: number, output: number}> = new Map();
   private costsLoaded: Promise<void>;
@@ -31,6 +35,7 @@ export class SimpleConsensusEngine {
   private optimizedMemory: OptimizedMemoryService;
   private conversationId: string | null = null;
   private userMessageId: string | null = null;
+  private consensusType: 'unanimous' | 'majority' | 'curator_override' = 'unanimous';
 
   constructor(database: any) {
     this.db = database;
@@ -206,10 +211,10 @@ export class SimpleConsensusEngine {
         request_id: request.requestId,
         conversation_id: this.conversationId || undefined,
         memories_retrieved: {
-          recent: relevantMemories.filter(m => m.source === 'recent').length,
-          today: relevantMemories.filter(m => m.source === 'today').length,
-          week: relevantMemories.filter(m => m.source === 'week').length,
-          semantic: relevantMemories.filter(m => m.source === 'semantic').length
+          recent: relevantMemories.filter(m => m.recency_score === 4).length,
+          today: relevantMemories.filter(m => m.recency_score === 3).length,
+          week: relevantMemories.filter(m => m.recency_score === 2).length,
+          semantic: relevantMemories.filter(m => m.recency_score === 1).length
         },
         context_summary: contextFramework.summary,
         patterns_identified: contextFramework.patterns,
@@ -345,8 +350,7 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       console.log('🧩 COMPLEX QUESTION - Using full consensus pipeline');
       
       // ITERATIVE DELIBERATION LOOP (max 50 rounds - let consensus happen naturally)
-      const MAX_ROUNDS = 50; // No practical limit - let consensus happen naturally
-      while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < MAX_ROUNDS) {
+      while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS) {
         this.conversation.rounds_completed++;
         console.log(`\n🔄 Starting Round ${this.conversation.rounds_completed}`);
         
@@ -374,10 +378,10 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       console.log('\n📊 LOOP EXIT STATUS:');
       console.log(`  Rounds completed: ${this.conversation.rounds_completed}`);
       console.log(`  Consensus achieved: ${this.conversation.consensus_achieved}`);
-      console.log(`  Max rounds (${MAX_ROUNDS}): ${this.conversation.rounds_completed >= MAX_ROUNDS ? 'REACHED' : 'Not reached'}`);
+      console.log(`  Max rounds (${SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS}): ${this.conversation.rounds_completed >= SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS ? 'REACHED' : 'Not reached'}`);
       
       if (!this.conversation.consensus_achieved) {
-        console.log(`\n⚠️ Maximum rounds (${MAX_ROUNDS}) reached without consensus!`);
+        console.log(`\n⚠️ Maximum rounds (${SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS}) reached without consensus!`);
         console.log('📝 Using last validator response as final (no Curator)');
       }
 
@@ -995,22 +999,50 @@ ${currentResponse}`;
       this.conversation!.rounds_completed
     );
     
-    // If ALL say NO (cannot be improved), consensus is achieved
-    this.conversation!.consensus_achieved = opinions.every(opinion => opinion === 'NO');
+    // Count how many models accept the response (NO = accept, cannot be improved)
+    const acceptCount = opinions.filter(opinion => opinion === 'NO').length;
+    
+    // Hybrid consensus approach based on round number
+    if (this.conversation!.rounds_completed <= 2) {
+      // Rounds 1-2: Require unanimous consensus
+      this.conversation!.consensus_achieved = opinions.every(opinion => opinion === 'NO');
+      
+      if (this.conversation!.consensus_achieved) {
+        console.log('✅ Unanimous consensus achieved');
+        this.consensusType = 'unanimous';
+      }
+    } else if (this.conversation!.rounds_completed === SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS) {
+      // Round 3: Accept majority vote or use curator judgment
+      if (acceptCount >= SimpleConsensusEngine.MAJORITY_THRESHOLD) {
+        console.log(`✅ Majority consensus (${acceptCount}/3) after ${this.conversation!.rounds_completed} rounds`);
+        this.conversation!.consensus_achieved = true;
+        this.consensusType = 'majority';
+      } else {
+        // No majority - use curator judgment as fallback
+        console.log(`⚠️ No consensus after ${SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS} rounds - using curator judgment`);
+        this.conversation!.consensus_achieved = true;
+        this.consensusType = 'curator_override';
+      }
+    }
     
     // Log consensus decision
     console.log(`\n📊 Consensus Check Summary:`);
     console.log(`  Generator: ${opinions[0]}`);
     console.log(`  Refiner: ${opinions[1]}`);
     console.log(`  Validator: ${opinions[2]}`);
-    console.log(`  Consensus Achieved: ${this.conversation!.consensus_achieved ? '✅ YES - All voted NO' : '❌ NO - At least one voted YES'}`);
+    console.log(`  Accept Count: ${acceptCount}/3`);
+    console.log(`  Round: ${this.conversation!.rounds_completed}/${SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS}`);
+    console.log(`  Consensus Type: ${this.consensusType}`);
+    console.log(`  Consensus Achieved: ${this.conversation!.consensus_achieved ? '✅ YES' : '❌ NO - Continue deliberation'}`);
     
     // Send consensus status to renderer
     this.sendConsensusStatus({
       generator: opinions[0],
       refiner: opinions[1],
       validator: opinions[2],
-      achieved: this.conversation!.consensus_achieved
+      achieved: this.conversation!.consensus_achieved,
+      consensusType: this.consensusType,
+      round: this.conversation!.rounds_completed
     });
     
     // Ensure all stages show as completed after consensus check
@@ -1183,7 +1215,7 @@ Final Curated Response:`;
         WHERE log_id = ?
       `;
       
-      this.db.run(sql, [routingDecision, logId], (err) => {
+      this.db.run(sql, [routingDecision, logId], (err: Error | null) => {
         if (err) {
           console.error('❌ Error updating context log with routing:', err);
           reject(err);

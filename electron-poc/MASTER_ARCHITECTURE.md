@@ -3724,6 +3724,123 @@ class OptimizedMemoryService {
 - **Cache Hit Rate**: ~40% for repeated similar queries
 - **Parallel Efficiency**: 75-85% (vs sequential queries)
 
+### 📊 Memory Context Logging & Debugging (v1.8.203+)
+
+#### Overview
+The system now comprehensively logs all context framework data to enable debugging and evaluation of what context is provided to LLMs during consensus processing.
+
+#### Database Schema
+**Table**: `memory_context_logs`
+```sql
+CREATE TABLE memory_context_logs (
+    log_id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    conversation_id TEXT,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Memory retrieval metrics
+    memories_retrieved_recent INTEGER DEFAULT 0,
+    memories_retrieved_today INTEGER DEFAULT 0,
+    memories_retrieved_week INTEGER DEFAULT 0,
+    memories_retrieved_semantic INTEGER DEFAULT 0,
+    
+    -- Context framework data (NEW)
+    context_summary TEXT,           -- Full context built from memories
+    patterns_identified TEXT,        -- JSON array of patterns found
+    topics_extracted TEXT,          -- JSON array of topics identified
+    user_preferences_detected TEXT, -- Future: learned preferences
+    
+    -- Routing information
+    routing_decision TEXT,          -- SIMPLE or COMPLEX
+    routing_confidence REAL,        -- Future: confidence score
+    context_influenced_routing BOOLEAN DEFAULT 0,
+    
+    -- Performance metrics
+    memory_stage_duration_ms INTEGER,
+    context_stage_duration_ms INTEGER,
+    total_memory_bytes INTEGER,
+    cache_hit_rate REAL,
+    
+    -- References
+    consensus_id TEXT,
+    final_message_id TEXT
+);
+```
+
+#### Implementation Details
+
+**Context Saving (After Building)**
+```typescript
+// Location: SimpleConsensusEngine.ts:199-222
+const contextLogId = `ctxlog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+await this.memoryDb.logMemoryContextOperation({
+    log_id: contextLogId,
+    request_id: request.requestId,
+    conversation_id: this.conversationId,
+    memories_retrieved: {
+        recent: relevantMemories.filter(m => m.source === 'recent').length,
+        today: relevantMemories.filter(m => m.source === 'today').length,
+        week: relevantMemories.filter(m => m.source === 'week').length,
+        semantic: relevantMemories.filter(m => m.source === 'semantic').length
+    },
+    context_summary: contextFramework.summary,
+    patterns_identified: contextFramework.patterns,
+    topics_extracted: contextFramework.relevantTopics,
+    performance_ms: { memory: 0, context: 0 }
+});
+```
+
+**Routing Decision Update**
+```typescript
+// Location: SimpleConsensusEngine.ts:256-257
+// After routing determines SIMPLE or COMPLEX
+await this.updateContextLogRouting(contextLogId, routingDecision);
+```
+
+#### Debugging Queries
+
+**View Recent Context Frameworks**
+```sql
+SELECT 
+    conversation_id,
+    context_summary,
+    patterns_identified,
+    topics_extracted,
+    routing_decision,
+    memories_retrieved_recent + memories_retrieved_today + 
+    memories_retrieved_week + memories_retrieved_semantic as total_memories
+FROM memory_context_logs 
+ORDER BY timestamp DESC 
+LIMIT 10;
+```
+
+**Analyze Routing Decisions**
+```sql
+SELECT 
+    routing_decision,
+    COUNT(*) as count,
+    AVG(memories_retrieved_recent + memories_retrieved_today + 
+        memories_retrieved_week + memories_retrieved_semantic) as avg_memories
+FROM memory_context_logs 
+GROUP BY routing_decision;
+```
+
+**Find Context Issues**
+```sql
+-- Find queries with no context despite available memories
+SELECT * FROM memory_context_logs 
+WHERE (memories_retrieved_recent + memories_retrieved_today + 
+       memories_retrieved_week + memories_retrieved_semantic) > 0
+AND (context_summary IS NULL OR context_summary = '');
+```
+
+#### Benefits
+1. **Debugging**: Understand why certain questions were routed incorrectly
+2. **Evaluation**: Review what context was actually provided to LLMs
+3. **Optimization**: Identify patterns in context building for improvement
+4. **Analytics**: Track context influence on routing decisions
+5. **Quality Assurance**: Ensure context is being properly extracted and used
+
 ### 🔄 Continuous Learning Loop
 
 Every interaction strengthens the system:
