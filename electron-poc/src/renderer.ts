@@ -668,7 +668,10 @@ document.body.innerHTML = `
 
       <!-- Chat Area -->
       <div class="chat-area">
-        <div class="chat-header">CONSENSUS CHAT</div>
+        <div class="chat-header">
+          <span>CONSENSUS CHAT</span>
+          <button class="consensus-settings-btn" id="consensus-settings-btn" title="Consensus Settings">⚙️</button>
+        </div>
         <div class="chat-content" id="chat-content">
           <div class="chat-message system">
             <div class="message-time">[${new Date().toLocaleTimeString()}]</div>
@@ -722,6 +725,43 @@ document.body.innerHTML = `
         <span class="status-icon">⚡</span>
         <span>IPC</span>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Consensus Settings Modal -->
+<div id="consensus-settings-modal" class="modal-overlay" style="display: none;">
+  <div class="modal-content" style="width: 400px;">
+    <div class="modal-header">
+      <h3>Consensus Settings</h3>
+      <button class="modal-close" id="close-consensus-settings">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="max-consensus-rounds">Maximum Consensus Rounds</label>
+        <input 
+          type="number" 
+          id="max-consensus-rounds" 
+          min="1" 
+          max="10" 
+          value="3"
+          style="width: 100%; padding: 8px; margin-top: 8px;"
+        />
+        <small class="help-text" style="color: var(--text-secondary); display: block; margin-top: 8px;">
+          Number of rounds the AI models will deliberate before reaching consensus (default: 3)
+        </small>
+      </div>
+      <div class="form-group" style="margin-top: 20px;">
+        <p style="color: var(--text-secondary); font-size: 12px;">
+          <strong>Round 1-2:</strong> Requires unanimous agreement<br/>
+          <strong>Final Round:</strong> Accepts majority vote or curator decision<br/>
+          <strong>Higher values:</strong> More thorough but uses more tokens
+        </p>
+      </div>
+    </div>
+    <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 16px;">
+      <button class="btn btn-secondary" id="cancel-consensus-settings">Cancel</button>
+      <button class="btn btn-primary" id="save-consensus-settings">Save</button>
     </div>
   </div>
 </div>
@@ -1392,6 +1432,56 @@ document.getElementById('new-conversation-btn')?.addEventListener('click', () =>
   conversationMessages = [];
   addLogEntry('🆕 Starting new conversation (context cleared)', 'info');
   addChatMessage('New conversation started. Previous context cleared.', true);
+});
+
+// Consensus Settings Modal Event Listeners
+document.getElementById('consensus-settings-btn')?.addEventListener('click', async () => {
+  const modal = document.getElementById('consensus-settings-modal');
+  if (modal) {
+    // Load current max rounds value from active profile
+    try {
+      const profileName = localStorage.getItem('activeProfile') || 'Free Also';
+      const profile = await (window as any).settingsAPI.getProfile(profileName);
+      const maxRoundsInput = document.getElementById('max-consensus-rounds') as HTMLInputElement;
+      if (maxRoundsInput && profile) {
+        maxRoundsInput.value = (profile.max_consensus_rounds || 3).toString();
+      }
+    } catch (error) {
+      console.error('Error loading max rounds:', error);
+    }
+    modal.style.display = 'flex';
+  }
+});
+
+document.getElementById('close-consensus-settings')?.addEventListener('click', () => {
+  const modal = document.getElementById('consensus-settings-modal');
+  if (modal) modal.style.display = 'none';
+});
+
+document.getElementById('cancel-consensus-settings')?.addEventListener('click', () => {
+  const modal = document.getElementById('consensus-settings-modal');
+  if (modal) modal.style.display = 'none';
+});
+
+document.getElementById('save-consensus-settings')?.addEventListener('click', async () => {
+  const maxRoundsInput = document.getElementById('max-consensus-rounds') as HTMLInputElement;
+  const maxRounds = parseInt(maxRoundsInput.value) || 3;
+  
+  // Save to active profile
+  try {
+    const profileName = localStorage.getItem('activeProfile') || 'Free Also';
+    await (window as any).settingsAPI.updateProfileMaxRounds(profileName, maxRounds);
+    
+    // Close modal
+    const modal = document.getElementById('consensus-settings-modal');
+    if (modal) modal.style.display = 'none';
+    
+    // Show success message
+    addChatMessage(`✅ Max consensus rounds updated to ${maxRounds}`, true);
+  } catch (error) {
+    console.error('Error saving max rounds:', error);
+    addChatMessage('❌ Failed to update consensus settings', true);
+  }
 });
 
 // TEST: Add IPC test before main consensus logic

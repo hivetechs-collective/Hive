@@ -24,7 +24,6 @@ interface Conversation {
 
 export class SimpleConsensusEngine {
   // Consensus configuration
-  private static readonly MAX_CONSENSUS_ROUNDS = 3;
   private static readonly MAJORITY_THRESHOLD = 2;
   
   private db: any;
@@ -36,6 +35,7 @@ export class SimpleConsensusEngine {
   private conversationId: string | null = null;
   private userMessageId: string | null = null;
   private consensusType: 'unanimous' | 'majority' | 'curator_override' = 'unanimous';
+  private maxConsensusRounds: number = 3; // Default, will be overridden by profile
 
   constructor(database: any) {
     this.db = database;
@@ -143,6 +143,9 @@ export class SimpleConsensusEngine {
         throw new Error('No profile found');
       }
 
+      // Set max consensus rounds from profile (defaults to 3 if not set)
+      this.maxConsensusRounds = profile.max_consensus_rounds || 3;
+
       console.log('🎯 Using profile:', profile.profile_name);
       console.log('🎯 Models:', {
         generator: profile.generator_model,
@@ -150,6 +153,7 @@ export class SimpleConsensusEngine {
         validator: profile.validator_model,
         curator: profile.curator_model
       });
+      console.log('🎯 Max Consensus Rounds:', this.maxConsensusRounds);
 
       // Initialize conversation for iterative deliberation
       // Generate unique consensus_id (timestamp + random)
@@ -349,8 +353,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       // COMPLEX PATH - Full consensus pipeline
       console.log('🧩 COMPLEX QUESTION - Using full consensus pipeline');
       
-      // ITERATIVE DELIBERATION LOOP (max 50 rounds - let consensus happen naturally)
-      while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS) {
+      // ITERATIVE DELIBERATION LOOP (max rounds from profile - let consensus happen naturally)
+      while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < this.maxConsensusRounds) {
         this.conversation.rounds_completed++;
         console.log(`\n🔄 Starting Round ${this.conversation.rounds_completed}`);
         
@@ -378,10 +382,10 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       console.log('\n📊 LOOP EXIT STATUS:');
       console.log(`  Rounds completed: ${this.conversation.rounds_completed}`);
       console.log(`  Consensus achieved: ${this.conversation.consensus_achieved}`);
-      console.log(`  Max rounds (${SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS}): ${this.conversation.rounds_completed >= SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS ? 'REACHED' : 'Not reached'}`);
+      console.log(`  Max rounds (${this.maxConsensusRounds}): ${this.conversation.rounds_completed >= this.maxConsensusRounds ? 'REACHED' : 'Not reached'}`);
       
       if (!this.conversation.consensus_achieved) {
-        console.log(`\n⚠️ Maximum rounds (${SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS}) reached without consensus!`);
+        console.log(`\n⚠️ Maximum rounds (${this.maxConsensusRounds}) reached without consensus!`);
         console.log('📝 Using last validator response as final (no Curator)');
       }
 
@@ -1023,15 +1027,15 @@ ${currentResponse}`;
         console.log('✅ Unanimous consensus achieved');
         this.consensusType = 'unanimous';
       }
-    } else if (this.conversation!.rounds_completed === SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS) {
-      // Round 3: Accept majority vote or use curator judgment
+    } else if (this.conversation!.rounds_completed === this.maxConsensusRounds) {
+      // Final round: Accept majority vote or use curator judgment
       if (acceptCount >= SimpleConsensusEngine.MAJORITY_THRESHOLD) {
         console.log(`✅ Majority consensus (${acceptCount}/3) after ${this.conversation!.rounds_completed} rounds`);
         this.conversation!.consensus_achieved = true;
         this.consensusType = 'majority';
       } else {
         // No majority - use curator judgment as fallback
-        console.log(`⚠️ No consensus after ${SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS} rounds - using curator judgment`);
+        console.log(`⚠️ No consensus after ${this.maxConsensusRounds} rounds - using curator judgment`);
         this.conversation!.consensus_achieved = true;
         this.consensusType = 'curator_override';
       }
@@ -1043,7 +1047,7 @@ ${currentResponse}`;
     console.log(`  Refiner: ${opinions[1]}`);
     console.log(`  Validator: ${opinions[2]}`);
     console.log(`  Accept Count: ${acceptCount}/3`);
-    console.log(`  Round: ${this.conversation!.rounds_completed}/${SimpleConsensusEngine.MAX_CONSENSUS_ROUNDS}`);
+    console.log(`  Round: ${this.conversation!.rounds_completed}/${this.maxConsensusRounds}`);
     console.log(`  Consensus Type: ${this.consensusType}`);
     console.log(`  Consensus Achieved: ${this.conversation!.consensus_achieved ? '✅ YES' : '❌ NO - Continue deliberation'}`);
     

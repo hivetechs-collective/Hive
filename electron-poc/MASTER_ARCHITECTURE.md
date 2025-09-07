@@ -1751,7 +1751,7 @@ $HIVE_BUNDLED_PYTHON $HIVE_BUNDLED_MODEL_SCRIPT --model-cache-dir ~/.hive/models
 ## Data Architecture
 
 ### Database Schema (SQLite)
-**Location**: `~/.hive/hive-ai.db`
+**Location**: `~/Library/Application Support/Hive Consensus/hive-ai.db`
 
 #### Core Tables
 
@@ -1905,6 +1905,21 @@ configurations (
   user_id TEXT,
   created_at TEXT,
   updated_at TEXT
+)
+```
+
+##### 8. Consensus Profiles Table (v1.8.207+)
+```sql
+consensus_profiles (
+  id TEXT PRIMARY KEY,
+  profile_name TEXT NOT NULL UNIQUE,
+  generator_model TEXT NOT NULL,
+  refiner_model TEXT NOT NULL,
+  validator_model TEXT NOT NULL,
+  curator_model TEXT NOT NULL,
+  max_consensus_rounds INTEGER DEFAULT 3,  -- User-configurable round limit
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 )
 ```
 
@@ -3910,23 +3925,26 @@ The consensus engine now uses a hybrid approach with round limits and intelligen
    - Display clear error message if profile not loaded
    - Prevent consensus execution without valid profile
 
-#### Hybrid Consensus Strategy (v1.8.206+)
+#### Hybrid Consensus Strategy (v1.8.207+)
 
-**Critical Enhancement**: Maximum 3 rounds with intelligent fallback strategies to prevent infinite loops.
+**Critical Enhancement**: User-configurable maximum rounds with intelligent fallback strategies to prevent infinite loops.
 
 ```typescript
-// Constants in SimpleConsensusEngine
-private static readonly MAX_CONSENSUS_ROUNDS = 3;
+// User-configurable in SimpleConsensusEngine
+private maxConsensusRounds: number; // Loaded from profile (default: 3)
 private static readonly MAJORITY_THRESHOLD = 2;
+
+// Set from consensus_profiles table
+this.maxConsensusRounds = profile.max_consensus_rounds || 3;
 ```
 
 **Consensus Decision Tree**:
 ```
-Round 1-2: Attempt unanimous consensus (all 3 models agree)
+Round 1 to (maxRounds-1): Attempt unanimous consensus (all 3 models agree)
     ├── If achieved → Mark as 'unanimous', run curator in polish mode
     └── If not achieved → Continue to next round
 
-Round 3: Accept majority vote (2/3 models agree)  
+Final Round (maxRounds): Accept majority vote (2/3 models agree)  
     ├── If majority agrees → Mark as 'majority', run curator in polish mode
     └── If no majority → Mark as 'curator_override', curator chooses from all 3
 
@@ -3934,10 +3952,16 @@ Curator Role Based on Consensus Type:
     ├── 'unanimous': Polish the agreed response
     ├── 'majority': Polish the majority-agreed response
     └── 'curator_override': Review all 3 responses and select/synthesize best
+
+User Configuration (v1.8.207+):
+    ├── max_consensus_rounds: Configurable per profile (default: 3)
+    ├── UI Access: Settings cog (⚙️) in Consensus Chat header
+    ├── Range: Typically 1-10 rounds
+    └── Trade-off: Higher values = more thorough but higher token usage
 ```
 
 **Benefits**:
-- **Prevents Infinite Loops**: Hard limit of 3 rounds (was 5+ rounds, 87,000+ tokens)
+- **Prevents Infinite Loops**: User-configurable limit (was 5+ rounds, 87,000+ tokens)
 - **Reduces Costs**: ~65% reduction in token usage for disagreements
 - **Maintains Quality**: Majority vote or curator judgment ensures quality
 - **Always Produces Output**: No more endless deliberation

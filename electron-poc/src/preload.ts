@@ -95,6 +95,8 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   resetSettings: () => ipcRenderer.invoke('settings-reset'),
   loadProfiles: () => ipcRenderer.invoke('settings-load-profiles'),
   loadModels: () => ipcRenderer.invoke('settings-load-models'),
+  getProfile: (profileName: string) => ipcRenderer.invoke('settings-get-profile', profileName),
+  updateProfileMaxRounds: (profileName: string, maxRounds: number) => ipcRenderer.invoke('settings-update-profile-max-rounds', profileName, maxRounds),
 });
 
 // Analytics API

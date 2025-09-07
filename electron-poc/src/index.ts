@@ -108,9 +108,26 @@ const initDatabase = () => {
     refiner_model TEXT NOT NULL,
     validator_model TEXT NOT NULL,
     curator_model TEXT NOT NULL,
+    max_consensus_rounds INTEGER DEFAULT 3,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // Migration: Add max_consensus_rounds column if it doesn't exist
+  db.run(`
+    PRAGMA table_info(consensus_profiles)
+  `, [], (err: any, rows: any[]) => {
+    if (!err && rows) {
+      const hasMaxRounds = rows.some((col: any) => col.name === 'max_consensus_rounds');
+      if (!hasMaxRounds) {
+        db.run(`ALTER TABLE consensus_profiles ADD COLUMN max_consensus_rounds INTEGER DEFAULT 3`, (err: any) => {
+          if (!err) {
+            console.log('✅ Added max_consensus_rounds column to consensus_profiles table');
+          }
+        });
+      }
+    }
+  });
 
   // Create consensus_iterations table to track model usage in iterative consensus
   db.run(`CREATE TABLE IF NOT EXISTS consensus_iterations (
@@ -4320,6 +4337,51 @@ ipcMain.handle('settings-save-profile', async (_, profile) => {
               }
             }
           );
+        }
+      }
+    );
+  });
+});
+
+// Get a single profile by name
+ipcMain.handle('settings-get-profile', async (_, profileName) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+
+    db.get(
+      'SELECT * FROM consensus_profiles WHERE profile_name = ?',
+      [profileName],
+      (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      }
+    );
+  });
+});
+
+// Update max consensus rounds for a profile
+ipcMain.handle('settings-update-profile-max-rounds', async (_, profileName, maxRounds) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+
+    db.run(
+      'UPDATE consensus_profiles SET max_consensus_rounds = ? WHERE profile_name = ?',
+      [maxRounds, profileName],
+      (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          console.log(`✅ Updated max_consensus_rounds to ${maxRounds} for profile: ${profileName}`);
+          resolve(true);
         }
       }
     );
