@@ -1600,7 +1600,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               color = '';
               break;
             case 'conversing':
-              displayText = "AI's Conversing";
+              displayText = data.elapsedTime ? `AI's Conversing ${data.elapsedTime}` : "AI's Conversing";
               color = '#2196F3'; // Blue to indicate active deliberation
               break;
             default:

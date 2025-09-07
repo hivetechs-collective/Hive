@@ -36,6 +36,8 @@ export class SimpleConsensusEngine {
   private userMessageId: string | null = null;
   private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' = 'pending';
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
+  private deliberationStartTime: number = 0;
+  private deliberationTimer: NodeJS.Timeout | null = null;
 
   constructor(database: any) {
     this.db = database;
@@ -353,12 +355,16 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       // COMPLEX PATH - Full consensus pipeline
       console.log('🧩 COMPLEX QUESTION - Using full consensus pipeline');
       
+      // Start deliberation timer and live updates
+      this.deliberationStartTime = Date.now();
+      this.startDeliberationTimer();
+      
       // ITERATIVE DELIBERATION LOOP (max rounds from profile - let consensus happen naturally)
       while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < this.maxConsensusRounds) {
         this.conversation.rounds_completed++;
         console.log(`\n🔄 Starting Round ${this.conversation.rounds_completed}`);
         
-        // Show "AI's Conversing" status during deliberation rounds
+        // Show "AI's Conversing" status (timer will update automatically)
         this.sendConsensusStatus({
           achieved: false,
           consensusType: 'conversing',
@@ -1218,11 +1224,40 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private sendConsensusComplete(data: any) {
+    // Stop deliberation timer when consensus is complete
+    this.stopDeliberationTimer();
+    
     const allWindows = BrowserWindow.getAllWindows();
     allWindows.forEach(window => {
       console.log('✅ Sending consensus-complete to renderer');
       window.webContents.send('consensus-complete', data);
     });
+  }
+
+  private startDeliberationTimer() {
+    // Update timer every second during deliberation
+    this.deliberationTimer = setInterval(() => {
+      if (this.consensusType === 'conversing' && this.deliberationStartTime > 0) {
+        const elapsed = Math.floor((Date.now() - this.deliberationStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timeDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        this.sendConsensusStatus({
+          achieved: false,
+          consensusType: 'conversing',
+          round: this.conversation?.rounds_completed || 0,
+          elapsedTime: timeDisplay
+        });
+      }
+    }, 1000); // Update every second
+  }
+
+  private stopDeliberationTimer() {
+    if (this.deliberationTimer) {
+      clearInterval(this.deliberationTimer);
+      this.deliberationTimer = null;
+    }
   }
 
   private logIteration(
