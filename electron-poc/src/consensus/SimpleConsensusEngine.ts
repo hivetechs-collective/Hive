@@ -396,17 +396,17 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       if (this.consensusType === 'unanimous') {
         // Unanimous consensus - curator just polishes the agreed response
         console.log('✅ UNANIMOUS CONSENSUS - Curator will polish the agreed response');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish', contextFramework);
         finalResponse = curatorResult.content;
       } else if (this.consensusType === 'majority') {
         // Majority consensus - curator polishes the majority-agreed response
         console.log('🤝 MAJORITY CONSENSUS - Curator will polish the majority response');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish', contextFramework);
         finalResponse = curatorResult.content;
       } else if (this.consensusType === 'curator_override') {
         // No consensus - curator must choose from all 3 responses
         console.log('👨‍⚖️ NO CONSENSUS - Curator will review all 3 responses and choose the best');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'choose');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'choose', contextFramework);
         finalResponse = curatorResult.content;
       } else {
         // Fallback (shouldn't happen)
@@ -1107,7 +1107,7 @@ ${currentResponse}`;
   }
 
 
-  private async curateConsensusResponse(apiKey: string, profile: any, mode: 'polish' | 'choose'): Promise<any> {
+  private async curateConsensusResponse(apiKey: string, profile: any, mode: 'polish' | 'choose', contextFramework?: any): Promise<any> {
     console.log(`🎨 CURATOR CALLED - Mode: ${mode}`);
     this.sendStageUpdate('curator', 'running');
     
@@ -1117,7 +1117,7 @@ ${currentResponse}`;
       // Polish mode - consensus was reached, just polish the agreed response
       const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
       
-      curatorPrompt = `${this.conversation!.user_question}
+      curatorPrompt = `${contextFramework && contextFramework.summary ? `Context from previous conversations:\n${contextFramework.summary}\n\n` : ''}Current question: ${this.conversation!.user_question}
 
 Content to polish and improve:
 
@@ -1131,7 +1131,7 @@ Provide an enhanced version of the above content. Improve clarity, formatting, a
       const refinerResponse = round3Messages.find(m => m.speaker === 'refiner')?.content || 'No response';
       const validatorResponse = round3Messages.find(m => m.speaker === 'validator')?.content || 'No response';
       
-      curatorPrompt = `${this.conversation!.user_question}
+      curatorPrompt = `${contextFramework && contextFramework.summary ? `Context from previous conversations:\n${contextFramework.summary}\n\n` : ''}Current question: ${this.conversation!.user_question}
 
 Reference materials from AI analysis:
 
