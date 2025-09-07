@@ -3992,6 +3992,25 @@ User Configuration (v1.8.207+):
 - **Always Produces Output**: No more endless deliberation
 - **Transparent to Users**: Shows consensus type achieved
 
+#### Enhanced User Experience (v1.8.211+)
+
+**Real-Time Deliberation Feedback**:
+- **"AI's Conversing" Status**: Shows during deliberation rounds with live elapsed timer
+- **Timer Display**: "AI's Conversing 0:00" → "AI's Conversing 1:23" (updates every second)
+- **Visual Confirmation**: Users see system is active during long processing times
+- **Progress Indication**: Prevents confusion about system being frozen
+
+**Consensus Type Indicators** (Color-Coded):
+- 🔵 **"AI's Conversing"** - Active deliberation in progress (Blue)
+- ✅ **"Unanimous"** - All 3 models agreed (Green) 
+- 🟡 **"Majority"** - 2/3 models agreed (Yellow/Amber)
+- 🟠 **"Curator Decision"** - No consensus, curator chose (Orange)
+
+**Version Information**:
+- **Help → About Dialog**: Shows current build version dynamically
+- **Auto-Updates**: Version pulled from package.json, no manual updates needed
+- **Build Integration**: Version increments automatically with each production build
+
 #### Core Architecture - Iterative Consensus with Unified Evaluation
 
 **Key Innovation**: All models (except Generator Round 1) use the SAME evaluation prompt, preventing endless rewrites.
@@ -4076,19 +4095,27 @@ All stages now use the SAME consensus evaluation prompt:
 - Consensus check repeats until agreement
 ```
 
-#### Final Stage: Curator (Dual-Mode Operation)
+#### Final Stage: Curator (Dual-Mode Operation with Context Parity - v1.8.211+)
 ```
 Curator Stage - Mode depends on consensus type:
 
 1. Polish Mode (unanimous/majority consensus):
-   ├── Input: Final agreed response from consensus
-   ├── Prompt: Polish and format for user presentation
-   └── Output: Markdown-formatted final answer
+   ├── Input: Final agreed response from consensus (no additional context needed)
+   ├── Prompt: Enhanced direct response format without meta-commentary
+   ├── Task: Polish agreed content for presentation
+   └── Output: Clean, polished final answer
 
 2. Choose Mode (no consensus - curator_override):
-   ├── Input: All 3 final responses from Generator, Refiner, Validator
-   ├── Prompt: Review all 3, choose best or synthesize optimal answer
-   └── Output: Curator's selected/synthesized response
+   ├── Input: Full contextFramework + Original question + All 3 LLM responses
+   ├── Prompt: Direct question format with reference materials (no role-playing)
+   ├── Task: Act as 4th LLM with same context as others to make final decision
+   └── Output: Synthesized response with proper domain understanding
+
+Enhanced Curator Design (v1.8.211+):
+- **Context Parity**: Choose mode gets same contextFramework as Generator/Refiner/Validator
+- **Clean Prompts**: Eliminated all meta-commentary and thinking process exposure
+- **Direct Response**: Curator responds as if answering original question directly
+- **Domain Understanding**: Proper context prevents misinterpretation (e.g., "angular" = JavaScript framework)
 ```
 
 ### Key Lessons Learned (Production Verified)
