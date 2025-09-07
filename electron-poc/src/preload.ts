@@ -173,7 +173,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onMenuResetState: (callback: () => void) => {
     ipcRenderer.on('menu-reset-state', callback);
-  }
+  },
+  onMenuAbout: (callback: () => void) => {
+    ipcRenderer.on('menu-about', callback);
+  },
+  getVersion: () => ipcRenderer.invoke('get-app-version')
 });
 
 // Git API

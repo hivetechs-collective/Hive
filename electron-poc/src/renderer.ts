@@ -5615,6 +5615,13 @@ window.cloneRepository = async () => {
         window.closeFolder();
     });
     
+    // About dialog
+    window.electronAPI.onMenuAbout(async () => {
+        console.log('[Menu] About dialog requested');
+        const version = await window.electronAPI.getVersion();
+        alert(`Hive Consensus\nVersion: ${version}\n\n🐝 Advanced AI-powered development environment\nwith 4-Stage Consensus Processing\n\nCopyright © 2025 HiveTechs`);
+    });
+    
     console.log('[Menu] Event handlers registered');
 })();
 

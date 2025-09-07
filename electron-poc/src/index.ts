@@ -1646,6 +1646,12 @@ ipcMain.handle('get-service-port', async (_, serviceName: string) => {
   return processInfo?.port || null;
 });
 
+// IPC handler to get app version for About dialog
+ipcMain.handle('get-app-version', async () => {
+  const packageJson = require('../package.json');
+  return packageJson.version;
+});
+
 // IPC handler to get WebSocket backend port specifically
 ipcMain.handle('get-websocket-port', async () => {
   const processInfo = processManager.getProcessStatus('websocket-backend');
