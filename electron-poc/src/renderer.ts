@@ -1601,13 +1601,14 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               break;
             case 'conversing':
               const funPhrase = data.funPhrase || "ai's chatting";
-              const animatedIcon = data.animatedIcon || "●";
-              displayText = `${animatedIcon} ${funPhrase}`;
+              const animatedIcon = data.animatedIcon || "+";
+              displayText = `${animatedIcon} ${funPhrase}...`;
               color = '#FF9500'; // Orange like Claude Code CLI
-              // Add breathing animation and pulsing effect
-              consensusTypeElement.style.animation = 'breathe 1.5s ease-in-out infinite, glow 2s ease-in-out infinite';
+              // Add breathing animation and varying sizes like Claude Code CLI
+              const randomSize = 12 + Math.random() * 4; // 12px to 16px
+              consensusTypeElement.style.animation = 'breathe 0.8s ease-in-out infinite, glow 1.2s ease-in-out infinite';
               consensusTypeElement.style.fontWeight = 'bold';
-              consensusTypeElement.style.fontSize = '14px';
+              consensusTypeElement.style.fontSize = `${randomSize}px`;
               break;
             default:
               displayText = '';

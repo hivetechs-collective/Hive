@@ -39,7 +39,7 @@ export class SimpleConsensusEngine {
   private deliberationStartTime: number = 0;
   private deliberationTimer: NodeJS.Timeout | null = null;
   private animatedIcons: string[] = [
-    "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
+    "+", "×", "*", "✱", "✲", "✳"
   ];
   private currentIconIndex: number = 0;
   private conversationPhrases: string[] = [
