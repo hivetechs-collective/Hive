@@ -604,6 +604,7 @@ document.body.innerHTML = `
           <img src="${hiveLogo}" alt="Hive" 
                style="width: 20px; height: 20px; object-fit: contain; border-radius: 3px;" />
           <span>Consensus Progress</span>
+          <span id="consensus-type" style="margin-left: 10px; color: var(--accent-color); font-weight: 600;"></span>
         </div>
         <div class="progress-content" id="progress-content">
           <div class="profile-display" id="active-profile-display">
@@ -1480,6 +1481,47 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
       
       // Clean up any existing listeners
       consensusAPI.removeAllListeners();
+      
+      // Consensus status handler (for tracking consensus type)
+      consensusAPI.onConsensusStatus((data: any) => {
+        console.log('📊 Consensus Status:', data);
+        
+        // Update consensus type display with color coding
+        const consensusTypeElement = document.getElementById('consensus-type');
+        if (consensusTypeElement && data.consensusType) {
+          let displayText = '';
+          let color = '';
+          
+          switch(data.consensusType) {
+            case 'unanimous':
+              displayText = 'Unanimous';
+              color = '#4CAF50'; // Green
+              break;
+            case 'majority':
+              displayText = 'Majority';
+              color = '#FFC107'; // Amber/Yellow
+              break;
+            case 'curator_override':
+              displayText = 'Curator Decision';
+              color = '#FF9800'; // Orange
+              break;
+            default:
+              displayText = '';
+              color = 'var(--accent-color)';
+          }
+          
+          consensusTypeElement.textContent = displayText;
+          consensusTypeElement.style.color = color;
+        }
+        
+        // Clear on reset/new query
+        if (data.reset) {
+          const consensusTypeElement = document.getElementById('consensus-type');
+          if (consensusTypeElement) {
+            consensusTypeElement.textContent = '';
+          }
+        }
+      });
       
       // SIMPLE visual update handler - one function to handle all updates
       consensusAPI.onVisualUpdate((data: any) => {
@@ -2426,6 +2468,12 @@ function resetStageStatus() {
     console.log(`🔍 Cleared interval for stage: ${stage}`);
   });
   progressIntervals.clear();
+  
+  // Clear consensus type display
+  const consensusTypeElement = document.getElementById('consensus-type');
+  if (consensusTypeElement) {
+    consensusTypeElement.textContent = '';
+  }
   
   // Reset ALL stages to proper initial state
   // All stages should start as 'ready' when a new consensus begins
