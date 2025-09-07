@@ -14655,6 +14655,62 @@ GROUP BY cp.max_consensus_rounds
 ORDER BY cp.max_consensus_rounds;
 ```
 
+#### 12c. Recent Consensus Session Analysis (Working Query)
+```sql
+-- Analyze most recent consensus sessions with round-by-round breakdown
+-- Usage: Shows complete consensus journey without needing conversation IDs
+
+-- Step 1: Get recent consensus sessions overview
+SELECT 
+    consensus_id,
+    COUNT(*) as total_iterations,
+    MAX(round_number) as rounds_completed,
+    GROUP_CONCAT(DISTINCT stage_name) as stages_used,
+    SUM(tokens_used) as total_tokens,
+    datetime(MAX(datetime), 'localtime') as completed_at
+FROM consensus_iterations 
+GROUP BY consensus_id 
+ORDER BY MAX(datetime) DESC 
+LIMIT 10;
+
+-- Step 2: Detailed round-by-round analysis for specific session
+-- Replace 'consensus_1757270905236_cl5rqa7zr' with actual consensus_id from Step 1
+SELECT 
+    round_number,
+    stage_name,
+    model_id,
+    tokens_used,
+    CASE flag WHEN 1 THEN 'Voted NO' ELSE 'Agreed' END as consensus_vote
+FROM consensus_iterations 
+WHERE consensus_id = 'consensus_1757270905236_cl5rqa7zr'
+ORDER BY id;
+
+-- Step 3: Consensus outcome interpretation
+-- Shows what type of consensus was achieved based on voting patterns
+WITH consensus_summary AS (
+    SELECT 
+        consensus_id,
+        round_number,
+        SUM(CASE WHEN stage_name LIKE 'consensus_check_%' AND flag = 0 THEN 1 ELSE 0 END) as votes_yes,
+        SUM(CASE WHEN stage_name LIKE 'consensus_check_%' AND flag = 1 THEN 1 ELSE 0 END) as votes_no,
+        MAX(CASE WHEN stage_name = 'curator' THEN 1 ELSE 0 END) as has_curator
+    FROM consensus_iterations
+    WHERE consensus_id = 'consensus_1757270905236_cl5rqa7zr'
+    GROUP BY consensus_id, round_number
+)
+SELECT 
+    round_number,
+    votes_yes || ' agreed, ' || votes_no || ' disagreed' as vote_breakdown,
+    CASE 
+        WHEN votes_yes = 3 THEN '✅ Unanimous (all agreed)'
+        WHEN votes_yes = 2 THEN '🟡 Majority (2/3 agreed)'  
+        WHEN votes_yes <= 1 AND has_curator = 1 THEN '🟠 Curator Override (no consensus)'
+        ELSE 'Continue to next round'
+    END as consensus_result
+FROM consensus_summary
+ORDER BY round_number;
+```
+
 ### 🔧 Debugging & Troubleshooting Queries
 
 #### 13. Find Failed Consensus Attempts
