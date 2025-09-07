@@ -1015,17 +1015,19 @@ ${currentResponse}`;
       this.conversation!.rounds_completed
     );
     
-    // Count how many models accept the response (NO = accept, cannot be improved)
-    const acceptCount = opinions.filter(opinion => opinion === 'NO').length;
+    // Count how many models accept the response (YES = accept, response is satisfactory)
+    const acceptCount = opinions.filter(opinion => opinion === 'YES').length;
     
     // Hybrid consensus approach based on round number
-    if (this.conversation!.rounds_completed <= 2) {
-      // Rounds 1-2: Require unanimous consensus
-      this.conversation!.consensus_achieved = opinions.every(opinion => opinion === 'NO');
+    if (this.conversation!.rounds_completed < this.maxConsensusRounds) {
+      // Rounds 1 to (maxRounds-1): Require unanimous consensus (all models agree response is good)
+      this.conversation!.consensus_achieved = opinions.every(opinion => opinion === 'YES');
       
       if (this.conversation!.consensus_achieved) {
-        console.log('✅ Unanimous consensus achieved');
+        console.log('✅ Unanimous consensus achieved - all models agree response is satisfactory');
         this.consensusType = 'unanimous';
+      } else {
+        console.log(`⏭️ No unanimous consensus in round ${this.conversation!.rounds_completed} - continuing to next round`);
       }
     } else if (this.conversation!.rounds_completed === this.maxConsensusRounds) {
       // Final round: Accept majority vote or use curator judgment
