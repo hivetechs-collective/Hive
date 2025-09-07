@@ -14334,3 +14334,331 @@ for (const message of conversation.messages) {
 - Prepare for production release
 
 This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in the current MASTER_ARCHITECTURE.md while preserving all functionality and dramatically improving the user experience.
+
+---
+
+## 📊 SQL Query Reference Library
+
+### Database Location
+**Primary Database**: `~/.hive/hive-ai.db`  
+**Description**: Unified SQLite database containing all application data, consensus history, memory, and analytics.
+
+### 🔍 Consensus Analysis Queries
+
+#### 1. Trace Complete Consensus Flow for a Query
+```sql
+-- Get full consensus journey for a specific query
+SELECT 
+    c.id as conversation_id,
+    c.title as query,
+    c.created_at,
+    c.total_tokens_input + c.total_tokens_output as total_tokens,
+    c.total_cost,
+    ci.stage_name,
+    ci.model_id,
+    ci.round_number,
+    ci.tokens_used,
+    ci.flag as rejected_improvement,
+    m.content as response_content,
+    m.consensus_rounds
+FROM conversations c
+LEFT JOIN consensus_iterations ci ON c.id = ci.consensus_id
+LEFT JOIN messages m ON c.id = m.conversation_id
+WHERE c.title LIKE '%PowerShell%'  -- Replace with your query
+ORDER BY c.created_at DESC, ci.round_number, ci.id;
+```
+
+#### 2. Analyze Consensus Round Performance
+```sql
+-- See how many rounds were needed to reach consensus
+SELECT 
+    c.id,
+    c.title,
+    COUNT(DISTINCT ci.round_number) as rounds_used,
+    MAX(ci.round_number) as max_round,
+    SUM(ci.tokens_used) as total_tokens,
+    GROUP_CONCAT(DISTINCT ci.stage_name) as stages_involved
+FROM conversations c
+JOIN consensus_iterations ci ON c.id = ci.consensus_id
+GROUP BY c.id
+ORDER BY rounds_used DESC;
+```
+
+#### 3. Memory Context Retrieval Analysis
+```sql
+-- Analyze memory retrieval for each query
+SELECT 
+    mcl.conversation_id,
+    mcl.timestamp,
+    mcl.memory_search_query,
+    mcl.memories_retrieved_recent,
+    mcl.memories_retrieved_today,
+    mcl.memories_retrieved_week,
+    mcl.memories_retrieved_semantic,
+    mcl.memory_stage_duration_ms,
+    mcl.context_stage_duration_ms,
+    mcl.patterns_identified,
+    mcl.topics_extracted,
+    mcl.routing_decision,
+    mcl.routing_confidence,
+    c.title as original_query
+FROM memory_context_logs mcl
+JOIN conversations c ON mcl.conversation_id = c.id
+WHERE c.created_at >= date('now', '-7 days')
+ORDER BY mcl.timestamp DESC;
+```
+
+#### 4. Route Analysis (Simple vs Complex)
+```sql
+-- See which queries took which routes
+SELECT 
+    mcl.routing_decision,
+    COUNT(*) as query_count,
+    AVG(mcl.memory_stage_duration_ms + mcl.context_stage_duration_ms) as avg_duration_ms,
+    AVG(c.total_cost) as avg_cost,
+    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens
+FROM memory_context_logs mcl
+JOIN conversations c ON mcl.conversation_id = c.id
+GROUP BY mcl.route_taken;
+```
+
+### 📈 Performance & Cost Analytics
+
+#### 5. Daily Usage Statistics
+```sql
+-- Complete daily statistics
+SELECT 
+    date(c.created_at) as query_date,
+    COUNT(DISTINCT c.id) as total_queries,
+    COUNT(DISTINCT cu.conversation_id) as tracked_conversations,
+    SUM(c.total_cost) as daily_cost,
+    SUM(c.total_tokens_input + c.total_tokens_output) as daily_tokens,
+    AVG(c.total_cost) as avg_cost_per_query,
+    COUNT(DISTINCT m.id) as memories_created
+FROM conversations c
+LEFT JOIN conversation_usage cu ON c.id = cu.conversation_id
+LEFT JOIN messages m ON c.id = m.conversation_id
+WHERE c.created_at >= date('now', '-30 days')
+GROUP BY date(c.created_at)
+ORDER BY query_date DESC;
+```
+
+#### 6. Model Performance Comparison
+```sql
+-- Compare performance across different models
+SELECT 
+    ci.model_id,
+    ci.stage_name,
+    COUNT(*) as usage_count,
+    AVG(ci.tokens_used) as avg_tokens,
+    SUM(ci.tokens_used) as total_tokens,
+    AVG(CASE WHEN ci.flag = 1 THEN 1 ELSE 0 END) as rejection_rate
+FROM consensus_iterations ci
+GROUP BY ci.model_id, ci.stage_name
+ORDER BY usage_count DESC;
+```
+
+#### 7. Profile Effectiveness Analysis
+```sql
+-- Analyze which profiles work best
+SELECT 
+    cp.profile_name,
+    COUNT(c.id) as queries_processed,
+    AVG(c.total_cost) as avg_cost,
+    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens,
+    AVG(c.performance_score) as avg_performance,
+    AVG(c.quality_rating) as avg_quality,
+    cp.generator_model,
+    cp.refiner_model,
+    cp.validator_model,
+    cp.curator_model,
+    cp.max_consensus_rounds
+FROM consensus_profiles cp
+LEFT JOIN conversations c ON c.profile_id = cp.id
+GROUP BY cp.id
+ORDER BY queries_processed DESC;
+```
+
+### 🧠 Memory & Context Queries
+
+#### 8. Memory Contribution Tracking
+```sql
+-- Track memory contributions over time
+SELECT 
+    date(m.timestamp) as contribution_date,
+    COUNT(*) as memories_added,
+    COUNT(DISTINCT m.conversation_id) as unique_conversations,
+    AVG(m.tokens_used) as avg_tokens_per_memory,
+    SUM(m.cost) as total_memory_cost
+FROM messages m
+WHERE m.role = 'assistant'
+GROUP BY date(m.timestamp)
+ORDER BY contribution_date DESC;
+```
+
+#### 9. Semantic Search Effectiveness
+```sql
+-- Analyze semantic search performance
+SELECT 
+    mcl.memory_search_query,
+    mcl.memories_retrieved_semantic,
+    mcl.memory_relevance_scores,
+    c.title as actual_query,
+    c.total_cost,
+    c.quality_rating
+FROM memory_context_logs mcl
+JOIN conversations c ON mcl.conversation_id = c.id
+WHERE mcl.memories_retrieved_semantic > 0
+ORDER BY mcl.timestamp DESC
+LIMIT 100;
+```
+
+#### 10. Context Pattern Detection
+```sql
+-- Find common patterns and topics
+SELECT 
+    patterns_identified,
+    COUNT(*) as occurrence_count,
+    AVG(c.total_cost) as avg_cost_with_pattern,
+    AVG(c.quality_rating) as avg_quality_with_pattern
+FROM memory_context_logs mcl
+JOIN conversations c ON mcl.conversation_id = c.id
+WHERE patterns_identified IS NOT NULL
+GROUP BY patterns_identified
+ORDER BY occurrence_count DESC;
+```
+
+### 🎯 Consensus Quality Metrics
+
+#### 11. Consensus vs Single Model Comparison
+```sql
+-- Compare consensus quality to baseline
+SELECT 
+    cm.question_complexity,
+    cm.question_category,
+    AVG(cm.improvement_score) as avg_improvement,
+    COUNT(*) as sample_size,
+    AVG(cm.user_rating) as avg_user_rating,
+    AVG(json_extract(cm.cost_comparison, '$.consensus_cost') / 
+        json_extract(cm.cost_comparison, '$.baseline_cost')) as cost_ratio
+FROM consensus_metrics cm
+GROUP BY cm.question_complexity, cm.question_category
+ORDER BY avg_improvement DESC;
+```
+
+#### 12. Curator Decision Analysis
+```sql
+-- Analyze curator override patterns
+SELECT 
+    m.consensus_path,
+    COUNT(*) as decision_count,
+    AVG(c.total_cost) as avg_cost,
+    AVG(c.quality_rating) as avg_quality
+FROM messages m
+JOIN conversations c ON m.conversation_id = c.id
+WHERE m.consensus_path IN ('unanimous', 'majority', 'curator_override')
+GROUP BY m.consensus_path;
+```
+
+### 🔧 Debugging & Troubleshooting Queries
+
+#### 13. Find Failed Consensus Attempts
+```sql
+-- Identify problematic queries
+SELECT 
+    c.id,
+    c.title,
+    c.created_at,
+    COUNT(ci.id) as iteration_count,
+    MAX(ci.round_number) as max_rounds_attempted,
+    c.total_cost,
+    c.metadata
+FROM conversations c
+LEFT JOIN consensus_iterations ci ON c.id = ci.consensus_id
+WHERE c.total_cost > 0.5  -- High cost threshold
+   OR ci.round_number >= 3  -- Hit max rounds
+GROUP BY c.id
+ORDER BY c.total_cost DESC;
+```
+
+#### 14. Token Usage Analysis
+```sql
+-- Detailed token usage breakdown
+SELECT 
+    date(c.created_at) as query_date,
+    SUM(c.total_tokens_input) as input_tokens,
+    SUM(c.total_tokens_output) as output_tokens,
+    SUM(c.total_tokens_input + c.total_tokens_output) as total_tokens,
+    COUNT(*) as query_count,
+    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens_per_query
+FROM conversations c
+WHERE c.created_at >= date('now', '-7 days')
+GROUP BY date(c.created_at)
+ORDER BY query_date DESC;
+```
+
+#### 15. Real-time Monitoring Query
+```sql
+-- Monitor current day activity
+SELECT 
+    strftime('%H:00', c.created_at) as hour,
+    COUNT(*) as queries_this_hour,
+    SUM(c.total_cost) as hourly_cost,
+    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens,
+    MAX(c.title) as last_query
+FROM conversations c
+WHERE date(c.created_at) = date('now')
+GROUP BY strftime('%H', c.created_at)
+ORDER BY hour DESC;
+```
+
+### 🚀 Quick Test Queries
+
+#### Basic Health Checks
+```sql
+-- Total memories
+SELECT COUNT(*) as total_memories FROM messages;
+
+-- Messages added today
+SELECT COUNT(*) as messages_today FROM messages 
+WHERE date(timestamp) = date('now');
+
+-- Actual queries today
+SELECT COUNT(*) as queries_today FROM conversation_usage 
+WHERE date(timestamp, 'localtime') = date('now', 'localtime');
+
+-- Current database size
+SELECT page_count * page_size / 1024.0 / 1024.0 as size_mb 
+FROM pragma_page_count(), pragma_page_size();
+
+-- Active profiles
+SELECT profile_name, max_consensus_rounds 
+FROM consensus_profiles 
+ORDER BY profile_name;
+```
+
+### 📝 Usage Examples
+
+```bash
+# Run any query from command line
+sqlite3 ~/.hive/hive-ai.db "SELECT COUNT(*) FROM messages;"
+
+# Export results to CSV
+sqlite3 -header -csv ~/.hive/hive-ai.db "SELECT * FROM conversations WHERE date(created_at) = date('now');" > today_queries.csv
+
+# Interactive mode for exploration
+sqlite3 ~/.hive/hive-ai.db
+```
+
+### 🔑 Key Tables Reference
+
+- **conversations**: Main conversation records with cost and tokens
+- **consensus_iterations**: Individual consensus round details
+- **messages**: All messages including responses
+- **memory_context_logs**: Memory retrieval and context creation logs
+- **conversation_usage**: Usage tracking for analytics
+- **consensus_profiles**: Configuration profiles with max_consensus_rounds
+- **stage_outputs**: Per-stage output tracking
+- **consensus_metrics**: Quality comparison metrics
+
+This query library enables deep analysis of the consensus system, from tracing individual queries through their complete journey to analyzing system-wide patterns and performance metrics.
