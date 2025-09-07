@@ -34,7 +34,7 @@ export class SimpleConsensusEngine {
   private optimizedMemory: OptimizedMemoryService;
   private conversationId: string | null = null;
   private userMessageId: string | null = null;
-  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' = 'pending';
+  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' | 'routing' = 'pending';
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
   private deliberationStartTime: number = 0;
   private deliberationTimer: NodeJS.Timeout | null = null;
@@ -43,44 +43,83 @@ export class SimpleConsensusEngine {
   ];
   private currentIconIndex: number = 0;
   private conversationPhrases: string[] = [
-    "ai's rapping",
-    "bots are chatting", 
-    "minds are melding",
-    "silicon syncing",
-    "neural networking",
-    "code conferencing",
-    "digital debating",
-    "algorithms arguing",
-    "models mingling",
-    "circuits discussing",
-    "logic linking",
-    "brains brainstorming",
-    "neurons firing",
-    "data dancing",
-    "tokens talking",
-    "bits buzzing",
-    "chips chatting",
-    "servers syncing",
-    "cores computing",
-    "bytes bouncing",
-    "nodes networking",
-    "threads thinking",
-    "processes pondering",
-    "systems syncing",
-    "engines evolving",
-    "machines musing",
-    "robots reasoning",
-    "ai's analyzing",
-    "llms laughing",
-    "models meditating",
-    "agents agreeing",
-    "bots building",
-    "code collaborating",
-    "tech talking",
-    "digital discussing",
-    "cyber syncing"
+    "rapping",
+    "chatting", 
+    "melding",
+    "syncing",
+    "networking",
+    "conferencing",
+    "debating",
+    "arguing",
+    "mingling",
+    "discussing",
+    "linking",
+    "brainstorming",
+    "firing",
+    "dancing",
+    "talking",
+    "buzzing",
+    "computing",
+    "bouncing",
+    "thinking",
+    "pondering",
+    "evolving",
+    "musing",
+    "reasoning",
+    "analyzing",
+    "laughing",
+    "meditating",
+    "agreeing",
+    "building",
+    "collaborating",
+    "lollygagging",
+    "deliberating",
+    "contemplating",
+    "processing",
+    "calculating",
+    "optimizing",
+    "synthesizing"
+  ];
+  private routingPhrases: string[] = [
+    "routing",
+    "directing", 
+    "navigating",
+    "channeling",
+    "steering",
+    "guiding",
+    "pathfinding",
+    "mapping",
+    "plotting",
+    "charting",
+    "coursing",
+    "tracking",
+    "tracing",
+    "dispatching",
+    "forwarding",
+    "switching",
+    "branching",
+    "deciding",
+    "choosing",
+    "selecting",
+    "picking",
+    "sorting",
+    "classifying",
+    "categorizing",
+    "evaluating",
+    "assessing",
+    "weighing",
+    "measuring",
+    "gauging",
+    "determining",
+    "analyzing",
+    "processing",
+    "examining",
+    "studying",
+    "considering",
+    "pondering"
   ];
   private currentPhraseIndex: number = 0;
+  private routingTimer: NodeJS.Timeout | null = null;
 
   constructor(database: any) {
     this.db = database;
@@ -282,6 +321,9 @@ export class SimpleConsensusEngine {
       this.sendStageUpdate('route', 'running');
       this.sendProgressUpdate(request.requestId, 'Analyzing question complexity...', 0.05);
       
+      // Start routing animation for long routing delays
+      this.startRoutingTimer();
+      
       const routingPrompt = `Analyze this question and determine if it requires simple or complex reasoning.
 
 ${contextFramework.summary ? `Context from past conversations:\n${contextFramework.summary}\n` : ''}
@@ -310,6 +352,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       // Update the context log with routing decision
       await this.updateContextLogRouting(contextLogId, routingDecision);
       
+      // Stop routing animation when route completes
+      this.stopRoutingTimer();
       this.sendStageUpdate('route', 'completed');
       
       // Add routing cost to conversation
@@ -1276,12 +1320,16 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private startDeliberationTimer() {
-    // Update phrases and icons rapidly like Claude Code CLI
+    // Rapidly cycle symbols and occasionally change phrases like Claude Code CLI
     this.deliberationTimer = setInterval(() => {
       if (this.consensusType === 'conversing') {
-        // Change both phrase and icon rapidly
-        this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
-        this.currentIconIndex = Math.floor(Math.random() * this.animatedIcons.length);
+        // Cycle symbol rapidly every update (super fast like Claude Code CLI)
+        this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
+        
+        // Change phrase less frequently (every 2-3 seconds)
+        if (Math.random() < 0.1) { // 10% chance = change phrase roughly every 1-2 seconds
+          this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
+        }
         
         const funPhrase = this.conversationPhrases[this.currentPhraseIndex];
         const animatedIcon = this.animatedIcons[this.currentIconIndex];
@@ -1294,13 +1342,43 @@ Provide a comprehensive response that synthesizes the best elements from the ref
           animatedIcon: animatedIcon
         });
       }
-    }, 150); // Update every 150ms for fast Claude Code CLI effect
+    }, 50); // Update every 50ms for super fast symbol cycling
   }
 
   private stopDeliberationTimer() {
     if (this.deliberationTimer) {
       clearInterval(this.deliberationTimer);
       this.deliberationTimer = null;
+    }
+  }
+
+  private startRoutingTimer() {
+    // Show routing animation during route decision delays
+    this.routingTimer = setInterval(() => {
+      // Cycle symbol rapidly every update
+      this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
+      
+      // Change routing phrase occasionally
+      if (Math.random() < 0.15) { // 15% chance = change phrase roughly every 1 second
+        this.currentPhraseIndex = Math.floor(Math.random() * this.routingPhrases.length);
+      }
+      
+      const routingPhrase = this.routingPhrases[this.currentPhraseIndex];
+      const animatedIcon = this.animatedIcons[this.currentIconIndex];
+      
+      this.sendConsensusStatus({
+        achieved: false,
+        consensusType: 'routing',
+        funPhrase: routingPhrase,
+        animatedIcon: animatedIcon
+      });
+    }, 50); // Update every 50ms for super fast symbol cycling
+  }
+
+  private stopRoutingTimer() {
+    if (this.routingTimer) {
+      clearInterval(this.routingTimer);
+      this.routingTimer = null;
     }
   }
 
