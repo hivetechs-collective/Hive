@@ -385,16 +385,28 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         console.log('📝 Using last validator response as final (no Curator)');
       }
 
-      // CURATOR - Final polish ONLY after consensus achieved
+      // CURATOR - Always runs, but with different roles based on consensus type
       let finalResponse: string;
-      if (this.conversation.consensus_achieved) {
-        console.log('\n✅ CONSENSUS ACHIEVED - Running Curator for final polish');
-        console.log('🎯 Stage 4: Curator (Final Polish)');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile);
+      console.log('\n🎯 Stage 4: Curator');
+      
+      if (this.consensusType === 'unanimous') {
+        // Unanimous consensus - curator just polishes the agreed response
+        console.log('✅ UNANIMOUS CONSENSUS - Curator will polish the agreed response');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish');
+        finalResponse = curatorResult.content;
+      } else if (this.consensusType === 'majority') {
+        // Majority consensus - curator polishes the majority-agreed response
+        console.log('🤝 MAJORITY CONSENSUS - Curator will polish the majority response');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish');
+        finalResponse = curatorResult.content;
+      } else if (this.consensusType === 'curator_override') {
+        // No consensus - curator must choose from all 3 responses
+        console.log('👨‍⚖️ NO CONSENSUS - Curator will review all 3 responses and choose the best');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'choose');
         finalResponse = curatorResult.content;
       } else {
-        // Use last validator response if no consensus
-        console.log('\n❌ NO CONSENSUS - Skipping Curator, using last response');
+        // Fallback (shouldn't happen)
+        console.log('⚠️ Unexpected consensus type - using last response');
         const lastMessage = this.conversation.messages[this.conversation.messages.length - 1];
         finalResponse = lastMessage.content;
       }
@@ -1081,14 +1093,17 @@ ${currentResponse}`;
   }
 
 
-  private async curateConsensusResponse(apiKey: string, profile: any): Promise<any> {
-    console.log('🎨 CURATOR CALLED - This should only happen after consensus!');
+  private async curateConsensusResponse(apiKey: string, profile: any, mode: 'polish' | 'choose'): Promise<any> {
+    console.log(`🎨 CURATOR CALLED - Mode: ${mode}`);
     this.sendStageUpdate('curator', 'running');
     
-    // Get the final validated response
-    const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
+    let curatorPrompt: string;
     
-    const curatorPrompt = `You are the CURATOR. After ${this.conversation!.rounds_completed} rounds of deliberation, the AI team has reached consensus.
+    if (mode === 'polish') {
+      // Polish mode - consensus was reached, just polish the agreed response
+      const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
+      
+      curatorPrompt = `You are the CURATOR. After ${this.conversation!.rounds_completed} rounds of deliberation, the AI team has reached ${this.consensusType === 'unanimous' ? 'unanimous' : 'majority'} consensus.
 
 Original Question: "${this.conversation!.user_question}"
 
@@ -1098,6 +1113,35 @@ ${finalMessage.content}
 Your role is to polish this for optimal user experience. Ensure professional, clear, and engaging presentation while preserving the content.
 
 Final Curated Response:`;
+    } else {
+      // Choose mode - no consensus reached, curator must choose from all 3 responses
+      const round3Messages = this.conversation!.messages.filter(m => m.round === 3);
+      const generatorResponse = round3Messages.find(m => m.speaker === 'generator')?.content || 'No response';
+      const refinerResponse = round3Messages.find(m => m.speaker === 'refiner')?.content || 'No response';
+      const validatorResponse = round3Messages.find(m => m.speaker === 'validator')?.content || 'No response';
+      
+      curatorPrompt = `You are the CURATOR. After ${this.conversation!.rounds_completed} rounds, the AI team could not reach consensus.
+
+Original Question: "${this.conversation!.user_question}"
+
+You must review all 3 final responses and choose the BEST one, or synthesize them into an optimal answer:
+
+GENERATOR'S RESPONSE:
+${generatorResponse}
+
+REFINER'S RESPONSE:
+${refinerResponse}
+
+VALIDATOR'S RESPONSE:
+${validatorResponse}
+
+As the final arbiter, provide the best possible answer to the user's question. You may:
+1. Choose the best response as-is
+2. Combine the best parts of multiple responses
+3. Create a synthesized response that addresses the question optimally
+
+Final Curated Response:`;
+    }
     
     const curatorResult = await this.callOpenRouter(apiKey, profile.curator_model, curatorPrompt);
     this.conversation!.total_tokens += curatorResult.usage.total_tokens;
