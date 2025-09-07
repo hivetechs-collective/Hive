@@ -1107,18 +1107,15 @@ ${currentResponse}`;
       // Polish mode - consensus was reached, just polish the agreed response
       const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
       
-      curatorPrompt = `You are the CURATOR. After ${this.conversation!.rounds_completed} rounds of deliberation, the AI team has reached ${this.consensusType === 'unanimous' ? 'unanimous' : 'majority'} consensus.
+      curatorPrompt = `Question: "${this.conversation!.user_question}"
 
-Original Question: "${this.conversation!.user_question}"
+Here is the consensus response that needs final polishing:
 
-Final Agreed Response:
 ${finalMessage.content}
 
-Your role is to polish this for optimal user experience. Ensure professional, clear, and engaging presentation while preserving the content.
+Polish this response for optimal presentation while preserving all content and meaning. Ensure professional, clear, and engaging formatting.
 
-IMPORTANT: Provide ONLY the polished response. Do not include any meta-commentary, thinking process, or explanations about what you're doing. Start directly with the answer to the user's question.
-
-Response:`;
+Polished Answer:`;
     } else {
       // Choose mode - no consensus reached, curator must choose from all 3 responses
       const round3Messages = this.conversation!.messages.filter(m => m.round === 3);
@@ -1126,29 +1123,22 @@ Response:`;
       const refinerResponse = round3Messages.find(m => m.speaker === 'refiner')?.content || 'No response';
       const validatorResponse = round3Messages.find(m => m.speaker === 'validator')?.content || 'No response';
       
-      curatorPrompt = `You are the CURATOR. After ${this.conversation!.rounds_completed} rounds, the AI team could not reach consensus.
+      curatorPrompt = `Question: "${this.conversation!.user_question}"
 
-Original Question: "${this.conversation!.user_question}"
+You are answering this question using insights from multiple AI perspectives. Here are three different approaches to consider:
 
-You must review all 3 final responses and choose the BEST one, or synthesize them into an optimal answer:
-
-GENERATOR'S RESPONSE:
+APPROACH 1:
 ${generatorResponse}
 
-REFINER'S RESPONSE:
+APPROACH 2:
 ${refinerResponse}
 
-VALIDATOR'S RESPONSE:
+APPROACH 3:
 ${validatorResponse}
 
-As the final arbiter, provide the best possible answer to the user's question. You may:
-1. Choose the best response as-is
-2. Combine the best parts of multiple responses
-3. Create a synthesized response that addresses the question optimally
+Using these perspectives as reference, provide your comprehensive answer to the original question. Combine the best insights, correct any errors, and present a polished response that fully addresses what was asked.
 
-IMPORTANT: Provide ONLY the final answer. Do not include any meta-commentary about your decision process, which response you chose, or why. Do not say things like "I'm choosing..." or "The best response is...". Start directly with the answer to the user's question.
-
-Response:`;
+Answer:`;
     }
     
     const curatorResult = await this.callOpenRouter(apiKey, profile.curator_model, curatorPrompt);
