@@ -34,7 +34,7 @@ export class SimpleConsensusEngine {
   private optimizedMemory: OptimizedMemoryService;
   private conversationId: string | null = null;
   private userMessageId: string | null = null;
-  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' = 'pending';
+  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' = 'pending';
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
 
   constructor(database: any) {
@@ -357,6 +357,13 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < this.maxConsensusRounds) {
         this.conversation.rounds_completed++;
         console.log(`\n🔄 Starting Round ${this.conversation.rounds_completed}`);
+        
+        // Show "AI's Conversing" status during deliberation rounds
+        this.sendConsensusStatus({
+          achieved: false,
+          consensusType: 'conversing',
+          round: this.conversation.rounds_completed
+        });
         
         // Reset stages to 'ready' for new round (visual sync)
         if (this.conversation.rounds_completed > 1) {
