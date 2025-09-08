@@ -4074,8 +4074,30 @@ ESC Pressed → Immediate Actions:
 - **After ESC**: ALL stages show 'ready', chat cleared, tokens protected
 - **Error Handling**: Technical messages hidden, clean welcome message restored
 
+**Enhanced Typography & Readability (v1.8.239+)**:
+- **Claude Code CLI Inspired**: Consistent 'SF Mono', 'Monaco', 'Consolas' monospace fonts
+- **Improved Font Sizes**: Model names (9px → 11px), headers (12px → 14px), chat content (13px → 14px)
+- **Enhanced Contrast**: Brightened secondary text for optimal readability
+- **Better Spacing**: More generous padding, margins, and line-height throughout
+- **Professional Aesthetic**: Clean terminal typography matching Claude Code CLI standards
+
+**Typography Hierarchy**:
+```
+Primary Text:   #FFFFFF (Bright white - main content)
+Secondary Text: #CCCCCC (High contrast - readable labels) 
+Muted Text:     #D1D5DB (Medium grey - easily readable timestamps/info)
+Dim Text:       #9CA3AF (Light grey - secondary status indicators)
+```
+
+**Readability Improvements**:
+- **Progress Panel**: All stage information clearly visible without strain
+- **Chat Panel**: Message content and timestamps easily readable  
+- **Model Names**: No longer dim and hard to see
+- **Status Indicators**: Clear visibility for all consensus states
+- **Monospace Consistency**: Professional terminal feel throughout
+
 **Version Information**:
-- **Help → About Dialog**: Shows current build version dynamically (v1.8.227+)
+- **Help → About Dialog**: Shows current build version dynamically (v1.8.239+)
 - **Auto-Updates**: Version pulled from package.json, no manual updates needed
 - **Clean Description**: "Multi-Stage Consensus Processing" (not limiting to 4-stage)
 
