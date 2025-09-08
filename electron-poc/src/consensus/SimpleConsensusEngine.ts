@@ -527,9 +527,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
           conversationId: this.conversationId,
           role: 'assistant',
           content: message.content,
-          stage: message.speaker,
-          model_used: profile[`${message.speaker}_model`],
-          consensus_rounds: finalRound
+          model: profile[`${message.speaker}_model`],
+          consensusRounds: finalRound
         });
         console.log(`💾 Stored ${message.speaker} response for curator`);
       }
