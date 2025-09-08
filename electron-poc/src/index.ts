@@ -1655,8 +1655,15 @@ ipcMain.handle('get-app-version', async () => {
 // IPC handler to interrupt consensus
 ipcMain.handle('interrupt-consensus', async () => {
   console.log('🛑 Interrupt consensus requested');
-  // TODO: Implement consensus interruption
-  // For now, just reset the consensus display
+  
+  // Interrupt the active consensus engine if it exists
+  if (consensusEngine && typeof consensusEngine.interrupt === 'function') {
+    consensusEngine.interrupt();
+    console.log('✅ Consensus engine interrupted successfully');
+  } else {
+    console.log('⚠️ No active consensus engine to interrupt');
+  }
+  
   return true;
 });
 

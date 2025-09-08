@@ -132,6 +132,7 @@ export class SimpleConsensusEngine {
   private currentPhraseIndex: number = 0;
   private animationTimer: NodeJS.Timeout | null = null;
   private currentStage: 'routing' | 'generator' | 'refiner' | 'validator' | 'curator' | 'conversing' = 'routing';
+  private isInterrupted: boolean = false;
 
   constructor(database: any) {
     this.db = database;
@@ -458,9 +459,15 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       this.currentStage = 'conversing';
       
       // ITERATIVE DELIBERATION LOOP (max rounds from profile - let consensus happen naturally)
-      while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < this.maxConsensusRounds) {
+      while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < this.maxConsensusRounds && !this.isInterrupted) {
         this.conversation.rounds_completed++;
         console.log(`\n🔄 Starting Round ${this.conversation.rounds_completed}`);
+        
+        // Check for interruption at start of round
+        if (this.isInterrupted) {
+          console.log('🛑 Consensus interrupted during round start');
+          return { response: 'Consensus interrupted by user', consensusType: 'interrupted' };
+        }
         
         // Show "AI's Conversing" status with initial fun phrase
         this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
@@ -1399,6 +1406,25 @@ Provide a comprehensive response that synthesizes the best elements from the ref
       this.animationTimer = null;
       console.log('🛑 Unified animation timer stopped');
     }
+  }
+
+  public interrupt() {
+    console.log('🛑 Consensus interrupted by user');
+    this.isInterrupted = true;
+    this.stopUnifiedTimer();
+    
+    // Reset consensus display
+    this.sendConsensusStatus({
+      achieved: true,
+      consensusType: 'pending',
+      reset: true
+    });
+    
+    // Reset all stage displays
+    this.sendStageUpdate('generator', 'ready');
+    this.sendStageUpdate('refiner', 'ready');
+    this.sendStageUpdate('validator', 'ready');
+    this.sendStageUpdate('curator', 'ready');
   }
 
   private logIteration(
