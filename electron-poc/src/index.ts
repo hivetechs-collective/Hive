@@ -2543,17 +2543,46 @@ server.start();
                 try {
                   logger.info(`[Main] Strategy 4: Manual cleanup for ${toolId}`);
                   
-                  // Try to manually remove the corrupted directory
-                  const globalNodeModules = '/opt/homebrew/lib/node_modules';
-                  const packagePath = path.join(globalNodeModules, packageName.replace('/', path.sep));
+                  // Comprehensive manual cleanup based on Gemini CLI GitHub issues
+                  logger.info(`[Main] Performing comprehensive cleanup for ${toolId}`);
                   
-                  // Try to remove the directory manually
+                  const fs = require('fs').promises;
+                  const cleanupPaths = [
+                    // NPM package directory
+                    '/opt/homebrew/lib/node_modules/@google/gemini-cli',
+                    // NPM bin files  
+                    '/opt/homebrew/bin/gemini',
+                    // Alternative locations
+                    '/usr/local/lib/node_modules/@google/gemini-cli',
+                    '/usr/local/bin/gemini',
+                    // User npm directories
+                    path.join(os.homedir(), '.npm', '_npx'),
+                    // Any temp npm directories with gemini in name
+                  ];
+                  
+                  for (const cleanupPath of cleanupPaths) {
+                    try {
+                      await fs.rm(cleanupPath, { recursive: true, force: true });
+                      logger.info(`[Main] Removed: ${cleanupPath}`);
+                    } catch (removeError) {
+                      // Expected to fail for non-existent paths
+                      logger.debug(`[Main] Path doesn't exist: ${cleanupPath}`);
+                    }
+                  }
+                  
+                  // Also try to find and remove any temp directories with gemini-cli pattern
                   try {
-                    const fs = require('fs').promises;
-                    await fs.rm(packagePath, { recursive: true, force: true });
-                    logger.info(`[Main] Manually removed corrupted directory: ${packagePath}`);
-                  } catch (removeError) {
-                    logger.warn(`[Main] Manual removal failed (continuing anyway):`, removeError);
+                    const globalDir = '/opt/homebrew/lib/node_modules/@google';
+                    const files = await fs.readdir(globalDir);
+                    for (const file of files) {
+                      if (file.includes('gemini-cli') || file.includes('.gemini-cli-')) {
+                        const tempPath = path.join(globalDir, file);
+                        await fs.rm(tempPath, { recursive: true, force: true });
+                        logger.info(`[Main] Removed temp directory: ${tempPath}`);
+                      }
+                    }
+                  } catch (tempCleanupError) {
+                    logger.debug(`[Main] Temp cleanup had issues:`, tempCleanupError);
                   }
                   
                   // Wait longer for filesystem
