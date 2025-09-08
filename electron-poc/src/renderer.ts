@@ -1579,8 +1579,8 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
       consensusAPI.onConsensusStatus((data: any) => {
         console.log('📊 Consensus Status:', data);
         
-        // Add escape handler during routing and conversing states
-        if ((data.consensusType === 'routing' || data.consensusType === 'conversing') && !escapeHandler) {
+        // Add escape handler during routing, conversing, stage_running, and curating states
+        if ((data.consensusType === 'routing' || data.consensusType === 'conversing' || data.consensusType === 'stage_running' || data.consensusType === 'curating') && !escapeHandler) {
           escapeHandler = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
               console.log('🛑 ESC pressed - interrupting consensus');
@@ -1637,16 +1637,17 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
             case 'conversing':
             case 'routing':
             case 'stage_running':
+            case 'curating':
               const funPhrase = data.funPhrase || "processing";
               const animatedIcon = data.animatedIcon || "+";
               // Use fixed-width for symbol to prevent word bouncing
               const fixedSymbol = animatedIcon.padEnd(1, ' '); // Ensure consistent width
-              displayText = `${fixedSymbol} ${funPhrase}... (esc to interrupt)`;
+              displayText = `${fixedSymbol} ${funPhrase}...\n(esc to interrupt)`;
               color = '#FF9500'; // Orange like Claude Code CLI
               // Remove breathing, focus on fast symbol spinning
               consensusTypeElement.style.animation = '';
               consensusTypeElement.style.fontWeight = 'bold';
-              consensusTypeElement.style.fontSize = '14px';
+              consensusTypeElement.style.fontSize = '16px';
               consensusTypeElement.style.textShadow = '0 0 8px rgba(255, 149, 0, 0.8)';
               consensusTypeElement.style.fontFamily = 'monospace'; // Fixed-width font to prevent bouncing
               consensusTypeElement.style.whiteSpace = 'pre'; // Preserve spacing

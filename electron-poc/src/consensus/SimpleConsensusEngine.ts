@@ -34,7 +34,7 @@ export class SimpleConsensusEngine {
   private optimizedMemory: OptimizedMemoryService;
   private conversationId: string | null = null;
   private userMessageId: string | null = null;
-  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' | 'routing' | 'stage_running' = 'pending';
+  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' | 'routing' | 'stage_running' | 'curating' = 'pending';
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
   private deliberationStartTime: number = 0;
   private deliberationTimer: NodeJS.Timeout | null = null;
@@ -127,9 +127,13 @@ export class SimpleConsensusEngine {
   private validatorPhrases: string[] = [
     "validating", "checking", "verifying", "reviewing", "examining", "testing", "confirming", "auditing"
   ];
+  private curatorPhrases: string[] = [
+    "curating", "polishing", "finalizing", "perfecting", "concluding", "wrapping", "finishing", "completing"
+  ];
   private currentPhraseIndex: number = 0;
   private routingTimer: NodeJS.Timeout | null = null;
   private stageTimer: NodeJS.Timeout | null = null;
+  private curatorTimer: NodeJS.Timeout | null = null;
 
   constructor(database: any) {
     this.db = database;
@@ -507,6 +511,9 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       let finalResponse: string;
       console.log('\n🎯 Stage 4: Curator');
       
+      // Start curator animation - keep fun words/symbols until curator finishes
+      this.startCuratorTimer();
+      
       if (this.consensusType === 'unanimous') {
         // Unanimous consensus - curator just polishes the agreed response
         console.log('✅ UNANIMOUS CONSENSUS - Curator will polish the agreed response');
@@ -529,7 +536,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         finalResponse = lastMessage.content;
       }
       
-      // NOW send final consensus status after curator completes
+      // Stop curator animation and send final consensus status after curator completes
+      this.stopCuratorTimer();
       this.sendConsensusStatus({
         achieved: true,
         consensusType: this.consensusType,
@@ -1360,7 +1368,7 @@ Provide a comprehensive response that synthesizes the best elements from the ref
           animatedIcon: animatedIcon
         });
       }
-    }, 50); // Update every 50ms for super fast symbol cycling
+    }, 80); // Update every 80ms for slightly slower symbol cycling
   }
 
   private stopDeliberationTimer() {
@@ -1390,7 +1398,7 @@ Provide a comprehensive response that synthesizes the best elements from the ref
         funPhrase: routingPhrase,
         animatedIcon: animatedIcon
       });
-    }, 50); // Update every 50ms for super fast symbol cycling
+    }, 80); // Update every 80ms for slightly slower symbol cycling
   }
 
   private stopRoutingTimer() {
@@ -1436,6 +1444,36 @@ Provide a comprehensive response that synthesizes the best elements from the ref
     if (this.stageTimer) {
       clearInterval(this.stageTimer);
       this.stageTimer = null;
+    }
+  }
+
+  private startCuratorTimer() {
+    // Show curator animation until curator completely finishes
+    this.curatorTimer = setInterval(() => {
+      // Cycle symbol rapidly every update
+      this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
+      
+      // Change curator phrase occasionally (~1 minute like others)
+      if (Math.random() < 0.0008) {
+        this.currentPhraseIndex = Math.floor(Math.random() * this.curatorPhrases.length);
+      }
+      
+      const curatorPhrase = this.curatorPhrases[this.currentPhraseIndex];
+      const animatedIcon = this.animatedIcons[this.currentIconIndex];
+      
+      this.sendConsensusStatus({
+        achieved: false,
+        consensusType: 'curating',
+        funPhrase: curatorPhrase,
+        animatedIcon: animatedIcon
+      });
+    }, 80); // Update every 80ms for slightly slower symbol cycling
+  }
+
+  private stopCuratorTimer() {
+    if (this.curatorTimer) {
+      clearInterval(this.curatorTimer);
+      this.curatorTimer = null;
     }
   }
 
