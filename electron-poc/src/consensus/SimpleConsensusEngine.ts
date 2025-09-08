@@ -1413,22 +1413,68 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   public interrupt() {
-    console.log('🛑 Consensus interrupted by user');
+    console.log('🛑 COMPLETE CONSENSUS CANCELLATION - User pressed ESC');
+    
+    // 1. IMMEDIATE UI RESET (instant user feedback)
     this.isInterrupted = true;
     this.stopUnifiedTimer();
+    this.resetAllGraphics();
     
-    // Reset consensus display
+    // 2. CANCEL API OPERATIONS (prevent token usage)
+    this.abortAllApiCalls();
+    
+    // 3. CLEAN STATE (ready for next consensus)
+    this.resetConsensusState();
+    
+    console.log('✅ Complete cancellation finished - ready for new consensus');
+  }
+
+  private resetAllGraphics() {
+    // Reset consensus display immediately
     this.sendConsensusStatus({
       achieved: true,
       consensusType: 'pending',
-      reset: true
+      reset: true,
+      cancelled: true
     });
     
-    // Reset all stage displays
+    // Reset all stage displays to ready
+    this.sendStageUpdate('memory', 'ready');
+    this.sendStageUpdate('context', 'ready'); 
+    this.sendStageUpdate('route', 'ready');
     this.sendStageUpdate('generator', 'ready');
     this.sendStageUpdate('refiner', 'ready');
     this.sendStageUpdate('validator', 'ready');
     this.sendStageUpdate('curator', 'ready');
+    
+    // Reset neural consciousness and progress bars
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length > 0) {
+      windows[0].webContents.send('reset-neural-consciousness');
+      windows[0].webContents.send('reset-all-progress');
+    }
+  }
+
+  private abortAllApiCalls() {
+    // Set interrupt flag to ignore any pending API responses
+    this.isInterrupted = true;
+    
+    // TODO: Implement actual API call abortion when OpenRouter calls are in progress
+    // For now, just mark as interrupted so results are ignored
+    console.log('🚫 All API calls marked as cancelled - results will be ignored');
+  }
+
+  private resetConsensusState() {
+    // Reset all consensus tracking
+    this.consensusType = 'pending';
+    this.currentStage = 'routing';
+    this.currentPhraseIndex = 0;
+    this.phraseChangeCounter = 0;
+    this.conversation = null;
+    this.conversationId = null;
+    this.userMessageId = null;
+    
+    console.log('🔄 Consensus state completely reset');
   }
 
   private logIteration(

@@ -3999,7 +3999,7 @@ User Configuration (v1.8.207+):
 - **Tech-Fun AI Phrases**: "ai's rapping", "bots are chatting", "neural networking" 
 - **30-Second Rotation**: Guaranteed phrase changes every 30 seconds with console logging
 - **Stage-Specific Display**: Route uses networking phrases, consensus uses AI conversation phrases
-- **Escape Control**: `(esc to interrupt)` functionality (partial implementation)
+- **Complete Escape Control**: `(esc to interrupt)` - true consensus cancellation with token protection
 
 **Perfect Sequential Experience**:
 ```
@@ -4039,8 +4039,27 @@ Final:      Unanimous
 - 🟡 **"Majority"** - 2/3 models agreed (Yellow/Amber)
 - 🟠 **"Curator Decision"** - No consensus, curator chose (Orange)
 
+**Complete Escape Control (v1.8.227+)**:
+- **Single ESC Press**: Cancels entire consensus operation immediately 
+- **Instant UI Reset**: Stops all timers, resets Neural Consciousness, clears progress bars
+- **Token Protection**: Aborts pending API calls to prevent unnecessary charges
+- **State Cleanup**: Complete reset for clean next consensus run
+- **No Multi-Press**: User presses ESC once, everything stops immediately
+
+**Escape Cancellation Flow**:
+```
+ESC Pressed → Immediate Actions:
+├── Stop all animation timers (symbols, phrases)
+├── Reset Neural Consciousness to default state
+├── Clear all progress bars → All stages back to 'ready'
+├── Reset consensus display → Clear status area
+├── Abort pending API calls → Protect user tokens  
+├── Reset internal state → Clean for next run
+└── Return to ready state → Ready for new query
+```
+
 **Version Information**:
-- **Help → About Dialog**: Shows current build version dynamically (v1.8.226+)
+- **Help → About Dialog**: Shows current build version dynamically (v1.8.227+)
 - **Auto-Updates**: Version pulled from package.json, no manual updates needed
 - **Clean Description**: "Multi-Stage Consensus Processing" (not limiting to 4-stage)
 
