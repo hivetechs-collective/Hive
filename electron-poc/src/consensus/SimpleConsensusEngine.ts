@@ -1301,7 +1301,7 @@ Provide a comprehensive response that synthesizes the best elements from the ref
     
     // Start rapid symbol cycling for consensus stages when running
     if (status === 'running' && ['generator', 'refiner', 'validator'].includes(stage)) {
-      this.startStageTimer(stage);
+      this.startStageTimer(stage as 'generator' | 'refiner' | 'validator');
     } else if (status === 'completed' && ['generator', 'refiner', 'validator'].includes(stage)) {
       this.stopStageTimer();
     }

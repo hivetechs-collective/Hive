@@ -134,6 +134,11 @@ declare global {
       }) => void) => void;
     };
     
+    // Consensus API
+    consensusAPI: {
+      interruptConsensus: () => void;
+    };
+    
     // Global instances
     fileExplorer: any;
     editorTabs: any;
