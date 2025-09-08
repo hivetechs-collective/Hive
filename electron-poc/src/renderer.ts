@@ -5705,15 +5705,28 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
                 (progressBar as HTMLElement).style.width = '0%';
             }
             
-            // Reset stage status text to ready
+            // Reset stage status more aggressively - try multiple selectors
             const stageElement = document.querySelector(`[data-stage="${stage}"]`);
             if (stageElement) {
                 stageElement.setAttribute('data-status', 'ready');
-                const statusElement = stageElement.querySelector('.stage-status');
-                if (statusElement) {
-                    statusElement.textContent = 'ready';
-                }
+                stageElement.removeAttribute('data-progress');
+                
+                // Try multiple status element selectors
+                const statusSelectors = ['.stage-status', '.status', '.stage-text', '.stage-label'];
+                statusSelectors.forEach(selector => {
+                    const statusElement = stageElement.querySelector(selector);
+                    if (statusElement && statusElement.textContent !== 'ready') {
+                        statusElement.textContent = 'ready';
+                        console.log(`🔧 Reset ${stage} status via ${selector}`);
+                    }
+                });
+                
+                // Force CSS class updates for visual state
+                stageElement.classList.remove('running', 'completed');
+                stageElement.classList.add('ready');
             }
+            
+            console.log(`📊 Reset ${stage} progress and status`);
         });
     });
     
