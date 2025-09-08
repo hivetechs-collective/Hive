@@ -49,7 +49,7 @@
   --border-color: #2D3336;
   --text-primary: #FFFFFF;
   --text-secondary: #CCCCCC;
-  --text-muted: #9CA3AF;
+  --text-muted: #D1D5DB; /* Brighter grey for better readability */
   
   /* Hive brand colors */
   --hive-yellow: #FFC107;
@@ -70,7 +70,7 @@
   --terminal-info: #06B6D4;     /* Cyan - informational */
   --terminal-user: #8B5CF6;     /* Purple - user messages */
   --terminal-ai: #3B82F6;       /* Blue - AI responses */
-  --terminal-dim: #6B7280;      /* Gray - secondary text */
+  --terminal-dim: #9CA3AF;      /* Brighter gray - secondary text for better readability */
   --terminal-code-bg: #1F2937;  /* Dark gray - code blocks */
   --terminal-link: #60A5FA;     /* Light blue - links */
 }
