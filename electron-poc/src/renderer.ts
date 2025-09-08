@@ -1636,6 +1636,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               break;
             case 'conversing':
             case 'routing':
+            case 'stage_running':
               const funPhrase = data.funPhrase || "processing";
               const animatedIcon = data.animatedIcon || "+";
               // Use fixed-width for symbol to prevent word bouncing

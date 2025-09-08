@@ -34,7 +34,7 @@ export class SimpleConsensusEngine {
   private optimizedMemory: OptimizedMemoryService;
   private conversationId: string | null = null;
   private userMessageId: string | null = null;
-  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' | 'routing' = 'pending';
+  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' | 'routing' | 'stage_running' = 'pending';
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
   private deliberationStartTime: number = 0;
   private deliberationTimer: NodeJS.Timeout | null = null;
@@ -118,8 +118,18 @@ export class SimpleConsensusEngine {
     "considering",
     "pondering"
   ];
+  private generatorPhrases: string[] = [
+    "generating", "creating", "building", "crafting", "producing", "forming", "constructing", "developing"
+  ];
+  private refinerPhrases: string[] = [
+    "refining", "polishing", "enhancing", "improving", "optimizing", "perfecting", "upgrading", "fine-tuning"
+  ];
+  private validatorPhrases: string[] = [
+    "validating", "checking", "verifying", "reviewing", "examining", "testing", "confirming", "auditing"
+  ];
   private currentPhraseIndex: number = 0;
   private routingTimer: NodeJS.Timeout | null = null;
+  private stageTimer: NodeJS.Timeout | null = null;
 
   constructor(database: any) {
     this.db = database;
@@ -1288,6 +1298,14 @@ Provide a comprehensive response that synthesizes the best elements from the ref
     }
     
     console.log(`📡 Stage Update: ${stage} -> ${status}`);
+    
+    // Start rapid symbol cycling for consensus stages when running
+    if (status === 'running' && ['generator', 'refiner', 'validator'].includes(stage)) {
+      this.startStageTimer(stage);
+    } else if (status === 'completed' && ['generator', 'refiner', 'validator'].includes(stage)) {
+      this.stopStageTimer();
+    }
+    
     const windows = BrowserWindow.getAllWindows();
     if (windows.length > 0) {
       windows[0].webContents.send('consensus-stage-update', { stage, status });
@@ -1379,6 +1397,45 @@ Provide a comprehensive response that synthesizes the best elements from the ref
     if (this.routingTimer) {
       clearInterval(this.routingTimer);
       this.routingTimer = null;
+    }
+  }
+
+  private startStageTimer(stage: 'generator' | 'refiner' | 'validator') {
+    // Show rapid symbols for individual consensus stages
+    this.stageTimer = setInterval(() => {
+      // Cycle symbol rapidly every update
+      this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
+      
+      // Select appropriate phrase list based on stage
+      let stagePhrases: string[];
+      switch (stage) {
+        case 'generator': stagePhrases = this.generatorPhrases; break;
+        case 'refiner': stagePhrases = this.refinerPhrases; break;  
+        case 'validator': stagePhrases = this.validatorPhrases; break;
+      }
+      
+      // Change phrase occasionally (~1 minute like others)
+      if (Math.random() < 0.0008) {
+        this.currentPhraseIndex = Math.floor(Math.random() * stagePhrases.length);
+      }
+      
+      const stagePhrase = stagePhrases[this.currentPhraseIndex];
+      const animatedIcon = this.animatedIcons[this.currentIconIndex];
+      
+      this.sendConsensusStatus({
+        achieved: false,
+        consensusType: 'stage_running',
+        funPhrase: stagePhrase,
+        animatedIcon: animatedIcon,
+        currentStage: stage
+      });
+    }, 50); // Update every 50ms for rapid symbol cycling
+  }
+
+  private stopStageTimer() {
+    if (this.stageTimer) {
+      clearInterval(this.stageTimer);
+      this.stageTimer = null;
     }
   }
 
