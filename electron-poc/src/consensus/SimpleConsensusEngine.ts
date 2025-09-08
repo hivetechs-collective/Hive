@@ -1460,11 +1460,12 @@ Provide a comprehensive response that synthesizes the best elements from the ref
     this.sendStageUpdate('validator', 'ready');
     this.sendStageUpdate('curator', 'ready');
     
-    // Reset neural consciousness and progress bars
+    // Reset neural consciousness, progress bars, and clear chat
     const windows = BrowserWindow.getAllWindows();
     if (windows.length > 0) {
       windows[0].webContents.send('reset-neural-consciousness');
       windows[0].webContents.send('reset-all-progress');
+      windows[0].webContents.send('clear-chat-window');
     }
   }
 
