@@ -37,7 +37,6 @@ export class SimpleConsensusEngine {
   private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' | 'routing' | 'stage_running' | 'curating' = 'pending';
   private maxConsensusRounds: number = 3; // Default, will be overridden by profile
   private deliberationStartTime: number = 0;
-  private deliberationTimer: NodeJS.Timeout | null = null;
   private animatedIcons: string[] = [
     "+", "×", "*", "✱", "✲", "✳"
   ];
@@ -1333,8 +1332,8 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private sendConsensusComplete(data: any) {
-    // Stop deliberation timer when consensus is complete
-    this.stopDeliberationTimer();
+    // Stop unified timer when consensus is complete
+    this.stopUnifiedTimer();
     
     const allWindows = BrowserWindow.getAllWindows();
     allWindows.forEach(window => {
@@ -1343,135 +1342,7 @@ Provide a comprehensive response that synthesizes the best elements from the ref
     });
   }
 
-  private startDeliberationTimer() {
-    // Rapidly cycle symbols continuously, change phrases every ~1 minute
-    this.deliberationTimer = setInterval(() => {
-      if (this.consensusType === 'conversing') {
-        // Cycle symbol rapidly every update (super fast like Claude Code CLI)
-        this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
-        
-        // Change phrase very rarely (~1 minute) - about 0.08% chance per 50ms = ~60 seconds
-        if (Math.random() < 0.0008) {
-          this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
-        }
-        
-        const funPhrase = this.conversationPhrases[this.currentPhraseIndex];
-        const animatedIcon = this.animatedIcons[this.currentIconIndex];
-        
-        this.sendConsensusStatus({
-          achieved: false,
-          consensusType: 'conversing',
-          round: this.conversation?.rounds_completed || 0,
-          funPhrase: funPhrase,
-          animatedIcon: animatedIcon
-        });
-      }
-    }, 80); // Update every 80ms for slightly slower symbol cycling
-  }
 
-  private stopDeliberationTimer() {
-    if (this.deliberationTimer) {
-      clearInterval(this.deliberationTimer);
-      this.deliberationTimer = null;
-    }
-  }
-
-  private startRoutingTimer() {
-    // Show routing animation - rapid symbols, words change every ~1 minute
-    this.routingTimer = setInterval(() => {
-      // Cycle symbol rapidly every update
-      this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
-      
-      // Change routing phrase very rarely (~1 minute) - about 0.08% chance per 50ms = ~60 seconds
-      if (Math.random() < 0.0008) {
-        this.currentPhraseIndex = Math.floor(Math.random() * this.routingPhrases.length);
-      }
-      
-      const routingPhrase = this.routingPhrases[this.currentPhraseIndex];
-      const animatedIcon = this.animatedIcons[this.currentIconIndex];
-      
-      this.sendConsensusStatus({
-        achieved: false,
-        consensusType: 'routing',
-        funPhrase: routingPhrase,
-        animatedIcon: animatedIcon
-      });
-    }, 80); // Update every 80ms for slightly slower symbol cycling
-  }
-
-  private stopRoutingTimer() {
-    if (this.routingTimer) {
-      clearInterval(this.routingTimer);
-      this.routingTimer = null;
-    }
-  }
-
-  private startStageTimer(stage: 'generator' | 'refiner' | 'validator') {
-    // Show rapid symbols for individual consensus stages
-    
-    // Select appropriate phrase list based on stage
-    let stagePhrases: string[];
-    switch (stage) {
-      case 'generator': stagePhrases = this.generatorPhrases; break;
-      case 'refiner': stagePhrases = this.refinerPhrases; break;  
-      case 'validator': stagePhrases = this.validatorPhrases; break;
-    }
-    
-    // Reset index to valid range for this stage's phrase array
-    this.currentPhraseIndex = Math.floor(Math.random() * stagePhrases.length);
-    
-    this.stageTimer = setInterval(() => {
-      // Cycle symbol rapidly every update
-      this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
-      
-      // Change phrase occasionally (~1 minute like others)
-      if (Math.random() < 0.0008) {
-        this.currentPhraseIndex = Math.floor(Math.random() * stagePhrases.length);
-      }
-      
-      // Ensure index is within bounds
-      const stagePhrase = stagePhrases[this.currentPhraseIndex] || stagePhrases[0];
-      const animatedIcon = this.animatedIcons[this.currentIconIndex];
-      
-      this.sendConsensusStatus({
-        achieved: false,
-        consensusType: 'stage_running',
-        funPhrase: stagePhrase,
-        animatedIcon: animatedIcon,
-        currentStage: stage
-      });
-    }, 50); // Update every 50ms for rapid symbol cycling
-  }
-
-  private stopStageTimer() {
-    if (this.stageTimer) {
-      clearInterval(this.stageTimer);
-      this.stageTimer = null;
-    }
-  }
-
-  private startCuratorTimer() {
-    // Show curator animation until curator completely finishes
-    this.curatorTimer = setInterval(() => {
-      // Cycle symbol rapidly every update
-      this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
-      
-      // Change curator phrase occasionally (~1 minute like others)
-      if (Math.random() < 0.0008) {
-        this.currentPhraseIndex = Math.floor(Math.random() * this.curatorPhrases.length);
-      }
-      
-      const curatorPhrase = this.curatorPhrases[this.currentPhraseIndex];
-      const animatedIcon = this.animatedIcons[this.currentIconIndex];
-      
-      this.sendConsensusStatus({
-        achieved: false,
-        consensusType: 'curating',
-        funPhrase: curatorPhrase,
-        animatedIcon: animatedIcon
-      });
-    }, 80); // Update every 80ms for slightly slower symbol cycling
-  }
 
   private startUnifiedTimer() {
     // One timer to handle all stages sequentially
