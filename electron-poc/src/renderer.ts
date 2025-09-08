@@ -5705,6 +5705,15 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
             }
         });
     });
+    
+    // Listen for chat clearing (hide error messages from interruption)
+    (window as any).electronAPI.on?.('clear-chat-window', () => {
+        console.log('💬 Clearing chat window');
+        const chatContainer = document.querySelector('.chat-container');
+        if (chatContainer) {
+            chatContainer.innerHTML = '<div class="message bot-message">Welcome to Hive Consensus! Try asking me a question.</div>';
+        }
+    });
 }
 
 // Close the current folder
