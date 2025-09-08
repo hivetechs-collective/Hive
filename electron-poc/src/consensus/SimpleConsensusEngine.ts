@@ -1360,24 +1360,13 @@ Provide a comprehensive response that synthesizes the best elements from the ref
           consensusType = 'routing';
           break;
         case 'generator':
-          stagePhrases = this.generatorPhrases;
-          consensusType = 'stage_running';
-          break;
         case 'refiner':
-          stagePhrases = this.refinerPhrases;
-          consensusType = 'stage_running';
-          break;
         case 'validator':
-          stagePhrases = this.validatorPhrases;
-          consensusType = 'stage_running';
-          break;
         case 'curator':
-          stagePhrases = this.curatorPhrases;
-          consensusType = 'curating';
-          break;
         case 'conversing':
+          // All consensus stages use the same conversation phrases
           stagePhrases = this.conversationPhrases;
-          consensusType = 'conversing';
+          consensusType = 'stage_running';
           break;
       }
       
