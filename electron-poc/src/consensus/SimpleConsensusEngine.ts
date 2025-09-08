@@ -222,6 +222,10 @@ export class SimpleConsensusEngine {
 
   async processConsensus(request: any): Promise<any> {
     console.log('🎯 SimpleConsensusEngine.processConsensus called');
+    
+    // Reset interruption flag for new consensus operation
+    this.isInterrupted = false;
+    
     const startTime = Date.now();
     
     // Ensure model costs are loaded before processing
