@@ -517,6 +517,23 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         console.log('📝 Using last validator response as final (no Curator)');
       }
 
+      // Store final round LLM responses for curator access
+      console.log('\n💾 Storing final round LLM responses for curator...');
+      const finalRound = this.conversation.rounds_completed;
+      const finalRoundMessages = this.conversation.messages.filter(m => m.round === finalRound);
+      
+      for (const message of finalRoundMessages) {
+        await this.optimizedMemory.storeMessage({
+          conversationId: this.conversationId,
+          role: 'assistant',
+          content: message.content,
+          stage: message.speaker,
+          model_used: profile[`${message.speaker}_model`],
+          consensus_rounds: finalRound
+        });
+        console.log(`💾 Stored ${message.speaker} response for curator`);
+      }
+
       // CURATOR - Always runs, but with different roles based on consensus type
       let finalResponse: string;
       console.log('\n🎯 Stage 4: Curator');
@@ -525,18 +542,18 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       this.currentStage = 'curator';
       
       if (this.consensusType === 'unanimous') {
-        // Unanimous consensus - curator just polishes the agreed response
-        console.log('✅ UNANIMOUS CONSENSUS - Curator will polish the agreed response');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish');
+        // Unanimous consensus - curator polishes with full context and all responses
+        console.log('✅ UNANIMOUS CONSENSUS - Curator will polish with full context');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish', contextFramework);
         finalResponse = curatorResult.content;
       } else if (this.consensusType === 'majority') {
-        // Majority consensus - curator polishes the majority-agreed response
-        console.log('🤝 MAJORITY CONSENSUS - Curator will polish the majority response');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish');
+        // Majority consensus - curator polishes with full context and all responses
+        console.log('🤝 MAJORITY CONSENSUS - Curator will polish with full context');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish', contextFramework);
         finalResponse = curatorResult.content;
       } else if (this.consensusType === 'curator_override') {
-        // No consensus - curator must choose from all 3 responses
-        console.log('👨‍⚖️ NO CONSENSUS - Curator will review all 3 responses and choose the best');
+        // No consensus - curator chooses with full context and all responses
+        console.log('👨‍⚖️ NO CONSENSUS - Curator will choose with full context');
         const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'choose', contextFramework);
         finalResponse = curatorResult.content;
       } else {
@@ -1260,36 +1277,49 @@ ${currentResponse}`;
     console.log(`🎨 CURATOR CALLED - Mode: ${mode}`);
     this.sendStageUpdate('curator', 'running');
     
-    let curatorPrompt: string;
+    // Get final round responses for curator (both modes need all 3 responses)
+    const finalRound = this.conversation!.rounds_completed;
+    const finalRoundMessages = this.conversation!.messages.filter(m => m.round === finalRound);
+    const generatorResponse = finalRoundMessages.find(m => m.speaker === 'generator')?.content || 'No response';
+    const refinerResponse = finalRoundMessages.find(m => m.speaker === 'refiner')?.content || 'No response';
+    const validatorResponse = finalRoundMessages.find(m => m.speaker === 'validator')?.content || 'No response';
     
+    // Build curator prompt with full context (same treatment as other LLMs)
+    const contextSummary = contextFramework && contextFramework.summary ? contextFramework.summary : '';
+    
+    let curatorPrompt: string;
     if (mode === 'polish') {
-      // Polish mode - consensus was reached, just polish the agreed response
-      const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
-      
-      curatorPrompt = `The following response needs to be improved and polished. Provide only the enhanced version:
+      // Polish mode - show all 3 responses and ask for polished version
+      curatorPrompt = `${contextSummary ? `Context from previous conversations:\n${contextSummary}\n\n` : ''}Question: ${this.conversation!.user_question}
 
-${finalMessage.content}`;
-    } else {
-      // Choose mode - no consensus reached, curator must choose from all 3 responses
-      const round3Messages = this.conversation!.messages.filter(m => m.round === 3);
-      const generatorResponse = round3Messages.find(m => m.speaker === 'generator')?.content || 'No response';
-      const refinerResponse = round3Messages.find(m => m.speaker === 'refiner')?.content || 'No response';
-      const validatorResponse = round3Messages.find(m => m.speaker === 'validator')?.content || 'No response';
-      
-      curatorPrompt = `${contextFramework && contextFramework.summary ? `Context from previous conversations:\n${contextFramework.summary}\n\n` : ''}Current question: ${this.conversation!.user_question}
+The AI team reached ${this.consensusType} consensus. Here are their responses:
 
-Reference materials from AI analysis:
-
-[REFERENCE 1]
+Generator Response:
 ${generatorResponse}
 
-[REFERENCE 2]  
+Refiner Response:  
 ${refinerResponse}
 
-[REFERENCE 3]
+Validator Response:
 ${validatorResponse}
 
-Provide a comprehensive response that synthesizes the best elements from the references above. Do not explain your reasoning, analysis process, or which references you used. Answer directly and professionally as if responding to the original question for the first time.`;
+Provide your final polished answer to the original question.`;
+    } else {
+      // Choose mode - same format, curator decides between responses
+      curatorPrompt = `${contextSummary ? `Context from previous conversations:\n${contextSummary}\n\n` : ''}Question: ${this.conversation!.user_question}
+
+The AI team could not reach consensus. Here are their responses:
+
+Generator Response:
+${generatorResponse}
+
+Refiner Response:
+${refinerResponse}
+
+Validator Response:
+${validatorResponse}
+
+Consider all responses and provide your final answer to the original question.`;
     }
     
     const curatorResult = await this.callOpenRouter(apiKey, profile.curator_model, curatorPrompt);
