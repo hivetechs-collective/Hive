@@ -2476,115 +2476,139 @@ server.start();
       // For NPM-based tools
       logger.info(`[Main] Updating ${toolId} via npm...`);
       
-      // Use npm update to get the latest version
-      const updateCommand = `npm update -g ${packageName}`;
+      // Robust multi-strategy npm update
+      const enhancedEnv = { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` };
+      
+      // Strategy 1: Standard npm update
+      let updateSucceeded = false;
+      let strategyUsed = '';
       
       try {
+        logger.info(`[Main] Strategy 1: Standard npm update for ${toolId}`);
+        const updateCommand = `npm update -g ${packageName}`;
         logger.info(`[Main] Running: ${updateCommand}`);
-        const { stdout, stderr } = await execAsync(updateCommand, {
-          env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
-        });
         
-        logger.info(`[Main] NPM update output: ${stdout}`);
+        const { stdout, stderr } = await execAsync(updateCommand, { env: enhancedEnv });
+        logger.info(`[Main] Strategy 1 SUCCESS: ${stdout}`);
         if (stderr && !stderr.includes('npm WARN')) {
-          logger.warn(`[Main] NPM update stderr: ${stderr}`);
+          logger.warn(`[Main] Non-critical stderr: ${stderr}`);
         }
+        updateSucceeded = true;
+        strategyUsed = 'standard update';
         
-        // Get the updated version
-        let version = 'Unknown';
+      } catch (error: any) {
+        logger.warn(`[Main] Strategy 1 failed:`, error.message);
+        
+        if (error.message.includes('ENOTEMPTY') || error.message.includes('rename') || error.message.includes('directory not empty')) {
+          // Strategy 2: Clear cache + force update
+          try {
+            logger.info(`[Main] Strategy 2: Clear cache + force update for ${toolId}`);
+            await execAsync('npm cache clean --force', { env: enhancedEnv });
+            
+            const forceCommand = `npm update -g ${packageName} --force`;
+            const { stdout } = await execAsync(forceCommand, { env: enhancedEnv });
+            logger.info(`[Main] Strategy 2 SUCCESS: ${stdout}`);
+            updateSucceeded = true;
+            strategyUsed = 'cache clear + force';
+            
+          } catch (forceError: any) {
+            logger.warn(`[Main] Strategy 2 failed:`, forceError.message);
+            
+            // Strategy 3: Nuclear option - uninstall + reinstall
+            try {
+              logger.info(`[Main] Strategy 3: Nuclear uninstall + reinstall for ${toolId}`);
+              
+              // Uninstall
+              try {
+                await execAsync(`npm uninstall -g ${packageName}`, { env: enhancedEnv });
+                logger.info(`[Main] Uninstalled ${toolId}`);
+              } catch (uninstallError) {
+                logger.warn(`[Main] Uninstall warning (continuing):`, uninstallError);
+              }
+              
+              // Wait for cleanup
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Reinstall
+              const { stdout } = await execAsync(`npm install -g ${packageName}`, { env: enhancedEnv });
+              logger.info(`[Main] Strategy 3 SUCCESS: ${stdout}`);
+              updateSucceeded = true;
+              strategyUsed = 'uninstall + reinstall';
+              
+            } catch (reinstallError: any) {
+              logger.error(`[Main] All strategies failed:`, reinstallError.message);
+              throw reinstallError;
+            }
+          }
+        } else {
+          throw error;
+        }
+      }
+      
+      // Get the updated version after successful update
+      let version = 'Unknown';
+      if (updateSucceeded) {
         try {
           // For Claude Code, use claude --version
           if (toolId === 'claude-code') {
-            const versionResult = await execAsync('claude --version', {
-              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
-            });
-            // Parse version from output like "claude-code/1.0.86 darwin-arm64 node-v23.6.0"
+            const versionResult = await execAsync('claude --version', { env: enhancedEnv });
             const match = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
           } else if (toolId === 'gemini-cli') {
-            // For Gemini CLI, use gemini --version
-            const versionResult = await execAsync('gemini --version', {
-              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
-            });
-            // Parse version from output - expecting format like "gemini-cli/0.1.18" or similar
+            const versionResult = await execAsync('gemini --version', { env: enhancedEnv });
             const match = versionResult.stdout.match(/(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
           } else if (toolId === 'qwen-code') {
-            // For Qwen Code, use qwen --version
-            const versionResult = await execAsync('qwen --version', {
-              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
-            });
-            // Parse version from output
+            const versionResult = await execAsync('qwen --version', { env: enhancedEnv });
             const match = versionResult.stdout.match(/(?:qwen\/|v?)(\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
           } else if (toolId === 'openai-codex') {
-            // For OpenAI Codex, use codex --version
-            const versionResult = await execAsync('codex --version', {
-              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
-            });
-            // Parse version from output
+            const versionResult = await execAsync('codex --version', { env: enhancedEnv });
             const match = versionResult.stdout.match(/codex-cli (\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
           } else if (toolId === 'cline') {
-            // For Cline, use cline-cli --version
-            const versionResult = await execAsync('cline-cli --version', {
-              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
-            });
-            // Parse version from output
+            const versionResult = await execAsync('cline-cli --version', { env: enhancedEnv });
             const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
           } else if (toolId === 'grok') {
-            // For Grok CLI, use grok --version
-            const versionResult = await execAsync('grok --version', {
-              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
-            });
-            // Parse version from output
+            const versionResult = await execAsync('grok --version', { env: enhancedEnv });
             const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
-          } else {
-            // For other tools, try to get version from npm list
-            const listResult = await execAsync(`npm list -g ${packageName} --depth=0`, {
-              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
-            });
-            const versionMatch = listResult.stdout.match(new RegExp(`${packageName}@(\\d+\\.\\d+\\.\\d+)`));
-            version = versionMatch ? versionMatch[1] : 'Unknown';
           }
         } catch (versionError) {
           logger.warn(`[Main] Could not get version for ${toolId}:`, versionError);
         }
         
-        // CRITICAL FIX: Clear the detector cache for this tool so UI refresh works
+        // Clear detector cache for UI refresh
         logger.info(`[Main] Clearing detector cache for ${toolId} after successful update`);
         cliToolsDetector.clearCache(toolId);
         
-        logger.info(`[Main] ${toolId} updated successfully to version ${version}`);
-        return { success: true, version, message: `Updated to version ${version}` };
-        
-      } catch (error: any) {
-        logger.error(`[Main] Failed to update ${toolId}:`, error);
-        
-        // Check if it's a permission error
-        if (error.message?.includes('EACCES') || error.message?.includes('permission')) {
-          return { 
-            success: false, 
-            error: 'Permission denied. Try running the app with elevated permissions or update manually with: ' + updateCommand 
-          };
-        }
-        
-        // Check if npm is not found
-        if (error.message?.includes('npm: command not found')) {
-          return { 
-            success: false, 
-            error: 'npm not found. Please ensure Node.js and npm are installed.' 
-          };
-        }
-        
-        return { success: false, error: error.message || 'Update failed' };
+        logger.info(`[Main] ${toolId} updated successfully using ${strategyUsed} to version ${version}`);
+        return { success: true, version, message: `Updated to version ${version} (${strategyUsed})` };
+      } else {
+        throw new Error('Update failed - no strategy succeeded');
       }
       
     } catch (error: any) {
-      logger.error(`[Main] Unexpected error updating ${toolId}:`, error);
-      return { success: false, error: error.message || 'Unexpected error occurred' };
+      logger.error(`[Main] Failed to update ${toolId}:`, error);
+      
+      // Check if it's a permission error
+      if (error.message?.includes('EACCES') || error.message?.includes('permission')) {
+        return { 
+          success: false, 
+          error: 'Permission denied. Try running the app with elevated permissions or update manually.' 
+        };
+      }
+      
+      // Check if npm is not found
+      if (error.message?.includes('npm: command not found')) {
+        return { 
+          success: false, 
+          error: 'npm not found. Please ensure Node.js and npm are installed.' 
+        };
+      }
+      
+      return { success: false, error: error.message || 'Update failed' };
     }
   });
   
