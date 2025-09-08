@@ -3992,24 +3992,57 @@ User Configuration (v1.8.207+):
 - **Always Produces Output**: No more endless deliberation
 - **Transparent to Users**: Shows consensus type achieved
 
-#### Enhanced User Experience (v1.8.211+)
+#### Enhanced User Experience (v1.8.226+)
 
-**Real-Time Deliberation Feedback**:
-- **"AI's Conversing" Status**: Shows during deliberation rounds with live elapsed timer
-- **Timer Display**: "AI's Conversing 0:00" → "AI's Conversing 1:23" (updates every second)
-- **Visual Confirmation**: Users see system is active during long processing times
-- **Progress Indication**: Prevents confusion about system being frozen
+**Claude Code CLI Style Animations**:
+- **Rapid Symbol Cycling**: `+` → `×` → `*` → `✱` → `✲` → `✳` (80ms intervals)
+- **Tech-Fun AI Phrases**: "ai's rapping", "bots are chatting", "neural networking" 
+- **30-Second Rotation**: Guaranteed phrase changes every 30 seconds with console logging
+- **Stage-Specific Display**: Route uses networking phrases, consensus uses AI conversation phrases
+- **Escape Control**: `(esc to interrupt)` functionality (partial implementation)
+
+**Perfect Sequential Experience**:
+```
+Route:      ✳ path processing...
+           (esc to interrupt)
+
+Generator:  + ai's rapping...
+           (esc to interrupt)
+
+Refiner:    × bots are chatting...
+           (esc to interrupt)  
+
+Validator:  * neural networking...
+           (esc to interrupt)
+
+Curator:    ✱ algorithms arguing...
+           (esc to interrupt)
+
+Final:      Unanimous
+```
+
+**Unified Timer System**:
+- **Single Timer**: Handles all sequential stage transitions
+- **No Conflicts**: Eliminated multiple competing timers
+- **Smart Phrase Selection**: Automatically uses appropriate phrases for current stage
+- **Bounds Checking**: Prevents undefined phrase access and display errors
+
+**Visual Enhancements**:
+- **Monospace Typography**: Consistent font across status displays and headers
+- **Fixed-Width Symbols**: Prevents word bouncing during rapid symbol cycling  
+- **Orange Glow Effects**: Authentic Claude Code CLI styling with text shadows
+- **Professional Layout**: ESC message on separate line for clarity
 
 **Consensus Type Indicators** (Color-Coded):
-- 🔵 **"AI's Conversing"** - Active deliberation in progress (Blue)
+- 🟠 **Tech-Fun Phrases** - Active AI conversation in progress (Orange)
 - ✅ **"Unanimous"** - All 3 models agreed (Green) 
 - 🟡 **"Majority"** - 2/3 models agreed (Yellow/Amber)
 - 🟠 **"Curator Decision"** - No consensus, curator chose (Orange)
 
 **Version Information**:
-- **Help → About Dialog**: Shows current build version dynamically
+- **Help → About Dialog**: Shows current build version dynamically (v1.8.226+)
 - **Auto-Updates**: Version pulled from package.json, no manual updates needed
-- **Build Integration**: Version increments automatically with each production build
+- **Clean Description**: "Multi-Stage Consensus Processing" (not limiting to 4-stage)
 
 #### Core Architecture - Iterative Consensus with Unified Evaluation
 
