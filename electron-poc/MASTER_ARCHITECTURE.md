@@ -7061,11 +7061,31 @@ describe('CLI Tool Integration', () => {
    - Immediate UI updates (cache clearing fix)
    - Sensible defaults (tools manage own config)
 
-**4. Error Recovery**:
-   - Graceful degradation without sudo
-   - Clear error messages with suggestions
-   - Retry mechanisms for transient failures
-   - Process cleanup on app exit
+**4. Enterprise-Grade Error Recovery (v1.8.237+)**:
+   - **Robust Update System**: 4-strategy approach for npm ENOTEMPTY errors
+   - **Research-Based Solutions**: Fixes based on CLI tool GitHub issues and community solutions
+   - **Comprehensive Cleanup**: Removes all traces including temp directories and binary files
+   - **Graceful degradation**: Fallback strategies without sudo requirements
+   - **Clear error messages**: Specific instructions when all strategies fail
+   - **Retry mechanisms**: Automatic progression through strategies
+   - **Process cleanup**: Proper cleanup on app exit
+
+**Update Strategy Progression (v1.8.237+)**:
+```
+Strategy 1: Standard npm update -g [package]
+    ↓ (if ENOTEMPTY error)
+Strategy 2: npm cache clean --force + npm update --force  
+    ↓ (if still ENOTEMPTY)
+Strategy 3: npm uninstall + 2s delay + npm install
+    ↓ (if reinstall fails with ENOTEMPTY)  
+Strategy 4: Comprehensive manual cleanup + reinstall
+    ├── Remove package directories (all locations)
+    ├── Remove binary files (/opt/homebrew/bin/[tool])
+    ├── Clear npm cache directories (~/.npm/_npx)
+    ├── Remove temp directories (.*[tool]-* patterns)
+    ├── 3-second filesystem cleanup delay
+    └── Fresh npm install
+```
 
 **5. Performance Optimization**:
    - Lazy detection (on-demand, not at startup)
