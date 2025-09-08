@@ -2536,8 +2536,53 @@ server.start();
               strategyUsed = 'uninstall + reinstall';
               
             } catch (reinstallError: any) {
-              logger.error(`[Main] All strategies failed:`, reinstallError.message);
-              throw reinstallError;
+              logger.warn(`[Main] Strategy 3 failed, trying Strategy 4: Manual cleanup for ${toolId}:`, reinstallError.message);
+              
+              // Strategy 4: Manual directory cleanup + reinstall
+              if (reinstallError.message.includes('ENOTEMPTY')) {
+                try {
+                  logger.info(`[Main] Strategy 4: Manual cleanup for ${toolId}`);
+                  
+                  // Try to manually remove the corrupted directory
+                  const globalNodeModules = '/opt/homebrew/lib/node_modules';
+                  const packagePath = path.join(globalNodeModules, packageName.replace('/', path.sep));
+                  
+                  // Try to remove the directory manually
+                  try {
+                    const fs = require('fs').promises;
+                    await fs.rm(packagePath, { recursive: true, force: true });
+                    logger.info(`[Main] Manually removed corrupted directory: ${packagePath}`);
+                  } catch (removeError) {
+                    logger.warn(`[Main] Manual removal failed (continuing anyway):`, removeError);
+                  }
+                  
+                  // Wait longer for filesystem
+                  await new Promise(resolve => setTimeout(resolve, 3000));
+                  
+                  // Try reinstall again
+                  const { stdout } = await execAsync(`npm install -g ${packageName}`, { env: enhancedEnv });
+                  logger.info(`[Main] Strategy 4 SUCCESS: ${stdout}`);
+                  updateSucceeded = true;
+                  strategyUsed = 'manual cleanup + reinstall';
+                  
+                } catch (manualError: any) {
+                  logger.error(`[Main] All 4 strategies failed for ${toolId}:`, manualError.message);
+                  
+                  // Provide helpful manual instructions
+                  const manualInstructions = `
+Manual update required for ${toolId}:
+1. Run: sudo rm -rf /opt/homebrew/lib/node_modules/@google/gemini-cli
+2. Run: npm cache clean --force  
+3. Run: npm install -g ${packageName}
+
+Or try: npm install -g ${packageName} --force --no-cache
+                  `.trim();
+                  
+                  throw new Error(`All automated strategies failed. ${manualInstructions}`);
+                }
+              } else {
+                throw reinstallError;
+              }
             }
           }
         } else {
