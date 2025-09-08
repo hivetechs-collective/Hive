@@ -5683,6 +5683,29 @@ window.cloneRepository = async () => {
     console.log('[Menu] Event handlers registered');
 })();
 
+// Add consensus reset handlers
+if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    // Listen for neural consciousness reset
+    (window as any).electronAPI.on?.('reset-neural-consciousness', () => {
+        console.log('🧠 Resetting Neural Consciousness');
+        if ((window as any).neuralConsciousness) {
+            (window as any).neuralConsciousness.reset();
+        }
+    });
+    
+    // Listen for progress reset  
+    (window as any).electronAPI.on?.('reset-all-progress', () => {
+        console.log('📊 Resetting all progress bars');
+        // Reset all stage progress bars to 0
+        const stages = ['generator', 'refiner', 'validator', 'curator'];
+        stages.forEach(stage => {
+            const progressBar = document.querySelector(`[data-stage="${stage}"] .stage-progress-fill`);
+            if (progressBar) {
+                (progressBar as HTMLElement).style.width = '0%';
+            }
+        });
+    });
+}
 
 // Close the current folder
 window.closeFolder = () => {
