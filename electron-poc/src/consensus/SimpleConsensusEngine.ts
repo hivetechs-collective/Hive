@@ -1266,7 +1266,7 @@ ${currentResponse}`;
       // Polish mode - consensus was reached, just polish the agreed response
       const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
       
-      curatorPrompt = `${this.conversation!.user_question}
+      curatorPrompt = `The following response needs to be improved and polished. Provide only the enhanced version:
 
 ${finalMessage.content}`;
     } else {
