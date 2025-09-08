@@ -4039,24 +4039,40 @@ Final:      Unanimous
 - 🟡 **"Majority"** - 2/3 models agreed (Yellow/Amber)
 - 🟠 **"Curator Decision"** - No consensus, curator chose (Orange)
 
-**Complete Escape Control (v1.8.227+)**:
+**Complete Escape Control (v1.8.233+)**:
 - **Single ESC Press**: Cancels entire consensus operation immediately 
-- **Instant UI Reset**: Stops all timers, resets Neural Consciousness, clears progress bars
-- **Token Protection**: Aborts pending API calls to prevent unnecessary charges
-- **State Cleanup**: Complete reset for clean next consensus run
-- **No Multi-Press**: User presses ESC once, everything stops immediately
+- **Real API Abortion**: AbortController cancels network requests mid-flight (token protection)
+- **Complete Progress Reset**: All stages forced to 'ready' regardless of running state
+- **Chat Window Clearing**: Hides technical error messages from interrupted operations
+- **Comprehensive UI Reset**: Neural Consciousness, timers, progress bars, chat, status
+- **Clean State Recovery**: Perfect reset for next consensus operation
 
-**Escape Cancellation Flow**:
+**Enhanced Escape Implementation**:
 ```
 ESC Pressed → Immediate Actions:
-├── Stop all animation timers (symbols, phrases)
-├── Reset Neural Consciousness to default state
-├── Clear all progress bars → All stages back to 'ready'
-├── Reset consensus display → Clear status area
-├── Abort pending API calls → Protect user tokens  
-├── Reset internal state → Clean for next run
-└── Return to ready state → Ready for new query
+├── Real API Call Abortion (AbortController.abort())
+│   └── Prevents token charges by stopping network requests
+├── Aggressive Progress Reset 
+│   ├── Multiple CSS selectors (.stage-status, .status, .stage-text)
+│   ├── Force CSS class updates (remove 'running', add 'ready')
+│   ├── Reset all stage attributes and progress bars
+│   └── Console logging for debugging reset success
+├── Complete UI Cleanup
+│   ├── Stop animation timers (symbols, phrases)
+│   ├── Reset Neural Consciousness to default state
+│   ├── Clear chat window → Hide 'Error: This operation was aborted'
+│   └── Reset consensus display → Clear status area
+├── Internal State Reset
+│   ├── isInterrupted flag management
+│   ├── Conversation state cleanup
+│   └── Timer and controller cleanup
+└── Ready for Next Operation → Clean slate for new consensus
 ```
+
+**User Experience**:
+- **Before ESC**: Any stage showing 'running' (Generator, Refiner, Validator, Curator)
+- **After ESC**: ALL stages show 'ready', chat cleared, tokens protected
+- **Error Handling**: Technical messages hidden, clean welcome message restored
 
 **Version Information**:
 - **Help → About Dialog**: Shows current build version dynamically (v1.8.227+)
