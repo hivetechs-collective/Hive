@@ -1594,12 +1594,10 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
                 consensusTypeElement.style.animation = '';
                 consensusTypeElement.style.fontWeight = '';
                 consensusTypeElement.style.textShadow = '';
+                consensusTypeElement.style.fontFamily = '';
+                consensusTypeElement.style.whiteSpace = '';
               }
-              // Remove escape handler
-              if (escapeHandler) {
-                document.removeEventListener('keydown', escapeHandler);
-                escapeHandler = null;
-              }
+              // DON'T remove escape handler - keep it active for multiple uses
             }
           };
           document.addEventListener('keydown', escapeHandler);
