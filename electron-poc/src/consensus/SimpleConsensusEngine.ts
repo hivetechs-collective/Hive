@@ -907,11 +907,6 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
   }
 
   private async executeDeliberationRound(apiKey: string, profile: any, contextFramework?: any): Promise<void> {
-    // Check for interruption before starting
-    if (this.isInterrupted || !this.conversation) {
-      console.log('🛑 executeDeliberationRound skipped - consensus interrupted');
-      return;
-    }
     
     const round = this.conversation.rounds_completed;
     
@@ -940,12 +935,6 @@ ${lastValidatorMessage.content}`;
     }
     
     const generatorResult = await this.callOpenRouter(apiKey, profile.generator_model, generatorPrompt);
-    
-    // Check for interruption after API call
-    if (this.isInterrupted || !this.conversation) {
-      console.log('🛑 Generator result ignored - consensus interrupted');
-      return;
-    }
     
     this.conversation.messages.push({
       speaker: 'generator',
@@ -992,12 +981,6 @@ ${generatorResult.content}`;
     
     const refinerResult = await this.callOpenRouter(apiKey, profile.refiner_model, refinerPrompt);
     
-    // Check for interruption after API call
-    if (this.isInterrupted || !this.conversation) {
-      console.log('🛑 Refiner result ignored - consensus interrupted');
-      return;
-    }
-    
     this.conversation.messages.push({
       speaker: 'refiner',
       content: refinerResult.content,
@@ -1043,12 +1026,6 @@ ${refinerResult.content}`;
     
     const validatorResult = await this.callOpenRouter(apiKey, profile.validator_model, validatorPrompt);
     
-    // Check for interruption after API call
-    if (this.isInterrupted || !this.conversation) {
-      console.log('🛑 Validator result ignored - consensus interrupted');
-      return;
-    }
-    
     this.conversation.messages.push({
       speaker: 'validator',
       content: validatorResult.content,
@@ -1081,11 +1058,6 @@ ${refinerResult.content}`;
   }
 
   private async checkConsensus(apiKey: string, profile: any): Promise<void> {
-    // Check for interruption before consensus checking
-    if (this.isInterrupted || !this.conversation || !this.conversation.messages) {
-      console.log('🛑 checkConsensus skipped - consensus interrupted');
-      return;
-    }
     
     // Get the last validator response (the final response of this round)
     const lastMessage = this.conversation.messages[this.conversation.messages.length - 1];
@@ -1106,12 +1078,6 @@ ${currentResponse}`;
     // Generator's opinion
     console.log('🤔 Asking Generator for consensus opinion...');
     const genOpinion = await this.callOpenRouter(apiKey, profile.generator_model, consensusPrompt);
-    
-    // Check for interruption after API call
-    if (this.isInterrupted || !this.conversation) {
-      console.log('🛑 Generator consensus check ignored - interrupted');
-      return;
-    }
     
     console.log(`  Generator raw response: "${genOpinion.content}"`);
     const genVote = this.parseConsensusOpinion(genOpinion.content);
@@ -1142,12 +1108,6 @@ ${currentResponse}`;
     console.log('🤔 Asking Refiner for consensus opinion...');
     const refOpinion = await this.callOpenRouter(apiKey, profile.refiner_model, consensusPrompt);
     
-    // Check for interruption after API call
-    if (this.isInterrupted || !this.conversation) {
-      console.log('🛑 Refiner consensus check ignored - interrupted');
-      return;
-    }
-    
     console.log(`  Refiner raw response: "${refOpinion.content}"`);
     const refVote = this.parseConsensusOpinion(refOpinion.content);
     opinions.push(refVote);
@@ -1176,12 +1136,6 @@ ${currentResponse}`;
     // Validator's opinion
     console.log('🤔 Asking Validator for consensus opinion...');
     const valOpinion = await this.callOpenRouter(apiKey, profile.validator_model, consensusPrompt);
-    
-    // Check for interruption after API call  
-    if (this.isInterrupted || !this.conversation) {
-      console.log('🛑 Validator consensus check ignored - interrupted');
-      return;
-    }
     
     console.log(`  Validator raw response: "${valOpinion.content}"`);
     const valVote = this.parseConsensusOpinion(valOpinion.content);
@@ -1328,12 +1282,6 @@ Provide a comprehensive response that synthesizes the best elements from the ref
     }
     
     const curatorResult = await this.callOpenRouter(apiKey, profile.curator_model, curatorPrompt);
-    
-    // Check for interruption after API call
-    if (this.isInterrupted || !this.conversation) {
-      console.log('🛑 Curator result ignored - consensus interrupted');
-      return { content: 'Consensus interrupted' };
-    }
     
     this.conversation.total_tokens += curatorResult.usage.total_tokens;
     this.conversation.total_cost += this.calculateCost(profile.curator_model, curatorResult.usage);
