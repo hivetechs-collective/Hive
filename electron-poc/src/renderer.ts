@@ -5695,13 +5695,24 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
     
     // Listen for progress reset  
     (window as any).electronAPI.on?.('reset-all-progress', () => {
-        console.log('📊 Resetting all progress bars');
-        // Reset all stage progress bars to 0
+        console.log('📊 Resetting all progress bars and stage status');
+        // Reset all stage progress bars to 0 and status to ready
         const stages = ['generator', 'refiner', 'validator', 'curator'];
         stages.forEach(stage => {
+            // Reset progress bar fill
             const progressBar = document.querySelector(`[data-stage="${stage}"] .stage-progress-fill`);
             if (progressBar) {
                 (progressBar as HTMLElement).style.width = '0%';
+            }
+            
+            // Reset stage status text to ready
+            const stageElement = document.querySelector(`[data-stage="${stage}"]`);
+            if (stageElement) {
+                stageElement.setAttribute('data-status', 'ready');
+                const statusElement = stageElement.querySelector('.stage-status');
+                if (statusElement) {
+                    statusElement.textContent = 'ready';
+                }
             }
         });
     });
@@ -5709,10 +5720,14 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
     // Listen for chat clearing (hide error messages from interruption)
     (window as any).electronAPI.on?.('clear-chat-window', () => {
         console.log('💬 Clearing chat window');
-        const chatContainer = document.querySelector('.chat-container');
-        if (chatContainer) {
-            chatContainer.innerHTML = '<div class="message bot-message">Welcome to Hive Consensus! Try asking me a question.</div>';
-        }
+        // Small delay to ensure abort error appears first, then clear it
+        setTimeout(() => {
+            const chatContainer = document.querySelector('.chat-container');
+            if (chatContainer) {
+                chatContainer.innerHTML = '<div class="message bot-message">Welcome to Hive Consensus! Try asking me a question.</div>';
+                console.log('✅ Chat window cleared - error messages hidden');
+            }
+        }, 100); // 100ms delay to catch abort errors
     });
 }
 
