@@ -1572,9 +1572,44 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
       // Clean up any existing listeners
       consensusAPI.removeAllListeners();
       
+      // ESC key handler for interrupting consensus (like Claude Code CLI)
+      let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+      
       // Consensus status handler (for tracking consensus type)
       consensusAPI.onConsensusStatus((data: any) => {
         console.log('📊 Consensus Status:', data);
+        
+        // Add escape handler during routing and conversing states
+        if ((data.consensusType === 'routing' || data.consensusType === 'conversing') && !escapeHandler) {
+          escapeHandler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+              console.log('🛑 ESC pressed - interrupting consensus');
+              // Stop consensus and reset display
+              window.consensusAPI?.interruptConsensus();
+              // Reset consensus display
+              const consensusTypeElement = document.getElementById('consensus-type');
+              if (consensusTypeElement) {
+                consensusTypeElement.textContent = '';
+                consensusTypeElement.style.color = '';
+                consensusTypeElement.style.animation = '';
+                consensusTypeElement.style.fontWeight = '';
+                consensusTypeElement.style.textShadow = '';
+              }
+              // Remove escape handler
+              if (escapeHandler) {
+                document.removeEventListener('keydown', escapeHandler);
+                escapeHandler = null;
+              }
+            }
+          };
+          document.addEventListener('keydown', escapeHandler);
+        }
+        
+        // Remove escape handler when consensus complete
+        if (data.achieved && escapeHandler) {
+          document.removeEventListener('keydown', escapeHandler);
+          escapeHandler = null;
+        }
         
         // Update consensus type display with color coding
         const consensusTypeElement = document.getElementById('consensus-type');
@@ -1603,13 +1638,17 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
             case 'routing':
               const funPhrase = data.funPhrase || "processing";
               const animatedIcon = data.animatedIcon || "+";
-              displayText = `${animatedIcon} ${funPhrase}...`;
+              // Use fixed-width for symbol to prevent word bouncing
+              const fixedSymbol = animatedIcon.padEnd(1, ' '); // Ensure consistent width
+              displayText = `${fixedSymbol} ${funPhrase}... (esc to interrupt)`;
               color = '#FF9500'; // Orange like Claude Code CLI
               // Remove breathing, focus on fast symbol spinning
               consensusTypeElement.style.animation = '';
               consensusTypeElement.style.fontWeight = 'bold';
               consensusTypeElement.style.fontSize = '14px';
               consensusTypeElement.style.textShadow = '0 0 8px rgba(255, 149, 0, 0.8)';
+              consensusTypeElement.style.fontFamily = 'monospace'; // Fixed-width font to prevent bouncing
+              consensusTypeElement.style.whiteSpace = 'pre'; // Preserve spacing
               break;
             default:
               displayText = '';
