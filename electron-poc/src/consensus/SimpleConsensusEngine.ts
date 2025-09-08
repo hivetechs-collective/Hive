@@ -134,6 +134,7 @@ export class SimpleConsensusEngine {
   private currentStage: 'routing' | 'generator' | 'refiner' | 'validator' | 'curator' | 'conversing' = 'routing';
   private isInterrupted: boolean = false;
   private phraseChangeCounter: number = 0;
+  private activeAbortController: AbortController | null = null;
 
   constructor(database: any) {
     this.db = database;
@@ -850,6 +851,15 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
   private async callOpenRouter(apiKey: string, model: string, query: string): Promise<{content: string, usage: any}> {
     console.log('🎯 Calling OpenRouter with model:', model);
     
+    // Create new AbortController for this API call
+    this.activeAbortController = new AbortController();
+    
+    // Check if already interrupted before making call
+    if (this.isInterrupted) {
+      console.log('🛑 Skipping API call - already interrupted');
+      throw new Error('Consensus interrupted');
+    }
+    
     // Determine max_tokens based on model capabilities (2025 standards)
     let maxTokens = 8192; // Safe default for most models
     
@@ -874,6 +884,7 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         'HTTP-Referer': 'https://hivetech.ai',
         'X-Title': 'Hive Consensus'
       },
+      signal: this.activeAbortController.signal,
       body: JSON.stringify({
         model: model,
         messages: [
@@ -1470,12 +1481,14 @@ Provide a comprehensive response that synthesizes the best elements from the ref
   }
 
   private abortAllApiCalls() {
-    // Set interrupt flag to ignore any pending API responses
-    this.isInterrupted = true;
+    // Actually abort any active API calls to prevent token usage
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      console.log('🚫 Active API call aborted - preventing token usage');
+    }
     
-    // TODO: Implement actual API call abortion when OpenRouter calls are in progress
-    // For now, just mark as interrupted so results are ignored
-    console.log('🚫 All API calls marked as cancelled - results will be ignored');
+    this.isInterrupted = true;
+    console.log('🛑 All future API calls will be ignored');
   }
 
   private resetConsensusState() {
