@@ -1573,12 +1573,13 @@ body {
 .progress-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px; /* More breathing room */
+  margin-bottom: 12px; /* More spacing */
   font-weight: 600;
   color: var(--text-primary);
-  font-size: 12px;
-  font-family: monospace; /* Match status word font */
+  font-size: 14px; /* Larger for better readability */
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; /* Consistent with Claude Code CLI */
+  line-height: 1.4; /* Better line spacing */
 }
 
 .pipeline-stages {
@@ -1592,30 +1593,31 @@ body {
 .profile-display {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-  font-size: 11px;
+  gap: 10px; /* More breathing room */
+  margin-bottom: 10px; /* More spacing */
+  padding: 8px 12px; /* More padding */
+  background: rgba(0, 0, 0, 0.3); /* Slightly more contrast */
+  border-radius: 6px; /* Slightly rounded */
+  font-size: 12px; /* Larger font for readability */
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; /* Consistent monospace */
 }
 
 .profile-label {
-  color: #9d9d9d;
+  color: #ccc; /* Brighter from #9d9d9d for better contrast */
   font-weight: 500;
 }
 
 .profile-name {
-  color: #FFC107;
+  color: #FFD54F; /* Brighter yellow for better visibility */
   font-weight: 600;
 }
 
 /* Stage model names */
 .stage-model {
-  font-size: 9px;
-  color: #888;
-  margin-top: 2px;
-  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 11px; /* Increased from 9px for better readability */
+  color: #bbb; /* Increased contrast from #888 to #bbb */
+  margin-top: 3px; /* More spacing */
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; /* Consistent with Claude Code CLI */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
