@@ -82,7 +82,10 @@ contextBridge.exposeInMainWorld('consensusAPI', {
     ipcRenderer.removeAllListeners('updateStageProgress');
     ipcRenderer.removeAllListeners('updateModelDisplay');
     ipcRenderer.removeAllListeners('neuralConsciousness.updatePhase');
-  }
+  },
+  
+  // Interrupt consensus functionality
+  interruptConsensus: () => ipcRenderer.invoke('interrupt-consensus')
 });
 
 // Settings API

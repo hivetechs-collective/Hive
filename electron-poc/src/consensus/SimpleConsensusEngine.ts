@@ -133,6 +133,7 @@ export class SimpleConsensusEngine {
   private animationTimer: NodeJS.Timeout | null = null;
   private currentStage: 'routing' | 'generator' | 'refiner' | 'validator' | 'curator' | 'conversing' = 'routing';
   private isInterrupted: boolean = false;
+  private phraseChangeCounter: number = 0;
 
   constructor(database: any) {
     this.db = database;
@@ -1382,9 +1383,12 @@ Provide a comprehensive response that synthesizes the best elements from the ref
         this.currentPhraseIndex = 0;
       }
       
-      // Change phrase every 30 seconds (0.0027% chance per 80ms = ~30 seconds)
-      if (Math.random() < 0.0027) {
+      // Change phrase every 30 seconds deterministically (375 updates = 30 seconds at 80ms)
+      this.phraseChangeCounter++;
+      if (this.phraseChangeCounter >= 375) {
         this.currentPhraseIndex = Math.floor(Math.random() * stagePhrases.length);
+        this.phraseChangeCounter = 0;
+        console.log(`🎯 Changed phrase to: ${stagePhrases[this.currentPhraseIndex]}`);
       }
       
       const stagePhrase = stagePhrases[this.currentPhraseIndex];
