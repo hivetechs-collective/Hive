@@ -1382,8 +1382,8 @@ Provide a comprehensive response that synthesizes the best elements from the ref
         this.currentPhraseIndex = 0;
       }
       
-      // Change phrase occasionally (~1 minute)
-      if (Math.random() < 0.0008) {
+      // Change phrase every 30 seconds (0.0027% chance per 80ms = ~30 seconds)
+      if (Math.random() < 0.0027) {
         this.currentPhraseIndex = Math.floor(Math.random() * stagePhrases.length);
       }
       
