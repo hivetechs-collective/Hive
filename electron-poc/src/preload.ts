@@ -284,7 +284,10 @@ contextBridge.exposeInMainWorld('testAPI', {
       console.log('[Preload] Error:', error);
       throw error;
     }
-  }
+  },
+  
+  // Interrupt consensus functionality
+  interruptConsensus: () => ipcRenderer.invoke('interrupt-consensus')
 });
 
 contextBridge.exposeInMainWorld('terminalAPI', {

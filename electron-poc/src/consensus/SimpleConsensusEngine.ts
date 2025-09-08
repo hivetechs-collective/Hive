@@ -536,8 +536,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         finalResponse = lastMessage.content;
       }
       
-      // Stop curator animation and send final consensus status after curator completes
-      this.stopCuratorTimer();
+      // Stop ALL animation timers and send final consensus status after curator completes
+      this.stopAllTimers();
       this.sendConsensusStatus({
         achieved: true,
         consensusType: this.consensusType,
@@ -1476,6 +1476,15 @@ Provide a comprehensive response that synthesizes the best elements from the ref
       clearInterval(this.curatorTimer);
       this.curatorTimer = null;
     }
+  }
+
+  private stopAllTimers() {
+    // Stop all animation timers
+    this.stopDeliberationTimer();
+    this.stopRoutingTimer();
+    this.stopStageTimer();
+    this.stopCuratorTimer();
+    console.log('🛑 All animation timers stopped');
   }
 
   private logIteration(

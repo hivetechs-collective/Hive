@@ -1652,6 +1652,14 @@ ipcMain.handle('get-app-version', async () => {
   return packageJson.version;
 });
 
+// IPC handler to interrupt consensus
+ipcMain.handle('interrupt-consensus', async () => {
+  console.log('🛑 Interrupt consensus requested');
+  // TODO: Implement consensus interruption
+  // For now, just reset the consensus display
+  return true;
+});
+
 // IPC handler to get WebSocket backend port specifically
 ipcMain.handle('get-websocket-port', async () => {
   const processInfo = processManager.getProcessStatus('websocket-backend');
