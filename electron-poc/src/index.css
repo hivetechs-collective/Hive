@@ -1578,6 +1578,7 @@ body {
   font-weight: 600;
   color: var(--text-primary);
   font-size: 12px;
+  font-family: monospace; /* Match status word font */
 }
 
 .pipeline-stages {

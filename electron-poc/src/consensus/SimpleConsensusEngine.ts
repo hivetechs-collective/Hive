@@ -1040,7 +1040,8 @@ ${refinerResult.content}`;
       round
     );
     
-    this.sendStageUpdate('validator', 'completed');
+    // DON'T mark validator complete yet - keep symbols during consensus checking
+    // this.sendStageUpdate('validator', 'completed'); // Moved to after consensus checking
   }
 
   private async checkConsensus(apiKey: string, profile: any): Promise<void> {
