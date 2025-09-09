@@ -5645,7 +5645,7 @@ function showGettingStartedModal() {
                 </section>
                 
                 <div class="help-modal-footer">
-                    <button class="help-modal-button primary" onclick="this.closest('.help-modal-overlay').remove()">Got it!</button>
+                    <button class="help-modal-button primary help-modal-ok-btn">Got it!</button>
                 </div>
             </div>
         </div>
@@ -5658,6 +5658,13 @@ function showGettingStartedModal() {
     if (closeBtn) {
         closeBtn.addEventListener('click', () => modal.remove());
     }
+    
+    // OK button handler
+    const okBtn = modal.querySelector('.help-modal-ok-btn');
+    if (okBtn) {
+        okBtn.addEventListener('click', () => modal.remove());
+    }
+    
     modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.remove();
     });
@@ -5748,7 +5755,7 @@ function showMemoryGuideModal() {
                 </section>
                 
                 <div class="help-modal-footer">
-                    <button class="help-modal-button primary" onclick="this.closest('.help-modal-overlay').remove()">Close</button>
+                    <button class="help-modal-button primary help-modal-ok-btn">Close</button>
                 </div>
             </div>
         </div>
@@ -5761,6 +5768,13 @@ function showMemoryGuideModal() {
     if (closeBtn) {
         closeBtn.addEventListener('click', () => modal.remove());
     }
+    
+    // OK button handler
+    const okBtn = modal.querySelector('.help-modal-ok-btn');
+    if (okBtn) {
+        okBtn.addEventListener('click', () => modal.remove());
+    }
+    
     modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.remove();
     });
