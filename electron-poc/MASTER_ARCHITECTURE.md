@@ -2702,10 +2702,28 @@ toolsList: [
 - **Efficient integration**: Single source of truth with AI CLI Tools section
 - **Performance overhead**: ~9ms every 5 seconds (0.18% CPU)
 
-**Essential Actions:**
-- **Export Memory**: Backup memory database for data safety
-- **Import Memory**: Restore from backup files
-- **Live Activity Stream**: Real-time Memory Service API usage monitoring
+**Essential Actions (v1.8.239+):**
+
+**Export Memory:**
+- **Native file dialog**: User chooses backup location and filename
+- **Timestamped defaults**: `hive-memory-export-2025-09-08.json`
+- **Complete backup**: All messages and conversations from unified database (~/.hive/hive-ai.db)
+- **Structured format**: JSON with metadata, version info, and export timestamp
+- **File system freedom**: Save to Desktop, cloud folders, external drives
+- **Data integrity**: Complete database export maintaining all relationships
+
+**Import Memory:**
+- **Native file dialog**: User browses and selects restore file
+- **Safe merge**: `INSERT OR IGNORE` prevents duplicates and overwrites  
+- **Smart counting**: Accurate feedback on new vs skipped records
+- **File validation**: Checks for proper export format before import
+- **Automatic refresh**: Dashboard updates after successful import
+- **Error handling**: Graceful handling of invalid files or import errors
+
+**Live Activity Stream:**
+- **Real-time monitoring**: WebSocket-based activity updates
+- **API usage tracking**: Shows actual Memory Service usage patterns
+- **Tool identification**: Displays which tools are accessing the service
 
 **Removed Redundant Features (v1.8.239+):**
 - ~~Configure Tools~~ (now automatic in AI CLI Tools section)
