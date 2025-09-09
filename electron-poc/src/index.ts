@@ -3168,6 +3168,32 @@ Or try: npm install -g ${packageName} --force --no-cache
         logger.warn(`[Main] AIToolsDatabase not available, skipping launch tracking`);
       }
       
+      // Create symlink to hive-ai.db for Smart Memory Access
+      // This allows AI CLI tools to directly query the user's growing knowledge base
+      try {
+        const dbLinkPath = path.join(selectedPath, '.hive-ai.db');
+        const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
+        
+        // Remove existing symlink if it exists (might be stale)
+        if (fs.existsSync(dbLinkPath)) {
+          try {
+            fs.unlinkSync(dbLinkPath);
+          } catch (unlinkErr) {
+            logger.debug(`[Main] Could not remove existing symlink: ${unlinkErr}`);
+          }
+        }
+        
+        // Create new symlink to the unified database
+        fs.symlinkSync(actualDbPath, dbLinkPath, 'file');
+        logger.info(`[Main] Created symlink to hive-ai.db at ${dbLinkPath} for AI tool memory access`);
+        
+        // Note: Query examples and documentation are available in the Help menu
+        
+      } catch (symlinkError) {
+        logger.warn(`[Main] Could not create symlink to hive-ai.db:`, symlinkError);
+        // Non-fatal - continue with launch even if symlink fails
+      }
+      
       // Determine the command to run
       let command: string;
       let apiKeyRow: any = null;  // Store API key for Cline
