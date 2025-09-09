@@ -8172,6 +8172,99 @@ For Claude Code and compatible tools:
    CLI tools test connection on port 3000 → All show "Connected ✓"
    ```
 
+#### Intelligent CLI Tools with Hive Memory Integration (Future Enhancement)
+
+**Vision**: Transform CLI tools from isolated utilities into intelligent extensions of Hive's collective memory, making the development environment increasingly personalized and intelligent.
+
+**Current State**: CLI tools are "connected" (health checks) but not "intelligent" (no memory usage)
+
+**Enhanced Integration Design**:
+
+1. **Bidirectional Intelligence Flow**:
+   ```
+   User Query → CLI Tool → Hive Memory+Context → Enhanced Response → Success → Learning Contribution
+   ```
+
+2. **Memory+Context Pipeline for CLI Tools**:
+   ```typescript
+   // Reuse exact Consensus Memory+Context stages
+   async function enhanceCliToolQuery(query: string, toolId: string) {
+     // Stage 1: MEMORY - Same as Consensus
+     const relevantMemories = await optimizedMemory.retrieveMemories(query, conversationId);
+     
+     // Stage 2: CONTEXT - Same as Consensus  
+     const contextFramework = await buildContextFramework(query, relevantMemories);
+     
+     // Stage 3: MCP DELIVERY - Instead of routing to Consensus
+     return {
+       originalQuery: query,
+       memoryContext: contextFramework.summary,
+       patterns: contextFramework.patterns,
+       userPreferences: contextFramework.userPreferences,
+       relevantHistory: relevantMemories.map(m => m.content.substring(0, 200))
+     };
+   }
+   ```
+
+3. **Enhanced MCP Tools**:
+   ```typescript
+   // Current: Basic query_memory
+   query_memory(query) → basic search results
+   
+   // Enhanced: Full Memory+Context pipeline
+   query_memory_with_context(query) → {
+     originalQuery,
+     memoryContext,
+     patterns, 
+     userPreferences,
+     relevantHistory
+   }
+   
+   // New: Learning contribution
+   save_output(content, category, success) → stores successful patterns
+   contribute_solution(problem, solution, code) → builds collective intelligence
+   ```
+
+4. **Example Intelligence Enhancement**:
+   ```
+   User asks Gemini CLI: "How to implement React authentication?"
+   ↓
+   Hive Memory+Context: "User struggled with OAuth, prefers JWT+hooks, had CORS issues with auth0"
+   ↓
+   Gemini CLI receives: Question + Rich context about user's auth history & preferences  
+   ↓
+   Gemini CLI: Context-aware response avoiding known problems, using preferred patterns
+   ↓
+   User: "This worked perfectly!"
+   ↓
+   Gemini CLI: /save → Contributes successful React+JWT solution back to Hive memory
+   ↓
+   Future: All CLI tools benefit from this accumulated knowledge
+   ```
+
+5. **Learning Contribution Triggers**:
+   ```
+   // User trigger commands
+   "/save" → Save last response as valuable learning
+   "/remember this" → Contribute current output to memory  
+   "/worked" → Mark solution as successful and save
+   "/note: [category]" → Save with specific categorization
+   
+   // Automatic triggers (future)
+   - CLI tool detects successful code execution
+   - User uses solution without asking follow-ups
+   - Pattern recognition of positive user feedback
+   ```
+
+6. **Collective Intelligence Benefits**:
+   - **Personalized environment**: Tools learn user's preferences, coding style, common issues
+   - **Cross-tool learning**: Claude Code discoveries benefit Gemini CLI and vice versa
+   - **Accumulated expertise**: System gets smarter with every successful interaction
+   - **Context continuity**: Tools understand user's project context and history
+   - **Pattern recognition**: System learns what solutions work for this specific user/project
+
+**Result**: Hive IDE becomes an increasingly intelligent, personalized development companion that grows with the user's experience and preferences.
+
 4. **Grok-Specific MCP Configuration**:
    
    **IMPORTANT**: Grok is unique among our AI CLI tools - it uses its own MCP configuration file at `~/.grok/mcp-config.json` rather than reading from the shared `~/.hive/cli-tools-config.json`.
