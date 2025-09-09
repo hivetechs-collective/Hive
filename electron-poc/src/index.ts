@@ -1329,6 +1329,93 @@ function updateAllMCPConfigurations(actualPort: number) {
       }
     }
     
+    // Create Gemini CLI MCP configuration with automatic memory integration
+    const geminiToken = config['gemini-cli']?.memoryService?.token;
+    if (geminiToken) {
+      const geminiDir = path.join(os.homedir(), '.gemini');
+      const geminiSettingsPath = path.join(geminiDir, 'settings.json');
+      
+      try {
+        if (!fs.existsSync(geminiDir)) {
+          fs.mkdirSync(geminiDir, { recursive: true });
+        }
+        
+        let geminiSettings: any = {};
+        if (fs.existsSync(geminiSettingsPath)) {
+          try {
+            geminiSettings = JSON.parse(fs.readFileSync(geminiSettingsPath, 'utf-8'));
+          } catch {
+            geminiSettings = {};
+          }
+        }
+        
+        // Configure intelligent memory integration
+        geminiSettings.mcpServers = geminiSettings.mcpServers || {};
+        geminiSettings.mcpServers['hive-memory-service'] = {
+          command: 'node',
+          args: [wrapperPath],
+          env: {
+            MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+            MEMORY_SERVICE_TOKEN: geminiToken
+          },
+          autoInvoke: ['query_memory_with_context'], // Automatic memory consultation
+          description: 'Hive Consensus Memory Service - AI memory and learning system'
+        };
+        
+        fs.writeFileSync(geminiSettingsPath, JSON.stringify(geminiSettings, null, 2));
+        logger.info('[Main] Updated/Created Gemini CLI intelligent MCP configuration');
+      } catch (err) {
+        logger.error('[Main] Failed to update Gemini CLI MCP config:', err);
+      }
+    }
+    
+    // Create intelligent MCP configurations for remaining CLI tools
+    const otherTools = [
+      { id: 'qwen-code', configPath: path.join(os.homedir(), '.qwen', 'config.json') },
+      { id: 'openai-codex', configPath: path.join(os.homedir(), '.codex', 'config.json') },
+      { id: 'cline', configPath: path.join(os.homedir(), '.cline', 'config.json') }
+    ];
+    
+    for (const tool of otherTools) {
+      const toolToken = config[tool.id]?.memoryService?.token;
+      if (toolToken) {
+        try {
+          const toolDir = path.dirname(tool.configPath);
+          if (!fs.existsSync(toolDir)) {
+            fs.mkdirSync(toolDir, { recursive: true });
+          }
+          
+          let toolConfig: any = {};
+          if (fs.existsSync(tool.configPath)) {
+            try {
+              toolConfig = JSON.parse(fs.readFileSync(tool.configPath, 'utf-8'));
+            } catch {
+              toolConfig = {};
+            }
+          }
+          
+          // Add intelligent MCP configuration
+          toolConfig.mcpServers = toolConfig.mcpServers || {};
+          toolConfig.mcpServers['hive-memory-service'] = {
+            command: 'node',
+            args: [wrapperPath],
+            env: {
+              MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+              MEMORY_SERVICE_TOKEN: toolToken
+            },
+            autoEnabled: true,
+            intelligentQueries: true,
+            description: 'Hive Consensus Memory Service - Intelligent context and learning'
+          };
+          
+          fs.writeFileSync(tool.configPath, JSON.stringify(toolConfig, null, 2));
+          logger.info(`[Main] Updated/Created ${tool.id} intelligent MCP configuration`);
+        } catch (err) {
+          logger.error(`[Main] Failed to update ${tool.id} MCP config:`, err);
+        }
+      }
+    }
+    
     // CRITICAL: Remove hardcoded endpoints from cli-tools-config.json  
     // Only store authentication tokens, not infrastructure endpoints
     logger.info('[Main] Removing hardcoded endpoints from cli-tools-config.json (keeping only tokens)');
@@ -2590,8 +2677,15 @@ server.start();
           }
         }
         
-        logger.info(`[Main] ${toolConfig.name} installed and configured successfully, version: ${version}`);
-        return { success: true, version, message: `Installed ${toolConfig.name} version ${version}` };
+        // INTELLIGENT CONFIGURATION: Deploy enhanced MCP config for newly installed tool
+        const memoryServicePort = processManager.getProcessStatus('memory-service')?.port;
+        if (memoryServicePort) {
+          logger.info(`[Main] Deploying intelligent MCP configuration for newly installed ${toolId}`);
+          updateAllMCPConfigurations(memoryServicePort);
+        }
+        
+        logger.info(`[Main] ${toolConfig.name} installed and configured successfully with intelligent memory integration, version: ${version}`);
+        return { success: true, version, message: `Installed ${toolConfig.name} version ${version} with Hive intelligence` };
         
       } catch (error: any) {
         logger.error(`[Main] Failed to install ${toolConfig.name}:`, error);
