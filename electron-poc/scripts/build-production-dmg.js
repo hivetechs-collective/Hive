@@ -1797,16 +1797,29 @@ console.log(`${GREEN}${BOLD}✅ BUILD SUCCESSFUL!${RESET}\n`);
 // Auto-install the DMG for immediate testing
 console.log(`${CYAN}${BOLD}Auto-installing DMG for testing...${RESET}`);
 try {
-  // First, eject any existing Hive Consensus volumes
+  // First, kill any running app
+  console.log(`${YELLOW}➤ Stopping any running Hive Consensus${RESET}`);
+  try {
+    execCommand('pkill -f "Hive Consensus" || true', 'Stop running app', { silent: true });
+    execCommand('sleep 1', 'Wait for app to quit', { silent: true });
+  } catch (error) {
+    // Ignore errors - app might not be running
+  }
+  
+  // Eject any existing Hive Consensus volumes
   try {
     execCommand('hdiutil detach "/Volumes/Hive Consensus" 2>/dev/null || true', 'Eject existing volume', { silent: true });
+    execCommand('sleep 0.5', 'Wait for volume to eject', { silent: true });
   } catch (error) {
     // Ignore errors - volume might not exist
   }
   
   // Mount DMG fresh
   console.log(`${YELLOW}➤ Mounting DMG${RESET}`);
-  execCommand(`hdiutil attach "${dmgPath}" -nobrowse`, 'Mounting DMG for auto-install', { silent: true });
+  execCommand(`hdiutil attach "${dmgPath}" -nobrowse`, 'Mounting DMG for auto-install');
+  
+  // Wait for mount to complete
+  execCommand('sleep 1', 'Wait for DMG to mount', { silent: true });
   
   // Use standard volume path
   const volumePath = '/Volumes/Hive Consensus';
@@ -1818,23 +1831,31 @@ try {
   
   console.log(`${CYAN}  Found app at: ${volumePath}/Hive Consensus.app${RESET}`);
   
-  console.log(`${YELLOW}➤ Installing to Applications${RESET}`);
+  console.log(`${YELLOW}➤ Removing old version from Applications${RESET}`);
   
-  // Force remove old app first (in case the earlier removal failed)
+  // Force remove old app first
   try {
-    execCommand('rm -rf "/Applications/Hive Consensus.app"', 'Force remove old app', { silent: true });
+    execCommand('rm -rf "/Applications/Hive Consensus.app"', 'Remove old app');
   } catch (error) {
-    // Ignore errors
+    console.log(`${YELLOW}  Note: Old app might not exist or be in use${RESET}`);
   }
   
+  console.log(`${YELLOW}➤ Installing new version to Applications${RESET}`);
+  
   // Copy new app
-  execCommand(`cp -R "${volumePath}/Hive Consensus.app" /Applications/`, 'Installing app to Applications', { silent: true });
+  execCommand(`cp -R "${volumePath}/Hive Consensus.app" /Applications/`, 'Installing app to Applications');
+  
+  // Verify installation
+  if (!fs.existsSync('/Applications/Hive Consensus.app')) {
+    throw new Error('Failed to install app to Applications');
+  }
   
   // Unmount DMG
   console.log(`${YELLOW}➤ Ejecting DMG${RESET}`);
-  execCommand(`hdiutil detach "${volumePath}"`, 'Ejecting DMG', { silent: true });
+  execCommand(`hdiutil detach "${volumePath}"`, 'Ejecting DMG');
   
-  console.log(`${GREEN}✅ Auto-installation complete!${RESET}\n`);
+  console.log(`${GREEN}✅ Auto-installation complete!${RESET}`);
+  console.log(`${GREEN}  App installed to: /Applications/Hive Consensus.app${RESET}\n`);
   
 } catch (error) {
   console.log(`${YELLOW}⚠ Auto-install failed: ${error.message}${RESET}`);
