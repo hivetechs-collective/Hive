@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hive Consensus - Help</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        h2 {
+            font-size: 1.8em;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+            padding-bottom: 10px;
+        }
+        
+        h3 {
+            font-size: 1.3em;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+        
+        p {
+            margin-bottom: 15px;
+        }
+        
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        pre {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        .example {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid #ffd700;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        
+        .keyboard-shortcut {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+            display: inline-block;
+            margin: 2px;
+        }
+        
+        .close-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .close-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .nav-tab {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 10px 10px 0 0;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tab:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .nav-tab.active {
+            background: rgba(255, 255, 255, 0.3);
+            font-weight: bold;
+        }
+        
+        .content-section {
+            display: none;
+        }
+        
+        .content-section.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <button class="close-button" onclick="window.close()">Close</button>
+    
+    <div class="container">
+        <h1>🐝 Hive Consensus Help</h1>
+        
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showSection('memory-query')">Memory Query</button>
+            <button class="nav-tab" onclick="showSection('database-access')">Database Access</button>
+            <button class="nav-tab" onclick="showSection('cli-integration')">CLI Tools</button>
+            <button class="nav-tab" onclick="showSection('shortcuts')">Shortcuts</button>
+        </div>
+        
+        <div id="memory-query" class="content-section active">
+            <h2>Memory Query Guide</h2>
+            
+            <h3>Overview</h3>
+            <p>The Hive Consensus memory system provides intelligent context retrieval for all your AI interactions. It maintains a unified database of all conversations, learnings, and insights.</p>
+            
+            <h3>Query Commands</h3>
+            <div class="example">
+                <p><strong>Universal Commands (work across all CLI tools):</strong></p>
+                <pre><code>hive-memory context "What have we worked on?"
+hive-memory query "Show me Python examples"
+hive-memory contribute solution python "Fixed import issue"</code></pre>
+            </div>
+            
+            <h3>Natural Language Triggers</h3>
+            <p>These phrases automatically trigger memory queries:</p>
+            <ul style="margin-left: 20px;">
+                <li>"What did we..." - Retrieves past conversations</li>
+                <li>"Show me our..." - Displays previous work</li>
+                <li>"Remind me about..." - Recalls specific topics</li>
+                <li>"What have we..." - Shows work history</li>
+            </ul>
+            
+            <h3>Tool-Specific Shortcuts</h3>
+            <div class="example">
+                <pre><code>hive-memory-claude-code context "test query"
+hive-memory-gemini-cli context "test query"
+hive-memory-grok context "test query"</code></pre>
+            </div>
+        </div>
+        
+        <div id="database-access" class="content-section">
+            <h2>Database Access Guide</h2>
+            
+            <h3>Unified Database Location</h3>
+            <p>All data is stored in: <code>~/.hive/hive-ai.db</code></p>
+            <p>This SQLite database contains all conversations, memory, settings, and analytics.</p>
+            
+            <h3>Direct Query Examples</h3>
+            <div class="example">
+                <p><strong>Natural Language Queries:</strong></p>
+                <pre><code>"Query .hive-ai.db: What have we worked on with authentication?"</code></pre>
+                
+                <p><strong>Named Views:</strong></p>
+                <pre><code>"Query .hive-ai.db view 'recent_work'"
+"Query .hive-ai.db view 'solutions' about React"</code></pre>
+                
+                <p><strong>Smart Context Function:</strong></p>
+                <pre><code>"Query .hive-ai.db: SELECT get_context('debugging TypeScript')"</code></pre>
+                
+                <p><strong>Direct SQL (Advanced):</strong></p>
+                <pre><code>"Query .hive-ai.db: SELECT * FROM messages WHERE content LIKE '%API%' LIMIT 5"</code></pre>
+            </div>
+            
+            <h3>Available Views</h3>
+            <ul style="margin-left: 20px;">
+                <li><code>recent_work</code> - Last 100 assistant responses</li>
+                <li><code>solutions</code> - Successful problem resolutions</li>
+                <li><code>errors_fixed</code> - Resolved error messages</li>
+                <li><code>code_examples</code> - Code snippets by language</li>
+                <li><code>project_context</code> - Current project information</li>
+            </ul>
+            
+            <h3>Database Statistics</h3>
+            <div class="example">
+                <pre><code># Check memory size
+"Query .hive-ai.db: SELECT COUNT(*) FROM messages"
+
+# View usage over time
+"Query .hive-ai.db: SELECT DATE(created_at) as day, COUNT(*) FROM messages GROUP BY day"</code></pre>
+            </div>
+        </div>
+        
+        <div id="cli-integration" class="content-section">
+            <h2>CLI Tools Integration</h2>
+            
+            <h3>Supported Tools</h3>
+            <ul style="margin-left: 20px;">
+                <li><strong>Claude Code</strong> - Full memory integration via Direct API</li>
+                <li><strong>Grok CLI</strong> - Morph Fast Apply with memory context</li>
+                <li><strong>Gemini CLI</strong> - Unified command support</li>
+                <li><strong>aichat</strong> - Multiple model access with memory</li>
+                <li><strong>mods</strong> - Streaming responses with context</li>
+                <li><strong>Cursor Composer</strong> - IDE integration</li>
+            </ul>
+            
+            <h3>Memory Service API</h3>
+            <div class="example">
+                <p><strong>Endpoints:</strong></p>
+                <pre><code>POST /api/v1/memory/query      - Query memories with context
+POST /api/v1/memory/contribute - Share new learnings
+GET  /api/v1/memory/stats      - Memory statistics
+GET  /api/v1/memory/tools      - List connected tools</code></pre>
+            </div>
+            
+            <h3>Installation & Configuration</h3>
+            <p>Tools are automatically configured when launched from Hive Consensus. The Memory Service provides:</p>
+            <ul style="margin-left: 20px;">
+                <li>Automatic port discovery (3457-3560 range)</li>
+                <li>Token-based authentication</li>
+                <li>Tool-specific identification</li>
+                <li>Unified command system</li>
+            </ul>
+            
+            <h3>Enterprise Features</h3>
+            <p>Advanced capabilities for professional use:</p>
+            <ul style="margin-left: 20px;">
+                <li>Hooks system for custom workflows</li>
+                <li>Approval workflows for sensitive operations</li>
+                <li>Audit logging for compliance</li>
+                <li>Custom memory retention policies</li>
+            </ul>
+        </div>
+        
+        <div id="shortcuts" class="content-section">
+            <h2>Keyboard Shortcuts</h2>
+            
+            <h3>Application Control</h3>
+            <div class="example">
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + R</span> - Reload application</p>
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + Shift + R</span> - Force reload</p>
+                <p><span class="keyboard-shortcut">F12</span> - Toggle Developer Tools</p>
+                <p><span class="keyboard-shortcut">F11</span> - Toggle Fullscreen</p>
+            </div>
+            
+            <h3>Navigation</h3>
+            <div class="example">
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + P</span> - Go to File</p>
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + G</span> - Go to Line</p>
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + /</span> - Show this help</p>
+            </div>
+            
+            <h3>View Controls</h3>
+            <div class="example">
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + 0</span> - Reset Zoom</p>
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + Plus</span> - Zoom In</p>
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + Minus</span> - Zoom Out</p>
+            </div>
+            
+            <h3>Window Management</h3>
+            <div class="example">
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + M</span> - Minimize Window</p>
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + W</span> - Close Window</p>
+                <p><span class="keyboard-shortcut">Cmd/Ctrl + Q</span> - Quit Application (macOS)</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected section
+            document.getElementById(sectionId).classList.add('active');
+            
+            // Mark corresponding tab as active
+            event.target.classList.add('active');
+        }
+        
+        // Handle IPC messages if in Electron context
+        if (window.electronAPI) {
+            // Listen for specific help topics
+            window.electronAPI.onMenuHelpMemoryQuery(() => {
+                showSection('memory-query');
+            });
+            
+            window.electronAPI.onMenuHelpDatabaseAccess(() => {
+                showSection('database-access');
+            });
+            
+            window.electronAPI.onMenuHelpCliIntegration(() => {
+                showSection('cli-integration');
+            });
+            
+            window.electronAPI.onMenuHelpShortcuts(() => {
+                showSection('shortcuts');
+            });
+        }
+    </script>
+</body>
+</html>
