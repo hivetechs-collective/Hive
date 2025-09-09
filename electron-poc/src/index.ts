@@ -5236,6 +5236,7 @@ ipcMain.handle('get-analytics', async () => {
       });
       });
     });
+    });
   });
 });
 
@@ -5250,5 +5251,4 @@ app.on('browser-window-created', (_, window) => {
   if (!mainWindow) {
     mainWindow = window;
   }
-});
 });
