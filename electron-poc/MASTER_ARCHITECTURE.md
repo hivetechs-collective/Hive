@@ -810,6 +810,7 @@ private static async isPortListening(port: number): Promise<boolean> {
    - Clean up orphaned processes via PidTracker
    - Initialize SQLite connection
    - No network calls, always fast
+   - **CRITICAL**: No async database operations during initialization (see Critical Fixes section)
 
 2. **Process Manager Setup** (10% weight)
    - Register service configurations
@@ -15473,3 +15474,119 @@ sqlite3 ~/.hive/hive-ai.db
 - **consensus_metrics**: Quality comparison metrics
 
 This query library enables deep analysis of the consensus system, from tracing individual queries through their complete journey to analyzing system-wide patterns and performance metrics.
+
+## Critical Fixes and Working Design
+
+### Database Initialization Fix (v1.8.252 - v1.8.267)
+
+#### The Problem
+Starting in v1.8.252, the application would crash immediately on launch. The root cause was the addition of 256 lines of async database operations (`db.run()` calls) in `src/index.ts` that created SQL views without proper callbacks or error handling.
+
+#### Why It Failed
+The problematic code attempted to create multiple database views during the synchronous initialization phase:
+```typescript
+// PROBLEMATIC CODE - DO NOT USE
+db.run(`CREATE VIEW IF NOT EXISTS recent_work AS
+  SELECT content, created_at, role
+  FROM messages
+  WHERE role = 'assistant'
+  ORDER BY created_at DESC
+  LIMIT 100`);
+// ... 255 more similar db.run() calls without callbacks
+```
+
+These async operations created race conditions where:
+1. Database operations would execute without waiting for completion
+2. The app would try to access the database before it was ready
+3. SQLite would encounter conflicts with multiple simultaneous operations
+4. The entire initialization chain would fail, causing immediate crash
+
+#### The Solution
+The fix involved reverting `src/index.ts` to the working version from commit c0cb3d441f, which uses proper initialization patterns:
+
+1. **Synchronous Database Setup**: Core database initialization happens synchronously during `app.on('ready')`
+2. **Proper Async Handling**: Any async database operations use callbacks or promises correctly
+3. **Sequential Initialization**: Services initialize in proper order through StartupOrchestrator
+4. **No Race Conditions**: Database is fully ready before any operations attempt to use it
+
+#### Working Design Principles
+
+##### Application Initialization Pattern
+```typescript
+// CORRECT PATTERN - Use this approach
+app.on('ready', () => {
+  // 1. Synchronous setup first
+  initDatabase();  // Creates connection, basic setup
+  
+  // 2. Initialize process manager
+  initializeProcessManager();
+  
+  // 3. Register IPC handlers (can reference db safely)
+  registerHandlers();
+  
+  // 4. Use StartupOrchestrator for async operations
+  const orchestrator = new StartupOrchestrator(initFunctions);
+  orchestrator.showSplashAndInitialize(createMainWindow);
+});
+```
+
+##### Database Operation Best Practices
+1. **Never use fire-and-forget db.run()**: Always provide callbacks or use promises
+2. **Avoid database operations during sync init**: Defer to after app is ready
+3. **Use transactions for multiple operations**: Prevents conflicts and ensures atomicity
+4. **Implement proper error handling**: Every database operation needs error handling
+
+##### Correct Database View Creation
+```typescript
+// CORRECT PATTERN - With proper error handling and timing
+function createDatabaseViews(callback) {
+  const views = [
+    `CREATE VIEW IF NOT EXISTS recent_work AS ...`,
+    `CREATE VIEW IF NOT EXISTS solutions AS ...`,
+    // ... other views
+  ];
+  
+  db.serialize(() => {
+    views.forEach(viewSQL => {
+      db.run(viewSQL, (err) => {
+        if (err) {
+          logger.error('Failed to create view:', err);
+        }
+      });
+    });
+    callback();
+  });
+}
+
+// Call AFTER app is ready and database is initialized
+app.whenReady().then(() => {
+  createDatabaseViews(() => {
+    logger.info('Database views created successfully');
+  });
+});
+```
+
+#### Build Process
+Always use the production build script for testing:
+```bash
+node ./scripts/build-production-dmg.js
+```
+
+This ensures:
+- All modules are properly bundled
+- Native dependencies are correctly compiled
+- The app runs in production-like environment
+- Issues are caught before release
+
+#### Version History
+- **v1.8.251**: Last known stable version before issues
+- **v1.8.252-266**: Contained problematic database initialization code
+- **v1.8.267**: Fixed by reverting to proper initialization pattern
+- **Current**: Working design documented and maintained
+
+#### Key Takeaways
+1. **Electron's initialization is sensitive to timing**: Respect the app lifecycle
+2. **SQLite operations must be properly sequenced**: No concurrent writes
+3. **Async operations need careful handling**: Use callbacks, promises, or async/await
+4. **StartupOrchestrator manages complexity**: Let it handle service initialization
+5. **Test with production builds**: Development builds may hide timing issues
