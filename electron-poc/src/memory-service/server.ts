@@ -251,6 +251,12 @@ export class MemoryServiceServer {
         contributionCount: 0,
         lastActivity: new Date()
       });
+      logger.info(`[MemoryService] New tool connected: ${clientName} (Total: ${this.connectedTools.size})`);
+    } else {
+      // Update last activity for existing tool
+      const tool = this.connectedTools.get(token)!;
+      tool.lastActivity = new Date();
+      logger.debug(`[MemoryService] Existing tool activity: ${clientName}`);
     }
     
     req.tool = this.connectedTools.get(token);
@@ -458,6 +464,7 @@ export class MemoryServiceServer {
     
     // Connected tools count (in memory - resets on restart)
     this.stats.connectedTools = this.connectedTools.size;
+    logger.debug(`[MemoryService] Stats update: ${this.connectedTools.size} connected tools`);
     
     // Calculate hit rate based on queries
     if (this.stats.queriesToday > 0) {

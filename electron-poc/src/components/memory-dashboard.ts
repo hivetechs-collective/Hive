@@ -244,31 +244,10 @@ export class MemoryDashboard {
         </div>
       </div>
       
-      <!-- Integration Guide -->
-      <div class="integration-guide">
-        <h3>Quick Integration</h3>
-        <div class="integration-steps">
-          <div class="integration-step">
-            <strong>1. Register Your Tool:</strong>
-            <code>curl -X POST http://localhost:${this.memoryServicePort || '[PORT]'}/api/v1/memory/register -d '{"toolName":"my-tool"}'</code>
-          </div>
-          <div class="integration-step">
-            <strong>2. Query Memories:</strong>
-            <code>curl -X POST http://localhost:${this.memoryServicePort || '[PORT]'}/api/v1/memory/query -H "Authorization: Bearer YOUR_TOKEN" -d '{"query":"oauth implementation"}'</code>
-          </div>
-          <div class="integration-step">
-            <strong>3. Contribute Learning:</strong>
-            <code>curl -X POST http://localhost:${this.memoryServicePort || '[PORT]'}/api/v1/memory/contribute -H "Authorization: Bearer YOUR_TOKEN" -d '{"learning":{...}}'</code>
-          </div>
-        </div>
-      </div>
-      
       <!-- Actions -->
       <div class="dashboard-actions">
         <button onclick="window.memoryDashboard.exportMemory()" class="btn btn-secondary">Export Memory</button>
         <button onclick="window.memoryDashboard.importMemory()" class="btn btn-secondary">Import Memory</button>
-        <button onclick="window.memoryDashboard.configureTools()" class="btn btn-secondary">Configure Tools</button>
-        <button onclick="window.memoryDashboard.viewDocs()" class="btn btn-primary">View Documentation</button>
       </div>
     `;
     
@@ -315,16 +294,6 @@ export class MemoryDashboard {
   public async importMemory() {
     // TODO: Implement memory import
     alert('Memory import will be available soon');
-  }
-  
-  public async configureTools() {
-    // TODO: Implement tool configuration
-    alert('Tool configuration will be available soon');
-  }
-  
-  public viewDocs() {
-    // Open documentation in new window
-    window.open('file://' + __dirname + '/../../UNIVERSAL_MEMORY_INFRASTRUCTURE.md');
   }
   
   private applyStyles() {
