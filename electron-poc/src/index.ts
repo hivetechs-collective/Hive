@@ -5260,53 +5260,7 @@ app.on('browser-window-created', (_, window) => {
 
 // Note: initializeApp function removed - initialization now happens directly in app.on('ready')
 // This matches the working v1.8.248 pattern
-
-// Handle app ready event
-app.on('ready', async () => {
-  try {
-    logger.info('[Main] App ready, starting initialization...');
-    
-    // Use StartupOrchestrator for clean, visual startup
-    const orchestrator = new StartupOrchestrator({
-      initDatabase,
-      initializeProcessManager,
-      registerMemoryServiceHandlers,
-      registerGitHandlers,
-      registerFileSystemHandlers,
-      registerDialogHandlers,
-      registerSimpleCliToolHandlers,
-      registerConsensusHandlers,
-      processManager
-    });
-    
-    // The orchestrator will handle all initialization and show splash screen
-    const result = await orchestrator.showSplashAndInitialize(createWindow);
-    
-    if (!result.success) {
-      logger.error('[Main] Startup failed:', result.error);
-      dialog.showErrorBox(
-        'Startup Failed',
-        `Unable to initialize required services.\n\n${result.error?.message || 'Unknown error'}`
-      );
-      app.quit();
-      return;
-    }
-    
-    // Store main window reference
-    mainWindow = BrowserWindow.getAllWindows()[0];
-    
-    // Success - app is now running with main window shown
-    logger.info('[Main] ✅ Application started successfully');
-    
-  } catch (error) {
-    logger.error('[Main] Unexpected startup error:', error);
-    dialog.showErrorBox(
-      'Startup Error',
-      `An unexpected error occurred during startup.\n\n${error}`
-    );
-    app.quit();
-  }
-});
+// IMPORTANT: The actual app.on('ready') handler is defined earlier in the file (around line 3521)
 
 // Handle all windows closed
 app.on('window-all-closed', () => {
