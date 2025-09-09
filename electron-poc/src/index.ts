@@ -3750,6 +3750,7 @@ ipcMain.handle('backend-test', async () => {
 
 // Import DirectConsensusEngine at top of file - will add after testing
 let consensusEngine: any = null;
+let simpleConsensusEngine: any = null;
 
 // Function to register consensus handlers AFTER database is initialized
 const registerConsensusHandlers = () => {
