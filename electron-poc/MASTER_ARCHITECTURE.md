@@ -8263,7 +8263,7 @@ For Claude Code and compatible tools:
    - **Context continuity**: Tools understand user's project context and history
    - **Pattern recognition**: System learns what solutions work for this specific user/project
 
-**Implementation Status (v1.8.240+)**: ✅ COMPLETE - Full Memory+Context intelligence now available to all CLI tools.
+**Implementation Status (v1.8.241+)**: ✅ COMPLETE - Automatic intelligent CLI tools with universal Memory+Context integration.
 
 **Available MCP Tools (v1.8.240+)**:
 ```typescript
@@ -8295,13 +8295,51 @@ gemini "How to implement React authentication?"
 /mcp                     # List all available memory tools
 ```
 
-**Expected Memory Service Activity**:
-```
-POST /api/v1/memory/query-with-context  ← CLI tools getting enhanced context
-POST /api/v1/memory/contribute          ← CLI tools saving valuable outputs
+**Automatic Universal Integration (v1.8.241+)**:
+
+**Zero Manual Configuration**: All CLI tools automatically become intelligent when installed via Hive:
+
+```typescript
+// Prebuilt configurations deployed automatically for all 6 tools:
+
+// Gemini CLI: ~/.gemini/settings.json
+{
+  "mcpServers": {
+    "hive-memory-service": {
+      "autoInvoke": ["query_memory_with_context"],  // Automatic memory consultation
+      "env": { "MEMORY_SERVICE_ENDPOINT": "dynamic_port" }
+    }
+  }
+}
+
+// Claude Code: ~/.claude/.mcp.json (enhanced)
+// Qwen Code: ~/.qwen/config.json (intelligentQueries: true)  
+// OpenAI Codex: ~/.codex/config.json (autoEnabled: true)
+// Cline: ~/.cline/config.json (enhanced MCP integration)
+// Grok CLI: ~/.grok/mcp-config.json (enhanced)
 ```
 
-**Result**: Hive IDE becomes an increasingly intelligent, personalized development companion that grows with the user's experience and preferences through complete Memory+Context integration.
+**Universal Intelligence Activation**:
+- **ANY question** to **ANY CLI tool** triggers Memory+Context consultation
+- **All programming languages**: Python, JavaScript, TypeScript, SQL, etc.
+- **All task types**: Debugging, implementation, optimization, learning
+- **All technologies**: React, Docker, APIs, authentication, databases, etc.
+
+**Growing Intelligence Examples**:
+```
+User: "How to implement React auth?" → Gets context about user's JWT preferences, CORS issues
+User: "Debug this Python error" → Gets context about user's debugging patterns, common fixes
+User: "Create REST API" → Gets context about user's API frameworks, authentication patterns
+User: "Optimize SQL query" → Gets context about user's database preferences, performance patterns
+```
+
+**Expected Memory Service Activity**:
+```
+POST /api/v1/memory/query-with-context  ← ALL CLI tools getting enhanced context automatically
+POST /api/v1/memory/contribute          ← CLI tools saving valuable outputs via /save commands
+```
+
+**Result**: Every CLI tool becomes an intelligent extension of Hive's collective memory, automatically providing context-aware responses tailored to the user's specific experience, preferences, and coding patterns across ALL programming languages and technologies.
 
 4. **Grok-Specific MCP Configuration**:
    
