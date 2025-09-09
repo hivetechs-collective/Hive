@@ -1896,6 +1896,149 @@ const registerMemoryServiceHandlers = () => {
     }
     return [];
   });
+  
+  // Memory Service Export/Import functionality
+  ipcMain.handle('memory-export', async () => {
+    try {
+      logger.info('[Main] Exporting memory database...');
+      
+      // Show save dialog for export location
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Export Memory Database',
+        defaultPath: `hive-memory-export-${new Date().toISOString().split('T')[0]}.json`,
+        filters: [
+          { name: 'JSON Files', extensions: ['json'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+      
+      if (result.canceled) {
+        return { success: false, message: 'Export cancelled by user' };
+      }
+      
+      // Get all memory data from database
+      const memories = await new Promise((resolve, reject) => {
+        if (!db) {
+          reject(new Error('Database not available'));
+          return;
+        }
+        
+        db.all('SELECT * FROM messages ORDER BY timestamp', [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+      
+      const conversations = await new Promise((resolve, reject) => {
+        if (!db) {
+          reject(new Error('Database not available'));
+          return;
+        }
+        
+        db.all('SELECT * FROM conversations ORDER BY created_at', [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
+      });
+      
+      // Create export data structure
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        version: app.getVersion(),
+        data: {
+          memories,
+          conversations,
+          metadata: {
+            totalMemories: Array.isArray(memories) ? memories.length : 0,
+            totalConversations: Array.isArray(conversations) ? conversations.length : 0
+          }
+        }
+      };
+      
+      // Write to selected file
+      fs.writeFileSync(result.filePath!, JSON.stringify(exportData, null, 2));
+      
+      logger.info(`[Main] Memory exported to: ${result.filePath}`);
+      return { 
+        success: true, 
+        message: `Memory exported successfully to ${path.basename(result.filePath!)}`,
+        filePath: result.filePath
+      };
+      
+    } catch (error) {
+      logger.error('[Main] Memory export failed:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
+  
+  ipcMain.handle('memory-import', async () => {
+    try {
+      logger.info('[Main] Importing memory database...');
+      
+      // Show open dialog for import file
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Import Memory Database',
+        filters: [
+          { name: 'JSON Files', extensions: ['json'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+      });
+      
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, message: 'Import cancelled by user' };
+      }
+      
+      const filePath = result.filePaths[0];
+      const importData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      
+      if (!importData.data || !importData.data.memories) {
+        return { success: false, error: 'Invalid memory export file format' };
+      }
+      
+      // Import memories into database
+      let importedCount = 0;
+      
+      for (const memory of importData.data.memories) {
+        try {
+          await new Promise((resolve, reject) => {
+            if (!db) {
+              reject(new Error('Database not available'));
+              return;
+            }
+            
+            // Insert or ignore to prevent duplicates
+            db.run(
+              `INSERT OR IGNORE INTO messages (id, conversation_id, content, role, stage, model_used, timestamp, tokens_used, cost) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [memory.id, memory.conversation_id, memory.content, memory.role, memory.stage, memory.model_used, 
+               memory.timestamp, memory.tokens_used, memory.cost],
+              function(err) {
+                if (err) reject(err);
+                else {
+                  if (this.changes > 0) importedCount++;
+                  resolve(this);
+                }
+              }
+            );
+          });
+        } catch (error) {
+          logger.warn(`[Main] Failed to import memory record:`, error);
+        }
+      }
+      
+      logger.info(`[Main] Memory import completed: ${importedCount} new records`);
+      return { 
+        success: true, 
+        message: `Successfully imported ${importedCount} new memory records`,
+        importedCount 
+      };
+      
+    } catch (error) {
+      logger.error('[Main] Memory import failed:', error);
+      return { success: false, error: (error as Error).message };
+    }
+  });
 };
 
 // ========== CLI TOOLS MANAGEMENT (DEPRECATED - NOW IN registerSimpleCliToolHandlers) ==========

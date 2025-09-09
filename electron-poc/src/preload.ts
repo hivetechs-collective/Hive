@@ -124,6 +124,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMemoryStats: () => ipcRenderer.invoke('memory-service-stats'),
   getConnectedTools: () => ipcRenderer.invoke('memory-service-tools'),
   getMemoryActivity: (limit?: number) => ipcRenderer.invoke('memory-service-activity', limit),
+  exportMemory: () => ipcRenderer.invoke('memory-export'),
+  importMemory: () => ipcRenderer.invoke('memory-import'),
   
   // CLI Tool Management
   detectCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-detect', toolId),

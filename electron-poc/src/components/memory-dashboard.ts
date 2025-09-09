@@ -287,13 +287,43 @@ export class MemoryDashboard {
   }
   
   public async exportMemory() {
-    // TODO: Implement memory export
-    alert('Memory export will be available soon');
+    try {
+      console.log('[MemoryDashboard] Exporting memory...');
+      const result = await (window as any).electronAPI.invoke('memory-export');
+      
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        console.log('[MemoryDashboard] Export successful:', result.filePath);
+      } else {
+        alert(`Export cancelled: ${result.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('[MemoryDashboard] Export error:', error);
+      alert(`❌ Export failed: ${error}`);
+    }
   }
   
   public async importMemory() {
-    // TODO: Implement memory import
-    alert('Memory import will be available soon');
+    try {
+      console.log('[MemoryDashboard] Importing memory...');
+      const result = await (window as any).electronAPI.invoke('memory-import');
+      
+      if (result.success) {
+        alert(`✅ ${result.message}`);
+        console.log('[MemoryDashboard] Import successful:', result.importedCount, 'records');
+        
+        // Refresh dashboard after successful import
+        setTimeout(() => {
+          this.updateStats();
+          this.updateConnectedTools();
+        }, 1000);
+      } else {
+        alert(`Import cancelled: ${result.message || result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('[MemoryDashboard] Import error:', error);
+      alert(`❌ Import failed: ${error}`);
+    }
   }
   
   private applyStyles() {
