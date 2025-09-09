@@ -1,15 +1,15 @@
 {
-  "timestamp": "2025-09-09T12:17:29.743Z",
+  "timestamp": "2025-09-09T13:19:02.315Z",
   "currentPhase": 0,
   "totalPhases": 17,
   "phaseProgress": "0.0%",
-  "currentPhaseTime": "9.9s",
-  "totalElapsedTime": "9.9s",
+  "currentPhaseTime": "10.9s",
+  "totalElapsedTime": "10.9s",
   "totalElapsedMinutes": "0.2m",
   "errors": 0,
   "warnings": 0,
   "criticalChecksPassed": 0,
   "criticalChecksFailed": 0,
   "lastMessage": "Native modules verified: All valid",
-  "logFile": "/Users/veronelazio/Developer/Private/hive/electron-poc/build-logs/build-2025-09-09T12-17-19-840Z.log"
+  "logFile": "/Users/veronelazio/Developer/Private/hive/electron-poc/build-logs/build-2025-09-09T13-18-51-428Z.log"
 }

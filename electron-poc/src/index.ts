@@ -1246,6 +1246,56 @@ function generateToolMCPWrapper(toolId: string, token: string): string {
   
   const wrapperPath = path.join(mcpWrapperDir, `${toolId}-memory-service.js`);
   
+  // Get tool-specific invocation commands for better user guidance
+  const getToolCommands = (tool: string) => {
+    switch(tool) {
+      case 'gemini-cli':
+        return {
+          primary: '/use @memory',
+          alt: 'use tools: @memory',
+          example: '/use @memory what have we worked on'
+        };
+      case 'grok':
+        return {
+          primary: '!mcp @memory',
+          alt: '!tools query_memory_with_context',
+          example: '!mcp @memory what have we worked on'
+        };
+      case 'qwen-code':
+        return {
+          primary: '/tool @memory',
+          alt: 'use @memory tool:',
+          example: '/tool @memory what have we worked on'
+        };
+      case 'claude-code':
+        return {
+          primary: '@memory',
+          alt: '@context',
+          example: '@memory what have we worked on'
+        };
+      case 'openai-codex':
+        return {
+          primary: '/mcp @memory',
+          alt: 'invoke memory-service',
+          example: '/mcp @memory what have we worked on'
+        };
+      case 'cline':
+        return {
+          primary: '@tools memory',
+          alt: '/mcp query_memory_with_context',
+          example: '@tools memory what have we worked on'
+        };
+      default:
+        return {
+          primary: '@memory',
+          alt: 'query_memory_with_context',
+          example: '@memory what have we worked on'
+        };
+    }
+  };
+  
+  const commands = getToolCommands(toolId);
+  
   // Generate tool-specific wrapper content
   const wrapperContent = `#!/usr/bin/env node
 /**
@@ -1326,12 +1376,20 @@ class MemoryServiceMCP extends Server {
       handler: this.saveSuccessfulOutput.bind(this)
     });
     
-    // Register helpful prompts for better discoverability
+    // Register helpful prompts for better discoverability with tool-specific commands
     this.registerPrompt({
       name: 'memory_help',
       description: 'Show how to use Memory Service commands',
       template: \`🧠 Memory Service Commands for ${toolId}:
 
+📝 Quick Commands:
+• ${commands.primary} <question> - Primary command
+• ${commands.alt} <question> - Alternative command
+
+💡 Example:
+${commands.example}
+
+🔍 Auto-triggers:
 • @memory <question> - Query your memory
 • @context - Get context about current work  
 • @recall <topic> - Recall past discussions
