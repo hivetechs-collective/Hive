@@ -5258,18 +5258,15 @@ app.on('browser-window-created', (_, window) => {
 // APP INITIALIZATION AND STARTUP
 // ===========================================
 
-/**
- * Initialize the application with splash screen
- */
-async function initializeApp() {
+// Note: initializeApp function removed - initialization now happens directly in app.on('ready')
+// This matches the working v1.8.248 pattern
+
+// Handle app ready event
+app.on('ready', async () => {
   try {
-    logger.info('[Main] Starting application initialization...');
-    logger.info('[Main] Creating smart memory access views for AI CLI tools');
+    logger.info('[Main] App ready, starting initialization...');
     
-    // Don't initialize database here - let StartupOrchestrator handle it
-    // to avoid duplicate initialization
-    
-    // Create startup orchestrator
+    // Use StartupOrchestrator for clean, visual startup
     const orchestrator = new StartupOrchestrator({
       initDatabase,
       initializeProcessManager,
@@ -5281,35 +5278,32 @@ async function initializeApp() {
       registerConsensusHandlers,
       processManager
     });
-
-    logger.info('[Main] StartupOrchestrator created, showing splash...');
     
-    // Show splash and initialize
+    // The orchestrator will handle all initialization and show splash screen
     const result = await orchestrator.showSplashAndInitialize(createWindow);
-
+    
     if (!result.success) {
-      logger.error('[Main] Application initialization failed:', result.error);
+      logger.error('[Main] Startup failed:', result.error);
+      dialog.showErrorBox(
+        'Startup Failed',
+        `Unable to initialize required services.\n\n${result.error?.message || 'Unknown error'}`
+      );
       app.quit();
       return;
     }
-
+    
     // Store main window reference
     mainWindow = BrowserWindow.getAllWindows()[0];
-
-    logger.info('[Main] Application initialization complete');
+    
+    // Success - app is now running with main window shown
+    logger.info('[Main] ✅ Application started successfully');
+    
   } catch (error) {
-    logger.error('[Main] Fatal error in initializeApp:', error);
-    logger.error('[Main] Stack trace:', (error as Error).stack);
-    throw error;
-  }
-}
-
-// Handle app ready event
-app.whenReady().then(async () => {
-  try {
-    await initializeApp();
-  } catch (error) {
-    logger.error('[Main] Fatal error during app initialization:', error);
+    logger.error('[Main] Unexpected startup error:', error);
+    dialog.showErrorBox(
+      'Startup Error',
+      `An unexpected error occurred during startup.\n\n${error}`
+    );
     app.quit();
   }
 });
