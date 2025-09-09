@@ -1328,9 +1328,8 @@ class MemoryServiceMCP extends Server {
       description: 'Hive Consensus Memory Service - Enhanced with unified triggers'
     });
 
-    // Primary memory query tool with enhanced description
-    this.registerTool({
-      name: 'query_memory',
+    // Register with multiple names for easier access
+    const memoryToolConfig = {
       description: 'Query the AI memory system. Use @memory, @context, @recall, or start with "What have we..." to trigger.',
       parameters: {
         query: { type: 'string', required: true },
@@ -1338,7 +1337,12 @@ class MemoryServiceMCP extends Server {
         autoEnhance: { type: 'boolean', default: true }
       },
       handler: this.queryMemory.bind(this)
-    });
+    };
+    
+    // Register with multiple names for compatibility
+    this.registerTool({ name: 'query_memory', ...memoryToolConfig });
+    this.registerTool({ name: '@memory', ...memoryToolConfig });
+    this.registerTool({ name: 'memory', ...memoryToolConfig });
 
     this.registerTool({
       name: 'contribute_learning',
@@ -1352,9 +1356,8 @@ class MemoryServiceMCP extends Server {
       handler: this.contributeLearning.bind(this)
     });
 
-    // Enhanced context-aware query - most intelligent tool
-    this.registerTool({
-      name: 'query_memory_with_context',
+    // Enhanced context-aware query - register with multiple names
+    const contextToolConfig = {
       description: 'Query with full Memory+Context intelligence. Automatically enriches responses with relevant context from your work history.',
       parameters: {
         query: { type: 'string', required: true },
@@ -1362,7 +1365,12 @@ class MemoryServiceMCP extends Server {
         includeRelated: { type: 'boolean', default: true }
       },
       handler: this.queryMemoryWithContext.bind(this)
-    });
+    };
+    
+    // Register with multiple names for easier access
+    this.registerTool({ name: 'query_memory_with_context', ...contextToolConfig });
+    this.registerTool({ name: '@context', ...contextToolConfig });
+    this.registerTool({ name: '@recall', ...contextToolConfig });
 
     this.registerTool({
       name: 'save_successful_output', 
