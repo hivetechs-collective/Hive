@@ -1814,7 +1814,26 @@ const registerMemoryServiceHandlers = () => {
       if (!port) throw new Error('Memory Service not running');
       const response = await fetch(`http://localhost:${port}/api/v1/memory/stats`);
       if (response.ok) {
-        return await response.json();
+        const stats = await response.json();
+        
+        // Override connectedTools count with accurate CLI Tools detector data
+        const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'cline', 'grok'];
+        let actualConnectedCount = 0;
+        
+        for (const toolId of supportedTools) {
+          try {
+            const toolStatus = await cliToolsDetector.detectTool(toolId);
+            if (toolStatus.installed && toolStatus.memoryServiceConnected) {
+              actualConnectedCount++;
+            }
+          } catch (error) {
+            // Tool check failed, doesn't count as connected
+          }
+        }
+        
+        stats.connectedTools = actualConnectedCount;
+        logger.debug(`[Main] Corrected connected tools count: ${actualConnectedCount}`);
+        return stats;
       }
     } catch (error) {
       logger.error('[Main] Failed to get memory stats:', error);
@@ -1833,17 +1852,34 @@ const registerMemoryServiceHandlers = () => {
 
   ipcMain.handle('memory-service-tools', async () => {
     try {
-      const port = processManager.getProcessStatus('memory-service')?.port;
-      if (!port) throw new Error('Memory Service not running');
-      const response = await fetch(`http://localhost:${port}/api/v1/memory/tools`);
-      if (response.ok) {
-        const data = await response.json();
-        return data.tools || [];
+      // Use working CLI Tools detector instead of broken Memory Service tracking
+      const connectedTools = [];
+      const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'cline', 'grok'];
+      
+      for (const toolId of supportedTools) {
+        try {
+          const toolStatus = await cliToolsDetector.detectTool(toolId);
+          if (toolStatus.installed && toolStatus.memoryServiceConnected) {
+            connectedTools.push({
+              name: toolStatus.name || toolId,
+              version: toolStatus.version,
+              connectedAt: new Date().toISOString(), // Use current time as connected time
+              queryCount: 0, // CLI detector doesn't track query count
+              contributionCount: 0, // CLI detector doesn't track contributions  
+              lastActivity: new Date().toISOString() // Use current time as last activity
+            });
+          }
+        } catch (error) {
+          logger.debug(`[Main] Error checking ${toolId}:`, error);
+        }
       }
+      
+      logger.info(`[Main] Connected tools via CLI detector: ${connectedTools.length}`);
+      return connectedTools;
     } catch (error) {
-      logger.error('[Main] Failed to get connected tools:', error);
+      logger.error('[Main] Failed to get connected tools via CLI detector:', error);
+      return [];
     }
-    return [];
   });
 
   ipcMain.handle('memory-service-activity', async (_, limit: number = 50) => {
