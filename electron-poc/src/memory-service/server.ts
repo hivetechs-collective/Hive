@@ -182,6 +182,9 @@ export class MemoryServiceServer {
     // Query memories
     this.app.post('/api/v1/memory/query', this.authenticate, this.handleQuery.bind(this));
     
+    // Enhanced query with full Memory+Context pipeline (like Consensus)
+    this.app.post('/api/v1/memory/query-with-context', this.authenticate, this.handleQueryWithContext.bind(this));
+    
     // Contribute learning (for now, just log it)
     this.app.post('/api/v1/memory/contribute', this.authenticate, this.handleContribution.bind(this));
     
@@ -320,6 +323,82 @@ export class MemoryServiceServer {
       res.status(500).json({ error: 'Query failed' });
     }
   };
+
+  private handleQueryWithContext = async (req: any, res: any) => {
+    const startTime = Date.now();
+    const query: MemoryQuery = req.body;
+    const tool = req.tool as ConnectedTool;
+    
+    try {
+      logger.info(`[MemoryService] Enhanced query from ${tool.name}: ${query.query}`);
+      
+      // Send IPC request to main process for enhanced Memory+Context pipeline
+      const enhancedResult = await this.requestMemoryContext(query.query, tool.name);
+      
+      const responseTime = Date.now() - startTime;
+      
+      tool.queryCount++;
+      tool.lastActivity = new Date();
+      
+      // Log enhanced activity
+      this.logActivity({
+        type: 'enhanced_query',
+        tool: tool.name,
+        query: query.query.substring(0, 50),
+        resultCount: enhancedResult.relevantMemories?.length || 0,
+        responseTime
+      });
+      
+      res.json({
+        success: true,
+        enhancedContext: enhancedResult,
+        metadata: {
+          query_time_ms: responseTime,
+          memories_retrieved: enhancedResult.relevantMemories?.length || 0,
+          patterns_found: enhancedResult.patterns?.length || 0,
+          context_summary: enhancedResult.memoryContext || ''
+        }
+      });
+      
+    } catch (error) {
+      logger.error('[MemoryService] Enhanced query error:', error);
+      res.status(500).json({ error: 'Enhanced query failed' });
+    }
+  };
+
+  private async requestMemoryContext(query: string, toolName: string): Promise<any> {
+    // Request Memory+Context pipeline from main process (same as Consensus uses)
+    return new Promise((resolve) => {
+      const requestId = crypto.randomUUID();
+      
+      process.send?.({
+        type: 'memory-context-request',
+        id: requestId,
+        query,
+        toolName
+      });
+      
+      // Listen for response (simplified - in real implementation would need proper event handling)
+      const timeout = setTimeout(() => {
+        resolve({
+          originalQuery: query,
+          memoryContext: '',
+          patterns: [],
+          userPreferences: [],
+          relevantMemories: []
+        });
+      }, 5000);
+      
+      // TODO: Implement proper IPC response handling for memory+context results
+      resolve({
+        originalQuery: query,
+        memoryContext: 'Enhanced context will be available when Memory+Context pipeline is integrated',
+        patterns: ['memory-integration-pending'],
+        userPreferences: [],
+        relevantMemories: []
+      });
+    });
+  }
 
   private handleContribution = async (req: any, res: any) => {
     const contribution: MemoryContribution = req.body;
