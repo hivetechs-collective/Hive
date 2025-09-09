@@ -6738,11 +6738,14 @@ Git Integration
 ### Executive Summary
 This section documents the complete architectural pattern for integrating AI CLI tools into Hive Consensus. Each tool follows the same comprehensive integration pattern, enabling seamless installation, configuration, updates, and terminal launching with full Memory Service integration via MCP protocol.
 
-### MCP Wrapper Generation Architecture (v1.8.242+)
+### MCP Wrapper Generation Architecture v2.0 (v1.8.244+)
 
-#### Dynamic Tool-Specific Wrapper Generation
+#### Enhanced Dynamic Tool-Specific Wrapper Generation
 
-**Key Innovation**: Each CLI tool gets its own uniquely identified MCP wrapper, enabling precise tracking in the Memory Service dashboard.
+**Key Innovations**: 
+- Each CLI tool gets its own uniquely identified MCP wrapper
+- v2.0 wrappers include unified trigger patterns and smart query enhancement
+- Automatic context injection for better results
 
 ```typescript
 // Helper function in src/index.ts
@@ -6750,14 +6753,30 @@ function generateToolMCPWrapper(toolId: string, token: string): string {
   const mcpWrapperDir = path.join(os.homedir(), '.hive', 'mcp-wrappers');
   const wrapperPath = path.join(mcpWrapperDir, `${toolId}-memory-service.js`);
   
-  // Wrapper content with tool-specific identification
+  // Generate v2.0 wrapper with enhanced features
   const wrapperContent = `
-    // Headers include tool-specific client name
-    'X-Client-Name': '${toolId}-mcp'
+    // MCP wrapper v2.0 for ${toolId}
+    const TOOL_ID = '${toolId}';
+    const TOKEN = '${token}';
     
-    // Requests identify the specific tool
-    client: '${toolId}'
-    source: '${toolId}'
+    // Unified trigger patterns
+    const MEMORY_TRIGGERS = [
+      /^@memory\\s+/i,
+      /^@context\\s*/i,
+      /^@recall\\s+/i,
+      /^what have we\\s+/i,
+      /^what did we\\s+/i
+    ];
+    
+    // Smart query enhancement
+    if (trigger.test(query)) {
+      enhancedQuery = query.replace(trigger, '').trim();
+      triggerUsed = true;
+    }
+    
+    // Headers include enhanced identification
+    'X-Client-Name': '${toolId}-mcp'
+    'X-Tool-Version': '2.0.0'
   `;
   
   fs.writeFileSync(wrapperPath, wrapperContent);
@@ -7356,14 +7375,18 @@ Before implementing ANY new AI CLI tool, you MUST become an expert by studying o
    }
    ```
 
-5. **Memory Service Integration (v1.8.242+ Dynamic Wrappers)**:
-   - All tools can connect to Memory Service via MCP
+5. **Memory Service Integration v2.0 (v1.8.244+)**:
+   - All tools connect to Memory Service via enhanced MCP v2.0
    - Each tool gets its own wrapper: `~/.hive/mcp-wrappers/[toolId]-memory-service.js`
-   - Tool-specific client identification: `X-Client-Name: '[toolId]-mcp'`
+   - Tool-specific client identification: `X-Client-Name: '[toolId]-mcp'`, `X-Tool-Version: '2.0.0'`
    - Dynamic generation via `generateToolMCPWrapper(toolId, token)` function
    - Tokens stored in `~/.hive/cli-tools-config.json`
    - User-agnostic paths using `os.homedir()` and `path.join()`
    - Works on any enterprise computer without modification
+   - **Unified Commands**: Same @memory, @context, @recall work across all tools
+   - **Natural Language**: "What have we...", "What did we..." auto-trigger memory
+   - **Smart Enhancement**: Automatic query processing and context injection
+   - **Zero Configuration**: New users get everything configured automatically on tool install
 
 ##### Example: Claude Code Deep Dive
 
@@ -8133,8 +8156,8 @@ When Grok is launched without an API key, a custom interactive setup wizard is t
 
 ### Memory Service Integration
 
-#### MCP (Model Context Protocol) Integration
-For Claude Code and compatible tools:
+#### MCP (Model Context Protocol) Integration v2.0 (v1.8.244+)
+Enhanced with unified, user-friendly commands across all 6 CLI tools:
 
 1. **Registration Flow**:
    - Tool registers with Memory Service API (`POST /api/v1/memory/register`)
@@ -8142,17 +8165,43 @@ For Claude Code and compatible tools:
    - Token stored in `~/.hive/cli-tools-config.json`
    - Token immediately usable for authenticated API calls
 
-2. **MCP Configuration**:
+2. **MCP Configuration v2.0**:
    - Automatically updates tool-specific MCP configs:
      - Claude Code: `~/.claude/.mcp.json`
      - Grok: `~/.grok/mcp-config.json`
-   - Creates shared MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
+     - Others: Tool-specific configuration files
+   - Creates **tool-specific** MCP wrapper scripts at `~/.hive/mcp-wrappers/[toolId]-memory-service.js`
+   - Each wrapper includes v2.0 enhancements:
+     - Unified trigger patterns (regex-based)
+     - Automatic query enhancement
+     - Context injection
+     - Helpful prompts
    - Wrapper script uses `@modelcontextprotocol/sdk` for MCP server
-   - Exposes two MCP tools:
-     - `query_memory`: Search AI memory system for relevant learnings
+   - Exposes enhanced MCP tools:
+     - `query_memory`: Search with auto-trigger support (@memory, @context, @recall)
+     - `query_memory_with_context`: Full Memory+Context intelligence with automatic enrichment
      - `contribute_learning`: Add new learnings with type, category, content
+     - `save_successful_output`: Save CLI tool outputs as valuable learnings
 
-3. **Authentication System**:
+3. **Unified Command System (v2.0)**:
+   - **Universal Commands** (work identically across all 6 tools):
+     - `@memory <question>` - Query your memory
+     - `@context` - Get context about current work
+     - `@recall <topic>` - Recall past discussions
+   - **Natural Language Triggers** (auto-detect and process):
+     - "What have we..." - Auto-triggers memory query
+     - "What did we..." - Auto-triggers memory query
+     - "Show me our..." - Auto-triggers memory query
+     - "Remind me about..." - Auto-triggers memory query
+   - **Smart Pattern Matching**:
+     - Regex-based trigger detection
+     - Automatic prefix removal for cleaner queries
+     - Context enhancement based on trigger type
+   - **Discovery Prompts**:
+     - `/memory_help` - Shows all available commands
+     - `/current_work` - Quick access to project status
+
+4. **Authentication System**:
    - Bearer token authentication for all API calls
    - Per-tool tokens for isolation and security (each tool gets unique token)
    - Tokens persist across sessions in cli-tools-config.json
@@ -8166,7 +8215,7 @@ For Claude Code and compatible tools:
      }
      ```
 
-4. **API Endpoints**:
+5. **API Endpoints**:
    ```
    POST /api/v1/memory/query      - Query memories with context
    POST /api/v1/memory/contribute - Contribute new learnings
@@ -12410,11 +12459,26 @@ electron-poc/
 
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
-**Last Updated**: 2025-08-27
-**Version**: 1.8.20
+**Last Updated**: 2025-09-09
+**Version**: 1.8.244
 **Maintainer**: Hive Development Team
 
 ### Change Log
+- **v1.8.244 (2025-09-09)**: MCP v2.0 - Unified Commands & Enhanced User Experience
+  - **Unified Command System**: Same commands (@memory, @context, @recall) work across all 6 CLI tools
+  - **Natural Language Triggers**: "What have we...", "What did we..." auto-trigger memory queries
+  - **Smart Pattern Matching**: Regex-based detection with automatic prefix removal
+  - **Enhanced MCP Wrappers**: v2.0 wrappers with query enhancement and context injection
+  - **Tool-Specific Identification**: Each tool properly identified in Memory Service dashboard
+  - **Discovery Prompts**: /memory_help shows all available commands
+  - **Zero Configuration**: New users get everything configured automatically on tool install
+  - **User Documentation**: Created UNIFIED_MCP_COMMANDS.md with comprehensive usage guide
+  - **Backwards Compatible**: Maintains all existing MCP functionality while adding enhancements
+- **v1.8.242 (2025-09-09)**: Dynamic MCP Wrapper Generation
+  - **Tool-Specific Wrappers**: Each CLI tool gets unique wrapper in ~/.hive/mcp-wrappers/
+  - **User-Agnostic Paths**: All configurations use os.homedir() for portability
+  - **Precise Tracking**: Memory Service can identify which tool made each query
+  - **Enterprise Ready**: Works on any computer without hardcoded paths
 - **v1.8.20 (2025-08-27)**: Critical Production Crash Fixes
   - **Python Runtime Extraction**: Changed from symlink to full copy to fix dylib loading failures
   - **Memory Management**: Added environment variables to limit ML library thread spawning
