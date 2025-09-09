@@ -2659,17 +2659,58 @@ this.wss = new WebSocketServer({ server: this.server });
 - Rate limiting
 - Activity monitoring
 
-### Statistics Tracking
+### Memory Service Dashboard (v1.8.239+)
+
+#### Purpose & Design Philosophy
+**Focus**: Memory-as-a-Service infrastructure health monitoring and connectivity status
+**Not**: Developer productivity analytics (handled by Analytics Dashboard)
+
+#### Dashboard Components
+
+**Service Health Indicators:**
 ```typescript
 {
-  totalMemories: 616,      // Total messages in database
-  queriesToday: 6,         // Actual consensus queries from conversation_usage table
-  contributionsToday: 5,   // Messages added today via consensus
-  connectedTools: 0,       // Currently connected external AI tools
-  hitRate: 92,            // Query success rate percentage
-  avgResponseTime: 45     // Milliseconds (exponential moving average)
+  status: "Active",           // Service operational status
+  port: 3000,                // Dynamic port allocation (varies per user)  
+  database: "~/.hive/hive-ai.db", // Database location
+  totalMemories: 797,        // Total messages in database
+  queriesToday: 19,          // Actual queries from conversation_usage table
+  contributionsToday: 0,     // Messages contributed today
+  hitRate: 92,              // Query success rate percentage
+  avgResponseTime: 45       // Milliseconds response time
 }
 ```
+
+**Connected Tools Integration (v1.8.239+):**
+```typescript
+// Uses working CLI Tools detector (same as AI CLI Tools section)
+connectedTools: 6          // Accurate count from CLI Tools detector
+toolsList: [
+  { name: "Claude Code", version: "1.0.109", status: "Active" },
+  { name: "Gemini CLI", version: "0.3.4", status: "Active" },
+  { name: "Qwen Code", version: "0.0.10", status: "Active" },
+  { name: "OpenAI Codex", version: "0.30.0", status: "Active" }, 
+  { name: "Cline", version: "0.0.1", status: "Active" },
+  { name: "Grok CLI", version: "1.0.1", status: "Active" }
+]
+```
+
+**Performance Architecture (v1.8.239+):**
+- **5-second updates**: Non-blocking renderer process intervals
+- **30-second caching**: CLI Tools detector caches detection results  
+- **WebSocket real-time**: Instant activity updates when available
+- **Efficient integration**: Single source of truth with AI CLI Tools section
+- **Performance overhead**: ~9ms every 5 seconds (0.18% CPU)
+
+**Essential Actions:**
+- **Export Memory**: Backup memory database for data safety
+- **Import Memory**: Restore from backup files
+- **Live Activity Stream**: Real-time Memory Service API usage monitoring
+
+**Removed Redundant Features (v1.8.239+):**
+- ~~Configure Tools~~ (now automatic in AI CLI Tools section)
+- ~~View Documentation~~ (not needed for service monitoring)
+- ~~Quick Integration~~ (contradicts seamless automation)
 
 ### Memory Service Implementation Details
 
@@ -2677,8 +2718,9 @@ this.wss = new WebSocketServer({ server: this.server });
 - **Type**: Child process managed by ProcessManager
 - **Entry Point**: `src/memory-service/index.ts`
 - **Server**: `src/memory-service/server.ts`
-- **Port**: 3457 (with automatic fallback to 3458-3460)
+- **Port**: Dynamic allocation (3457-3560 range) via PortManager
 - **IPC Communication**: Fork with ts-node for TypeScript support
+- **Zero hardcoded ports**: Fully integrated with ProcessManager/PortManager architecture
 
 #### Database Access Pattern
 ```typescript
