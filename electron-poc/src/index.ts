@@ -1259,27 +1259,40 @@ const fetch = require('node-fetch');
 const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || 'http://localhost:3000';
 const TOKEN = process.env.MEMORY_SERVICE_TOKEN || '${token}';
 
+// Unified trigger patterns that work across all CLI tools
+const MEMORY_TRIGGERS = [
+  /^@memory\\s+/i,
+  /^@context\\s*/i,
+  /^@recall\\s+/i,
+  /^what have we\\s+/i,
+  /^what did we\\s+/i,
+  /^show me our\\s+/i,
+  /^remind me about\\s+/i
+];
+
 class MemoryServiceMCP extends Server {
   constructor() {
     super({
       name: 'hive-memory-service',
-      version: '1.0.0',
-      description: 'Hive Consensus Memory Service'
+      version: '2.0.0',
+      description: 'Hive Consensus Memory Service - Enhanced with unified triggers'
     });
 
+    // Primary memory query tool with enhanced description
     this.registerTool({
       name: 'query_memory',
-      description: 'Query the AI memory system for relevant learnings',
+      description: 'Query the AI memory system. Use @memory, @context, @recall, or start with "What have we..." to trigger.',
       parameters: {
         query: { type: 'string', required: true },
-        limit: { type: 'number', default: 5 }
+        limit: { type: 'number', default: 5 },
+        autoEnhance: { type: 'boolean', default: true }
       },
       handler: this.queryMemory.bind(this)
     });
 
     this.registerTool({
       name: 'contribute_learning',
-      description: 'Contribute a new learning to the memory system',
+      description: 'Share insights with Memory Service for collective learning',
       parameters: {
         type: { type: 'string', required: true },
         category: { type: 'string', required: true },
@@ -1289,12 +1302,14 @@ class MemoryServiceMCP extends Server {
       handler: this.contributeLearning.bind(this)
     });
 
+    // Enhanced context-aware query - most intelligent tool
     this.registerTool({
       name: 'query_memory_with_context',
-      description: 'Query with full Memory+Context intelligence like Hive Consensus (enhanced)',
+      description: 'Query with full Memory+Context intelligence. Automatically enriches responses with relevant context from your work history.',
       parameters: {
         query: { type: 'string', required: true },
-        limit: { type: 'number', default: 5 }
+        limit: { type: 'number', default: 5 },
+        includeRelated: { type: 'boolean', default: true }
       },
       handler: this.queryMemoryWithContext.bind(this)
     });
@@ -1310,25 +1325,73 @@ class MemoryServiceMCP extends Server {
       },
       handler: this.saveSuccessfulOutput.bind(this)
     });
+    
+    // Register helpful prompts for better discoverability
+    this.registerPrompt({
+      name: 'memory_help',
+      description: 'Show how to use Memory Service commands',
+      template: \`🧠 Memory Service Commands for ${toolId}:
+
+• @memory <question> - Query your memory
+• @context - Get context about current work  
+• @recall <topic> - Recall past discussions
+• "What have we worked on?" - Auto-triggers memory
+• "What did we discuss about X?" - Auto-triggers memory
+• "Show me our progress on Y" - Auto-triggers memory\`
+    });
+
+    this.registerPrompt({
+      name: 'current_work',
+      description: 'Get context about current project',
+      template: '@context Show me the current project status and recent work'
+    });
   }
 
-  async queryMemory({ query, limit = 5 }) {
+  async queryMemory({ query, limit = 5, autoEnhance = true }) {
+    // Check if query matches any trigger patterns and enhance if needed
+    let enhancedQuery = query;
+    let triggerUsed = false;
+    
+    if (autoEnhance) {
+      for (const trigger of MEMORY_TRIGGERS) {
+        if (trigger.test(query)) {
+          // Remove trigger prefix for cleaner query
+          enhancedQuery = query.replace(trigger, '').trim();
+          triggerUsed = true;
+          break;
+        }
+      }
+    }
+
     const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': \`Bearer \${TOKEN}\`,
-        'X-Client-Name': '${toolId}-mcp'
+        'X-Client-Name': '${toolId}-mcp',
+        'X-Tool-Version': '2.0.0'
       },
       body: JSON.stringify({
         client: '${toolId}',
-        context: { file: process.cwd() },
-        query,
+        context: { 
+          file: process.cwd(),
+          triggered: triggerUsed,
+          originalQuery: query
+        },
+        query: enhancedQuery,
         options: { limit }
       })
     });
 
-    return await response.json();
+    const result = await response.json();
+    
+    // Add helpful context if this was triggered by a command
+    if (triggerUsed && result.success) {
+      result.triggerUsed = true;
+      result.helpText = 'Tip: You can use @memory, @context, or @recall anytime!';
+    }
+    
+    return result;
   }
 
   async contributeLearning({ type, category, content, code }) {
@@ -1354,19 +1417,43 @@ class MemoryServiceMCP extends Server {
     return await response.json();
   }
 
-  async queryMemoryWithContext({ query, limit = 5 }) {
+  async queryMemoryWithContext({ query, limit = 5, includeRelated = true }) {
+    // Enhanced query with automatic context enrichment
+    let enhancedQuery = query;
+    let triggerUsed = false;
+    
+    // Check for trigger patterns and clean up query
+    for (const trigger of MEMORY_TRIGGERS) {
+      if (trigger.test(query)) {
+        enhancedQuery = query.replace(trigger, '').trim();
+        triggerUsed = true;
+        break;
+      }
+    }
+
     const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query-with-context\`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': \`Bearer \${TOKEN}\`,
-        'X-Client-Name': '${toolId}-mcp'
+        'X-Client-Name': '${toolId}-mcp',
+        'X-Tool-Version': '2.0.0'
       },
       body: JSON.stringify({
         client: '${toolId}',
-        context: { file: process.cwd() },
-        query,
-        options: { limit }
+        context: { 
+          file: process.cwd(),
+          includeRelated,
+          enhanced: true,
+          tool: '${toolId}',
+          triggered: triggerUsed
+        },
+        query: enhancedQuery,
+        options: { 
+          limit,
+          includeContext: true,
+          includeHistory: true
+        }
       })
     });
 
