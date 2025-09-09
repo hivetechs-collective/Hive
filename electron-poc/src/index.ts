@@ -5252,3 +5252,102 @@ app.on('browser-window-created', (_, window) => {
     mainWindow = window;
   }
 });
+
+// ===========================================
+// APP INITIALIZATION AND STARTUP
+// ===========================================
+
+/**
+ * Create the main application window with all features
+ */
+const createWindow = (show: boolean = true): BrowserWindow => {
+  // Create the browser window
+  const window = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 600,
+    show: show,
+    backgroundColor: '#0E1414',
+    icon: path.join(__dirname, '../assets/icon.png'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      additionalArguments: [`--app-path=${app.getAppPath()}`]
+    },
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: process.platform === 'darwin' ? { x: 10, y: 10 } : undefined
+  });
+
+  // Load the index.html
+  window.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+
+  // Open DevTools in development
+  if (!app.isPackaged) {
+    window.webContents.openDevTools();
+  }
+
+  return window;
+};
+
+/**
+ * Initialize the application with splash screen
+ */
+async function initializeApp() {
+  logger.info('[Main] Starting application initialization...');
+
+  // Initialize database first
+  initDatabase();
+
+  // Create startup orchestrator
+  const orchestrator = new StartupOrchestrator({
+    initDatabase,
+    initializeProcessManager,
+    registerMemoryServiceHandlers,
+    registerGitHandlers,
+    registerFileSystemHandlers,
+    registerDialogHandlers,
+    registerSimpleCliToolHandlers,
+    registerConsensusHandlers,
+    processManager
+  });
+
+  // Show splash and initialize
+  const result = await orchestrator.showSplashAndInitialize(createWindow);
+
+  if (!result.success) {
+    logger.error('[Main] Application initialization failed:', result.error);
+    app.quit();
+    return;
+  }
+
+  // Store main window reference
+  mainWindow = BrowserWindow.getAllWindows()[0];
+
+  logger.info('[Main] Application initialization complete');
+}
+
+// Handle app ready event
+app.whenReady().then(async () => {
+  try {
+    await initializeApp();
+  } catch (error) {
+    logger.error('[Main] Fatal error during app initialization:', error);
+    app.quit();
+  }
+});
+
+// Handle all windows closed
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+// Handle app activation (macOS)
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});
