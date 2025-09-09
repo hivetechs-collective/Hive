@@ -106,6 +106,8 @@ declare global {
       onMenuCloseAllTabs(callback: () => void): void;
       onMenuToggleAutoSave(callback: (enabled: boolean) => void): void;
       onMenuResetState(callback: () => void): void;
+      onMenuGettingStarted(callback: () => void): void;
+      onMenuMemoryGuide(callback: () => void): void;
       onMenuAbout(callback: () => void): void;
       getVersion(): Promise<string>;
       openExternal?(url: string): Promise<void>;

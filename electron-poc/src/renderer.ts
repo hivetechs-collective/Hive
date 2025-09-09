@@ -5654,7 +5654,10 @@ function showGettingStartedModal() {
     document.body.appendChild(modal);
     
     // Close on click outside or close button
-    modal.querySelector('.help-modal-close').addEventListener('click', () => modal.remove());
+    const closeBtn = modal.querySelector('.help-modal-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => modal.remove());
+    }
     modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.remove();
     });
@@ -5754,7 +5757,10 @@ function showMemoryGuideModal() {
     document.body.appendChild(modal);
     
     // Close on click outside or close button
-    modal.querySelector('.help-modal-close').addEventListener('click', () => modal.remove());
+    const closeBtn = modal.querySelector('.help-modal-close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => modal.remove());
+    }
     modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.remove();
     });
