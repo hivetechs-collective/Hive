@@ -6738,6 +6738,52 @@ Git Integration
 ### Executive Summary
 This section documents the complete architectural pattern for integrating AI CLI tools into Hive Consensus. Each tool follows the same comprehensive integration pattern, enabling seamless installation, configuration, updates, and terminal launching with full Memory Service integration via MCP protocol.
 
+### MCP Wrapper Generation Architecture (v1.8.242+)
+
+#### Dynamic Tool-Specific Wrapper Generation
+
+**Key Innovation**: Each CLI tool gets its own uniquely identified MCP wrapper, enabling precise tracking in the Memory Service dashboard.
+
+```typescript
+// Helper function in src/index.ts
+function generateToolMCPWrapper(toolId: string, token: string): string {
+  const mcpWrapperDir = path.join(os.homedir(), '.hive', 'mcp-wrappers');
+  const wrapperPath = path.join(mcpWrapperDir, `${toolId}-memory-service.js`);
+  
+  // Wrapper content with tool-specific identification
+  const wrapperContent = `
+    // Headers include tool-specific client name
+    'X-Client-Name': '${toolId}-mcp'
+    
+    // Requests identify the specific tool
+    client: '${toolId}'
+    source: '${toolId}'
+  `;
+  
+  fs.writeFileSync(wrapperPath, wrapperContent);
+  return wrapperPath; // Return dynamic path for configuration
+}
+```
+
+**Benefits**:
+- **Precise Tracking**: Memory Service dashboard shows which tool made each query
+- **User-Agnostic**: Uses `os.homedir()` for paths that work on any computer
+- **No Hardcoding**: No `/Users/veronelazio/` paths in configurations
+- **Enterprise-Ready**: Works across different user accounts and systems
+- **Clean Organization**: All wrappers in dedicated `mcp-wrappers` directory
+
+**Configuration Updates**:
+```typescript
+// Each tool's config points to its specific wrapper
+claudeMcp.servers['hive-memory-service'].args = [
+  '~/.hive/mcp-wrappers/claude-code-memory-service.js'
+];
+
+geminiSettings.mcpServers['hive-memory-service'].args = [
+  '~/.hive/mcp-wrappers/gemini-cli-memory-service.js'
+];
+```
+
 ### Core Integration Components
 
 #### 1. Tool Registry & Metadata
@@ -6871,11 +6917,12 @@ async function configureMemoryService(toolId: string): Promise<ConfigResult> {
   // 2. Save configuration
   await saveConfig('~/.hive/cli-tools-config.json', { token });
   
-  // 3. Create MCP wrapper
-  await createMCPWrapper(toolId, token);
+  // 3. Generate tool-specific MCP wrapper (v1.8.242+)
+  const wrapperPath = generateToolMCPWrapper(toolId, token);
+  // Creates: ~/.hive/mcp-wrappers/[toolId]-memory-service.js
   
-  // 4. Update tool's MCP config
-  await updateToolMCPConfig(toolId);
+  // 4. Update tool's MCP config with dynamic paths
+  await updateToolMCPConfig(toolId, wrapperPath);
   
   return { success: true, token };
 }
@@ -6980,7 +7027,13 @@ class TTYDManager {
 ```
 ~/.hive/
 ├── cli-tools-config.json       # Tool configurations and tokens
-├── memory-service-mcp-wrapper.js # MCP bridge for Memory Service
+├── mcp-wrappers/               # Tool-specific MCP wrapper scripts (v1.8.242+)
+│   ├── claude-code-memory-service.js
+│   ├── gemini-cli-memory-service.js
+│   ├── grok-memory-service.js
+│   ├── qwen-code-memory-service.js
+│   ├── openai-codex-memory-service.js
+│   └── cline-memory-service.js
 ├── ai-tools.db                 # Launch history database
 └── tools/                       # Local tool installations
 
@@ -7303,10 +7356,14 @@ Before implementing ANY new AI CLI tool, you MUST become an expert by studying o
    }
    ```
 
-5. **Memory Service Integration**:
+5. **Memory Service Integration (v1.8.242+ Dynamic Wrappers)**:
    - All tools can connect to Memory Service via MCP
-   - Configuration creates MCP wrapper at `~/.hive/memory-service-mcp-wrapper.js`
-   - Token stored in `~/.hive/cli-tools-config.json`
+   - Each tool gets its own wrapper: `~/.hive/mcp-wrappers/[toolId]-memory-service.js`
+   - Tool-specific client identification: `X-Client-Name: '[toolId]-mcp'`
+   - Dynamic generation via `generateToolMCPWrapper(toolId, token)` function
+   - Tokens stored in `~/.hive/cli-tools-config.json`
+   - User-agnostic paths using `os.homedir()` and `path.join()`
+   - Works on any enterprise computer without modification
 
 ##### Example: Claude Code Deep Dive
 

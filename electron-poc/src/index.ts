@@ -1237,6 +1237,183 @@ const createApplicationMenu = () => {
 // Note: The manager is now initialized as a singleton in registerCliToolHandlers()
 // let cliToolsManager: CliToolsManager | null = null;  // DEPRECATED - using singleton pattern now
 
+// Helper function to generate tool-specific MCP wrapper
+function generateToolMCPWrapper(toolId: string, token: string): string {
+  const mcpWrapperDir = path.join(os.homedir(), '.hive', 'mcp-wrappers');
+  if (!fs.existsSync(mcpWrapperDir)) {
+    fs.mkdirSync(mcpWrapperDir, { recursive: true });
+  }
+  
+  const wrapperPath = path.join(mcpWrapperDir, `${toolId}-memory-service.js`);
+  
+  // Generate tool-specific wrapper content
+  const wrapperContent = `#!/usr/bin/env node
+/**
+ * MCP Wrapper for ${toolId} - Hive Memory Service Integration
+ * Auto-generated with dynamic configuration
+ */
+
+const { Server } = require('@modelcontextprotocol/sdk');
+const fetch = require('node-fetch');
+
+const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || 'http://localhost:3000';
+const TOKEN = process.env.MEMORY_SERVICE_TOKEN || '${token}';
+
+class MemoryServiceMCP extends Server {
+  constructor() {
+    super({
+      name: 'hive-memory-service',
+      version: '1.0.0',
+      description: 'Hive Consensus Memory Service'
+    });
+
+    this.registerTool({
+      name: 'query_memory',
+      description: 'Query the AI memory system for relevant learnings',
+      parameters: {
+        query: { type: 'string', required: true },
+        limit: { type: 'number', default: 5 }
+      },
+      handler: this.queryMemory.bind(this)
+    });
+
+    this.registerTool({
+      name: 'contribute_learning',
+      description: 'Contribute a new learning to the memory system',
+      parameters: {
+        type: { type: 'string', required: true },
+        category: { type: 'string', required: true },
+        content: { type: 'string', required: true },
+        code: { type: 'string' }
+      },
+      handler: this.contributeLearning.bind(this)
+    });
+
+    this.registerTool({
+      name: 'query_memory_with_context',
+      description: 'Query with full Memory+Context intelligence like Hive Consensus (enhanced)',
+      parameters: {
+        query: { type: 'string', required: true },
+        limit: { type: 'number', default: 5 }
+      },
+      handler: this.queryMemoryWithContext.bind(this)
+    });
+
+    this.registerTool({
+      name: 'save_successful_output', 
+      description: 'Save CLI tool output as valuable learning for future use',
+      parameters: {
+        content: { type: 'string', required: true },
+        category: { type: 'string', required: true },
+        success: { type: 'boolean', default: true },
+        code: { type: 'string' }
+      },
+      handler: this.saveSuccessfulOutput.bind(this)
+    });
+  }
+
+  async queryMemory({ query, limit = 5 }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        client: '${toolId}',
+        context: { file: process.cwd() },
+        query,
+        options: { limit }
+      })
+    });
+
+    return await response.json();
+  }
+
+  async contributeLearning({ type, category, content, code }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        source: '${toolId}',
+        learning: {
+          type,
+          category,
+          content,
+          code,
+          context: { file: process.cwd(), success: true }
+        }
+      })
+    });
+
+    return await response.json();
+  }
+
+  async queryMemoryWithContext({ query, limit = 5 }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query-with-context\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        client: '${toolId}',
+        context: { file: process.cwd() },
+        query,
+        options: { limit }
+      })
+    });
+
+    return await response.json();
+  }
+
+  async saveSuccessfulOutput({ content, category, success = true, code }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        source: '${toolId}',
+        learning: {
+          type: 'solution',
+          category,
+          content,
+          code,
+          context: { 
+            file: process.cwd(), 
+            success,
+            timestamp: new Date().toISOString(),
+            source_tool: '${toolId}'
+          }
+        }
+      })
+    });
+
+    return await response.json();
+  }
+}
+
+// Start the MCP server
+const server = new MemoryServiceMCP();
+server.start();
+`;
+  
+  fs.writeFileSync(wrapperPath, wrapperContent);
+  fs.chmodSync(wrapperPath, '755');
+  logger.info(`[Main] Generated tool-specific MCP wrapper for ${toolId} at ${wrapperPath}`);
+  
+  return wrapperPath;
+}
+
 // Function to update MCP configurations for all tools with the actual Memory Service port
 // This must be defined before initializeProcessManager where it's used
 function updateAllMCPConfigurations(actualPort: number) {
@@ -1253,46 +1430,36 @@ function updateAllMCPConfigurations(actualPort: number) {
     
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     
-    // Update MCP wrapper with the correct endpoint
-    const wrapperPath = path.join(os.homedir(), '.hive', 'memory-service-mcp-wrapper.js');
-    if (fs.existsSync(wrapperPath)) {
-      // Read the wrapper and update the ENDPOINT fallback
-      let wrapperContent = fs.readFileSync(wrapperPath, 'utf-8');
-      // Replace the hardcoded endpoint in the fallback
-      wrapperContent = wrapperContent.replace(
-        /const ENDPOINT = process\.env\.MEMORY_SERVICE_ENDPOINT \|\| '[^']+'/,
-        `const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}'`
-      );
-      fs.writeFileSync(wrapperPath, wrapperContent);
-      logger.info('[Main] Updated MCP wrapper with dynamic endpoint');
-    }
-    
     // Update Claude Code MCP configuration
-    const claudeMcpPath = path.join(os.homedir(), '.claude', '.mcp.json');
-    if (fs.existsSync(claudeMcpPath)) {
-      try {
-        const claudeMcp = JSON.parse(fs.readFileSync(claudeMcpPath, 'utf-8'));
-        if (claudeMcp.servers?.['hive-memory-service']) {
-          const claudeToken = config['claude-code']?.memoryService?.token;
-          if (claudeToken) {
+    const claudeToken = config['claude-code']?.memoryService?.token;
+    if (claudeToken) {
+      const claudeMcpPath = path.join(os.homedir(), '.claude', '.mcp.json');
+      const claudeWrapperPath = generateToolMCPWrapper('claude-code', claudeToken);
+      
+      if (fs.existsSync(claudeMcpPath)) {
+        try {
+          const claudeMcp = JSON.parse(fs.readFileSync(claudeMcpPath, 'utf-8'));
+          if (claudeMcp.servers?.['hive-memory-service']) {
+            claudeMcp.servers['hive-memory-service'].args = [claudeWrapperPath];
             claudeMcp.servers['hive-memory-service'].env = {
               MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
               MEMORY_SERVICE_TOKEN: claudeToken
             };
             fs.writeFileSync(claudeMcpPath, JSON.stringify(claudeMcp, null, 2));
-            logger.info('[Main] Updated Claude Code MCP configuration');
+            logger.info('[Main] Updated Claude Code MCP configuration with tool-specific wrapper');
           }
+        } catch (err) {
+          logger.error('[Main] Failed to update Claude MCP config:', err);
         }
-      } catch (err) {
-        logger.error('[Main] Failed to update Claude MCP config:', err);
       }
     }
     
     // Update or create Grok MCP configuration
-    const grokMcpPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
     const grokToken = config['grok']?.memoryService?.token;
-    
     if (grokToken) {
+      const grokMcpPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
+      const grokWrapperPath = generateToolMCPWrapper('grok', grokToken);
+      
       try {
         let grokMcp: any = { servers: {} };
         
@@ -1305,11 +1472,11 @@ function updateAllMCPConfigurations(actualPort: number) {
           }
         }
         
-        // Add or update the memory service server
+        // Add or update the memory service server with tool-specific wrapper
         grokMcp.servers['hive-memory-service'] = {
           transport: 'stdio',
           command: 'node',
-          args: [wrapperPath],
+          args: [grokWrapperPath],
           env: {
             MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
             MEMORY_SERVICE_TOKEN: grokToken
@@ -1323,7 +1490,7 @@ function updateAllMCPConfigurations(actualPort: number) {
         }
         
         fs.writeFileSync(grokMcpPath, JSON.stringify(grokMcp, null, 2));
-        logger.info('[Main] Updated/Created Grok MCP configuration');
+        logger.info('[Main] Updated/Created Grok MCP configuration with tool-specific wrapper');
       } catch (err) {
         logger.error('[Main] Failed to update Grok MCP config:', err);
       }
@@ -1334,6 +1501,7 @@ function updateAllMCPConfigurations(actualPort: number) {
     if (geminiToken) {
       const geminiDir = path.join(os.homedir(), '.gemini');
       const geminiSettingsPath = path.join(geminiDir, 'settings.json');
+      const geminiWrapperPath = generateToolMCPWrapper('gemini-cli', geminiToken);
       
       try {
         if (!fs.existsSync(geminiDir)) {
@@ -1349,11 +1517,11 @@ function updateAllMCPConfigurations(actualPort: number) {
           }
         }
         
-        // Configure intelligent memory integration
+        // Configure intelligent memory integration with tool-specific wrapper
         geminiSettings.mcpServers = geminiSettings.mcpServers || {};
         geminiSettings.mcpServers['hive-memory-service'] = {
           command: 'node',
-          args: [wrapperPath],
+          args: [geminiWrapperPath],
           env: {
             MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
             MEMORY_SERVICE_TOKEN: geminiToken
@@ -1363,7 +1531,7 @@ function updateAllMCPConfigurations(actualPort: number) {
         };
         
         fs.writeFileSync(geminiSettingsPath, JSON.stringify(geminiSettings, null, 2));
-        logger.info('[Main] Updated/Created Gemini CLI intelligent MCP configuration');
+        logger.info('[Main] Updated/Created Gemini CLI intelligent MCP configuration with tool-specific wrapper');
       } catch (err) {
         logger.error('[Main] Failed to update Gemini CLI MCP config:', err);
       }
@@ -1379,6 +1547,9 @@ function updateAllMCPConfigurations(actualPort: number) {
     for (const tool of otherTools) {
       const toolToken = config[tool.id]?.memoryService?.token;
       if (toolToken) {
+        // Generate tool-specific wrapper
+        const toolWrapperPath = generateToolMCPWrapper(tool.id, toolToken);
+        
         try {
           const toolDir = path.dirname(tool.configPath);
           if (!fs.existsSync(toolDir)) {
@@ -1394,11 +1565,11 @@ function updateAllMCPConfigurations(actualPort: number) {
             }
           }
           
-          // Add intelligent MCP configuration
+          // Add intelligent MCP configuration with tool-specific wrapper
           toolConfig.mcpServers = toolConfig.mcpServers || {};
           toolConfig.mcpServers['hive-memory-service'] = {
             command: 'node',
-            args: [wrapperPath],
+            args: [toolWrapperPath],
             env: {
               MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
               MEMORY_SERVICE_TOKEN: toolToken
@@ -1409,7 +1580,7 @@ function updateAllMCPConfigurations(actualPort: number) {
           };
           
           fs.writeFileSync(tool.configPath, JSON.stringify(toolConfig, null, 2));
-          logger.info(`[Main] Updated/Created ${tool.id} intelligent MCP configuration`);
+          logger.info(`[Main] Updated/Created ${tool.id} intelligent MCP configuration with tool-specific wrapper`);
         } catch (err) {
           logger.error(`[Main] Failed to update ${tool.id} MCP config:`, err);
         }
@@ -2534,141 +2705,67 @@ const registerSimpleCliToolHandlers = () => {
             // Use dynamic port discovery - no hardcoded endpoints stored
             const token = crypto.randomBytes(32).toString('hex');
             
-            // Create MCP wrapper for the tool
-            const mcpWrapperDir = path.join(os.homedir(), '.hive', 'mcp-wrappers');
-            if (!fs.existsSync(mcpWrapperDir)) {
-              fs.mkdirSync(mcpWrapperDir, { recursive: true });
-            }
-            
-            const wrapperPath = path.join(mcpWrapperDir, `${toolId}-memory-service.js`);
-            const wrapperContent = `#!/usr/bin/env node
-// Auto-generated MCP wrapper for ${toolId} to connect with Hive Memory Service
-
-const { McpServer } = require('@modelcontextprotocol/server');
-
-const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT; // No fallback - must be provided dynamically
-const TOKEN = process.env.MEMORY_SERVICE_TOKEN || '${token}';
-
-class MemoryServiceMCP extends McpServer {
-  constructor() {
-    super({
-      name: 'hive-memory-service',
-      version: '1.0.0',
-      description: 'Hive Consensus Memory Service - AI memory and learning system'
-    });
-  }
-
-  async start() {
-    await super.start();
-    
-    this.registerTool({
-      name: 'query_memory',
-      description: 'Query the AI memory system for relevant learnings',
-      parameters: {
-        query: { type: 'string', required: true },
-        limit: { type: 'number', default: 5 }
-      },
-      handler: this.queryMemory.bind(this)
-    });
-
-    this.registerTool({
-      name: 'contribute_learning',
-      description: 'Contribute a new learning to the memory system',
-      parameters: {
-        type: { type: 'string', required: true },
-        category: { type: 'string', required: true },
-        content: { type: 'string', required: true },
-        code: { type: 'string' }
-      },
-      handler: this.contributeLearning.bind(this)
-    });
-  }
-
-  async queryMemory({ query, limit = 5 }) {
-    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${TOKEN}\`,
-        'X-Client-Name': '${toolId}-mcp'
-      },
-      body: JSON.stringify({
-        client: '${toolId}',
-        context: { file: process.cwd() },
-        query,
-        options: { limit }
-      })
-    });
-
-    return await response.json();
-  }
-
-  async contributeLearning({ type, category, content, code }) {
-    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${TOKEN}\`,
-        'X-Client-Name': '${toolId}-mcp'
-      },
-      body: JSON.stringify({
-        source: '${toolId}',
-        learning: {
-          type,
-          category,
-          content,
-          code,
-          context: { file: process.cwd(), success: true }
-        }
-      })
-    });
-
-    return await response.json();
-  }
-}
-
-// Start the MCP server
-const server = new MemoryServiceMCP();
-server.start();
-`;
-            
-            fs.writeFileSync(wrapperPath, wrapperContent);
-            fs.chmodSync(wrapperPath, '755');
-            
-            // Update MCP configuration for Claude Code
-            const mcpConfigPath = path.join(os.homedir(), '.claude', '.mcp.json');
-            let mcpConfig: any = { servers: {} };
-            
-            if (fs.existsSync(mcpConfigPath)) {
-              try {
-                mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
-              } catch {
-                mcpConfig = { servers: {} };
-              }
-            }
+            // Use the helper function to generate tool-specific MCP wrapper
+            const wrapperPath = generateToolMCPWrapper(toolId, token);
             
             // Get dynamic Memory Service port (NO HARDCODED ENDPOINTS!)
             const memoryStatus = processManager.getProcessStatus('memory-service');
             const dynamicEndpoint = memoryStatus?.port ? `http://localhost:${memoryStatus.port}` : 'http://localhost:3000';
             
-            // Add or update the memory service server
-            mcpConfig.servers['hive-memory-service'] = {
-              command: 'node',
-              args: [wrapperPath],
-              env: {
-                MEMORY_SERVICE_ENDPOINT: dynamicEndpoint,
-                MEMORY_SERVICE_TOKEN: token
-              },
-              description: 'Hive Consensus Memory Service - AI memory and learning system'
-            };
-            
-            // Ensure directory exists
-            const mcpDir = path.dirname(mcpConfigPath);
-            if (!fs.existsSync(mcpDir)) {
-              fs.mkdirSync(mcpDir, { recursive: true });
+            // Only configure Claude Code here since it has a unique MCP format
+            // All other tools will be configured by updateAllMCPConfigurations() below
+            if (toolId === 'claude-code') {
+              const mcpConfigPath = path.join(os.homedir(), '.claude', '.mcp.json');
+              let mcpConfig: any = { servers: {} };
+              
+              if (fs.existsSync(mcpConfigPath)) {
+                try {
+                  mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+                } catch {
+                  mcpConfig = { servers: {} };
+                }
+              }
+              
+              // Add or update the memory service server
+              mcpConfig.servers['hive-memory-service'] = {
+                command: 'node',
+                args: [wrapperPath],
+                env: {
+                  MEMORY_SERVICE_ENDPOINT: dynamicEndpoint,
+                  MEMORY_SERVICE_TOKEN: token
+                },
+                description: 'Hive Consensus Memory Service - AI memory and learning system'
+              };
+              
+              // Ensure directory exists
+              const mcpDir = path.dirname(mcpConfigPath);
+              if (!fs.existsSync(mcpDir)) {
+                fs.mkdirSync(mcpDir, { recursive: true });
+              }
+              
+              fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
             }
             
-            fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+            // Save the token to cli-tools-config.json for all tools
+            const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+            let cliConfig: any = {};
+            
+            if (fs.existsSync(configPath)) {
+              try {
+                cliConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+              } catch {
+                cliConfig = {};
+              }
+            }
+            
+            // Store the token for this tool
+            cliConfig[toolId] = cliConfig[toolId] || {};
+            cliConfig[toolId].memoryService = {
+              token: token,
+              configuredAt: new Date().toISOString()
+            };
+            
+            fs.writeFileSync(configPath, JSON.stringify(cliConfig, null, 2));
             
             logger.info(`[Main] Successfully registered ${toolId} with Memory Service`);
           } catch (configError) {
@@ -3328,101 +3425,8 @@ Or try: npm install -g ${packageName} --force --no-cache
       
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
       
-      // 4. Create MCP wrapper script
-      const wrapperPath = path.join(os.homedir(), '.hive', 'memory-service-mcp-wrapper.js');
-      const wrapperContent = `#!/usr/bin/env node
-/**
- * MCP Wrapper for Hive Memory Service
- * This script provides an MCP-compatible interface to the Memory Service
- */
-
-const { Server } = require('@modelcontextprotocol/sdk');
-const fetch = require('node-fetch');
-
-const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT; // No fallback - must be provided dynamically
-const TOKEN = process.env.MEMORY_SERVICE_TOKEN;
-
-class MemoryServiceMCP extends Server {
-  constructor() {
-    super({
-      name: 'hive-memory-service',
-      version: '1.0.0',
-      description: 'Hive Consensus Memory Service'
-    });
-
-    this.registerTool({
-      name: 'query_memory',
-      description: 'Query the AI memory system for relevant learnings',
-      parameters: {
-        query: { type: 'string', required: true },
-        limit: { type: 'number', default: 5 }
-      },
-      handler: this.queryMemory.bind(this)
-    });
-
-    this.registerTool({
-      name: 'contribute_learning',
-      description: 'Contribute a new learning to the memory system',
-      parameters: {
-        type: { type: 'string', required: true },
-        category: { type: 'string', required: true },
-        content: { type: 'string', required: true },
-        code: { type: 'string' }
-      },
-      handler: this.contributeLearning.bind(this)
-    });
-  }
-
-  async queryMemory({ query, limit = 5 }) {
-    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${TOKEN}\`,
-        'X-Client-Name': '${toolId}-mcp'
-      },
-      body: JSON.stringify({
-        client: '${toolId}',
-        context: { file: process.cwd() },
-        query,
-        options: { limit }
-      })
-    });
-
-    return await response.json();
-  }
-
-  async contributeLearning({ type, category, content, code }) {
-    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${TOKEN}\`,
-        'X-Client-Name': '${toolId}-mcp'
-      },
-      body: JSON.stringify({
-        source: '${toolId}',
-        learning: {
-          type,
-          category,
-          content,
-          code,
-          context: { file: process.cwd(), success: true }
-        }
-      })
-    });
-
-    return await response.json();
-  }
-}
-
-// Start the MCP server
-const server = new MemoryServiceMCP();
-server.start();
-`;
-      
-      fs.writeFileSync(wrapperPath, wrapperContent);
-      fs.chmodSync(wrapperPath, '755');
+      // 4. Generate tool-specific MCP wrapper using helper function
+      const wrapperPath = generateToolMCPWrapper(toolId, token);
       
       // 5. Update MCP configuration for Claude Code
       const mcpConfigPath = path.join(os.homedir(), '.claude', '.mcp.json');
@@ -3455,7 +3459,7 @@ server.start();
       
       fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
       
-      // Also configure MCP for Grok if it's being installed
+      // Also configure MCP for other tools based on toolId
       if (toolId === 'grok') {
         const grokMcpConfigPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
         let grokMcpConfig: any = { servers: {} };
@@ -3468,7 +3472,7 @@ server.start();
           }
         }
         
-        // Add or update the memory service server for Grok
+        // Add or update the memory service server for Grok with tool-specific wrapper
         grokMcpConfig.servers['hive-memory-service'] = {
           transport: 'stdio',
           command: 'node',
@@ -3486,7 +3490,79 @@ server.start();
         }
         
         fs.writeFileSync(grokMcpConfigPath, JSON.stringify(grokMcpConfig, null, 2));
-        logger.info(`[Main] Successfully configured Grok MCP with Memory Service`);
+        logger.info(`[Main] Successfully configured Grok MCP with tool-specific Memory Service wrapper`);
+      } else if (toolId === 'gemini-cli') {
+        // Configure Gemini CLI with tool-specific wrapper
+        const geminiDir = path.join(os.homedir(), '.gemini');
+        const geminiSettingsPath = path.join(geminiDir, 'settings.json');
+        
+        if (!fs.existsSync(geminiDir)) {
+          fs.mkdirSync(geminiDir, { recursive: true });
+        }
+        
+        let geminiSettings: any = {};
+        if (fs.existsSync(geminiSettingsPath)) {
+          try {
+            geminiSettings = JSON.parse(fs.readFileSync(geminiSettingsPath, 'utf-8'));
+          } catch {
+            geminiSettings = {};
+          }
+        }
+        
+        geminiSettings.mcpServers = geminiSettings.mcpServers || {};
+        geminiSettings.mcpServers['hive-memory-service'] = {
+          command: 'node',
+          args: [wrapperPath],
+          env: {
+            MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+            MEMORY_SERVICE_TOKEN: token
+          },
+          autoInvoke: ['query_memory_with_context'],
+          description: 'Hive Consensus Memory Service - AI memory and learning system'
+        };
+        
+        fs.writeFileSync(geminiSettingsPath, JSON.stringify(geminiSettings, null, 2));
+        logger.info(`[Main] Successfully configured Gemini CLI MCP with tool-specific Memory Service wrapper`);
+      } else if (toolId === 'qwen-code' || toolId === 'openai-codex' || toolId === 'cline') {
+        // Configure other tools with their specific config paths
+        const configPaths: Record<string, string> = {
+          'qwen-code': path.join(os.homedir(), '.qwen', 'config.json'),
+          'openai-codex': path.join(os.homedir(), '.codex', 'config.json'),
+          'cline': path.join(os.homedir(), '.cline', 'config.json')
+        };
+        
+        const toolConfigPath = configPaths[toolId];
+        if (toolConfigPath) {
+          const toolDir = path.dirname(toolConfigPath);
+          if (!fs.existsSync(toolDir)) {
+            fs.mkdirSync(toolDir, { recursive: true });
+          }
+          
+          let toolConfig: any = {};
+          if (fs.existsSync(toolConfigPath)) {
+            try {
+              toolConfig = JSON.parse(fs.readFileSync(toolConfigPath, 'utf-8'));
+            } catch {
+              toolConfig = {};
+            }
+          }
+          
+          toolConfig.mcpServers = toolConfig.mcpServers || {};
+          toolConfig.mcpServers['hive-memory-service'] = {
+            command: 'node',
+            args: [wrapperPath],
+            env: {
+              MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+              MEMORY_SERVICE_TOKEN: token
+            },
+            autoEnabled: true,
+            intelligentQueries: true,
+            description: 'Hive Consensus Memory Service - Intelligent context and learning'
+          };
+          
+          fs.writeFileSync(toolConfigPath, JSON.stringify(toolConfig, null, 2));
+          logger.info(`[Main] Successfully configured ${toolId} MCP with tool-specific Memory Service wrapper`);
+        }
       }
       
       logger.info(`[Main] Successfully configured ${toolId} with Memory Service`);
