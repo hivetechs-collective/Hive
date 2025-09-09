@@ -421,6 +421,9 @@ export class MemoryServiceServer {
     return new Promise((resolve) => {
       const requestId = crypto.randomUUID();
       
+      // Store resolver for response handling
+      this.pendingQueries.set(requestId, resolve);
+      
       process.send?.({
         type: 'db-query',
         id: requestId,
@@ -438,10 +441,13 @@ export class MemoryServiceServer {
         params: [`%${query}%`]
       });
       
-      // Simple response handling for now
+      // Timeout fallback
       setTimeout(() => {
-        resolve([]);
-      }, 1000);
+        if (this.pendingQueries.has(requestId)) {
+          this.pendingQueries.delete(requestId);
+          resolve([]);
+        }
+      }, 5000);
     });
   }
 
@@ -492,18 +498,34 @@ export class MemoryServiceServer {
       if (/authentication|auth|login/i.test(memory.content)) topics.add('Authentication');
       if (/error|bug|issue|problem/i.test(memory.content)) topics.add('Troubleshooting');
       
-      // Extract user patterns
+      // Extract user patterns (COMPLETE set from Consensus)
       if (/prefer|favorite|like/i.test(memory.content)) patterns.add('User Preferences');
       if (/problem|issue|error|failed/i.test(memory.content)) patterns.add('Common Issues');
       if (/solved|worked|success/i.test(memory.content)) patterns.add('Successful Solutions');
+      
+      // Extract conversation patterns (EXACT from Consensus)
+      if (memory.content.includes('?')) patterns.add('questions');
+      if (/function|const|class|def|import/.test(memory.content)) patterns.add('code-related');
+      if (/create|build|implement|develop/.test(memory.content)) patterns.add('creation-tasks');
+      if (/fix|debug|solve|error/.test(memory.content)) patterns.add('debugging');
+      if (/optimize|improve|enhance/.test(memory.content)) patterns.add('optimization');
+      if (/example|show me|how to/i.test(memory.content)) patterns.add('examples-needed');
     });
     
     framework.patterns = Array.from(patterns);
     framework.relevantTopics = Array.from(topics);
     
-    // Build summary (EXACT same logic as Consensus)
+    // Build comprehensive summary (EXACT same logic as Consensus)
     if (recentContext.length > 0) {
-      framework.summary = `Based on recent conversations:\n${recentContext.slice(0, 5).join('\n')}`;
+      framework.summary = `Current conversation context: ${recentContext.join(' ')} `;
+    }
+    
+    if (framework.relevantTopics.length > 0) {
+      framework.summary += `Topics being discussed: ${framework.relevantTopics.join(', ')}. `;
+    }
+    
+    if (framework.patterns.length > 0) {
+      framework.summary += `Conversation patterns: ${framework.patterns.join(', ')}.`;
     }
     
     console.log(`[MemoryService] Context framework: ${framework.patterns.length} patterns, ${framework.relevantTopics.length} topics`);
