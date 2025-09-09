@@ -2280,7 +2280,7 @@ const registerSimpleCliToolHandlers = () => {
 
 const { McpServer } = require('@modelcontextprotocol/server');
 
-const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}';
+const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT; // No fallback - must be provided dynamically
 const TOKEN = process.env.MEMORY_SERVICE_TOKEN || '${token}';
 
 class MemoryServiceMCP extends McpServer {
@@ -2381,12 +2381,16 @@ server.start();
               }
             }
             
+            // Get dynamic Memory Service port (NO HARDCODED ENDPOINTS!)
+            const memoryStatus = processManager.getProcessStatus('memory-service');
+            const dynamicEndpoint = memoryStatus?.port ? `http://localhost:${memoryStatus.port}` : 'http://localhost:3000';
+            
             // Add or update the memory service server
             mcpConfig.servers['hive-memory-service'] = {
               command: 'node',
               args: [wrapperPath],
               env: {
-                MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+                MEMORY_SERVICE_ENDPOINT: dynamicEndpoint,
                 MEMORY_SERVICE_TOKEN: token
               },
               description: 'Hive Consensus Memory Service - AI memory and learning system'
@@ -3062,7 +3066,7 @@ Or try: npm install -g ${packageName} --force --no-cache
 const { Server } = require('@modelcontextprotocol/sdk');
 const fetch = require('node-fetch');
 
-const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}';
+const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT; // No fallback - must be provided dynamically
 const TOKEN = process.env.MEMORY_SERVICE_TOKEN;
 
 class MemoryServiceMCP extends Server {
