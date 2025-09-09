@@ -5262,37 +5262,46 @@ app.on('browser-window-created', (_, window) => {
  * Initialize the application with splash screen
  */
 async function initializeApp() {
-  logger.info('[Main] Starting application initialization...');
+  try {
+    logger.info('[Main] Starting application initialization...');
+    logger.info('[Main] Creating smart memory access views for AI CLI tools');
+    
+    // Don't initialize database here - let StartupOrchestrator handle it
+    // to avoid duplicate initialization
+    
+    // Create startup orchestrator
+    const orchestrator = new StartupOrchestrator({
+      initDatabase,
+      initializeProcessManager,
+      registerMemoryServiceHandlers,
+      registerGitHandlers,
+      registerFileSystemHandlers,
+      registerDialogHandlers,
+      registerSimpleCliToolHandlers,
+      registerConsensusHandlers,
+      processManager
+    });
 
-  // Initialize database first
-  initDatabase();
+    logger.info('[Main] StartupOrchestrator created, showing splash...');
+    
+    // Show splash and initialize
+    const result = await orchestrator.showSplashAndInitialize(createWindow);
 
-  // Create startup orchestrator
-  const orchestrator = new StartupOrchestrator({
-    initDatabase,
-    initializeProcessManager,
-    registerMemoryServiceHandlers,
-    registerGitHandlers,
-    registerFileSystemHandlers,
-    registerDialogHandlers,
-    registerSimpleCliToolHandlers,
-    registerConsensusHandlers,
-    processManager
-  });
+    if (!result.success) {
+      logger.error('[Main] Application initialization failed:', result.error);
+      app.quit();
+      return;
+    }
 
-  // Show splash and initialize
-  const result = await orchestrator.showSplashAndInitialize(createWindow);
+    // Store main window reference
+    mainWindow = BrowserWindow.getAllWindows()[0];
 
-  if (!result.success) {
-    logger.error('[Main] Application initialization failed:', result.error);
-    app.quit();
-    return;
+    logger.info('[Main] Application initialization complete');
+  } catch (error) {
+    logger.error('[Main] Fatal error in initializeApp:', error);
+    logger.error('[Main] Stack trace:', (error as Error).stack);
+    throw error;
   }
-
-  // Store main window reference
-  mainWindow = BrowserWindow.getAllWindows()[0];
-
-  logger.info('[Main] Application initialization complete');
 }
 
 // Handle app ready event
