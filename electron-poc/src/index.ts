@@ -152,100 +152,6 @@ const initDatabase = () => {
           ON consensus_iterations(stage_name, model_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_consensus_iterations_datetime 
           ON consensus_iterations(datetime)`);
-  
-  // Create user-friendly views for AI CLI tools to query (Smart Memory Access v4.0)
-  logger.info('[Main] Creating smart memory access views for AI CLI tools');
-  
-  // View: Recent work - what we've been working on
-  db.run(`CREATE VIEW IF NOT EXISTS recent_work AS
-    SELECT content, created_at, role
-    FROM messages
-    WHERE role = 'assistant'
-    ORDER BY created_at DESC
-    LIMIT 100`);
-  
-  // View: Solutions - problems we've solved
-  db.run(`CREATE VIEW IF NOT EXISTS solutions AS
-    SELECT content, created_at
-    FROM messages
-    WHERE role = 'assistant'
-    AND (content LIKE '%fixed%' OR content LIKE '%solved%' 
-         OR content LIKE '%solution:%' OR content LIKE '%implemented%'
-         OR content LIKE '%resolved%' OR content LIKE '%working now%')
-    ORDER BY created_at DESC`);
-  
-  // View: Patterns and learnings
-  db.run(`CREATE VIEW IF NOT EXISTS patterns AS
-    SELECT content, created_at
-    FROM messages
-    WHERE content LIKE '%pattern:%' OR content LIKE '%learned:%' 
-       OR content LIKE '%important:%' OR content LIKE '%note:%'
-       OR content LIKE '%remember:%' OR content LIKE '%tip:%'
-    ORDER BY created_at DESC`);
-  
-  // View: Debugging and errors
-  db.run(`CREATE VIEW IF NOT EXISTS debugging AS
-    SELECT content, created_at
-    FROM messages
-    WHERE content LIKE '%error%' OR content LIKE '%debug%' 
-       OR content LIKE '%fix%' OR content LIKE '%issue%'
-       OR content LIKE '%bug%' OR content LIKE '%problem%'
-    ORDER BY created_at DESC`);
-  
-  // View: Code examples
-  db.run(`CREATE VIEW IF NOT EXISTS code_examples AS
-    SELECT content, created_at
-    FROM messages
-    WHERE content LIKE '%\`\`\`%' OR content LIKE '%function%'
-       OR content LIKE '%class%' OR content LIKE '%const%'
-       OR content LIKE '%import%' OR content LIKE '%export%'
-    ORDER BY created_at DESC`);
-  
-  // Create Full-Text Search virtual table for efficient searching
-  try {
-    // Drop existing FTS table if it exists to rebuild
-    db.run(`DROP TABLE IF EXISTS messages_fts`);
-    
-    // Create FTS5 virtual table
-    db.run(`CREATE VIRTUAL TABLE messages_fts USING fts5(
-      content, 
-      created_at,
-      role,
-      tokenize = 'porter'
-    )`);
-    
-    // Populate FTS table with existing messages
-    db.run(`INSERT INTO messages_fts (content, created_at, role)
-      SELECT content, created_at, role FROM messages`);
-    
-    logger.info('[Main] Full-text search index created successfully');
-  } catch (ftsError) {
-    logger.warn('[Main] Could not create FTS index (may not be supported):', ftsError);
-  }
-  
-  // Register custom SQLite function for smart context generation
-  // Note: better-sqlite3 doesn't support custom functions directly
-  // We'll implement this as a view-based approach instead
-  try {
-    // Create a stored procedure-like view that can be queried with parameters
-    db.run(`CREATE VIEW IF NOT EXISTS context_search AS
-      SELECT content, created_at, 
-        CASE 
-          WHEN content LIKE '%pattern:%' THEN 'pattern'
-          WHEN content LIKE '%learned:%' THEN 'learning'
-          WHEN content LIKE '%fixed%' THEN 'solution'
-          ELSE 'memory'
-        END as type
-      FROM messages
-      WHERE role = 'assistant'`);
-    
-    logger.info('[Main] Context search view created successfully');
-  } catch (funcError) {
-    logger.warn('[Main] Could not create context view:', funcError);
-  }
-  
-  // Setup PATH for hive memory commands on every startup
-  addHiveBinToPath();
 };
 
 // Toggle to switch between implementations
@@ -1288,29 +1194,6 @@ const createApplicationMenu = () => {
     {
       label: 'Help',
       submenu: [
-        {
-          label: 'Getting Started',
-          click: () => {
-            if (mainWindow) {
-              mainWindow.webContents.send('menu-getting-started');
-            }
-          }
-        },
-        {
-          label: 'Memory Access Guide',
-          click: () => {
-            if (mainWindow) {
-              mainWindow.webContents.send('menu-memory-guide');
-            }
-          }
-        },
-        { type: 'separator' },
-        {
-          label: 'Documentation',
-          click: () => {
-            shell.openExternal('https://hive.ai/docs');
-          }
-        },
         {
           label: 'About',
           click: () => {
@@ -2470,27 +2353,16 @@ const registerSimpleCliToolHandlers = () => {
             fs.writeFileSync(configPath, JSON.stringify(cliConfig, null, 2));
             
             logger.info(`[Main] Successfully registered ${toolId} with Memory Service`);
-            
           } catch (configError) {
             logger.warn(`[Main] Could not configure Memory Service for ${toolId}:`, configError);
             // Non-fatal error - tool is still installed
           }
         }
         
-        // Configure PATH for memory commands after successful installation
-        await addHiveBinToPath();
-        
-        // Provide PATH setup instructions for immediate use
-        const pathInstructions = process.platform === 'darwin' 
-          ? `\n\nTo use memory commands immediately, run:\nexport PATH="$HOME/.hive/bin:$PATH"\n\nOr restart your terminal for permanent access.`
-          : `\n\nTo use memory commands immediately, run:\nexport PATH="$HOME/.hive/bin:$PATH"`;
+        // Note: Direct API integration configured - no MCP setup needed
         
         logger.info(`[Main] ${toolConfig.name} installed and configured successfully with intelligent memory integration, version: ${version}`);
-        return { 
-          success: true, 
-          version, 
-          message: `Installed ${toolConfig.name} version ${version} with Hive intelligence${pathInstructions}` 
-        };
+        return { success: true, version, message: `Installed ${toolConfig.name} version ${version} with Hive intelligence` };
         
       } catch (error: any) {
         logger.error(`[Main] Failed to install ${toolConfig.name}:`, error);
@@ -3374,33 +3246,6 @@ Or try: npm install -g ${packageName} --force --no-cache
         });
       }
       
-      // Create symlink to hive-ai.db for Smart Memory Access (v4.0)
-      // This allows AI CLI tools to directly query the user's growing knowledge base
-      try {
-        const dbLinkPath = path.join(selectedPath, '.hive-ai.db');
-        const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
-        
-        // Remove existing symlink if it exists (might be stale)
-        if (fs.existsSync(dbLinkPath)) {
-          try {
-            fs.unlinkSync(dbLinkPath);
-          } catch (unlinkErr) {
-            logger.debug(`[Main] Could not remove existing symlink: ${unlinkErr}`);
-          }
-        }
-        
-        // Create new symlink to the unified database
-        fs.symlinkSync(actualDbPath, dbLinkPath, 'file');
-        logger.info(`[Main] Created symlink to hive-ai.db at ${dbLinkPath} for AI tool memory access`);
-        
-        // Note: Query examples and documentation are available in the Help menu
-        // We don't create guide files in user projects to avoid clutter
-        
-      } catch (symlinkError) {
-        logger.warn(`[Main] Could not create symlink to hive-ai.db:`, symlinkError);
-        // Non-fatal - continue with launch even if symlink fails
-      }
-      
       // Send IPC to renderer to create a terminal tab with the tool
       if (mainWindow && !mainWindow.isDestroyed()) {
         // FIRST: Update the global folder context to the selected path
@@ -3579,96 +3424,6 @@ app.on('activate', () => {
   }
 });
 
-// Add ~/.hive/bin to PATH for easy memory command access
-async function addHiveBinToPath(): Promise<void> {
-  try {
-    const hiveBinPath = path.join(os.homedir(), '.hive', 'bin');
-    
-    // Ensure the bin directory exists
-    if (!fs.existsSync(hiveBinPath)) {
-      fs.mkdirSync(hiveBinPath, { recursive: true });
-      logger.info(`[Main] Created ~/.hive/bin directory`);
-    }
-    
-    // Determine the default shell and config files
-    const defaultShell = process.env.SHELL || '/bin/bash';
-    const isZsh = defaultShell.includes('zsh');
-    const isBash = defaultShell.includes('bash');
-    
-    const shellConfigFiles = [
-      path.join(os.homedir(), '.zshrc'),
-      path.join(os.homedir(), '.bashrc'),
-      path.join(os.homedir(), '.bash_profile'),
-      path.join(os.homedir(), '.profile')
-    ];
-    
-    const pathExport = `\n# Hive Memory Commands (added by Hive Consensus)\nexport PATH="$HOME/.hive/bin:$PATH"\n`;
-    let configuredFiles = [];
-    
-    for (const configFile of shellConfigFiles) {
-      try {
-        // Create the file if it doesn't exist (especially for new users)
-        if (!fs.existsSync(configFile)) {
-          // Only create the primary shell config file
-          if ((isZsh && configFile.endsWith('.zshrc')) || 
-              (isBash && configFile.endsWith('.bashrc'))) {
-            fs.writeFileSync(configFile, '# Shell configuration\n');
-            logger.info(`[Main] Created ${configFile} for new user`);
-          } else {
-            continue; // Skip non-primary shell files
-          }
-        }
-        
-        const content = fs.readFileSync(configFile, 'utf-8');
-        
-        // Check if already added (look for both old and new patterns)
-        if (!content.includes('/.hive/bin') && !content.includes('Hive Memory Commands')) {
-          fs.appendFileSync(configFile, pathExport);
-          logger.info(`[Main] Added ~/.hive/bin to PATH in ${configFile}`);
-          configuredFiles.push(configFile);
-        } else {
-          logger.info(`[Main] PATH already configured in ${configFile}`);
-        }
-      } catch (fileError) {
-        logger.debug(`[Main] Could not modify ${configFile}:`, fileError);
-      }
-    }
-    
-    // Create a setup script for immediate use
-    const setupScript = path.join(os.homedir(), '.hive', 'setup-path.sh');
-    const setupContent = `#!/bin/bash
-# Hive Memory Commands Setup Script
-export PATH="$HOME/.hive/bin:$PATH"
-
-echo "✅ Hive memory commands are now available in this session!"
-echo ""
-echo "Available commands:"
-echo "  hive-memory                  - Universal memory interface"
-echo "  hive-memory-claude-code      - Claude Code memory commands"
-echo "  hive-memory-gemini-cli       - Gemini CLI memory commands"
-echo "  hive-memory-grok             - Grok memory commands"
-echo "  hive-memory-qwen-code        - Qwen Code memory commands"
-echo "  hive-memory-openai-codex     - OpenAI Codex memory commands"
-echo "  hive-memory-cline            - Cline memory commands"
-echo ""
-echo "Example: hive-memory-gemini-cli query-with-context 'What have we worked on?'"
-echo ""
-echo "For permanent access, restart your terminal or run: source ~/.${isZsh ? 'zshrc' : 'bashrc'}"
-`;
-    
-    fs.writeFileSync(setupScript, setupContent);
-    fs.chmodSync(setupScript, '755');
-    
-    if (configuredFiles.length > 0) {
-      logger.info(`[Main] PATH configuration complete. Modified files: ${configuredFiles.join(', ')}`);
-    }
-    
-  } catch (error) {
-    logger.warn('[Main] Could not configure PATH automatically:', error);
-    // Non-fatal - user can add manually if needed
-  }
-}
-
 // Track cleanup state to prevent duplicate cleanup
 let isCleaningUp = false;
 
@@ -3750,7 +3505,6 @@ ipcMain.handle('backend-test', async () => {
 
 // Import DirectConsensusEngine at top of file - will add after testing
 let consensusEngine: any = null;
-let simpleConsensusEngine: any = null;
 
 // Function to register consensus handlers AFTER database is initialized
 const registerConsensusHandlers = () => {
@@ -5237,7 +4991,6 @@ ipcMain.handle('get-analytics', async () => {
       });
       });
     });
-    });
   });
 });
 
@@ -5253,13 +5006,4 @@ app.on('browser-window-created', (_, window) => {
     mainWindow = window;
   }
 });
-
-// ===========================================
-// APP INITIALIZATION AND STARTUP
-// ===========================================
-
-// Note: initializeApp function removed - initialization now happens directly in app.on('ready')
-// This matches the working v1.8.248 pattern
-// IMPORTANT: The actual app.on('ready') handler is defined earlier in the file (around line 3521)
-
-// Note: window-all-closed and activate handlers are defined earlier in the file (around lines 3565 and 3574)
+});
