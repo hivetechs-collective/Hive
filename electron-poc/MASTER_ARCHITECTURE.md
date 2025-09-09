@@ -8057,35 +8057,59 @@ For Claude Code and compatible tools:
    GET  /api/v1/memory/tools      - List connected tools
    ```
 
-#### Dynamic Port Handling for MCP
+#### Zero-Hardcoded-Ports Architecture for CLI Tools (v1.8.238+)
 
-**Problem**: Memory Service uses dynamic port allocation (3457-3560) but MCP configs need the actual port.
+**Problem**: CLI tools were using hardcoded endpoints breaking ProcessManager/PortManager philosophy.
 
-**Solution**: Automatic MCP configuration updates on every app startup.
+**Solution**: Complete migration to dynamic port discovery architecture matching core system design.
 
-1. **Port Discovery Flow**:
+1. **ProcessManager Integration**:
    ```typescript
-   // When Memory Service starts
-   processManager.on('process:message', (name, msg) => {
-     if (name === 'memory-service' && msg.type === 'ready') {
-       memoryServicePort = msg.port;  // Actual allocated port
-       updateAllMCPConfigurations(memoryServicePort);
+   // CLI tools detector gets ProcessManager reference
+   import { setProcessManagerReference } from './main/cli-tools/detector';
+   setProcessManagerReference(processManager);
+   
+   // Connection testing uses actual dynamic port
+   const memoryStatus = processManager.getProcessStatus('memory-service');
+   const dynamicPort = memoryStatus.port; // Real port, not hardcoded
+   ```
+
+2. **Authentication-Only Configuration** (`~/.hive/cli-tools-config.json`):
+   ```json
+   {
+     "gemini-cli": {
+       "memoryService": {
+         "token": "abc123"  // ONLY authentication stored
+         // NO endpoint stored - discovered at runtime
+       }
      }
-   });
+   }
    ```
 
-2. **MCP Configuration Update Process** (`updateAllMCPConfigurations`):
-   - Reads current tool tokens from `~/.hive/cli-tools-config.json`
-   - Updates MCP wrapper fallback endpoint with actual port
-   - Updates Claude Code MCP config with dynamic endpoint
-   - Updates Grok MCP config with dynamic endpoint
-   - Maintains existing authentication tokens
+3. **Dynamic MCP Configuration Updates** (`updateAllMCPConfigurations`):
+   - **Removes hardcoded endpoints** from existing configurations
+   - **Updates MCP wrappers** with runtime environment variables
+   - **Updates all tool MCP configs** with dynamic ports
+   - **Clears detector cache** for immediate status refresh
 
-3. **Files Updated on Each Startup**:
+4. **Runtime Port Discovery**:
+   - **Connection detection**: Tests actual Memory Service port from ProcessManager
+   - **MCP wrapper execution**: Gets endpoint via MEMORY_SERVICE_ENDPOINT environment variable
+   - **New tool setup**: Uses current Memory Service port automatically
+   - **Zero hardcoded assumptions**: Works regardless of port allocation
+
+5. **Complete Integration**:
    ```
-   ~/.hive/memory-service-mcp-wrapper.js  - Fallback endpoint updated
-   ~/.claude/.mcp.json                    - Environment variables updated
-   ~/.grok/mcp-config.json               - Environment variables updated
+   Memory Service starts → Dynamic port (e.g., 3000)
+   ↓
+   updateAllMCPConfigurations(3000)
+   ├── Remove hardcoded endpoints from configs
+   ├── Update MCP wrapper environment variables
+   ├── Update Claude Code .mcp.json with port 3000
+   ├── Update Grok MCP config with port 3000
+   └── Clear detector cache
+   ↓
+   CLI tools test connection on port 3000 → All show "Connected ✓"
    ```
 
 4. **Grok-Specific MCP Configuration**:
