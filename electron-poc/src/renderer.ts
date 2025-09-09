@@ -957,7 +957,7 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                             <div class="welcome-view">
                                 <div class="welcome-content">
                                     <p class="welcome-message">You have not yet opened a folder.</p>
-                                    <button class="welcome-button primary" onclick="window.openFolder()">
+                                    <button class="welcome-button primary" id="welcome-open-folder-btn">
                                         Open Folder
                                     </button>
                                     <p class="welcome-hint">
@@ -965,7 +965,7 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                                     </p>
                                     <div class="welcome-section">
                                         <p class="welcome-text">You can clone a repository locally.</p>
-                                        <button class="welcome-button" onclick="window.cloneRepository()">
+                                        <button class="welcome-button" id="welcome-clone-repo-btn">
                                             Clone Repository
                                         </button>
                                     </div>
@@ -976,6 +976,19 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                                 </div>
                             </div>
                         `;
+                        
+                        // Add event listeners for welcome buttons
+                        setTimeout(() => {
+                            const openFolderBtn = document.getElementById('welcome-open-folder-btn');
+                            if (openFolderBtn) {
+                                openFolderBtn.addEventListener('click', () => window.openFolder());
+                            }
+                            
+                            const cloneRepoBtn = document.getElementById('welcome-clone-repo-btn');
+                            if (cloneRepoBtn) {
+                                cloneRepoBtn.addEventListener('click', () => window.cloneRepository());
+                            }
+                        }, 0);
                     }
                     
                     // Connect add file/folder buttons
@@ -3200,6 +3213,59 @@ function hideAnalyticsPanel(): void {
     }
 }
 
+/**
+ * Attach event listeners to CLI tool buttons
+ */
+function attachCliToolEventListeners() {
+    // Attach listeners for batch action buttons
+    const installAllBtn = document.getElementById('install-all-cli-tools-btn');
+    if (installAllBtn) {
+        installAllBtn.addEventListener('click', () => installAllCliTools());
+    }
+    
+    const updateAllBtn = document.getElementById('update-all-cli-tools-btn');
+    if (updateAllBtn) {
+        updateAllBtn.addEventListener('click', () => updateAllCliTools());
+    }
+    
+    const uninstallAllBtn = document.getElementById('uninstall-all-cli-tools-btn');
+    if (uninstallAllBtn) {
+        uninstallAllBtn.addEventListener('click', () => uninstallAllCliTools());
+    }
+    
+    // Attach listeners for individual tool buttons
+    const toolButtons = document.querySelectorAll('button[data-action]');
+    toolButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const button = e.currentTarget as HTMLButtonElement;
+            const action = button.getAttribute('data-action');
+            const toolId = button.getAttribute('data-tool-id');
+            const url = button.getAttribute('data-url');
+            
+            switch (action) {
+                case 'launch':
+                    if (toolId) launchCliTool(toolId);
+                    break;
+                case 'install':
+                    if (toolId) installCliTool(toolId);
+                    break;
+                case 'update':
+                    if (toolId) updateCliTool(toolId);
+                    break;
+                case 'uninstall':
+                    if (toolId) uninstallCliTool(toolId);
+                    break;
+                case 'refresh':
+                    if (toolId) refreshCliToolDetails(toolId);
+                    break;
+                case 'docs':
+                    if (url) window.open(url, '_blank');
+                    break;
+            }
+        });
+    });
+}
+
 // CLI Tools Panel Management
 async function renderCliToolsPanel(forceRefresh: boolean = false) {
     const container = document.getElementById('cli-tools-container');
@@ -3227,7 +3293,7 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 
                 <!-- Batch Action Buttons -->
                 <div style="display: flex; gap: 12px; margin-bottom: 24px; align-items: center;">
-                    <button onclick="installAllCliTools()" style="
+                    <button id="install-all-cli-tools-btn" style="
                         padding: 10px 20px;
                         background: linear-gradient(135deg, #FFC107 0%, #FFAD00 100%);
                         color: #0E1414;
@@ -3247,7 +3313,7 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                         <span class="codicon codicon-cloud-download" style="font-size: 16px;"></span>
                         <span>Install All Tools</span>
                     </button>
-                    <button onclick="updateAllCliTools()" style="
+                    <button id="update-all-cli-tools-btn" style="
                         padding: 10px 20px;
                         background: linear-gradient(135deg, #007BFF 0%, #0056b3 100%);
                         color: #fff;
@@ -3267,7 +3333,7 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                         <span class="codicon codicon-sync" style="font-size: 16px;"></span>
                         <span>Update All Tools</span>
                     </button>
-                    <button onclick="uninstallAllCliTools()" style="
+                    <button id="uninstall-all-cli-tools-btn" style="
                         padding: 10px 20px;
                         background: #1E2427;
                         color: #9CA3AF;
@@ -3388,6 +3454,9 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
             }));
             
             console.log('[CLI Tools] Panel rendered successfully');
+            
+            // Attach event listeners to all dynamically created buttons
+            attachCliToolEventListeners();
         } catch (error) {
             console.error('[CLI Tools] Error rendering panel:', error);
             // Show error state
@@ -3459,7 +3528,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     let buttons = '';
     if (isInstalled) {
         buttons = `
-            <button onclick="launchCliTool('${id}')" style="
+            <button data-action="launch" data-tool-id="${id}" style="
                 flex: 1; 
                 padding: 8px 12px; 
                 background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); 
@@ -3474,7 +3543,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
             " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(255, 193, 7, 0.35)'" 
                onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(255, 193, 7, 0.25)'" 
                title="Launch in current project">Launch</button>
-            <button onclick="refreshCliToolDetails('${id}')" style="
+            <button data-action="refresh" data-tool-id="${id}" style="
                 flex: 1; 
                 padding: 8px 12px; 
                 background: #1E2427; 
@@ -3488,7 +3557,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
             " onmouseover="this.style.background='#2D3336'; this.style.borderColor='#FFC107'; this.style.transform='translateY(-1px)'" 
                onmouseout="this.style.background='#1E2427'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
                title="Refresh tool details">Details</button>
-            <button onclick="updateCliTool('${id}')" style="
+            <button data-action="update" data-tool-id="${id}" style="
                 flex: 1; 
                 padding: 8px 12px; 
                 background: linear-gradient(135deg, #8A2BE2 0%, #007BFF 100%); 
@@ -3502,7 +3571,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
                 box-shadow: 0 4px 6px rgba(138, 43, 226, 0.25);
             " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(138, 43, 226, 0.35)'" 
                onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(138, 43, 226, 0.25)'">Update</button>
-            <button onclick="uninstallCliTool('${id}')" style="
+            <button data-action="uninstall" data-tool-id="${id}" style="
                 flex: 1; 
                 padding: 8px 12px; 
                 background: #1E2427; 
@@ -3519,7 +3588,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
         `;
     } else {
         buttons = `
-            <button onclick="installCliTool('${id}')" style="
+            <button data-action="install" data-tool-id="${id}" style="
                 flex: 1; 
                 padding: 8px 12px; 
                 background: linear-gradient(135deg, #28A745 0%, #20C997 100%); 
@@ -3535,7 +3604,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
                onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(40, 167, 69, 0.25)'">Install</button>
         `;
     }
-    buttons += `<button onclick="window.open('${docsUrl}', '_blank')" style="
+    buttons += `<button data-action="docs" data-url="${docsUrl}" style="
         padding: 8px 12px; 
         background: #1E2427; 
         color: #FFD54F; 
@@ -3606,8 +3675,8 @@ function createStaticToolCard(id: string, name: string, description: string, bad
             </div>
         </div>
         <div style="margin-top: 12px; display: flex; gap: 8px;">
-            <button onclick="alert('Installation coming soon')" style="flex: 1; padding: 6px; background: #6c757d; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" disabled>Install</button>
-            <button onclick="window.open('${docsUrl}', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">Docs</button>
+            <button style="flex: 1; padding: 6px; background: #6c757d; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" disabled>Install</button>
+            <button data-action="docs" data-url="${docsUrl}" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">Docs</button>
         </div>
     `;
     
