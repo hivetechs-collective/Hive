@@ -20,7 +20,7 @@ import { PortManager } from './utils/PortManager';
 // import { DirectConsensusEngine } from './consensus/DirectConsensusEngine';
 import { SimpleConsensusEngine } from './consensus/SimpleConsensusEngine';
 import { PidTracker } from './utils/PidTracker';
-import { cliToolsDetector } from './main/cli-tools/detector';
+import { cliToolsDetector, setProcessManagerReference } from './main/cli-tools/detector';
 import { CLI_TOOLS_REGISTRY } from './shared/types/cli-tools';
 // Removed import - functions are now defined locally
 import { logger } from './utils/SafeLogger';
@@ -42,6 +42,9 @@ if (require('electron-squirrel-startup')) {
 // Single source of truth for all process and port management
 // Initialize early so it's available for all components
 const processManager = new ProcessManager();
+
+// Inject ProcessManager into CLI tools detector for dynamic port discovery
+setProcessManagerReference(processManager);
 
 let db: Database | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -1326,7 +1329,30 @@ function updateAllMCPConfigurations(actualPort: number) {
       }
     }
     
-    // We could add similar updates for other tools here if they support MCP
+    // CRITICAL: Remove hardcoded endpoints from cli-tools-config.json  
+    // Only store authentication tokens, not infrastructure endpoints
+    logger.info('[Main] Removing hardcoded endpoints from cli-tools-config.json (keeping only tokens)');
+    
+    let configUpdated = false;
+    for (const [toolId, toolConfig] of Object.entries(config)) {
+      if (toolConfig && typeof toolConfig === 'object' && (toolConfig as any).memoryService) {
+        // Remove hardcoded endpoint - keep only token for authentication
+        if ((toolConfig as any).memoryService.endpoint) {
+          delete (toolConfig as any).memoryService.endpoint;
+          configUpdated = true;
+          logger.info(`[Main] Removed hardcoded endpoint from ${toolId} config - using dynamic discovery`);
+        }
+      }
+    }
+    
+    if (configUpdated) {
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      logger.info('[Main] cli-tools-config.json cleaned of hardcoded endpoints');
+      
+      // Clear detector cache to pick up token-only configuration  
+      cliToolsDetector.clearCache();
+      logger.info('[Main] Cleared CLI tools detector cache after hardcoded endpoint removal');
+    }
     
   } catch (error) {
     logger.error('[Main] Failed to update MCP configurations:', error);
@@ -2239,7 +2265,7 @@ const registerSimpleCliToolHandlers = () => {
               logger.error('[Main] Memory service port not allocated');
               return { success: false, error: 'Memory service not running' };
             }
-            const memoryServiceEndpoint = process.env.MEMORY_SERVICE_ENDPOINT || `http://localhost:${memoryServicePort}`;
+            // Use dynamic port discovery - no hardcoded endpoints stored
             const token = crypto.randomBytes(32).toString('hex');
             
             // Create MCP wrapper for the tool
@@ -3018,8 +3044,7 @@ Or try: npm install -g ${packageName} --force --no-cache
       config[toolId] = {
         ...config[toolId],
         memoryService: {
-          endpoint: memoryServiceEndpoint,
-          token: token,
+          token: token,  // Only store authentication - NO ENDPOINTS!
           connectedAt: new Date().toISOString()
         }
       };
