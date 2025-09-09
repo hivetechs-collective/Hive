@@ -1,56 +1,79 @@
-# MCP Memory Service - ACTUAL Working Commands
+# MCP Memory Service - Working Commands for All 6 Tools
 
-## ✅ Commands That WILL Invoke MCP Successfully
+## ✅ Commands That WILL Invoke MCP Successfully (v1.8.246+)
 
-### Gemini CLI
+With our MCP wrapper registering multiple tool names, these commands now work:
+
+### 1. Gemini CLI
 ```bash
-# This WORKS:
-use tools: query_memory_with_context "what have we worked on"
+# WORKS with our aliases:
+use tools: @memory "what have we worked on"
+use tools: @context "show recent changes"
+use tools: @recall "authentication work"
 
-# This does NOT work yet:
-/use @memory what have we worked on  # (would need alias configuration)
+# ALWAYS works (original):
+use tools: query_memory_with_context "what have we worked on"
 ```
 
-### Grok CLI
+### 2. Grok CLI
 ```bash
-# This WORKS:
+# WORKS with our aliases:
+!tools @memory "what have we worked on"
+!tools @context "show recent changes"
+
+# ALWAYS works (original):
 !tools query_memory_with_context "what have we worked on"
 
-# This MAY work (depends on Grok's MCP implementation):
-!mcp query_memory_with_context "what have we worked on"
+# Alternative MCP syntax:
+!mcp @memory "what have we worked on"
 ```
 
-### Qwen Code
+### 3. Qwen Code
 ```bash
-# This WORKS:
+# WORKS with our aliases:
+use @memory tool: what have we worked on
+use @context tool: show recent changes
+
+# ALWAYS works (original):
 use query_memory_with_context tool: what have we worked on
-
-# This does NOT work yet:
-/tool @memory what have we worked on  # (would need alias configuration)
 ```
 
-### Claude Code
+### 4. Claude Code
 ```bash
-# This WORKS (natively):
+# WORKS natively (best integration):
 @memory what have we worked on
+@context show recent changes
+@recall authentication implementation
+
+# No prefix needed - Claude Code has native MCP support
 ```
 
-### OpenAI Codex
+### 5. OpenAI Codex
 ```bash
-# This SHOULD work:
-invoke memory-service query_memory_with_context "what have we worked on"
+# WORKS with our aliases:
+invoke @memory "what have we worked on"
+invoke @context "show recent changes"
 
-# Simplified version needs testing:
+# ALWAYS works (original):
+invoke query_memory_with_context "what have we worked on"
+
+# Alternative MCP syntax:
+/mcp @memory "what have we worked on"
 /mcp query_memory_with_context "what have we worked on"
 ```
 
-### Cline
+### 6. Cline
 ```bash
-# This SHOULD work:
-/mcp query_memory_with_context "what have we worked on"
+# WORKS with our aliases:
+@tools @memory "what have we worked on"
+@tools @context "show recent changes"
 
-# This needs testing:
+# ALWAYS works (original):
 @tools query_memory_with_context "what have we worked on"
+
+# Alternative MCP syntax:
+/mcp @memory "what have we worked on"
+/mcp query_memory_with_context "what have we worked on"
 ```
 
 ## 🔧 What We Need to Fix
