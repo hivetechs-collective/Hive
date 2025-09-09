@@ -6017,16 +6017,20 @@ addHelpModalStyles();
     });
     
     // Getting Started
-    window.electronAPI.onMenuGettingStarted(() => {
-        console.log('[Menu] Getting Started requested');
-        showGettingStartedModal();
-    });
+    if (window.electronAPI.onMenuGettingStarted) {
+        window.electronAPI.onMenuGettingStarted(() => {
+            console.log('[Menu] Getting Started requested');
+            showGettingStartedModal();
+        });
+    }
     
     // Memory Access Guide
-    window.electronAPI.onMenuMemoryGuide(() => {
-        console.log('[Menu] Memory Guide requested');
-        showMemoryGuideModal();
-    });
+    if (window.electronAPI.onMenuMemoryGuide) {
+        window.electronAPI.onMenuMemoryGuide(() => {
+            console.log('[Menu] Memory Guide requested');
+            showMemoryGuideModal();
+        });
+    }
     
     // About dialog
     window.electronAPI.onMenuAbout(async () => {
