@@ -5262,16 +5262,4 @@ app.on('browser-window-created', (_, window) => {
 // This matches the working v1.8.248 pattern
 // IMPORTANT: The actual app.on('ready') handler is defined earlier in the file (around line 3521)
 
-// Handle all windows closed
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-// Handle app activation (macOS)
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
-});
+// Note: window-all-closed and activate handlers are defined earlier in the file (around lines 3565 and 3574)
