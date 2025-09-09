@@ -6773,6 +6773,39 @@ CLI Tool → hive-memory command → Dynamic port discovery → Memory Service A
 - **Maintains Connected Tools Reporting**: Dashboard continues to show all 6 tools as connected
 - **Simplified Architecture**: Eliminates MCP protocol overhead and complexity
 
+#### PATH Configuration for Memory Commands
+
+**Automatic PATH Setup**: The system automatically configures shell PATH on startup to include `~/.hive/bin`:
+
+```typescript
+// src/index.ts - addHiveBinToPath()
+// Called on every app startup to ensure memory commands are accessible
+```
+
+**Shell Configuration**: Adds to `.zshrc`, `.bashrc`, and `.bash_profile`:
+```bash
+# Hive Memory Commands
+export PATH="$HOME/.hive/bin:$PATH"
+```
+
+**Manual Setup** (if automatic setup fails):
+```bash
+# For zsh (default on macOS)
+echo 'export PATH="$HOME/.hive/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# For bash
+echo 'export PATH="$HOME/.hive/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Verification**:
+```bash
+# Test that commands are accessible
+which hive-memory
+hive-memory-gemini-cli query-with-context "test"
+```
+
 ### Core Integration Components
 
 #### 1. Tool Registry & Metadata
@@ -8174,6 +8207,145 @@ Simplified Memory Service access with unified, user-friendly commands across all
    - Per-tool tokens for isolation and security (each tool gets unique token)
    - Tokens persist across sessions in cli-tools-config.json
    - Memory Service tracks connected tools in-memory with Map<token, ToolInfo>
+
+#### Smart Memory Access Architecture v4.0 (v1.8.251+)
+
+**Revolutionary Approach**: Direct SQLite access to the unified `hive-ai.db` knowledge base from within AI CLI tools.
+
+##### Overview
+Instead of complex API calls or MCP protocols, AI CLI tools can directly query the user's growing knowledge base stored in `hive-ai.db` using simple, user-friendly SQL views and functions. This leverages SQLite's ACID properties for safe concurrent access while making memory queries as easy as natural language.
+
+##### Architecture Components
+
+1. **Symlink Creation on Tool Launch**:
+   When launching any AI CLI tool from Hive IDE, a symlink to `hive-ai.db` is created in the project directory:
+   ```typescript
+   // In launchCliTool function
+   const linkPath = path.join(projectPath, '.hive-ai.db');
+   const actualDb = path.join(os.homedir(), '.hive', 'hive-ai.db');
+   fs.symlinkSync(actualDb, linkPath, 'file');
+   ```
+   This makes the database accessible within the AI tool's workspace restrictions.
+
+2. **User-Friendly SQL Views**:
+   Pre-created views that eliminate the need for SQL expertise:
+   ```sql
+   -- What we've been working on
+   CREATE VIEW recent_work AS
+   SELECT content, created_at FROM messages 
+   ORDER BY created_at DESC LIMIT 100;
+   
+   -- Solutions and fixes
+   CREATE VIEW solutions AS
+   SELECT content FROM messages 
+   WHERE content LIKE '%fixed%' OR content LIKE '%solved%'
+   ORDER BY created_at DESC;
+   
+   -- Patterns and learnings
+   CREATE VIEW patterns AS
+   SELECT content FROM messages 
+   WHERE content LIKE '%pattern:%' OR content LIKE '%learned:%'
+   ORDER BY created_at DESC;
+   
+   -- Debugging history
+   CREATE VIEW debugging AS
+   SELECT content FROM messages 
+   WHERE content LIKE '%error%' OR content LIKE '%debug%'
+   ORDER BY created_at DESC;
+   ```
+
+3. **Smart Context Function**:
+   A custom SQLite function that mimics the consensus Memory→Context pipeline:
+   ```sql
+   -- Users can query with natural language
+   SELECT get_context('debugging React hooks')
+   
+   -- Returns JSON with:
+   -- - Relevant memories (semantic + temporal)
+   -- - Extracted patterns
+   -- - Summarized context
+   -- - Thematic clustering
+   ```
+
+4. **Full-Text Search Support**:
+   ```sql
+   CREATE VIRTUAL TABLE messages_fts USING fts5(
+     content, created_at, role,
+     tokenize = 'porter'
+   );
+   ```
+
+##### User Experience
+
+**Simple Queries in AI Tools**:
+```bash
+# In Gemini, Claude Code, or any AI CLI tool:
+
+# Natural language
+"Query .hive-ai.db: What have we worked on with authentication?"
+
+# Named views
+"Query .hive-ai.db view 'recent_work'"
+"Query .hive-ai.db view 'solutions' about React"
+
+# Smart context function
+"Query .hive-ai.db: SELECT get_context('debugging TypeScript')"
+
+# Direct SQL (for advanced users)
+"Query .hive-ai.db: SELECT * FROM messages WHERE content LIKE '%API%' LIMIT 5"
+```
+
+##### Implementation Details
+
+1. **Database Initialization** (`src/index.ts`):
+   - Creates views on app startup
+   - Registers custom SQLite functions
+   - Maintains FTS index for fast searching
+
+2. **Launch Integration** (`launchCliTool`):
+   - Creates symlink before tool launch
+   - Generates README with query examples
+   - Ensures database accessibility
+
+3. **Memory Growth**:
+   - Consensus curator continuously adds to `hive-ai.db`
+   - Views automatically reflect new knowledge
+   - No sync or update needed - direct access to source
+
+##### Benefits
+
+- ✅ **Zero Configuration**: Works immediately after tool launch
+- ✅ **No API Overhead**: Direct SQLite queries (microsecond response)
+- ✅ **Single Source of Truth**: Direct access to `hive-ai.db`
+- ✅ **Natural Language**: Simple queries without SQL knowledge
+- ✅ **Growing Knowledge**: Automatically includes all consensus learnings
+- ✅ **ACID Safety**: SQLite handles concurrent access perfectly
+- ✅ **Universal**: Works with ALL AI CLI tools that can read files
+
+##### Query Examples for Users
+
+```sql
+-- What have we been working on?
+Query .hive-ai.db view 'recent_work'
+
+-- Find previous solutions
+Query .hive-ai.db view 'solutions' 
+
+-- Get context about specific topic
+Query .hive-ai.db: SELECT get_context('React hooks debugging')
+
+-- Search with full-text
+Query .hive-ai.db: SELECT * FROM messages_fts WHERE messages_fts MATCH 'authentication'
+
+-- Complex analysis
+Query .hive-ai.db: 
+SELECT DATE(created_at) as day, COUNT(*) as queries 
+FROM messages 
+GROUP BY day 
+ORDER BY day DESC LIMIT 7
+```
+
+This approach makes the entire knowledge base accessible with simple, intuitive queries while maintaining the integrity of the unified database system
    - Authentication middleware validates token on each request:
      ```typescript
      const token = req.headers.authorization?.replace('Bearer ', '');

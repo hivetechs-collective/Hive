@@ -179,6 +179,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuResetState: (callback: () => void) => {
     ipcRenderer.on('menu-reset-state', callback);
   },
+  onMenuGettingStarted: (callback: () => void) => {
+    ipcRenderer.on('menu-getting-started', callback);
+  },
+  onMenuMemoryGuide: (callback: () => void) => {
+    ipcRenderer.on('menu-memory-guide', callback);
+  },
   onMenuAbout: (callback: () => void) => {
     ipcRenderer.on('menu-about', callback);
   },

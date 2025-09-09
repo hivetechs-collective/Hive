@@ -5596,6 +5596,343 @@ window.cloneRepository = async () => {
 // Testing Git modification indicator
 
 
+// ========== HELP MODAL FUNCTIONS ==========
+function showGettingStartedModal() {
+    const modal = document.createElement('div');
+    modal.className = 'help-modal-overlay';
+    modal.innerHTML = `
+        <div class="help-modal">
+            <div class="help-modal-header">
+                <h2>Getting Started with Hive Consensus</h2>
+                <button class="help-modal-close">&times;</button>
+            </div>
+            <div class="help-modal-content">
+                <section>
+                    <h3>Welcome to Hive Consensus IDE</h3>
+                    <p>Hive Consensus is an advanced AI-powered development environment that enhances your coding experience with multi-stage consensus processing and integrated AI tools.</p>
+                </section>
+                
+                <section>
+                    <h3>Key Features</h3>
+                    <ul>
+                        <li><strong>Multi-Stage Consensus:</strong> Leverage our 4-stage AI consensus engine (Generator → Refiner → Validator → Curator) for superior code quality</li>
+                        <li><strong>AI CLI Tools:</strong> Integrated support for Claude Code, Gemini CLI, Qwen Code, and more</li>
+                        <li><strong>Smart Memory Access:</strong> Your AI tools can directly query your development history and knowledge base</li>
+                        <li><strong>Git Integration:</strong> Full version control with intelligent commit suggestions</li>
+                        <li><strong>Real-time Analytics:</strong> Track your productivity and AI usage patterns</li>
+                    </ul>
+                </section>
+                
+                <section>
+                    <h3>Quick Start</h3>
+                    <ol>
+                        <li><strong>Open a Project:</strong> Click "Open Folder" or use Cmd/Ctrl+O</li>
+                        <li><strong>Launch AI Tools:</strong> Click any AI tool icon in the sidebar to start coding with AI assistance</li>
+                        <li><strong>Use Consensus:</strong> Type in the consensus chat panel to get refined AI responses</li>
+                        <li><strong>Access Memory:</strong> Your AI tools can query past solutions using simple SQL views</li>
+                    </ol>
+                </section>
+                
+                <section>
+                    <h3>Keyboard Shortcuts</h3>
+                    <ul>
+                        <li><code>Cmd/Ctrl+O</code> - Open folder</li>
+                        <li><code>Cmd/Ctrl+S</code> - Save file</li>
+                        <li><code>Cmd/Ctrl+B</code> - Toggle file explorer</li>
+                        <li><code>Cmd/Ctrl+\`</code> - Toggle terminal</li>
+                        <li><code>Cmd/Ctrl+Shift+G</code> - Toggle source control</li>
+                    </ul>
+                </section>
+                
+                <div class="help-modal-footer">
+                    <button class="help-modal-button primary" onclick="this.closest('.help-modal-overlay').remove()">Got it!</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close on click outside or close button
+    modal.querySelector('.help-modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+}
+
+function showMemoryGuideModal() {
+    const modal = document.createElement('div');
+    modal.className = 'help-modal-overlay';
+    modal.innerHTML = `
+        <div class="help-modal">
+            <div class="help-modal-header">
+                <h2>Smart Memory Access Guide</h2>
+                <button class="help-modal-close">&times;</button>
+            </div>
+            <div class="help-modal-content">
+                <section>
+                    <h3>AI Tools Can Now Access Your Memory</h3>
+                    <p>When you launch any AI CLI tool (Claude Code, Gemini CLI, etc.) from Hive, it automatically gains access to your development history through a local SQLite database symlink.</p>
+                </section>
+                
+                <section>
+                    <h3>How It Works</h3>
+                    <ol>
+                        <li>When you open a project folder, Hive creates a <code>.hive-ai.db</code> symlink in your project root</li>
+                        <li>This symlink points to your unified knowledge base at <code>~/.hive/hive-ai.db</code></li>
+                        <li>AI tools can query this database to understand your past work and solutions</li>
+                    </ol>
+                </section>
+                
+                <section>
+                    <h3>Available Views for Querying</h3>
+                    <div class="code-block">
+                        <h4>Recent Work</h4>
+                        <code>SELECT * FROM recent_work LIMIT 10;</code>
+                        <p>Shows your most recent assistant responses</p>
+                    </div>
+                    
+                    <div class="code-block">
+                        <h4>Solutions</h4>
+                        <code>SELECT * FROM solutions WHERE content LIKE '%authentication%';</code>
+                        <p>Finds problems you've solved before</p>
+                    </div>
+                    
+                    <div class="code-block">
+                        <h4>Patterns</h4>
+                        <code>SELECT * FROM patterns;</code>
+                        <p>Shows learned patterns and best practices</p>
+                    </div>
+                    
+                    <div class="code-block">
+                        <h4>Debugging</h4>
+                        <code>SELECT * FROM debugging WHERE content LIKE '%error%';</code>
+                        <p>Searches through past debugging sessions</p>
+                    </div>
+                    
+                    <div class="code-block">
+                        <h4>Code Examples</h4>
+                        <code>SELECT * FROM code_examples LIMIT 5;</code>
+                        <p>Retrieves code snippets from your history</p>
+                    </div>
+                    
+                    <div class="code-block">
+                        <h4>Full-Text Search</h4>
+                        <code>SELECT * FROM messages_fts WHERE content MATCH 'authentication';</code>
+                        <p>Fast text search across all messages</p>
+                    </div>
+                </section>
+                
+                <section>
+                    <h3>Example Usage in AI Tools</h3>
+                    <p>When using Claude Code or other AI tools, you can ask questions like:</p>
+                    <ul>
+                        <li>"Query the local .hive-ai.db to see what we've been working on"</li>
+                        <li>"Check our past solutions for authentication problems"</li>
+                        <li>"Search the memory database for React patterns we've used"</li>
+                        <li>"Find debugging sessions related to TypeScript errors"</li>
+                    </ul>
+                </section>
+                
+                <section>
+                    <h3>Privacy & Security</h3>
+                    <ul>
+                        <li>The database is stored locally on your machine</li>
+                        <li>Only accessible when you explicitly launch AI tools from Hive</li>
+                        <li>Symlink is created per-project and removed when switching projects</li>
+                        <li>No data is sent to external servers without your consent</li>
+                    </ul>
+                </section>
+                
+                <div class="help-modal-footer">
+                    <button class="help-modal-button primary" onclick="this.closest('.help-modal-overlay').remove()">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close on click outside or close button
+    modal.querySelector('.help-modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+}
+
+// Add modal styles
+const addHelpModalStyles = () => {
+    if (!document.getElementById('help-modal-styles')) {
+        const style = document.createElement('style');
+        style.id = 'help-modal-styles';
+        style.textContent = `
+            .help-modal-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            }
+            
+            .help-modal {
+                background: var(--vscode-editor-background, #1e1e1e);
+                border: 1px solid var(--vscode-widget-border, #464647);
+                border-radius: 4px;
+                width: 90%;
+                max-width: 800px;
+                max-height: 80vh;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            }
+            
+            .help-modal-header {
+                padding: 16px 20px;
+                border-bottom: 1px solid var(--vscode-widget-border, #464647);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .help-modal-header h2 {
+                margin: 0;
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--vscode-foreground, #cccccc);
+            }
+            
+            .help-modal-close {
+                background: none;
+                border: none;
+                color: var(--vscode-foreground, #cccccc);
+                font-size: 24px;
+                cursor: pointer;
+                padding: 0;
+                width: 30px;
+                height: 30px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .help-modal-close:hover {
+                background: var(--vscode-toolbar-hoverBackground, #2a2d2e);
+                border-radius: 3px;
+            }
+            
+            .help-modal-content {
+                padding: 20px;
+                overflow-y: auto;
+                flex: 1;
+                color: var(--vscode-foreground, #cccccc);
+                line-height: 1.6;
+            }
+            
+            .help-modal-content section {
+                margin-bottom: 24px;
+            }
+            
+            .help-modal-content h3 {
+                margin: 0 0 12px 0;
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--vscode-foreground, #cccccc);
+            }
+            
+            .help-modal-content p {
+                margin: 0 0 12px 0;
+                color: var(--vscode-descriptionForeground, #969696);
+            }
+            
+            .help-modal-content ul,
+            .help-modal-content ol {
+                margin: 0 0 12px 0;
+                padding-left: 24px;
+                color: var(--vscode-descriptionForeground, #969696);
+            }
+            
+            .help-modal-content li {
+                margin-bottom: 8px;
+            }
+            
+            .help-modal-content strong {
+                color: var(--vscode-foreground, #cccccc);
+            }
+            
+            .help-modal-content code {
+                background: var(--vscode-textBlockQuote-background, #222222);
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 13px;
+                color: var(--vscode-textPreformat-foreground, #d7ba7d);
+            }
+            
+            .code-block {
+                background: var(--vscode-textBlockQuote-background, #222222);
+                border: 1px solid var(--vscode-widget-border, #464647);
+                border-radius: 3px;
+                padding: 12px;
+                margin-bottom: 16px;
+            }
+            
+            .code-block h4 {
+                margin: 0 0 8px 0;
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--vscode-foreground, #cccccc);
+            }
+            
+            .code-block code {
+                display: block;
+                background: none;
+                padding: 0;
+                margin-bottom: 8px;
+            }
+            
+            .code-block p {
+                margin: 0;
+                font-size: 12px;
+            }
+            
+            .help-modal-footer {
+                padding: 16px 20px;
+                border-top: 1px solid var(--vscode-widget-border, #464647);
+                display: flex;
+                justify-content: flex-end;
+            }
+            
+            .help-modal-button {
+                padding: 6px 14px;
+                border: 1px solid var(--vscode-button-border, transparent);
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 13px;
+                background: var(--vscode-button-secondaryBackground, #3a3d41);
+                color: var(--vscode-button-secondaryForeground, #cccccc);
+            }
+            
+            .help-modal-button.primary {
+                background: var(--vscode-button-background, #0e639c);
+                color: var(--vscode-button-foreground, #ffffff);
+            }
+            
+            .help-modal-button:hover {
+                background: var(--vscode-button-hoverBackground, #1177bb);
+            }
+        `;
+        document.head.appendChild(style);
+    }
+};
+
+// Initialize help modal styles
+addHelpModalStyles();
+
 // ========== FILE MENU EVENT HANDLERS ==========
 // Listen for menu events from the main process
 (function setupMenuHandlers() {
@@ -5671,6 +6008,18 @@ window.cloneRepository = async () => {
     // Close folder
     window.electronAPI.onMenuCloseFolder(() => {
         window.closeFolder();
+    });
+    
+    // Getting Started
+    window.electronAPI.onMenuGettingStarted(() => {
+        console.log('[Menu] Getting Started requested');
+        showGettingStartedModal();
+    });
+    
+    // Memory Access Guide
+    window.electronAPI.onMenuMemoryGuide(() => {
+        console.log('[Menu] Memory Guide requested');
+        showMemoryGuideModal();
     });
     
     // About dialog
