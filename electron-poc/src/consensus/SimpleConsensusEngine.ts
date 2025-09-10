@@ -1404,14 +1404,6 @@ Consider all responses and provide your final answer to the original question.`;
     }
   }
 
-  private stopUnifiedTimer() {
-    if (this.animationTimer) {
-      clearInterval(this.animationTimer);
-      this.animationTimer = null;
-      console.log('⏹️ Stopped unified timer');
-    }
-  }
-
   private sendConsensusComplete(data: any) {
     // Stop unified timer when consensus is complete
     this.stopUnifiedTimer();
