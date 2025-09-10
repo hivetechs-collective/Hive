@@ -175,26 +175,27 @@
             
             <h3>Query Commands</h3>
             <div class="example">
-                <p><strong>Universal Commands (work across all CLI tools):</strong></p>
-                <pre><code>hive-memory context "What have we worked on?"
-hive-memory query "Show me Python examples"
-hive-memory contribute solution python "Fixed import issue"</code></pre>
+                <p><strong>Direct Database Queries (work across all CLI tools):</strong></p>
+                <pre><code># Ask your AI tool to query the database:
+"Query the local database for Python examples"
+"Check ~/.hive-ai.db for what we've worked on"
+"Search the memory database for authentication solutions"</code></pre>
             </div>
             
-            <h3>Natural Language Triggers</h3>
-            <p>These phrases automatically trigger memory queries:</p>
+            <h3>Natural Language Queries</h3>
+            <p>Ask your AI tools to query the database with phrases like:</p>
             <ul style="margin-left: 20px;">
-                <li>"What did we..." - Retrieves past conversations</li>
-                <li>"Show me our..." - Displays previous work</li>
-                <li>"Remind me about..." - Recalls specific topics</li>
-                <li>"What have we..." - Shows work history</li>
+                <li>"Query ~/.hive-ai.db for recent work"</li>
+                <li>"Check the database for Python examples"</li>
+                <li>"Search memory for authentication solutions"</li>
+                <li>"What's in the recent_work view?"</li>
             </ul>
             
-            <h3>Tool-Specific Shortcuts</h3>
+            <h3>How the Symlink Works</h3>
             <div class="example">
-                <pre><code>hive-memory-claude-code context "test query"
-hive-memory-gemini-cli context "test query"
-hive-memory-grok context "test query"</code></pre>
+                <p>When you install CLI tools through Hive, we create a symlink at <code>~/.hive-ai.db</code> that points to your unified database. This allows all AI tools to directly query your memory using standard SQLite commands.</p>
+                <pre><code># The symlink enables direct queries:
+sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work LIMIT 5"</code></pre>
             </div>
         </div>
         
@@ -266,32 +267,35 @@ sqlite3 ~/.hive-ai.db "SELECT DATE(timestamp) as day, COUNT(*) as count FROM mes
                 <li><strong>Cursor Composer</strong> - IDE integration</li>
             </ul>
             
-            <h3>Memory Service API</h3>
+            <h3>Direct Database Access</h3>
             <div class="example">
-                <p><strong>Endpoints:</strong></p>
-                <pre><code>POST /api/v1/memory/query      - Query memories with context
-POST /api/v1/memory/contribute - Share new learnings
-GET  /api/v1/memory/stats      - Memory statistics
-GET  /api/v1/memory/tools      - List connected tools</code></pre>
+                <p><strong>How CLI tools access memory:</strong></p>
+                <pre><code># Tools can directly query the database via symlink:
+sqlite3 ~/.hive-ai.db ".tables"  # List all tables and views
+sqlite3 ~/.hive-ai.db "SELECT * FROM messages WHERE content LIKE '%error%' LIMIT 5"</code></pre>
             </div>
             
             <h3>Installation & Configuration</h3>
-            <p>Tools are automatically configured when launched from Hive Consensus. The Memory Service provides:</p>
+            <p>When you install CLI tools through Hive Consensus:</p>
             <ul style="margin-left: 20px;">
-                <li>Automatic port discovery (3457-3560 range)</li>
-                <li>Token-based authentication</li>
-                <li>Tool-specific identification</li>
-                <li>Unified command system</li>
+                <li>A symlink is created at <code>~/.hive-ai.db</code></li>
+                <li>Points to your unified database at <code>~/.hive/hive-ai.db</code></li>
+                <li>All tools can query using standard SQLite commands</li>
+                <li>No additional configuration needed</li>
             </ul>
             
-            <h3>Enterprise Features</h3>
-            <p>Advanced capabilities for professional use:</p>
-            <ul style="margin-left: 20px;">
-                <li>Hooks system for custom workflows</li>
-                <li>Approval workflows for sensitive operations</li>
-                <li>Audit logging for compliance</li>
-                <li>Custom memory retention policies</li>
-            </ul>
+            <h3>Supported Query Examples</h3>
+            <div class="example">
+                <p>Tell your AI tools to run queries like:</p>
+                <pre><code># View recent work
+sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work LIMIT 10"
+
+# Search for solutions
+sqlite3 ~/.hive-ai.db "SELECT * FROM solutions WHERE content LIKE '%error%'"
+
+# Get code examples
+sqlite3 ~/.hive-ai.db "SELECT * FROM code_examples LIMIT 5"</code></pre>
+            </div>
         </div>
         
         <div id="shortcuts" class="content-section">
