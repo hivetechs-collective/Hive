@@ -2072,7 +2072,7 @@ GET  /api/analytics           - Fetch usage analytics
 ### File Menu System
 **Implementation**: `src/index.ts` (main process)
 
-#### Menu Structure
+#### Menu Structure (v1.8.289)
 ```typescript
 File Menu
 ├── New File (Ctrl/Cmd+N)
@@ -2088,7 +2088,20 @@ File Menu
 ├── Close All Tabs
 ├── Close Folder
 └── Exit (Ctrl/Cmd+Q)
+
+Help Menu (Simplified v1.8.289)
+├── Show Welcome (Ctrl/Cmd+Shift+W)
+├── ─────────────
+├── Documentation (Ctrl/Cmd+/)
+├── ─────────────
+└── About
 ```
+
+**Help Menu Changes**:
+- Removed external help links
+- Documentation now opens integrated help viewer
+- Show Welcome provides access to welcome page
+- About shows application version and info
 
 #### Auto-Save Feature
 - **Toggle Option**: Checkbox in File menu (checked state persists)
@@ -2496,6 +2509,87 @@ Recommended minimum: 1400px for all panels visible
 }
 ```
 
+##### Panel Visibility Management (v1.8.289)
+
+**Overview**
+The application uses a sophisticated panel management system to handle multiple overlapping panels in the center area while maintaining proper visibility and toggle states.
+
+**Panel Categories**:
+1. **Side Panels**: Explorer, Git (left sidebar)
+2. **Right Panels**: Terminal, Consensus (right side)
+3. **Center Panels**: Editor tabs, Welcome, Documentation, Settings, Analytics, Memory, CLI Tools
+
+**Visibility Rules**:
+- Only one center panel visible at a time
+- Side panels operate independently
+- Special panels (Welcome, Documentation, Settings) have dedicated handlers
+- Regular center panels use tab-based system with close buttons
+
+**Toggle Behavior**:
+```typescript
+// Welcome button toggles (not just opens)
+if (view === 'welcome') {
+  const isVisible = welcomePanel.style.display === 'block';
+  if (isVisible) {
+    welcomePanel.style.display = 'none';
+    button.classList.remove('active');
+  } else {
+    // Hide other panels and show welcome
+    welcomePanel.style.display = 'block';
+    button.classList.add('active');
+  }
+}
+
+// Documentation uses similar toggle pattern
+if (view === 'documentation') {
+  const isVisible = helpPanel.style.display === 'block';
+  helpPanel.style.display = isVisible ? 'none' : 'block';
+  // Update active states
+}
+```
+
+**Dedicated Handlers for Special Panels**:
+- **Welcome**: Toggles with home icon, hides all other center panels
+- **Documentation**: Toggles with document icon, can overlay other panels
+- **Settings**: Ensures visibility regardless of other panel states
+
+**Tab System for Regular Panels**:
+- Analytics, Memory Service, CLI Tools use tabs
+- Each tab has a close button (×)
+- Tabs persist until explicitly closed
+- Multiple tabs can exist but only one visible
+
+##### Activity Bar Icons (v1.8.289)
+
+**Icon Organization**:
+```html
+<div class="activity-bar-unified">
+  <!-- Top Section: Core Tools -->
+  <button data-view="explorer">File Explorer</button>
+  <button data-view="git">Source Control</button>
+  
+  <!-- Middle Section: AI Tools -->
+  <div class="sidebar-divider"></div>
+  <div class="ai-cli-icons-section">
+    <button data-view="memory">Memory Service</button>
+    <button data-view="analytics">Analytics</button>
+    <button data-view="cli-tools">CLI Tools</button>
+  </div>
+  
+  <!-- Bottom Section: System -->
+  <div class="sidebar-divider"></div>
+  <button data-view="welcome">Welcome (Home icon)</button>
+  <button data-view="documentation">Documentation</button>
+  <button data-view="settings">Settings</button>
+</div>
+```
+
+**Visual Hierarchy**:
+- Dividers separate functional groups
+- Bottom section uses `margin-top: auto` to stick to bottom
+- Active states shown with background highlight
+- Tooltips show keyboard shortcuts
+
 ##### Panel Interaction Flows
 
 **1. TTYD Terminal Panel (v1.8.0 - No Manual Resize)**
@@ -2561,6 +2655,87 @@ Recommended minimum: 1400px for all panels visible
 - position: sticky for headers
 
 ### UI Components
+
+#### Welcome Page Component (v1.8.289)
+**Implementation**: `src/components/welcome-page.ts`
+
+##### Purpose
+- Provides enterprise-grade welcome experience when app launches
+- Shows getting started information and feature highlights
+- Displays release notes and changelog information
+- Offers quick access to documentation and key features
+
+##### Architecture
+- **Enterprise Design**: Professional typography and color scheme
+- **Flat UI**: Minimal shadows, subtle borders, muted colors
+- **Responsive Layout**: Grid-based feature cards
+- **Copy-to-Clipboard**: Memory command for AI CLI tools integration
+
+##### Visual Design Principles
+```css
+/* Enterprise Typography */
+.welcome-title {
+  font-size: 36px;      /* Reduced from 48px for professionalism */
+  font-weight: 400;     /* Medium weight, not too bold */
+  letter-spacing: -0.5px;
+}
+
+.welcome-subtitle {
+  font-size: 14px;      /* Small, uppercase subtitle */
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #8b8b8b;       /* Muted color */
+}
+
+/* Flat Design Elements */
+.feature-card {
+  background: #252526;  /* Solid background */
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;   /* Subtle rounding */
+  transition: border-color 0.15s;
+}
+
+.feature-icon {
+  border: 1px solid #3c3c3c;  /* Outline style */
+  color: #007acc;              /* Accent color for icons */
+}
+```
+
+##### Integration Points
+- Mounted dynamically when Help → Show Welcome is selected
+- Toggle button in activity bar (home icon above settings)
+- Hidden when other panels are activated
+- Persistent across sessions
+
+#### Help Viewer Component (v1.8.289)
+**Implementation**: `src/components/help-viewer.ts`
+
+##### Purpose
+- Integrated documentation viewer within the application
+- Replaces external browser-based help system
+- Provides VS Code-style documentation experience
+- Direct access to Getting Started, Memory Query, Database Access guides
+
+##### Architecture
+- **Section-Based Navigation**: Left sidebar with section list
+- **Forced Scrollbars**: Always visible for better UX (`overflow-y: scroll`)
+- **SVG Icons**: VS Code-style icons for each section
+- **Dark Theme**: Consistent with application theme
+
+##### Key Features
+```typescript
+// Copy-to-clipboard for memory command
+<button class="copy-btn" onclick="navigator.clipboard.writeText('Read ~/.MEMORY.md')">
+  Copy Command
+</button>
+
+// Section management
+private sections: HelpSection[] = [
+  { id: 'getting-started', title: 'Getting Started', icon: '...', content: '...' },
+  { id: 'memory-query', title: 'Memory Query', icon: '...', content: '...' },
+  // ...
+]
+```
 
 #### Isolated Terminal Panel (TTYD Implementation v1.8.0)
 **Location**: `src/components/TTYDTerminalPanel.ts`
@@ -4796,6 +4971,52 @@ const resizeObserver = new ResizeObserver(() => {
 - Web Workers for heavy computations
 
 ---
+
+## Version History & Recent Changes
+
+### v1.8.289 (Current - December 2024)
+**Major UI/UX Overhaul**
+
+#### Welcome Page Enhancements
+- **Enterprise Design**: Refined typography (36px title, uppercase subtitle)
+- **Professional Icons**: Replaced sparkle with home icon
+- **Toggle Behavior**: Welcome button now toggles (not just opens)
+- **Flat UI**: Removed gradients, using subtle borders and muted colors
+- **Improved Layout**: Better visual hierarchy and spacing
+
+#### Documentation System
+- **Integrated Viewer**: Help documentation now part of main window
+- **VS Code Styling**: Consistent dark theme with application
+- **Forced Scrollbars**: Always visible for better UX
+- **Getting Started**: Added memory command with copy-to-clipboard
+- **Simplified Menu**: Help menu reduced to Documentation and About
+
+#### Panel Management Improvements
+- **Visibility Rules**: Only one center panel visible at a time
+- **Dedicated Handlers**: Special panels (Welcome, Documentation, Settings)
+- **Tab System**: Regular panels use tabs with close buttons
+- **Toggle Consistency**: All toggle buttons work uniformly
+- **Activity Bar Organization**: Three sections with dividers
+
+#### Bug Fixes
+- Fixed AI CLI Tools and Memory Service panels not appearing
+- Resolved documentation panel blocking other center panels
+- Fixed settings button visibility issues
+- Corrected TypeScript compilation errors with DOM references
+- Ensured proper panel stacking and z-index management
+
+### v1.8.280-288 (December 2024)
+- Initial welcome page implementation
+- What's New section with changelog
+- Release notes display system
+- Navigation improvements
+- Panel visibility fixes
+
+### v1.8.277-279 (December 2024)
+- Help system complete redesign
+- VS Code-style documentation viewer
+- Menu simplification
+- Icon standardization
 
 ## Development & Deployment
 
