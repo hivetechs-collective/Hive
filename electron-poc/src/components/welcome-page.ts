@@ -34,20 +34,15 @@ export class WelcomePage {
       <div class="welcome-page">
         <div class="welcome-content">
           <div class="welcome-header">
-            <h1 class="welcome-title">Welcome to Hive Consensus</h1>
-            <p class="welcome-subtitle">Your Enterprise AI Development Platform</p>
+            <h1 class="welcome-title">Hive Consensus</h1>
+            <p class="welcome-subtitle">Enterprise AI Development Platform</p>
           </div>
 
           <!-- What's New Section -->
           <div class="whats-new-section">
             <div class="whats-new-header">
-              <h2>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 8px;">
-                  <path d="M12 2L13.09 5.26L16.5 4.5L15.74 7.91L19 9L16.5 10.5L17.26 13.91L14 12.5L12 16L10 12.5L6.74 13.91L7.5 10.5L5 9L8.26 7.91L7.5 4.5L10.91 5.26L12 2Z" opacity="0.8"/>
-                </svg>
-                What's New in v1.8.287
-              </h2>
-              <span class="version-badge">Latest</span>
+              <h2>Release Notes</h2>
+              <span class="version-badge">v1.8.288</span>
             </div>
             <div class="whats-new-content">
               <div class="changelog-item">
@@ -76,8 +71,8 @@ export class WelcomePage {
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                 </svg>
               </div>
-              <h3>4-Stage Consensus Engine</h3>
-              <p>Experience the power of multiple AI models working together to provide optimal code generation and refinement.</p>
+              <h3>Consensus Engine</h3>
+              <p>4-stage AI pipeline with multiple models for optimal code generation.</p>
             </div>
 
             <div class="feature-card">
@@ -86,8 +81,8 @@ export class WelcomePage {
                   <path d="M9 11H3v2h6v-2zm0-4H3v2h6V7zm0 8H3v2h6v-2zm12-8h-6v2h6V7zm0 4h-6v2h6v-2zm0 4h-6v2h6v-2z"/>
                 </svg>
               </div>
-              <h3>Unified Memory System</h3>
-              <p>Your conversations and context are preserved across all AI CLI tools through our innovative memory database.</p>
+              <h3>Memory System</h3>
+              <p>Persistent context across all AI CLI tools via unified database.</p>
             </div>
 
             <div class="feature-card">
@@ -99,8 +94,8 @@ export class WelcomePage {
                   <line x1="9" y1="15" x2="11" y2="15"/>
                 </svg>
               </div>
-              <h3>AI CLI Tool Integration</h3>
-              <p>Launch and manage Claude Code, Gemini, Grok, and other AI tools with automatic memory context injection.</p>
+              <h3>CLI Integration</h3>
+              <p>Seamless integration with Claude Code, Gemini, Grok, and more.</p>
             </div>
           </div>
 
@@ -244,24 +239,28 @@ export class WelcomePage {
       }
 
       .welcome-title {
-        font-size: 48px;
-        font-weight: 300;
+        font-size: 36px;
+        font-weight: 400;
         color: #e1e1e1;
         margin: 0 0 8px 0;
-        letter-spacing: -1px;
+        letter-spacing: -0.5px;
       }
 
       .welcome-subtitle {
-        font-size: 20px;
-        color: #969696;
+        font-size: 14px;
+        color: #8b8b8b;
         margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 500;
       }
 
       .whats-new-section {
-        background: linear-gradient(135deg, #252526 0%, #2a2d2e 100%);
-        border: 1px solid #007acc;
-        border-radius: 8px;
-        padding: 24px;
+        background: #252526;
+        border: 1px solid #3c3c3c;
+        border-left: 3px solid #007acc;
+        border-radius: 4px;
+        padding: 20px;
         margin-bottom: 32px;
         position: relative;
       }
@@ -283,14 +282,14 @@ export class WelcomePage {
       }
 
       .version-badge {
-        background: #007acc;
-        color: white;
-        padding: 4px 10px;
-        border-radius: 12px;
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        background: transparent;
+        color: #8b8b8b;
+        padding: 4px 8px;
+        border: 1px solid #3c3c3c;
+        border-radius: 3px;
+        font-size: 12px;
+        font-weight: 500;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
       }
 
       .whats-new-content {
@@ -323,18 +322,21 @@ export class WelcomePage {
       }
 
       .changelog-badge.new {
-        background: #16825d;
+        background: transparent;
         color: #4ec9b0;
+        border: 1px solid #16825d;
       }
 
       .changelog-badge.improved {
-        background: #004880;
+        background: transparent;
         color: #75beff;
+        border: 1px solid #004880;
       }
 
       .changelog-badge.fixed {
-        background: #8f3b00;
+        background: transparent;
         color: #ce9178;
+        border: 1px solid #8f3b00;
       }
 
       .changelog-text {
@@ -353,29 +355,29 @@ export class WelcomePage {
       .feature-card {
         background: #252526;
         border: 1px solid #3c3c3c;
-        border-radius: 8px;
-        padding: 24px;
-        transition: border-color 0.2s, transform 0.2s;
+        border-radius: 4px;
+        padding: 20px;
+        transition: border-color 0.15s;
       }
 
       .feature-card:hover {
-        border-color: #007acc;
-        transform: translateY(-2px);
+        border-color: #464647;
       }
 
       .feature-icon {
-        width: 48px;
-        height: 48px;
+        width: 40px;
+        height: 40px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #007acc;
-        border-radius: 8px;
+        background: transparent;
+        border: 1px solid #3c3c3c;
+        border-radius: 4px;
         margin-bottom: 16px;
       }
 
       .feature-icon svg {
-        color: white;
+        color: #007acc;
       }
 
       .feature-card h3 {
