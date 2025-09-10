@@ -2051,6 +2051,62 @@ const registerCliToolsHandlers = () => {
   ipcMain.handle('cli-tools-install', async (_, toolId: string) => {
     if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
     await cliToolsManager.install(toolId);
+    
+    // After successful installation, create symlinks to hive-ai.db in common directories
+    try {
+      const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
+      const commonDirs = [
+        os.homedir(), // Home directory
+        path.join(os.homedir(), 'Desktop'),
+        path.join(os.homedir(), 'Documents'),
+        path.join(os.homedir(), 'Downloads')
+      ];
+      
+      // Add Developer directory if it exists
+      const devDir = path.join(os.homedir(), 'Developer');
+      if (fs.existsSync(devDir)) {
+        commonDirs.push(devDir);
+      }
+      
+      let symlinkCount = 0;
+      for (const dir of commonDirs) {
+        if (fs.existsSync(dir)) {
+          const dbLinkPath = path.join(dir, '.hive-ai.db');
+          
+          // Skip if symlink already exists and is valid
+          if (fs.existsSync(dbLinkPath)) {
+            try {
+              const stats = fs.lstatSync(dbLinkPath);
+              if (stats.isSymbolicLink()) {
+                const target = fs.readlinkSync(dbLinkPath);
+                if (target === actualDbPath) {
+                  continue; // Symlink already exists and is correct
+                }
+              }
+              // Remove invalid or incorrect symlink/file
+              fs.unlinkSync(dbLinkPath);
+            } catch (err) {
+              logger.debug(`[Main] Could not check/remove existing symlink at ${dbLinkPath}: ${err}`);
+            }
+          }
+          
+          // Create new symlink
+          try {
+            fs.symlinkSync(actualDbPath, dbLinkPath, 'file');
+            symlinkCount++;
+            logger.info(`[Main] Created .hive-ai.db symlink in ${dir}`);
+          } catch (symlinkError) {
+            logger.debug(`[Main] Could not create symlink in ${dir}: ${symlinkError}`);
+          }
+        }
+      }
+      
+      logger.info(`[Main] Created ${symlinkCount} symlinks for ${toolId} installation`);
+    } catch (error) {
+      logger.warn(`[Main] Error creating symlinks after ${toolId} installation:`, error);
+      // Non-fatal - installation still succeeded
+    }
+    
     return { success: true };
   });
   
@@ -3110,33 +3166,14 @@ Or try: npm install -g ${packageName} --force --no-cache
     return [];
   });
   
-  // Launch CLI tool with folder selection and resume detection
+  // Launch CLI tool directly without folder selection
   ipcMain.handle('cli-tool-launch', async (_, toolId: string, projectPath?: string) => {
     logger.info(`[Main] Launching CLI tool: ${toolId}${projectPath ? ` in ${projectPath}` : ''}`);
     
     try {
-      // If no project path provided, show folder selection dialog
-      let selectedPath = projectPath;
-      if (!selectedPath) {
-        // Get proper tool name from registry
-        const toolConfig = CLI_TOOLS_REGISTRY[toolId];
-        const toolName = toolConfig ? toolConfig.name : toolId;
-        
-        const result = await dialog.showOpenDialog(mainWindow!, {
-          properties: ['openDirectory'],
-          title: `Select folder to launch ${toolName}`,
-          buttonLabel: 'Launch Here'
-        });
-        
-        if (result.canceled || !result.filePaths[0]) {
-          logger.info('[Main] User canceled folder selection');
-          return { success: false, error: 'Folder selection canceled' };
-        }
-        
-        selectedPath = result.filePaths[0];
-      }
-      
-      logger.info(`[Main] Selected folder: ${selectedPath}`);
+      // Use home directory as default launch location if no path provided
+      const selectedPath = projectPath || os.homedir();
+      logger.info(`[Main] Launch directory: ${selectedPath}`);
       
       // Get the AI tools database instance with unified database connection
       logger.info(`[Main] Getting AIToolsDatabase instance with unified database...`);
@@ -3153,7 +3190,7 @@ Or try: npm install -g ${packageName} --force --no-cache
         aiToolsDb = null;
       }
       
-      // Check if tool has been launched in this repository before
+      // Check if tool has been launched before (for --resume flag)
       let hasBeenLaunched = false;
       if (aiToolsDb) {
         hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(toolId, selectedPath);
@@ -3168,31 +3205,8 @@ Or try: npm install -g ${packageName} --force --no-cache
         logger.warn(`[Main] AIToolsDatabase not available, skipping launch tracking`);
       }
       
-      // Create symlink to hive-ai.db for Smart Memory Access
-      // This allows AI CLI tools to directly query the user's growing knowledge base
-      try {
-        const dbLinkPath = path.join(selectedPath, '.hive-ai.db');
-        const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
-        
-        // Remove existing symlink if it exists (might be stale)
-        if (fs.existsSync(dbLinkPath)) {
-          try {
-            fs.unlinkSync(dbLinkPath);
-          } catch (unlinkErr) {
-            logger.debug(`[Main] Could not remove existing symlink: ${unlinkErr}`);
-          }
-        }
-        
-        // Create new symlink to the unified database
-        fs.symlinkSync(actualDbPath, dbLinkPath, 'file');
-        logger.info(`[Main] Created symlink to hive-ai.db at ${dbLinkPath} for AI tool memory access`);
-        
-        // Note: Query examples and documentation are available in the Help menu
-        
-      } catch (symlinkError) {
-        logger.warn(`[Main] Could not create symlink to hive-ai.db:`, symlinkError);
-        // Non-fatal - continue with launch even if symlink fails
-      }
+      // Note: Symlink creation has been moved to installation process
+      // Users can query .hive-ai.db from directories where symlinks were created during installation
       
       // Determine the command to run
       let command: string;
