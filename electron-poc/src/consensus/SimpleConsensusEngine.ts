@@ -1428,23 +1428,16 @@ Consider all responses and provide your final answer to the original question.`;
   }
 
   private sendConsensusComplete(data: any) {
-    // Stop unified timer when consensus is complete
+    // CRITICAL: Stop unified timer FIRST to prevent any more updates
     this.stopUnifiedTimer();
     
     // Log the current consensus type BEFORE sending
     console.log(`🎯 sendConsensusComplete called with consensusType: ${this.consensusType}`);
     
-    const allWindows = BrowserWindow.getAllWindows();
-    allWindows.forEach(window => {
-      console.log('✅ Sending consensus-complete to renderer');
-      window.webContents.send('consensus-complete', data);
-    });
-    
-    // Store the consensus type in a local variable to prevent any race conditions
+    // Store the consensus type to ensure consistency
     const finalConsensusType = this.consensusType;
     
-    // Send final consensus classification status AFTER consensus-complete
-    // Send immediately with achieved=true to show classification
+    // Send final consensus status IMMEDIATELY to show classification
     console.log(`📊 SENDING FINAL CLASSIFICATION: ${finalConsensusType}`);
     this.sendConsensusStatus({
       achieved: true,
@@ -1452,15 +1445,12 @@ Consider all responses and provide your final answer to the original question.`;
       round: this.conversation?.rounds_completed || 0
     });
     
-    // Also send it again after a delay to ensure it persists
-    setTimeout(() => {
-      console.log(`📊 RE-SENDING FINAL CLASSIFICATION: ${finalConsensusType}`);
-      this.sendConsensusStatus({
-        achieved: true,
-        consensusType: finalConsensusType,
-        round: this.conversation?.rounds_completed || 0
-      });
-    }, 1000); // 1 second delay to ensure it's the last thing displayed
+    // Then send consensus-complete event
+    const allWindows = BrowserWindow.getAllWindows();
+    allWindows.forEach(window => {
+      console.log('✅ Sending consensus-complete to renderer');
+      window.webContents.send('consensus-complete', data);
+    });
   }
 
 
