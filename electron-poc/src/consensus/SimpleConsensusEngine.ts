@@ -1391,18 +1391,21 @@ Consider all responses and provide your final answer to the original question.`;
     // Stop unified timer when consensus is complete
     this.stopUnifiedTimer();
     
-    // Send final consensus classification status
-    this.sendConsensusStatus({
-      achieved: true,
-      consensusType: this.consensusType,
-      round: this.conversation?.rounds_completed || 0
-    });
-    
     const allWindows = BrowserWindow.getAllWindows();
     allWindows.forEach(window => {
       console.log('✅ Sending consensus-complete to renderer');
       window.webContents.send('consensus-complete', data);
     });
+    
+    // Send final consensus classification status AFTER consensus-complete
+    // Small delay to ensure it's displayed after other updates
+    setTimeout(() => {
+      this.sendConsensusStatus({
+        achieved: true,
+        consensusType: this.consensusType,
+        round: this.conversation?.rounds_completed || 0
+      });
+    }, 50);
   }
 
 
