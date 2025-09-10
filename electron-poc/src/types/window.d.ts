@@ -110,8 +110,9 @@ declare global {
       onMenuMemoryGuide(callback: () => void): void;
       onMenuAbout(callback: () => void): void;
       
-      // Help menu handler
+      // Help menu handlers
       onMenuHelpDocumentation(callback: () => void): void;
+      onMenuShowWelcome(callback: () => void): void;
       
       getVersion(): Promise<string>;
       openExternal?(url: string): Promise<void>;

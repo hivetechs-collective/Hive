@@ -1196,6 +1196,14 @@ const createApplicationMenu = () => {
       label: 'Help',
       submenu: [
         {
+          label: 'Show Welcome',
+          accelerator: 'CmdOrCtrl+Shift+W',
+          click: () => {
+            mainWindow?.webContents.send('menu-show-welcome');
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'Documentation',
           accelerator: 'CmdOrCtrl+/',
           click: () => {

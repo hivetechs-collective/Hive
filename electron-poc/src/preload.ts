@@ -191,6 +191,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuAbout: (callback: () => void) => {
     ipcRenderer.on('menu-about', callback);
   },
+  onMenuShowWelcome: (callback: () => void) => {
+    ipcRenderer.on('menu-show-welcome', callback);
+  },
   getVersion: () => ipcRenderer.invoke('get-app-version')
 });
 

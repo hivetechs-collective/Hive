@@ -3152,10 +3152,15 @@ function showAnalyticsPanel(): void {
         return;
     }
     
-    // Hide welcome content
-    if (welcomeContent) {
-        welcomeContent.style.display = 'none';
-    }
+    // Hide all other panels
+    const welcomePanel = document.getElementById('welcome-panel');
+    const helpPanel = document.getElementById('help-panel');
+    const memoryPanel = document.getElementById('memory-panel');
+    const cliToolsPanel = document.getElementById('cli-tools-panel');
+    if (welcomePanel) welcomePanel.style.display = 'none';
+    if (helpPanel) helpPanel.style.display = 'none';
+    if (memoryPanel) memoryPanel.style.display = 'none';
+    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
     
     // Show analytics panel
     analyticsPanel.style.display = 'block';
@@ -3190,9 +3195,10 @@ function showAnalyticsPanel(): void {
                     // Close tab
                     newTab.remove();
                     hideAnalyticsPanel();
-                    // Show welcome content
-                    if (welcomeContent) {
-                        welcomeContent.style.display = 'block';
+                    // Show welcome panel
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    if (welcomePanel) {
+                        welcomePanel.style.display = 'block';
                     }
                     // Make Day 0 tab active
                     const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
@@ -3203,7 +3209,8 @@ function showAnalyticsPanel(): void {
                     // Switch to this tab
                     tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     newTab.classList.add('active');
-                    if (welcomeContent) welcomeContent.style.display = 'none';
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    if (welcomePanel) welcomePanel.style.display = 'none';
                     analyticsPanel.style.display = 'block';
                 }
             });
@@ -3232,17 +3239,19 @@ function showWelcomePage(): void {
     const welcomePanel = document.getElementById('welcome-panel');
     const helpPanel = document.getElementById('help-panel');
     const analyticsPanel = document.getElementById('analytics-panel');
-    const editorArea = document.getElementById('editor-area');
     
     if (!welcomePanel) {
         console.error('Welcome panel not found in DOM');
         return;
     }
     
-    // Hide other panels
+    // Hide all other panels
+    const memoryPanel = document.getElementById('memory-panel');
+    const cliToolsPanel = document.getElementById('cli-tools-panel');
     if (helpPanel) helpPanel.style.display = 'none';
     if (analyticsPanel) analyticsPanel.style.display = 'none';
-    if (editorArea) editorArea.style.display = 'none';
+    if (memoryPanel) memoryPanel.style.display = 'none';
+    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
     
     // Show welcome panel
     welcomePanel.style.display = 'block';
@@ -3277,23 +3286,19 @@ function showHelpPanel(section?: string): void {
     const helpPanel = document.getElementById('help-panel');
     const welcomePanel = document.getElementById('welcome-panel');
     const analyticsPanel = document.getElementById('analytics-panel');
-    const editorArea = document.getElementById('editor-area');
     
     if (!helpPanel) {
         console.error('Help panel not found in DOM');
         return;
     }
     
-    // Hide other panels
-    if (welcomePanel) {
-        welcomePanel.style.display = 'none';
-    }
-    if (analyticsPanel) {
-        analyticsPanel.style.display = 'none';
-    }
-    if (editorArea) {
-        editorArea.style.display = 'none';
-    }
+    // Hide all other panels
+    const memoryPanel = document.getElementById('memory-panel');
+    const cliToolsPanel = document.getElementById('cli-tools-panel');
+    if (welcomePanel) welcomePanel.style.display = 'none';
+    if (analyticsPanel) analyticsPanel.style.display = 'none';
+    if (memoryPanel) memoryPanel.style.display = 'none';
+    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
     
     // Show help panel
     helpPanel.style.display = 'block';
@@ -3333,9 +3338,10 @@ function showHelpPanel(section?: string): void {
                     // Close tab
                     newTab.remove();
                     hideHelpPanel();
-                    // Show welcome content
-                    if (welcomeContent) {
-                        welcomeContent.style.display = 'block';
+                    // Show welcome panel
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    if (welcomePanel) {
+                        welcomePanel.style.display = 'block';
                     }
                     // Make Day 0 tab active
                     const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
@@ -3346,8 +3352,13 @@ function showHelpPanel(section?: string): void {
                     // Switch to this tab
                     tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     newTab.classList.add('active');
-                    if (welcomeContent) welcomeContent.style.display = 'none';
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    const memoryPanel = document.getElementById('memory-panel');
+                    const cliToolsPanel = document.getElementById('cli-tools-panel');
+                    if (welcomePanel) welcomePanel.style.display = 'none';
                     if (analyticsPanel) analyticsPanel.style.display = 'none';
+                    if (memoryPanel) memoryPanel.style.display = 'none';
+                    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
                     helpPanel.style.display = 'block';
                 }
             });
@@ -3429,6 +3440,85 @@ function attachCliToolEventListeners() {
 // CLI Tools Panel Management
 async function renderCliToolsPanel(forceRefresh: boolean = false) {
     const container = document.getElementById('cli-tools-container');
+    const cliToolsPanel = document.getElementById('cli-tools-panel');
+    
+    if (!container || !cliToolsPanel) {
+        console.error('[CLI Tools] Container or panel not found');
+        return;
+    }
+    
+    // Hide other center panels (documentation, analytics, welcome, memory)
+    const helpPanel = document.getElementById('help-panel');
+    const analyticsPanel = document.getElementById('analytics-panel');
+    const welcomePanel = document.getElementById('welcome-panel');
+    const memoryPanel = document.getElementById('memory-panel');
+    if (helpPanel) helpPanel.style.display = 'none';
+    if (analyticsPanel) analyticsPanel.style.display = 'none';
+    if (welcomePanel) welcomePanel.style.display = 'none';
+    if (memoryPanel) memoryPanel.style.display = 'none';
+    
+    // Show the CLI Tools panel
+    cliToolsPanel.style.display = 'block';
+    
+    // Add CLI Tools tab if it doesn't exist
+    const tabsContainer = document.querySelector('.editor-tabs');
+    if (tabsContainer) {
+        // Remove active class from all tabs
+        tabsContainer.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        // Check if CLI Tools tab already exists
+        let cliToolsTab = tabsContainer.querySelector('[data-tab="cli-tools"]');
+        if (!cliToolsTab) {
+            // Create new tab for CLI Tools
+            const newTab = document.createElement('div');
+            newTab.className = 'tab active';
+            newTab.setAttribute('data-tab', 'cli-tools');
+            newTab.innerHTML = `
+                <span class="tab-icon">🤖</span>
+                <span class="tab-name">AI CLI Tools</span>
+                <span class="tab-close">×</span>
+            `;
+            
+            // Add click handler for tab
+            newTab.addEventListener('click', (e) => {
+                if ((e.target as HTMLElement).classList.contains('tab-close')) {
+                    // Close tab
+                    newTab.remove();
+                    cliToolsPanel.style.display = 'none';
+                    // Show welcome panel
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    if (welcomePanel) {
+                        welcomePanel.style.display = 'block';
+                    }
+                    // Make Day 0 tab active
+                    const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
+                    if (day0Tab) {
+                        day0Tab.classList.add('active');
+                    }
+                } else {
+                    // Switch to this tab
+                    tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    newTab.classList.add('active');
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    const helpPanel = document.getElementById('help-panel');
+                    const analyticsPanel = document.getElementById('analytics-panel');
+                    const memoryPanel = document.getElementById('memory-panel');
+                    if (welcomePanel) welcomePanel.style.display = 'none';
+                    if (helpPanel) helpPanel.style.display = 'none';
+                    if (analyticsPanel) analyticsPanel.style.display = 'none';
+                    if (memoryPanel) memoryPanel.style.display = 'none';
+                    cliToolsPanel.style.display = 'block';
+                }
+            });
+            
+            tabsContainer.appendChild(newTab);
+        } else {
+            cliToolsTab.classList.add('active');
+        }
+    }
+    
     if (container && (container.innerHTML.trim() === '' || forceRefresh)) {
         console.log('[CLI Tools] Rendering CLI Tools panel...');
         
@@ -4658,9 +4748,82 @@ async function openMemoryDashboard(): Promise<void> {
     console.log('[Memory] Opening Memory Dashboard...');
     
     const container = document.getElementById('memory-container');
-    if (!container) {
-        console.error('[Memory] Memory container not found');
+    const memoryPanel = document.getElementById('memory-panel');
+    if (!container || !memoryPanel) {
+        console.error('[Memory] Memory container or panel not found');
         return;
+    }
+    
+    // Hide other center panels (documentation, analytics, welcome, cli-tools)
+    const helpPanel = document.getElementById('help-panel');
+    const analyticsPanel = document.getElementById('analytics-panel');
+    const welcomePanel = document.getElementById('welcome-panel');
+    const cliToolsPanel = document.getElementById('cli-tools-panel');
+    if (helpPanel) helpPanel.style.display = 'none';
+    if (analyticsPanel) analyticsPanel.style.display = 'none';
+    if (welcomePanel) welcomePanel.style.display = 'none';
+    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+    
+    // Show the memory panel
+    memoryPanel.style.display = 'block';
+    
+    // Add Memory tab if it doesn't exist
+    const tabsContainer = document.querySelector('.editor-tabs');
+    if (tabsContainer) {
+        // Remove active class from all tabs
+        tabsContainer.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        // Check if memory tab already exists
+        let memoryTab = tabsContainer.querySelector('[data-tab="memory"]');
+        if (!memoryTab) {
+            // Create new tab for Memory
+            const newTab = document.createElement('div');
+            newTab.className = 'tab active';
+            newTab.setAttribute('data-tab', 'memory');
+            newTab.innerHTML = `
+                <span class="tab-icon">🧠</span>
+                <span class="tab-name">Memory Service</span>
+                <span class="tab-close">×</span>
+            `;
+            
+            // Add click handler for tab
+            newTab.addEventListener('click', (e) => {
+                if ((e.target as HTMLElement).classList.contains('tab-close')) {
+                    // Close tab
+                    newTab.remove();
+                    memoryPanel.style.display = 'none';
+                    // Show welcome panel
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    if (welcomePanel) {
+                        welcomePanel.style.display = 'block';
+                    }
+                    // Make Day 0 tab active
+                    const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
+                    if (day0Tab) {
+                        day0Tab.classList.add('active');
+                    }
+                } else {
+                    // Switch to this tab
+                    tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    newTab.classList.add('active');
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    const helpPanel = document.getElementById('help-panel');
+                    const analyticsPanel = document.getElementById('analytics-panel');
+                    const cliToolsPanel = document.getElementById('cli-tools-panel');
+                    if (welcomePanel) welcomePanel.style.display = 'none';
+                    if (helpPanel) helpPanel.style.display = 'none';
+                    if (analyticsPanel) analyticsPanel.style.display = 'none';
+                    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+                    memoryPanel.style.display = 'block';
+                }
+            });
+            
+            tabsContainer.appendChild(newTab);
+        } else {
+            memoryTab.classList.add('active');
+        }
     }
     
     // Check if Memory Service is running, start if not
@@ -5785,7 +5948,7 @@ function initializeWelcomePage() {
             properties: ['openDirectory']
         }).then((result: any) => {
             if (!result.canceled && result.filePaths.length > 0) {
-                openFolder(result.filePaths[0]);
+                handleOpenFolder(result.filePaths[0]);
             }
         });
     });
@@ -6319,6 +6482,14 @@ addHelpModalStyles();
         window.electronAPI.onMenuHelpDocumentation(() => {
             console.log('[Menu] Documentation requested');
             showHelpPanel('getting-started');
+        });
+    }
+    
+    // Add welcome menu handler
+    if (window.electronAPI.onMenuShowWelcome) {
+        window.electronAPI.onMenuShowWelcome(() => {
+            console.log('[Menu] Show Welcome requested');
+            showWelcomePage();
         });
     }
     
