@@ -562,17 +562,22 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         finalResponse = lastMessage.content;
       }
       
-      // Stop unified timer and send final consensus status after curator completes
+      // Stop unified timer and clear the fun phrase display
       this.stopUnifiedTimer();
       
-      // Small delay to ensure the last fun phrase is cleared before showing final classification
-      setTimeout(() => {
-        this.sendConsensusStatus({
-          achieved: true,
-          consensusType: this.consensusType,
-          round: this.conversation!.rounds_completed
-        });
-      }, 100);
+      // Clear the fun phrase immediately
+      this.sendConsensusStatus({
+        achieved: false,
+        consensusType: 'pending',
+        reset: true
+      });
+      
+      // Then send the final classification
+      this.sendConsensusStatus({
+        achieved: true,
+        consensusType: this.consensusType,
+        round: this.conversation!.rounds_completed
+      });
       
       console.log('\n📊 FINAL STATISTICS:');
       console.log('  Total tokens:', this.conversation.total_tokens);
