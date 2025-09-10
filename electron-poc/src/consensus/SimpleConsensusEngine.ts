@@ -602,6 +602,25 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         consensusType: this.consensusType,  // Include the consensus classification!
         consensus_path: this.consensusType  // Also include as consensus_path for compatibility
       });
+      
+      // NEW: Force display the consensus classification after everything else
+      // This runs at the very end to ensure nothing overwrites it
+      setTimeout(() => {
+        console.log('🎯 FORCING FINAL CONSENSUS DISPLAY');
+        const finalClassification = this.consensusType;
+        
+        // Send a special "final-classification" event that nothing else uses
+        const windows = BrowserWindow.getAllWindows();
+        if (windows.length > 0) {
+          windows[0].webContents.send('consensus-final-classification', {
+            classificationType: finalClassification,
+            displayText: finalClassification === 'unanimous' ? '✅ Unanimous Consensus' :
+                        finalClassification === 'majority' ? '🟡 Majority Consensus' :
+                        finalClassification === 'curator_override' ? '🟠 Curator Decision' :
+                        '❓ Unknown'
+          });
+        }
+      }, 2000); // 2 second delay to ensure it's the absolute last thing
 
       // Return in expected format
       const stagesCompleted = ['generator', 'refiner', 'validator'];

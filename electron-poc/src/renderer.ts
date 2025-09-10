@@ -1721,6 +1721,35 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
         }
       });
       
+      // NEW: Handler for the final consensus classification
+      // This is a completely separate event that runs at the very end
+      if ((window as any).api) {
+        (window as any).api.receive('consensus-final-classification', (data: any) => {
+          console.log('🎯 RECEIVED FINAL CONSENSUS CLASSIFICATION:', data);
+          
+          // Find the consensus-type element and force display the classification
+          const consensusTypeElement = document.getElementById('consensus-type');
+          if (consensusTypeElement) {
+            consensusTypeElement.textContent = data.displayText;
+            consensusTypeElement.style.color = 
+              data.classificationType === 'unanimous' ? '#4CAF50' :  // Green
+              data.classificationType === 'majority' ? '#FFC107' :     // Yellow/Amber
+              data.classificationType === 'curator_override' ? '#FF9800' : // Orange  
+              '#999';  // Gray for unknown
+            consensusTypeElement.style.fontWeight = 'bold';
+            consensusTypeElement.style.fontSize = '18px';
+            
+            // Clear any animation styles
+            consensusTypeElement.style.animation = '';
+            consensusTypeElement.style.textShadow = '';
+            
+            console.log(`✅ DISPLAYED FINAL CLASSIFICATION: "${data.displayText}"`);
+          } else {
+            console.warn('⚠️ consensus-type element not found!');
+          }
+        });
+      }
+      
       // SIMPLE visual update handler - one function to handle all updates
       consensusAPI.onVisualUpdate((data: any) => {
         console.log('🎨 RECEIVED Visual Update:', data.type, data);
