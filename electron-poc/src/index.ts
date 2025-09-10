@@ -2047,53 +2047,8 @@ const registerCliToolsHandlers = () => {
     return await cliToolsManager.checkInstalled(toolId);
   });
   
-  // Install a tool and create symlink
-  ipcMain.handle('cli-tools-install', async (_, toolId: string) => {
-    if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
-    await cliToolsManager.install(toolId);
-    
-    // After successful installation, create symlink to hive-ai.db
-    try {
-      const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
-      const symlinkPath = path.join(os.homedir(), '.hive-ai.db');
-      
-      // Check if symlink already exists and is valid
-      let needsSymlink = true;
-      if (fs.existsSync(symlinkPath)) {
-        try {
-          const stats = fs.lstatSync(symlinkPath);
-          if (stats.isSymbolicLink()) {
-            const target = fs.readlinkSync(symlinkPath);
-            if (target === actualDbPath) {
-              logger.info(`[Main] Symlink already exists and is correct`);
-              needsSymlink = false;
-            } else {
-              // Remove incorrect symlink
-              logger.info(`[Main] Removing incorrect symlink pointing to ${target}`);
-              fs.unlinkSync(symlinkPath);
-            }
-          } else {
-            // Remove file that's not a symlink (e.g., empty file)
-            logger.info(`[Main] Removing non-symlink file at ${symlinkPath}`);
-            fs.unlinkSync(symlinkPath);
-          }
-        } catch (err) {
-          logger.debug(`[Main] Could not check/remove existing file at ${symlinkPath}: ${err}`);
-        }
-      }
-      
-      // Create symlink if needed
-      if (needsSymlink) {
-        fs.symlinkSync(actualDbPath, symlinkPath, 'file');
-        logger.info(`[Main] Created .hive-ai.db symlink in home directory pointing to ${actualDbPath}`);
-      }
-    } catch (error) {
-      logger.warn(`[Main] Error creating symlink after ${toolId} installation:`, error);
-      // Non-fatal - installation still succeeded
-    }
-    
-    return { success: true };
-  });
+  // Note: The actual installation handler is 'cli-tool-install' (without 's')
+  // This stub handler is not used and can be removed in future cleanup
   
   // Uninstall a tool
   ipcMain.handle('cli-tools-uninstall', async (_, toolId: string) => {
@@ -2477,6 +2432,48 @@ const registerSimpleCliToolHandlers = () => {
         }
         
         // Note: Direct API integration configured - no MCP setup needed
+        
+        // Create symlink to hive-ai.db for CLI tool access
+        try {
+          const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
+          const symlinkPath = path.join(os.homedir(), '.hive-ai.db');
+          
+          logger.info(`[Main] Creating database symlink for ${toolId} access`);
+          
+          // Check if symlink already exists and is valid
+          let needsSymlink = true;
+          if (fs.existsSync(symlinkPath)) {
+            try {
+              const stats = fs.lstatSync(symlinkPath);
+              if (stats.isSymbolicLink()) {
+                const target = fs.readlinkSync(symlinkPath);
+                if (target === actualDbPath) {
+                  logger.info(`[Main] Database symlink already exists and is correct`);
+                  needsSymlink = false;
+                } else {
+                  // Remove incorrect symlink
+                  logger.info(`[Main] Removing incorrect symlink pointing to ${target}`);
+                  fs.unlinkSync(symlinkPath);
+                }
+              } else {
+                // Remove file that's not a symlink (e.g., empty file)
+                logger.info(`[Main] Removing non-symlink file at ${symlinkPath} (size: ${stats.size} bytes)`);
+                fs.unlinkSync(symlinkPath);
+              }
+            } catch (err) {
+              logger.debug(`[Main] Could not check/remove existing file at ${symlinkPath}: ${err}`);
+            }
+          }
+          
+          // Create symlink if needed
+          if (needsSymlink) {
+            fs.symlinkSync(actualDbPath, symlinkPath, 'file');
+            logger.info(`[Main] Created ~/.hive-ai.db symlink pointing to ${actualDbPath}`);
+          }
+        } catch (symlinkError) {
+          logger.warn(`[Main] Could not create database symlink for ${toolId}:`, symlinkError);
+          // Non-fatal - installation still succeeded
+        }
         
         logger.info(`[Main] ${toolConfig.name} installed and configured successfully with intelligent memory integration, version: ${version}`);
         return { success: true, version, message: `Installed ${toolConfig.name} version ${version} with Hive intelligence` };
@@ -3507,6 +3504,48 @@ app.on('ready', async () => {
     
     // Success - app is now running with main window shown
     logger.info('[Main] ✅ Application started successfully');
+    
+    // Ensure database symlink exists for CLI tools
+    try {
+      const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
+      const symlinkPath = path.join(os.homedir(), '.hive-ai.db');
+      
+      logger.info('[Main] Checking database symlink for CLI tools...');
+      
+      // Check if symlink already exists and is valid
+      let needsSymlink = true;
+      if (fs.existsSync(symlinkPath)) {
+        try {
+          const stats = fs.lstatSync(symlinkPath);
+          if (stats.isSymbolicLink()) {
+            const target = fs.readlinkSync(symlinkPath);
+            if (target === actualDbPath) {
+              logger.info('[Main] Database symlink exists and is correct');
+              needsSymlink = false;
+            } else {
+              // Remove incorrect symlink
+              logger.info(`[Main] Removing incorrect symlink pointing to ${target}`);
+              fs.unlinkSync(symlinkPath);
+            }
+          } else {
+            // Remove file that's not a symlink (e.g., empty file)
+            logger.info(`[Main] Removing non-symlink file at ${symlinkPath} (size: ${stats.size} bytes)`);
+            fs.unlinkSync(symlinkPath);
+          }
+        } catch (err) {
+          logger.debug(`[Main] Could not check/remove existing file at ${symlinkPath}: ${err}`);
+        }
+      }
+      
+      // Create symlink if needed
+      if (needsSymlink) {
+        fs.symlinkSync(actualDbPath, symlinkPath, 'file');
+        logger.info(`[Main] Created ~/.hive-ai.db symlink for CLI tools`);
+      }
+    } catch (symlinkError) {
+      logger.warn('[Main] Could not create database symlink on startup:', symlinkError);
+      // Non-fatal - app continues running
+    }
     
   } catch (error) {
     logger.error('[Main] Unexpected startup error:', error);
