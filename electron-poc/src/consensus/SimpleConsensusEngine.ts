@@ -598,7 +598,9 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         totalCost: this.conversation.total_cost,
         conversationId: this.conversationId,
         rounds: this.conversation.rounds_completed,
-        consensusAchieved: this.conversation.consensus_achieved
+        consensusAchieved: this.conversation.consensus_achieved,
+        consensusType: this.consensusType,  // Include the consensus classification!
+        consensus_path: this.consensusType  // Also include as consensus_path for compatibility
       });
 
       // Return in expected format
@@ -616,7 +618,9 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         rounds_completed: this.conversation.rounds_completed,
         tokens_used: this.conversation.total_tokens,
         cost: this.conversation.total_cost,
-        duration_ms: Date.now() - startTime
+        duration_ms: Date.now() - startTime,
+        consensus_path: this.consensusType,  // Add the consensus classification here!
+        consensusType: this.consensusType    // Also include as consensusType for compatibility
       };
 
     } catch (error: any) {
@@ -1421,15 +1425,23 @@ Consider all responses and provide your final answer to the original question.`;
     const finalConsensusType = this.consensusType;
     
     // Send final consensus classification status AFTER consensus-complete
-    // Longer delay to ensure it's displayed after all other updates complete
+    // Send immediately with achieved=true to show classification
+    console.log(`📊 SENDING FINAL CLASSIFICATION: ${finalConsensusType}`);
+    this.sendConsensusStatus({
+      achieved: true,
+      consensusType: finalConsensusType,
+      round: this.conversation?.rounds_completed || 0
+    });
+    
+    // Also send it again after a delay to ensure it persists
     setTimeout(() => {
-      console.log(`📊 SENDING FINAL CLASSIFICATION: ${finalConsensusType}`);
+      console.log(`📊 RE-SENDING FINAL CLASSIFICATION: ${finalConsensusType}`);
       this.sendConsensusStatus({
         achieved: true,
         consensusType: finalConsensusType,
         round: this.conversation?.rounds_completed || 0
       });
-    }, 500); // Increased delay to 500ms to ensure it's the last thing displayed
+    }, 1000); // 1 second delay to ensure it's the last thing displayed
   }
 
 
