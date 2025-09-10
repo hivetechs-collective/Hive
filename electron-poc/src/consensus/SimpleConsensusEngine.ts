@@ -564,11 +564,15 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       
       // Stop unified timer and send final consensus status after curator completes
       this.stopUnifiedTimer();
-      this.sendConsensusStatus({
-        achieved: true,
-        consensusType: this.consensusType,
-        round: this.conversation!.rounds_completed
-      });
+      
+      // Small delay to ensure the last fun phrase is cleared before showing final classification
+      setTimeout(() => {
+        this.sendConsensusStatus({
+          achieved: true,
+          consensusType: this.consensusType,
+          round: this.conversation!.rounds_completed
+        });
+      }, 100);
       
       console.log('\n📊 FINAL STATISTICS:');
       console.log('  Total tokens:', this.conversation.total_tokens);
