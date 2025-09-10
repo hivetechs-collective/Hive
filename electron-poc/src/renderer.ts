@@ -1655,16 +1655,16 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
           
           switch(data.consensusType) {
             case 'unanimous':
-              displayText = 'Unanimous';
-              color = '#4CAF50'; // Green
+              displayText = data.achieved ? 'Unanimous' : '';
+              color = data.achieved ? '#4CAF50' : ''; // Green when achieved
               break;
             case 'majority':
-              displayText = 'Majority';
-              color = '#FFC107'; // Amber/Yellow
+              displayText = data.achieved ? 'Majority' : '';
+              color = data.achieved ? '#FFC107' : ''; // Amber/Yellow when achieved
               break;
             case 'curator_override':
-              displayText = 'Curator Decision';
-              color = '#FF9800'; // Orange
+              displayText = data.achieved ? 'Curator Decision' : '';
+              color = data.achieved ? '#FF9800' : ''; // Orange when achieved
               break;
             case 'pending':
               displayText = ''; // Don't show anything for pending state
@@ -1693,15 +1693,18 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               color = 'var(--accent-color)';
           }
           
+          // Clear animation styles when showing final classification
+          if (data.achieved && (data.consensusType === 'unanimous' || data.consensusType === 'majority' || data.consensusType === 'curator_override')) {
+            consensusTypeElement.style.animation = '';
+            consensusTypeElement.style.fontWeight = 'normal';
+            consensusTypeElement.style.textShadow = '';
+            consensusTypeElement.style.fontFamily = '';
+            consensusTypeElement.style.whiteSpace = '';
+            consensusTypeElement.style.fontSize = '';
+          }
+          
           consensusTypeElement.textContent = displayText;
           consensusTypeElement.style.color = color;
-          
-          // Clear animations for non-conversing states
-          if (data.consensusType !== 'conversing') {
-            consensusTypeElement.style.animation = '';
-            consensusTypeElement.style.fontWeight = '';
-            consensusTypeElement.style.textShadow = '';
-          }
         }
         
         // Clear on reset/new query
