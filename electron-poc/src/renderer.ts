@@ -5423,7 +5423,57 @@ setTimeout(() => {
                 return;
             }
             
-            // Handle center panels (Settings, Analytics, Memory)
+            // Handle settings button specially to ensure consistent visibility
+            if (view === 'settings') {
+                const settingsPanel = panels.settings || document.getElementById('settings-panel');
+                if (settingsPanel) {
+                    // Hide all other panels first
+                    const helpPanel = document.getElementById('help-panel');
+                    const welcomePanel = document.getElementById('welcome-panel');
+                    const analyticsPanel = document.getElementById('analytics-panel');
+                    const memoryPanel = document.getElementById('memory-panel');
+                    const cliToolsPanel = document.getElementById('cli-tools-panel');
+                    
+                    if (settingsPanel.style.display === 'none') {
+                        // Hide all other panels
+                        if (helpPanel) helpPanel.style.display = 'none';
+                        if (welcomePanel) welcomePanel.style.display = 'none';
+                        if (analyticsPanel) analyticsPanel.style.display = 'none';
+                        if (memoryPanel) memoryPanel.style.display = 'none';
+                        if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+                        
+                        // Show settings
+                        settingsPanel.style.display = 'block';
+                        btn.classList.add('active');
+                        
+                        // Initialize settings if needed
+                        const container = document.getElementById('settings-container');
+                        if (container && settingsModal) {
+                            if (container.innerHTML.trim() === '') {
+                                settingsModal.renderInContainer(container);
+                            }
+                        }
+                    } else {
+                        // Hide settings
+                        settingsPanel.style.display = 'none';
+                        btn.classList.remove('active');
+                        // Show welcome panel
+                        if (welcomePanel) {
+                            welcomePanel.style.display = 'block';
+                        }
+                    }
+                    
+                    // Remove active from other buttons
+                    activityButtons.forEach(b => {
+                        if (b !== btn && b.getAttribute('data-view') !== 'explorer' && b.getAttribute('data-view') !== 'git') {
+                            b.classList.remove('active');
+                        }
+                    });
+                }
+                return;
+            }
+            
+            // Handle center panels (Analytics, Memory, CLI Tools)
             if (currentView === view) {
                 const panel = panels[view];
                 if (panel) {
