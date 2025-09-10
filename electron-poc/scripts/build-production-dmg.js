@@ -1835,6 +1835,8 @@ try {
   
   // Force remove old app first
   try {
+    execCommand('pkill -f "Hive Consensus" || true', 'Stop running app');
+    execCommand('sleep 1', 'Wait for app to quit');
     execCommand('rm -rf "/Applications/Hive Consensus.app"', 'Remove old app');
   } catch (error) {
     console.log(`${YELLOW}  Note: Old app might not exist or be in use${RESET}`);
@@ -1842,8 +1844,8 @@ try {
   
   console.log(`${YELLOW}➤ Installing new version to Applications${RESET}`);
   
-  // Copy new app
-  execCommand(`cp -R "${volumePath}/Hive Consensus.app" /Applications/`, 'Installing app to Applications');
+  // Copy new app (force overwrite)
+  execCommand(`cp -Rf "${volumePath}/Hive Consensus.app" /Applications/`, 'Installing app to Applications');
   
   // Verify installation
   if (!fs.existsSync('/Applications/Hive Consensus.app')) {
