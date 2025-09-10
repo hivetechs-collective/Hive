@@ -1392,19 +1392,25 @@ Consider all responses and provide your final answer to the original question.`;
     // Stop unified timer when consensus is complete
     this.stopUnifiedTimer();
     
+    // Log the current consensus type BEFORE sending
+    console.log(`🎯 sendConsensusComplete called with consensusType: ${this.consensusType}`);
+    
     const allWindows = BrowserWindow.getAllWindows();
     allWindows.forEach(window => {
       console.log('✅ Sending consensus-complete to renderer');
       window.webContents.send('consensus-complete', data);
     });
     
+    // Store the consensus type in a local variable to prevent any race conditions
+    const finalConsensusType = this.consensusType;
+    
     // Send final consensus classification status AFTER consensus-complete
     // Longer delay to ensure it's displayed after all other updates complete
     setTimeout(() => {
-      console.log(`📊 SENDING FINAL CLASSIFICATION: ${this.consensusType}`);
+      console.log(`📊 SENDING FINAL CLASSIFICATION: ${finalConsensusType}`);
       this.sendConsensusStatus({
         achieved: true,
-        consensusType: this.consensusType,
+        consensusType: finalConsensusType,
         round: this.conversation?.rounds_completed || 0
       });
     }, 500); // Increased delay to 500ms to ensure it's the last thing displayed
