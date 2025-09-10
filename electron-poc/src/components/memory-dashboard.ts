@@ -138,8 +138,6 @@ export class MemoryDashboard {
           <span class="tool-status active">Active</span>
         </div>
         <div class="tool-stats">
-          <span>Queries: ${tool.queryCount}</span>
-          <span>Contributions: ${tool.contributionCount}</span>
           <span>Last Active: ${new Date(tool.lastActivity).toLocaleTimeString()}</span>
         </div>
       </div>
@@ -218,8 +216,7 @@ export class MemoryDashboard {
                   <span class="tool-status active">Active</span>
                 </div>
                 <div class="tool-stats">
-                  <span>Queries: ${tool.queryCount}</span>
-                  <span>Contributions: ${tool.contributionCount}</span>
+                  <span>Last Active: ${new Date(tool.lastActivity).toLocaleTimeString()}</span>
                 </div>
               </div>
             `).join('') : '<div class="no-tools">No tools connected yet</div>'}
@@ -442,29 +439,38 @@ export class MemoryDashboard {
       }
       
       .tool-item {
-        padding: 12px;
-        margin-bottom: 8px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
         background: #1e1e1e;
         border-radius: 4px;
         border: 1px solid #333;
+        transition: background-color 0.15s;
+      }
+
+      .tool-item:hover {
+        background: #252526;
       }
       
       .tool-header {
         display: flex;
         justify-content: space-between;
-        margin-bottom: 8px;
+        align-items: center;
+        margin-bottom: 4px;
       }
       
       .tool-name {
-        font-weight: bold;
+        font-weight: 500;
         color: #ffffff;
+        font-size: 14px;
       }
       
       .tool-status {
-        font-size: 12px;
-        padding: 2px 8px;
+        font-size: 11px;
+        padding: 2px 6px;
         border-radius: 3px;
         background: #333;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
       }
       
       .tool-status.active {
@@ -473,10 +479,8 @@ export class MemoryDashboard {
       }
       
       .tool-stats {
-        display: flex;
-        gap: 16px;
-        font-size: 12px;
-        color: #999;
+        font-size: 11px;
+        color: #8b8b8b;
       }
       
       .activity-stream {
