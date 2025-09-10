@@ -2433,8 +2433,9 @@ const registerSimpleCliToolHandlers = () => {
         
         // Note: Direct API integration configured - no MCP setup needed
         
-        // Create symlink to hive-ai.db for CLI tool access
+        // Create symlinks for database and memory guide access
         try {
+          // 1. Database symlink
           const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
           const symlinkPath = path.join(os.homedir(), '.hive-ai.db');
           
@@ -2470,8 +2471,45 @@ const registerSimpleCliToolHandlers = () => {
             fs.symlinkSync(actualDbPath, symlinkPath, 'file');
             logger.info(`[Main] Created ~/.hive-ai.db symlink pointing to ${actualDbPath}`);
           }
+          
+          // 2. MEMORY.md guide symlink
+          const memoryGuidePath = app.isPackaged 
+            ? path.join(process.resourcesPath, 'app', 'resources', 'MEMORY.md')
+            : path.join(__dirname, '..', 'resources', 'MEMORY.md');
+          const memorySymlinkPath = path.join(os.homedir(), '.MEMORY.md');
+          
+          logger.info(`[Main] Creating MEMORY.md symlink for ${toolId} context guide`);
+          
+          // Check if MEMORY.md symlink needs creation
+          let needsMemorySymlink = true;
+          if (fs.existsSync(memorySymlinkPath)) {
+            try {
+              const stats = fs.lstatSync(memorySymlinkPath);
+              if (stats.isSymbolicLink()) {
+                const target = fs.readlinkSync(memorySymlinkPath);
+                if (target === memoryGuidePath) {
+                  logger.info(`[Main] MEMORY.md symlink already exists and is correct`);
+                  needsMemorySymlink = false;
+                } else {
+                  logger.info(`[Main] Removing incorrect MEMORY.md symlink`);
+                  fs.unlinkSync(memorySymlinkPath);
+                }
+              } else {
+                logger.info(`[Main] Removing non-symlink MEMORY.md file`);
+                fs.unlinkSync(memorySymlinkPath);
+              }
+            } catch (err) {
+              logger.debug(`[Main] Could not check/remove MEMORY.md: ${err}`);
+            }
+          }
+          
+          // Create MEMORY.md symlink if needed
+          if (needsMemorySymlink) {
+            fs.symlinkSync(memoryGuidePath, memorySymlinkPath, 'file');
+            logger.info(`[Main] Created ~/.MEMORY.md symlink for AI context guide`);
+          }
         } catch (symlinkError) {
-          logger.warn(`[Main] Could not create database symlink for ${toolId}:`, symlinkError);
+          logger.warn(`[Main] Could not create symlinks for ${toolId}:`, symlinkError);
           // Non-fatal - installation still succeeded
         }
         

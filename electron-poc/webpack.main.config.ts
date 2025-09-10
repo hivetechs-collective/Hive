@@ -46,6 +46,8 @@ plugins.push(new CopyWebpackPlugin({
     { from: 'startup-preload.js', to: 'startup-preload.js' },
     // Copy help documentation file
     { from: 'src/help.html', to: 'help.html' },
+    // Copy MEMORY.md guide for AI CLI tools
+    { from: 'resources/MEMORY.md', to: 'resources/MEMORY.md' },
     // Copy .env.production with discovered Node.js path (if exists)
     { 
       from: '.env.production', 

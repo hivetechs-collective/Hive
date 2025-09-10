@@ -191,11 +191,18 @@
                 <li>"What's in the recent_work view?"</li>
             </ul>
             
-            <h3>How the Symlink Works</h3>
+            <h3>How the Memory System Works</h3>
             <div class="example">
-                <p>When you install CLI tools through Hive, we create a symlink at <code>~/.hive-ai.db</code> that points to your unified database. This allows all AI tools to directly query your memory using standard SQLite commands.</p>
-                <pre><code># The symlink enables direct queries:
-sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work LIMIT 5"</code></pre>
+                <p>When you install CLI tools through Hive, we create two important symlinks:</p>
+                <ol style="margin-left: 20px;">
+                    <li><code>~/.hive-ai.db</code> - Links to your unified database</li>
+                    <li><code>~/.MEMORY.md</code> - Complete guide for AI tools</li>
+                </ol>
+                <p><strong>Starting your day with AI tools:</strong></p>
+                <pre><code># Tell your AI tool to read the memory guide:
+"Read ~/.MEMORY.md for context"
+
+# This gives it access to the same memory system as Consensus!</code></pre>
             </div>
         </div>
         
@@ -233,15 +240,33 @@ sqlite3 ~/.hive-ai.db "SELECT * FROM messages WHERE content LIKE '%authenticatio
 sqlite3 ~/.hive-ai.db "SELECT substr(content, 1, 200), timestamp FROM messages WHERE role = 'assistant' ORDER BY timestamp DESC LIMIT 5"</code></pre>
             </div>
             
-            <h3>Available Views & Tables</h3>
+            <h3>Enhanced Memory Views (Consensus-Level Context)</h3>
+            <p>These views replicate the Hive Consensus engine's intelligent memory system:</p>
+            
+            <h4>🧠 Temporal Memory Layers</h4>
+            <ul style="margin-left: 20px;">
+                <li><code>memory_recent</code> - Last 2 hours (conversation continuity)</li>
+                <li><code>memory_today</code> - Last 24 hours (recent context)</li>
+                <li><code>memory_week</code> - Last 7 days (pattern recognition)</li>
+                <li><code>memory_semantic</code> - All-time (thematic relevance)</li>
+            </ul>
+            
+            <h4>🎯 Context Building Views</h4>
+            <ul style="margin-left: 20px;">
+                <li><code>memory_patterns</code> - Recurring code patterns & solutions</li>
+                <li><code>memory_preferences</code> - User technology preferences</li>
+                <li><code>memory_themes</code> - Thematic conversation clusters</li>
+                <li><code>memory_solutions_enhanced</code> - Problem-solution pairs</li>
+                <li><code>memory_context_full</code> - Combined layered memory</li>
+                <li><code>memory_context_summary</code> - Quick statistics overview</li>
+            </ul>
+            
+            <h4>📚 Legacy Views</h4>
             <ul style="margin-left: 20px;">
                 <li><code>recent_work</code> - Last 100 assistant responses</li>
-                <li><code>solutions</code> - Successful problem resolutions</li>
-                <li><code>code_examples</code> - Code snippets by language</li>
-                <li><code>patterns</code> - Common coding patterns</li>
-                <li><code>messages</code> - All conversation messages</li>
-                <li><code>conversations</code> - Conversation threads</li>
-                <li><code>consensus_metrics</code> - Consensus engine performance</li>
+                <li><code>solutions</code> - Basic solution filtering</li>
+                <li><code>code_examples</code> - Code snippet extraction</li>
+                <li><code>patterns</code> - Simple pattern matching</li>
             </ul>
             
             <h3>Database Statistics</h3>
@@ -278,11 +303,20 @@ sqlite3 ~/.hive-ai.db "SELECT * FROM messages WHERE content LIKE '%error%' LIMIT
             <h3>Installation & Configuration</h3>
             <p>When you install CLI tools through Hive Consensus:</p>
             <ul style="margin-left: 20px;">
-                <li>A symlink is created at <code>~/.hive-ai.db</code></li>
+                <li>Database symlink created at <code>~/.hive-ai.db</code></li>
+                <li>Memory guide symlink created at <code>~/.MEMORY.md</code></li>
                 <li>Points to your unified database at <code>~/.hive/hive-ai.db</code></li>
                 <li>All tools can query using standard SQLite commands</li>
                 <li>No additional configuration needed</li>
             </ul>
+            
+            <h3>Daily Workflow with AI Tools</h3>
+            <div class="example">
+                <p><strong>Step 1:</strong> Install your preferred CLI tool through Hive</p>
+                <p><strong>Step 2:</strong> Launch the tool from Hive</p>
+                <p><strong>Step 3:</strong> Tell your AI: <code>"Read ~/.MEMORY.md for context"</code></p>
+                <p><strong>Result:</strong> Your AI now has full access to your memory system!</p>
+            </div>
             
             <h3>Supported Query Examples</h3>
             <div class="example">
