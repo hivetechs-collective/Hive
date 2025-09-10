@@ -1381,6 +1381,7 @@ Consider all responses and provide your final answer to the original question.`;
   }
 
   private sendConsensusStatus(status: any) {
+    console.log('🎯 Sending consensus status:', JSON.stringify(status));
     const windows = BrowserWindow.getAllWindows();
     if (windows.length > 0) {
       windows[0].webContents.send('consensus-status', status);
@@ -1398,14 +1399,15 @@ Consider all responses and provide your final answer to the original question.`;
     });
     
     // Send final consensus classification status AFTER consensus-complete
-    // Small delay to ensure it's displayed after other updates
+    // Longer delay to ensure it's displayed after all other updates complete
     setTimeout(() => {
+      console.log(`📊 SENDING FINAL CLASSIFICATION: ${this.consensusType}`);
       this.sendConsensusStatus({
         achieved: true,
         consensusType: this.consensusType,
         round: this.conversation?.rounds_completed || 0
       });
-    }, 50);
+    }, 500); // Increased delay to 500ms to ensure it's the last thing displayed
   }
 
 

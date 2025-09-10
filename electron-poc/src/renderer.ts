@@ -1615,7 +1615,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
       
       // Consensus status handler (for tracking consensus type)
       consensusAPI.onConsensusStatus((data: any) => {
-        console.log('📊 Consensus Status:', data);
+        console.log('📊 Consensus Status:', JSON.stringify(data));
         
         // Add escape handler during routing, conversing, stage_running, and curating states
         if ((data.consensusType === 'routing' || data.consensusType === 'conversing' || data.consensusType === 'stage_running' || data.consensusType === 'curating') && !escapeHandler) {
@@ -1705,6 +1705,11 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
           
           consensusTypeElement.textContent = displayText;
           consensusTypeElement.style.color = color;
+          
+          // Log when we set the final classification
+          if (data.achieved && displayText) {
+            console.log(`✅ DISPLAYING FINAL CLASSIFICATION: "${displayText}" with color ${color}`);
+          }
         }
         
         // Clear on reset/new query
