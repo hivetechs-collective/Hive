@@ -211,25 +211,25 @@ hive-memory-grok context "test query"</code></pre>
                 <p>AI tools should execute SQLite commands directly:</p>
                 <pre><code># When user asks to query the database, run:
 sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work LIMIT 10"
-sqlite3 ~/.hive-ai.db "SELECT * FROM solutions WHERE category LIKE '%auth%'"
-sqlite3 ~/.hive-ai.db "SELECT * FROM memory_queries ORDER BY created_at DESC LIMIT 5"</code></pre>
+sqlite3 ~/.hive-ai.db "SELECT * FROM solutions WHERE content LIKE '%auth%' LIMIT 5"
+sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 5"</code></pre>
                 
                 <p><strong>Available Views for Querying:</strong></p>
                 <pre><code># List all views
 sqlite3 ~/.hive-ai.db ".tables"
 
 # Query specific views
-sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work"
-sqlite3 ~/.hive-ai.db "SELECT * FROM solutions"
-sqlite3 ~/.hive-ai.db "SELECT * FROM errors_fixed"
-sqlite3 ~/.hive-ai.db "SELECT * FROM code_examples"</code></pre>
+sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work LIMIT 10"
+sqlite3 ~/.hive-ai.db "SELECT * FROM solutions LIMIT 10"
+sqlite3 ~/.hive-ai.db "SELECT * FROM code_examples LIMIT 10"
+sqlite3 ~/.hive-ai.db "SELECT * FROM patterns LIMIT 10"</code></pre>
                 
                 <p><strong>Context-Aware Queries:</strong></p>
-                <pre><code># Find memories about current project
-sqlite3 ~/.hive-ai.db "SELECT * FROM memory_queries WHERE query LIKE '%authentication%'"
+                <pre><code># Find messages about specific topics
+sqlite3 ~/.hive-ai.db "SELECT * FROM messages WHERE content LIKE '%authentication%' LIMIT 10"
 
-# Get recent work from this directory
-sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work WHERE project_path = '$(pwd)'"</code></pre>
+# Get recent assistant responses
+sqlite3 ~/.hive-ai.db "SELECT substr(content, 1, 200), timestamp FROM messages WHERE role = 'assistant' ORDER BY timestamp DESC LIMIT 5"</code></pre>
             </div>
             
             <h3>Available Views & Tables</h3>
@@ -246,10 +246,10 @@ sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work WHERE project_path = '$(pwd)'"<
             <h3>Database Statistics</h3>
             <div class="example">
                 <pre><code># Check memory size
-"Query .hive-ai.db: SELECT COUNT(*) FROM messages"
+sqlite3 ~/.hive-ai.db "SELECT COUNT(*) as total_messages FROM messages"
 
 # View usage over time
-"Query .hive-ai.db: SELECT DATE(created_at) as day, COUNT(*) FROM messages GROUP BY day"</code></pre>
+sqlite3 ~/.hive-ai.db "SELECT DATE(timestamp) as day, COUNT(*) as count FROM messages GROUP BY day ORDER BY day DESC LIMIT 7"</code></pre>
             </div>
         </div>
         
