@@ -48,42 +48,7 @@ setProcessManagerReference(processManager);
 
 let db: Database | null = null;
 let mainWindow: BrowserWindow | null = null;
-let helpWindow: BrowserWindow | null = null;
-
-// Function to open help window with specific section
-const openHelpWindow = (section?: string) => {
-  if (helpWindow && !helpWindow.isDestroyed()) {
-    helpWindow.focus();
-    if (section) {
-      helpWindow.webContents.send('navigate-to-section', section);
-    }
-    return;
-  }
-
-  helpWindow = new BrowserWindow({
-    width: 1000,
-    height: 700,
-    title: 'Hive Consensus - Help',
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
-  });
-
-  const helpPath = path.join(__dirname, 'help.html');
-  helpWindow.loadFile(helpPath);
-
-  if (section) {
-    helpWindow.webContents.once('did-finish-load', () => {
-      helpWindow?.webContents.send('navigate-to-section', section);
-    });
-  }
-
-  helpWindow.on('closed', () => {
-    helpWindow = null;
-  });
-};
+// Help is now integrated into the main window - no separate help window needed
 
 // Initialize SQLite database connection - use the existing hive-ai.db
 const initDatabase = () => {
@@ -1231,42 +1196,10 @@ const createApplicationMenu = () => {
       label: 'Help',
       submenu: [
         {
-          label: 'Memory Query Guide',
-          click: () => {
-            openHelpWindow('memory-query');
-          }
-        },
-        {
-          label: 'Database Access Guide',
-          click: () => {
-            openHelpWindow('database-access');
-          }
-        },
-        {
-          label: 'CLI Tools Integration',
-          click: () => {
-            openHelpWindow('cli-integration');
-          }
-        },
-        { type: 'separator' },
-        {
-          label: 'Keyboard Shortcuts',
+          label: 'Documentation',
           accelerator: 'CmdOrCtrl+/',
           click: () => {
-            openHelpWindow('shortcuts');
-          }
-        },
-        { type: 'separator' },
-        {
-          label: 'View Documentation',
-          click: () => {
-            require('electron').shell.openExternal('https://github.com/veronelazio/hive-consensus/wiki');
-          }
-        },
-        {
-          label: 'Report Issue',
-          click: () => {
-            require('electron').shell.openExternal('https://github.com/veronelazio/hive-consensus/issues');
+            mainWindow?.webContents.send('menu-help-documentation');
           }
         },
         { type: 'separator' },

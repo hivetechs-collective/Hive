@@ -185,17 +185,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuMemoryGuide: (callback: () => void) => {
     ipcRenderer.on('menu-memory-guide', callback);
   },
-  onMenuHelpMemoryQuery: (callback: () => void) => {
-    ipcRenderer.on('menu-help-memory-query', callback);
-  },
-  onMenuHelpDatabaseAccess: (callback: () => void) => {
-    ipcRenderer.on('menu-help-database-access', callback);
-  },
-  onMenuHelpCliIntegration: (callback: () => void) => {
-    ipcRenderer.on('menu-help-cli-integration', callback);
-  },
-  onMenuHelpShortcuts: (callback: () => void) => {
-    ipcRenderer.on('menu-help-shortcuts', callback);
+  onMenuHelpDocumentation: (callback: () => void) => {
+    ipcRenderer.on('menu-help-documentation', callback);
   },
   onMenuAbout: (callback: () => void) => {
     ipcRenderer.on('menu-about', callback);

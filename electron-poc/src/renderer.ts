@@ -78,6 +78,7 @@ import { VSCodeExplorerExact } from './vscode-explorer-exact';
 import { EditorTabs } from './editor-tabs';
 import { StatusBar } from './status-bar';
 import { ttydTerminalPanel } from './components/TTYDTerminalPanel';
+import { helpViewer } from './components/help-viewer';
 
 // Current opened folder state
 let currentOpenedFolder: string | null = null;
@@ -516,6 +517,11 @@ document.body.innerHTML = `
       <!-- Analytics Panel (Hidden by default) -->
       <div id="analytics-panel" class="panel-content" style="display: none;">
         <!-- Analytics content will be mounted here -->
+      </div>
+      
+      <!-- Help Panel (Hidden by default) -->
+      <div id="help-panel" class="panel-content" style="display: none; height: 100%; overflow: hidden;">
+        <!-- Help content will be mounted here -->
       </div>
 
       <!-- Terminal Section (Bottom, resizable) - Hidden since we use System Log in TTYD panel -->
@@ -3210,6 +3216,106 @@ function hideAnalyticsPanel(): void {
     if (analyticsPanel) {
         analyticsDashboard.unmount();
         analyticsPanel.style.display = 'none';
+    }
+}
+
+/**
+ * Show the integrated help panel with optional section navigation
+ */
+function showHelpPanel(section?: string): void {
+    // Get the help panel that's already in the DOM
+    const helpPanel = document.getElementById('help-panel');
+    const welcomeContent = document.getElementById('welcome-content');
+    const analyticsPanel = document.getElementById('analytics-panel');
+    
+    if (!helpPanel) {
+        console.error('Help panel not found in DOM');
+        return;
+    }
+    
+    // Hide other panels
+    if (welcomeContent) {
+        welcomeContent.style.display = 'none';
+    }
+    if (analyticsPanel) {
+        analyticsPanel.style.display = 'none';
+    }
+    
+    // Show help panel
+    helpPanel.style.display = 'block';
+    
+    // Mount the help viewer
+    helpViewer.mount(helpPanel);
+    
+    // Navigate to specific section if provided
+    if (section) {
+        helpViewer.navigateToSection(section);
+    }
+    
+    // Add Help tab if it doesn't exist
+    const tabsContainer = document.querySelector('.editor-tabs');
+    if (tabsContainer) {
+        // Remove active class from all tabs
+        tabsContainer.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        // Check if help tab already exists
+        let helpTab = tabsContainer.querySelector('[data-tab="help"]');
+        if (!helpTab) {
+            // Create new tab for Help
+            const newTab = document.createElement('div');
+            newTab.className = 'tab active';
+            newTab.setAttribute('data-tab', 'help');
+            newTab.innerHTML = `
+                <span class="tab-icon">📖</span>
+                <span class="tab-name">Documentation</span>
+                <span class="tab-close">×</span>
+            `;
+            
+            // Add click handler for tab
+            newTab.addEventListener('click', (e) => {
+                if ((e.target as HTMLElement).classList.contains('tab-close')) {
+                    // Close tab
+                    newTab.remove();
+                    hideHelpPanel();
+                    // Show welcome content
+                    if (welcomeContent) {
+                        welcomeContent.style.display = 'block';
+                    }
+                    // Make Day 0 tab active
+                    const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
+                    if (day0Tab) {
+                        day0Tab.classList.add('active');
+                    }
+                } else {
+                    // Switch to this tab
+                    tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    newTab.classList.add('active');
+                    if (welcomeContent) welcomeContent.style.display = 'none';
+                    if (analyticsPanel) analyticsPanel.style.display = 'none';
+                    helpPanel.style.display = 'block';
+                }
+            });
+            
+            tabsContainer.appendChild(newTab);
+        } else {
+            helpTab.classList.add('active');
+        }
+    }
+    
+    // Update button states
+    updateButtonStates('help');
+}
+
+/**
+ * Hide the integrated help panel
+ */
+function hideHelpPanel(): void {
+    const helpPanel = document.getElementById('help-panel');
+    if (helpPanel) {
+        helpViewer.unmount();
+        helpPanel.style.display = 'none';
     }
 }
 
@@ -6121,6 +6227,14 @@ addHelpModalStyles();
         const version = await window.electronAPI.getVersion();
         alert(`Hive Consensus\nVersion: ${version}\n\nAdvanced AI-powered development environment\nwith Multi-Stage Consensus Processing\n\nCopyright © 2025 HiveTechs`);
     });
+    
+    // Add help menu handler for integrated documentation
+    if (window.electronAPI.onMenuHelpDocumentation) {
+        window.electronAPI.onMenuHelpDocumentation(() => {
+            console.log('[Menu] Documentation requested');
+            showHelpPanel('getting-started');
+        });
+    }
     
     console.log('[Menu] Event handlers registered');
 })();

@@ -44,8 +44,7 @@ plugins.push(new CopyWebpackPlugin({
     { from: 'startup.html', to: 'startup.html' },
     { from: 'startup-neural.js', to: 'startup-neural.js' },
     { from: 'startup-preload.js', to: 'startup-preload.js' },
-    // Copy help documentation file
-    { from: 'src/help.html', to: 'help.html' },
+    // Help is now integrated into the main window via TypeScript component
     // Copy MEMORY.md guide for AI CLI tools
     { from: 'resources/MEMORY.md', to: 'resources/MEMORY.md' },
     // Copy .env.production with discovered Node.js path (if exists)
