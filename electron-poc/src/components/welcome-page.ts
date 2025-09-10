@@ -127,14 +127,6 @@ export class WelcomePage {
               </svg>
               View Documentation
             </button>
-            <button class="action-btn" id="open-folder-welcome">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M1.5 2a.5.5 0 00-.5.5v3a.5.5 0 00.146.354l5.5 5.5a.5.5 0 00.708 0l3-3a.5.5 0 000-.708l-5.5-5.5A.5.5 0 004.5 2h-3z"/>
-                <path d="M5.5 3a.5.5 0 11-1 0 .5.5 0 011 0z"/>
-                <path d="M6.854 11.854l5-5A.5.5 0 0011.5 6H7.707L5.854 7.854a.5.5 0 000 .708l1 1a.5.5 0 00.708 0z"/>
-              </svg>
-              Open Project Folder
-            </button>
             <button class="action-btn" id="close-welcome">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z"/>
@@ -158,15 +150,6 @@ export class WelcomePage {
         window.dispatchEvent(new CustomEvent('open-documentation', { 
           detail: { section: 'getting-started' } 
         }));
-      });
-    }
-
-    // Open folder button
-    const folderBtn = this.container.querySelector('#open-folder-welcome');
-    if (folderBtn) {
-      folderBtn.addEventListener('click', () => {
-        // Emit event to open folder dialog
-        window.dispatchEvent(new CustomEvent('open-folder-dialog'));
       });
     }
 
