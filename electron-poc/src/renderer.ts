@@ -453,6 +453,13 @@ document.body.innerHTML = `
         <!-- Bottom section with fixed positioning -->
         <div class="sidebar-bottom-section" style="position: absolute; bottom: 0; width: 100%;">
           <div class="sidebar-divider"></div>
+          <button class="activity-btn" data-view="welcome" aria-label="Welcome">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L13.09 5.26L16.5 4.5L15.74 7.91L19 9L16.5 10.5L17.26 13.91L14 12.5L12 16L10 12.5L6.74 13.91L7.5 10.5L5 9L8.26 7.91L7.5 4.5L10.91 5.26L12 2Z" opacity="0.8"/>
+              <path d="M9 16L10 14L8 13L10 12L9 10L11 11L12 9L13 11L15 10L14 12L16 13L14 14L15 16L13 15L12 17L11 15L9 16Z" opacity="0.6"/>
+            </svg>
+            <span class="activity-tooltip">Welcome / What's New</span>
+          </button>
           <button class="activity-btn" data-view="documentation" aria-label="Documentation">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M14,2H6A2,2,0,0,0,4,4V20a2,2,0,0,0,2,2H18a2,2,0,0,0,2-2V8ZM15,3.5,18.5,7H15ZM18,20H6V4H13V8a1,1,0,0,0,1,1h4Z"/>
@@ -5399,6 +5406,37 @@ setTimeout(() => {
                     currentView = view;
                 }
                 return; // Exit early for sidebar panels
+            }
+            
+            // Handle welcome button - shows the welcome page
+            if (view === 'welcome') {
+                const welcomePanel = document.getElementById('welcome-panel');
+                if (welcomePanel) {
+                    // Hide all other panels
+                    const helpPanel = document.getElementById('help-panel');
+                    const settingsPanel = panels.settings || document.getElementById('settings-panel');
+                    const analyticsPanel = document.getElementById('analytics-panel');
+                    const memoryPanel = document.getElementById('memory-panel');
+                    const cliToolsPanel = document.getElementById('cli-tools-panel');
+                    
+                    if (helpPanel) helpPanel.style.display = 'none';
+                    if (settingsPanel) settingsPanel.style.display = 'none';
+                    if (analyticsPanel) analyticsPanel.style.display = 'none';
+                    if (memoryPanel) memoryPanel.style.display = 'none';
+                    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+                    
+                    // Show welcome
+                    welcomePanel.style.display = 'block';
+                    
+                    // Update button states
+                    activityButtons.forEach(b => {
+                        if (b.getAttribute('data-view') !== 'explorer' && b.getAttribute('data-view') !== 'git') {
+                            b.classList.remove('active');
+                        }
+                    });
+                    btn.classList.add('active');
+                }
+                return;
             }
             
             // Handle documentation button specially - it toggles the help panel

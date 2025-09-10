@@ -38,6 +38,37 @@ export class WelcomePage {
             <p class="welcome-subtitle">Your Enterprise AI Development Platform</p>
           </div>
 
+          <!-- What's New Section -->
+          <div class="whats-new-section">
+            <div class="whats-new-header">
+              <h2>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 8px;">
+                  <path d="M12 2L13.09 5.26L16.5 4.5L15.74 7.91L19 9L16.5 10.5L17.26 13.91L14 12.5L12 16L10 12.5L6.74 13.91L7.5 10.5L5 9L8.26 7.91L7.5 4.5L10.91 5.26L12 2Z" opacity="0.8"/>
+                </svg>
+                What's New in v1.8.287
+              </h2>
+              <span class="version-badge">Latest</span>
+            </div>
+            <div class="whats-new-content">
+              <div class="changelog-item">
+                <span class="changelog-badge new">NEW</span>
+                <span class="changelog-text">Integrated documentation viewer with VS Code styling</span>
+              </div>
+              <div class="changelog-item">
+                <span class="changelog-badge improved">IMPROVED</span>
+                <span class="changelog-text">Panel navigation with dedicated sidebar buttons</span>
+              </div>
+              <div class="changelog-item">
+                <span class="changelog-badge fixed">FIXED</span>
+                <span class="changelog-text">Settings and documentation panel visibility issues</span>
+              </div>
+              <div class="changelog-item">
+                <span class="changelog-badge new">NEW</span>
+                <span class="changelog-text">Welcome page with quick access to all features</span>
+              </div>
+            </div>
+          </div>
+
           <div class="welcome-features">
             <div class="feature-card">
               <div class="feature-icon">
@@ -224,6 +255,92 @@ export class WelcomePage {
         font-size: 20px;
         color: #969696;
         margin: 0;
+      }
+
+      .whats-new-section {
+        background: linear-gradient(135deg, #252526 0%, #2a2d2e 100%);
+        border: 1px solid #007acc;
+        border-radius: 8px;
+        padding: 24px;
+        margin-bottom: 32px;
+        position: relative;
+      }
+
+      .whats-new-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+
+      .whats-new-header h2 {
+        font-size: 20px;
+        font-weight: 500;
+        color: #e1e1e1;
+        margin: 0;
+        display: flex;
+        align-items: center;
+      }
+
+      .version-badge {
+        background: #007acc;
+        color: white;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .whats-new-content {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .changelog-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid #3c3c3c33;
+      }
+
+      .changelog-item:last-child {
+        border-bottom: none;
+      }
+
+      .changelog-badge {
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        min-width: 60px;
+        text-align: center;
+      }
+
+      .changelog-badge.new {
+        background: #16825d;
+        color: #4ec9b0;
+      }
+
+      .changelog-badge.improved {
+        background: #004880;
+        color: #75beff;
+      }
+
+      .changelog-badge.fixed {
+        background: #8f3b00;
+        color: #ce9178;
+      }
+
+      .changelog-text {
+        color: #cccccc;
+        font-size: 13px;
+        flex: 1;
       }
 
       .welcome-features {
