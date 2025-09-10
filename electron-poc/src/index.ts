@@ -2057,7 +2057,8 @@ const registerCliToolsHandlers = () => {
       const actualDbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
       const symlinkPath = path.join(os.homedir(), '.hive-ai.db');
       
-      // Check if symlink already exists
+      // Check if symlink already exists and is valid
+      let needsSymlink = true;
       if (fs.existsSync(symlinkPath)) {
         try {
           const stats = fs.lstatSync(symlinkPath);
@@ -2065,12 +2066,15 @@ const registerCliToolsHandlers = () => {
             const target = fs.readlinkSync(symlinkPath);
             if (target === actualDbPath) {
               logger.info(`[Main] Symlink already exists and is correct`);
+              needsSymlink = false;
             } else {
               // Remove incorrect symlink
+              logger.info(`[Main] Removing incorrect symlink pointing to ${target}`);
               fs.unlinkSync(symlinkPath);
             }
           } else {
-            // Remove file that's not a symlink
+            // Remove file that's not a symlink (e.g., empty file)
+            logger.info(`[Main] Removing non-symlink file at ${symlinkPath}`);
             fs.unlinkSync(symlinkPath);
           }
         } catch (err) {
@@ -2078,10 +2082,10 @@ const registerCliToolsHandlers = () => {
         }
       }
       
-      // Create symlink if it doesn't exist
-      if (!fs.existsSync(symlinkPath)) {
+      // Create symlink if needed
+      if (needsSymlink) {
         fs.symlinkSync(actualDbPath, symlinkPath, 'file');
-        logger.info(`[Main] Created .hive-ai.db symlink in home directory`);
+        logger.info(`[Main] Created .hive-ai.db symlink in home directory pointing to ${actualDbPath}`);
       }
     } catch (error) {
       logger.warn(`[Main] Error creating symlink after ${toolId} installation:`, error);

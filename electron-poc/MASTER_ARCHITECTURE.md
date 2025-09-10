@@ -15590,3 +15590,98 @@ This ensures:
 3. **Async operations need careful handling**: Use callbacks, promises, or async/await
 4. **StartupOrchestrator manages complexity**: Let it handle service initialization
 5. **Test with production builds**: Development builds may hide timing issues
+
+---
+
+## AI CLI Tools Memory Integration
+
+### Overview
+AI CLI tools (Claude, Gemini, Qwen, etc.) can access the Hive Consensus memory database through a symbolic link created during installation. This enables seamless memory queries and context retrieval across all AI tools.
+
+### Database Access Architecture
+
+#### 1. Symlink Creation
+When CLI tools are installed via Hive Consensus, a symbolic link is created:
+- **Source**: `~/.hive/hive-ai.db` (actual database)
+- **Symlink**: `~/.hive-ai.db` (in home directory)
+- **Created During**: Tool installation (not launch)
+
+The symlink creation logic (src/index.ts:2060-2089):
+- Checks if `~/.hive-ai.db` exists
+- If it's not a symlink or points to wrong location, removes it
+- Creates proper symlink to `~/.hive/hive-ai.db`
+- Handles empty files that may have been incorrectly created
+
+#### 2. Database Query Methods
+AI tools should use SQLite commands directly:
+
+```bash
+# List available tables and views
+sqlite3 ~/.hive-ai.db ".tables"
+
+# Query specific views
+sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work LIMIT 10"
+sqlite3 ~/.hive-ai.db "SELECT * FROM solutions WHERE category LIKE '%auth%'"
+sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY created_at DESC LIMIT 5"
+```
+
+#### 3. Available Views
+- `recent_work` - Last 100 assistant responses
+- `solutions` - Successful problem resolutions  
+- `code_examples` - Code snippets by language
+- `patterns` - Common coding patterns
+- `messages` - All conversation messages
+- `conversations` - Conversation threads
+- `consensus_metrics` - Consensus engine performance
+
+### CLI Tool Launch Workflow
+
+#### 1. Installation Phase
+- Install CLI tool via npm/package manager
+- Create symlink at `~/.hive-ai.db` → `~/.hive/hive-ai.db`
+- Log installation in `ai_tool_launches` table
+
+#### 2. Launch Phase  
+- Show folder selection dialog
+- Update global folder context via `menu-open-folder` event
+- Check if tool was previously launched (for --resume flag)
+- Launch tool in selected directory
+- Update File Explorer, Source Control, Status Bar
+
+### Global Folder Management Integration
+When launching CLI tools, the selected folder becomes the global active folder:
+```typescript
+// Send menu-open-folder event to update global context
+mainWindow.webContents.send('menu-open-folder', selectedPath);
+```
+
+This ensures:
+- File Explorer shows the selected project
+- Source Control displays git status
+- Status Bar shows current branch
+- Window title reflects project name
+
+### Help Documentation
+The help system (src/help.html) provides:
+- Database access examples for AI tools
+- SQLite command syntax
+- Available views documentation
+- Query examples for common tasks
+
+### Troubleshooting
+
+#### Symlink Issues
+If AI tools report "no such table" errors:
+1. Check symlink exists: `ls -la ~/.hive-ai.db`
+2. Verify it points to correct location
+3. Reinstall tool through Hive Consensus to recreate symlink
+
+#### Query Syntax
+AI tools need explicit SQLite commands:
+- ❌ Wrong: "Query .hive-ai.db view 'recent_work'"
+- ✅ Correct: `sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work"`
+
+### Version History
+- **v1.8.274**: Fixed symlink creation logic to handle empty files
+- **v1.8.273**: Moved symlink creation from launch to installation
+- **v1.8.267**: Fixed database initialization race conditions

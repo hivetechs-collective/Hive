@@ -207,27 +207,40 @@ hive-memory-grok context "test query"</code></pre>
             
             <h3>Direct Query Examples</h3>
             <div class="example">
-                <p><strong>Natural Language Queries:</strong></p>
-                <pre><code>"Query .hive-ai.db: What have we worked on with authentication?"</code></pre>
+                <p><strong>For AI CLI Tools (Claude, Gemini, etc.):</strong></p>
+                <p>AI tools should execute SQLite commands directly:</p>
+                <pre><code># When user asks to query the database, run:
+sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work LIMIT 10"
+sqlite3 ~/.hive-ai.db "SELECT * FROM solutions WHERE category LIKE '%auth%'"
+sqlite3 ~/.hive-ai.db "SELECT * FROM memory_queries ORDER BY created_at DESC LIMIT 5"</code></pre>
                 
-                <p><strong>Named Views:</strong></p>
-                <pre><code>"Query .hive-ai.db view 'recent_work'"
-"Query .hive-ai.db view 'solutions' about React"</code></pre>
+                <p><strong>Available Views for Querying:</strong></p>
+                <pre><code># List all views
+sqlite3 ~/.hive-ai.db ".tables"
+
+# Query specific views
+sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work"
+sqlite3 ~/.hive-ai.db "SELECT * FROM solutions"
+sqlite3 ~/.hive-ai.db "SELECT * FROM errors_fixed"
+sqlite3 ~/.hive-ai.db "SELECT * FROM code_examples"</code></pre>
                 
-                <p><strong>Smart Context Function:</strong></p>
-                <pre><code>"Query .hive-ai.db: SELECT get_context('debugging TypeScript')"</code></pre>
-                
-                <p><strong>Direct SQL (Advanced):</strong></p>
-                <pre><code>"Query .hive-ai.db: SELECT * FROM messages WHERE content LIKE '%API%' LIMIT 5"</code></pre>
+                <p><strong>Context-Aware Queries:</strong></p>
+                <pre><code># Find memories about current project
+sqlite3 ~/.hive-ai.db "SELECT * FROM memory_queries WHERE query LIKE '%authentication%'"
+
+# Get recent work from this directory
+sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work WHERE project_path = '$(pwd)'"</code></pre>
             </div>
             
-            <h3>Available Views</h3>
+            <h3>Available Views & Tables</h3>
             <ul style="margin-left: 20px;">
                 <li><code>recent_work</code> - Last 100 assistant responses</li>
                 <li><code>solutions</code> - Successful problem resolutions</li>
-                <li><code>errors_fixed</code> - Resolved error messages</li>
                 <li><code>code_examples</code> - Code snippets by language</li>
-                <li><code>project_context</code> - Current project information</li>
+                <li><code>patterns</code> - Common coding patterns</li>
+                <li><code>messages</code> - All conversation messages</li>
+                <li><code>conversations</code> - Conversation threads</li>
+                <li><code>consensus_metrics</code> - Consensus engine performance</li>
             </ul>
             
             <h3>Database Statistics</h3>
