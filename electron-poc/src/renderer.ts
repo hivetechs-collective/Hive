@@ -79,6 +79,7 @@ import { EditorTabs } from './editor-tabs';
 import { StatusBar } from './status-bar';
 import { ttydTerminalPanel } from './components/TTYDTerminalPanel';
 import { helpViewer } from './components/help-viewer';
+import { welcomePage } from './components/welcome-page';
 
 // Current opened folder state
 let currentOpenedFolder: string | null = null;
@@ -522,6 +523,11 @@ document.body.innerHTML = `
       <!-- Help Panel (Hidden by default) -->
       <div id="help-panel" class="panel-content" style="display: none; height: 100%; overflow: hidden;">
         <!-- Help content will be mounted here -->
+      </div>
+      
+      <!-- Welcome Page (Shown on startup) -->
+      <div id="welcome-panel" class="panel-content" style="display: block; height: 100%; overflow: hidden;">
+        <!-- Welcome content will be mounted here -->
       </div>
 
       <!-- Terminal Section (Bottom, resizable) - Hidden since we use System Log in TTYD panel -->
@@ -3220,13 +3226,58 @@ function hideAnalyticsPanel(): void {
 }
 
 /**
+ * Show the welcome page
+ */
+function showWelcomePage(): void {
+    const welcomePanel = document.getElementById('welcome-panel');
+    const helpPanel = document.getElementById('help-panel');
+    const analyticsPanel = document.getElementById('analytics-panel');
+    const editorArea = document.getElementById('editor-area');
+    
+    if (!welcomePanel) {
+        console.error('Welcome panel not found in DOM');
+        return;
+    }
+    
+    // Hide other panels
+    if (helpPanel) helpPanel.style.display = 'none';
+    if (analyticsPanel) analyticsPanel.style.display = 'none';
+    if (editorArea) editorArea.style.display = 'none';
+    
+    // Show welcome panel
+    welcomePanel.style.display = 'block';
+    
+    // Mount the welcome page
+    welcomePage.mount(welcomePanel);
+}
+
+/**
+ * Hide the welcome page
+ */
+function hideWelcomePage(): void {
+    const welcomePanel = document.getElementById('welcome-panel');
+    const editorArea = document.getElementById('editor-area');
+    
+    if (welcomePanel) {
+        welcomePage.unmount();
+        welcomePanel.style.display = 'none';
+    }
+    
+    // Show editor area
+    if (editorArea) {
+        editorArea.style.display = 'block';
+    }
+}
+
+/**
  * Show the integrated help panel with optional section navigation
  */
 function showHelpPanel(section?: string): void {
     // Get the help panel that's already in the DOM
     const helpPanel = document.getElementById('help-panel');
-    const welcomeContent = document.getElementById('welcome-content');
+    const welcomePanel = document.getElementById('welcome-panel');
     const analyticsPanel = document.getElementById('analytics-panel');
+    const editorArea = document.getElementById('editor-area');
     
     if (!helpPanel) {
         console.error('Help panel not found in DOM');
@@ -3234,11 +3285,14 @@ function showHelpPanel(section?: string): void {
     }
     
     // Hide other panels
-    if (welcomeContent) {
-        welcomeContent.style.display = 'none';
+    if (welcomePanel) {
+        welcomePanel.style.display = 'none';
     }
     if (analyticsPanel) {
         analyticsPanel.style.display = 'none';
+    }
+    if (editorArea) {
+        editorArea.style.display = 'none';
     }
     
     // Show help panel
@@ -5437,6 +5491,9 @@ async function handleOpenFolder(folderPath: string) {
         console.log('[handleOpenFolder] Folder path value:', JSON.stringify(folderPath));
         console.log('[handleOpenFolder] Previous folder:', currentOpenedFolder);
         
+        // Hide welcome page when opening a folder
+        hideWelcomePage();
+        
         // Update the current opened folder state
         currentOpenedFolder = folderPath;
         (window as any).currentOpenedFolder = currentOpenedFolder;
@@ -5710,8 +5767,37 @@ async function initializeCliToolDetector() {
     }
 }
 
+// Initialize welcome page on startup
+function initializeWelcomePage() {
+    // Show welcome page on startup
+    showWelcomePage();
+    
+    // Listen for welcome page events
+    window.addEventListener('open-documentation', (event: CustomEvent) => {
+        hideWelcomePage();
+        showHelpPanel(event.detail?.section || 'getting-started');
+    });
+    
+    window.addEventListener('open-folder-dialog', () => {
+        hideWelcomePage();
+        // Trigger the open folder dialog
+        window.electronAPI?.showOpenDialog({
+            properties: ['openDirectory']
+        }).then((result: any) => {
+            if (!result.canceled && result.filePaths.length > 0) {
+                openFolder(result.filePaths[0]);
+            }
+        });
+    });
+    
+    window.addEventListener('close-welcome', () => {
+        hideWelcomePage();
+    });
+}
+
 // Call on startup
 initializeCliToolDetector();
+initializeWelcomePage();
 
 // Define global functions for opening folder and cloning repository
 window.openFolder = async (folderPath?: string) => {
