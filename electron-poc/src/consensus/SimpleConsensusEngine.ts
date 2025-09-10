@@ -1230,6 +1230,14 @@ ${currentResponse}`;
     
     // DON'T send final consensus status yet - let fun phrases continue during curator stage
     // Final status will be sent after curator completes
+
+    // Send the vote update to the renderer
+    this.sendConsensusVoteUpdate({
+      generator: opinions[0],
+      refiner: opinions[1],
+      validator: opinions[2],
+      achieved: this.conversation!.consensus_achieved
+    });
     
     // Ensure all stages show as completed after consensus check
     // (they might appear running during consensus voting)
@@ -1385,6 +1393,22 @@ Consider all responses and provide your final answer to the original question.`;
     const windows = BrowserWindow.getAllWindows();
     if (windows.length > 0) {
       windows[0].webContents.send('consensus-status', status);
+    }
+  }
+
+  private sendConsensusVoteUpdate(data: any) {
+    console.log('🎯 Sending consensus vote update:', JSON.stringify(data));
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length > 0) {
+      windows[0].webContents.send('consensus-vote-update', data);
+    }
+  }
+
+  private stopUnifiedTimer() {
+    if (this.animationTimer) {
+      clearInterval(this.animationTimer);
+      this.animationTimer = null;
+      console.log('⏹️ Stopped unified timer');
     }
   }
 

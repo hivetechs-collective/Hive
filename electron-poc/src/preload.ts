@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('consensusAPI', {
   onStageUpdate(callback: (data: any) => void) {
     ipcRenderer.on('consensus-stage-update', (_, data) => callback(data));
   },
+  onConsensusVoteUpdate(callback: (data: any) => void) {
+    ipcRenderer.on('consensus-vote-update', (_, data) => callback(data));
+  },
   onConsensusStatus(callback: (data: any) => void) {
     ipcRenderer.on('consensus-status', (_, data) => callback(data));
   },
@@ -77,6 +80,7 @@ contextBridge.exposeInMainWorld('consensusAPI', {
     ipcRenderer.removeAllListeners('consensus-complete');
     ipcRenderer.removeAllListeners('consensus-round-update');
     ipcRenderer.removeAllListeners('consensus-stage-update');
+    ipcRenderer.removeAllListeners('consensus-vote-update');
     ipcRenderer.removeAllListeners('consensus-status');
     ipcRenderer.removeAllListeners('updateStageStatus');
     ipcRenderer.removeAllListeners('updateStageProgress');

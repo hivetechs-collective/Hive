@@ -1895,8 +1895,8 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
         }
       });
       
-      consensusAPI.onConsensusStatus((data: any) => {
-        console.log('🤔 Consensus Status:', data);
+      consensusAPI.onConsensusVoteUpdate((data: any) => {
+        console.log('🤔 Consensus Vote Update:', data);
         addLogEntry(`Consensus check - Generator: ${data.generator}, Refiner: ${data.refiner}, Validator: ${data.validator}`, 'info');
         // Display consensus opinions in chat
         const consensusDiv = document.createElement('div');
@@ -1911,7 +1911,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
             ${data.achieved ? '<span style="color: #89d185; font-weight: bold;">✨ Consensus Achieved!</span>' : '<span style="color: #f14c4c;">Continuing iteration...</span>'}
           </div>
         `;
-        const chatMessages = document.getElementById('consensus-chat-messages');
+        const chatMessages = document.getElementById('chat-content');
         if (chatMessages) {
           chatMessages.appendChild(consensusDiv);
           chatMessages.scrollTop = chatMessages.scrollHeight;
