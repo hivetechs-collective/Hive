@@ -562,22 +562,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         finalResponse = lastMessage.content;
       }
       
-      // Stop unified timer and clear the fun phrase display
+      // Stop timer but DON'T send status here - let sendConsensusComplete handle it
       this.stopUnifiedTimer();
-      
-      // Clear the fun phrase immediately
-      this.sendConsensusStatus({
-        achieved: false,
-        consensusType: 'pending',
-        reset: true
-      });
-      
-      // Then send the final classification
-      this.sendConsensusStatus({
-        achieved: true,
-        consensusType: this.consensusType,
-        round: this.conversation!.rounds_completed
-      });
       
       console.log('\n📊 FINAL STATISTICS:');
       console.log('  Total tokens:', this.conversation.total_tokens);
@@ -1404,6 +1390,13 @@ Consider all responses and provide your final answer to the original question.`;
   private sendConsensusComplete(data: any) {
     // Stop unified timer when consensus is complete
     this.stopUnifiedTimer();
+    
+    // Send final consensus classification status
+    this.sendConsensusStatus({
+      achieved: true,
+      consensusType: this.consensusType,
+      round: this.conversation?.rounds_completed || 0
+    });
     
     const allWindows = BrowserWindow.getAllWindows();
     allWindows.forEach(window => {
