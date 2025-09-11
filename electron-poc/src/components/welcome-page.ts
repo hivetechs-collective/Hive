@@ -6,9 +6,10 @@
 export class WelcomePage {
   private container: HTMLElement | null = null;
 
-  mount(container: HTMLElement): void {
+  async mount(container: HTMLElement): Promise<void> {
     this.container = container;
     this.render();
+    await this.loadPreferences();
     this.attachEventListeners();
   }
 
@@ -146,27 +147,117 @@ export class WelcomePage {
             </div>
           </div>
 
-          <div class="welcome-actions">
-            <button class="action-btn primary" id="open-documentation">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M14 1H2a1 1 0 00-1 1v8a1 1 0 001 1h5.5l3 3 3-3H14a1 1 0 001-1V2a1 1 0 00-1-1zM8 9.5a.5.5 0 110-1 .5.5 0 010 1zm1-2.5a1 1 0 01-2 0V4a1 1 0 012 0v3z"/>
-              </svg>
-              View Documentation
-            </button>
-            <button class="action-btn" id="close-welcome">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z"/>
-              </svg>
-              Close Welcome
-            </button>
+          <div class="welcome-footer">
+            <div class="startup-preference">
+              <label class="checkbox-label">
+                <input type="checkbox" id="show-on-startup" checked>
+                <span>Show welcome page on startup</span>
+              </label>
+            </div>
+            <div class="welcome-actions">
+              <button class="action-btn primary" id="open-documentation">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M14 1H2a1 1 0 00-1 1v8a1 1 0 001 1h5.5l3 3 3-3H14a1 1 0 001-1V2a1 1 0 00-1-1zM8 9.5a.5.5 0 110-1 .5.5 0 010 1zm1-2.5a1 1 0 01-2 0V4a1 1 0 012 0v3z"/>
+                </svg>
+                View Documentation
+              </button>
+              <button class="action-btn" id="close-welcome">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z"/>
+                </svg>
+                Close Welcome
+              </button>
+            </div>
           </div>
         </div>
       </div>
     `;
   }
 
+  private async loadPreferences(): Promise<void> {
+    if (!this.container) return;
+    
+    const checkbox = this.container.querySelector('#show-on-startup') as HTMLInputElement;
+    if (!checkbox) return;
+    
+    try {
+      // Try to load preference from database
+      if (window.databaseAPI) {
+        const result = await window.databaseAPI.query(
+          'SELECT value FROM settings WHERE key = ?',
+          ['welcome.showOnStartup']
+        );
+        
+        // Default to true if no preference is saved
+        const showOnStartup = result.length === 0 || result[0]?.value !== '0';
+        checkbox.checked = showOnStartup;
+      }
+    } catch (error) {
+      console.error('Failed to load welcome preferences:', error);
+      // Default to checked on error
+      checkbox.checked = true;
+    }
+  }
+
+  private async savePreference(showOnStartup: boolean): Promise<void> {
+    try {
+      if (window.databaseAPI) {
+        // Save to database
+        await window.databaseAPI.execute(
+          'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+          ['welcome.showOnStartup', showOnStartup ? '1' : '0']
+        );
+        
+        // Show toast notification
+        this.showToast(showOnStartup 
+          ? 'Welcome page will show on startup' 
+          : 'Welcome page disabled on startup. Access via Help menu anytime.'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to save welcome preference:', error);
+      this.showToast('Failed to save preference', 'error');
+    }
+  }
+
+  private showToast(message: string, type: 'info' | 'error' = 'info'): void {
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast-notification ${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: ${type === 'error' ? '#f44336' : '#007acc'};
+      color: white;
+      border-radius: 4px;
+      font-size: 14px;
+      z-index: 10000;
+      animation: slideIn 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+      toast.style.animation = 'slideOut 0.3s ease-out';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
   private attachEventListeners(): void {
     if (!this.container) return;
+
+    // Show on startup checkbox
+    const checkbox = this.container.querySelector('#show-on-startup') as HTMLInputElement;
+    if (checkbox) {
+      checkbox.addEventListener('change', async (e) => {
+        const target = e.target as HTMLInputElement;
+        await this.savePreference(target.checked);
+      });
+    }
 
     // Documentation button
     const docBtn = this.container.querySelector('#open-documentation');
@@ -518,6 +609,42 @@ export class WelcomePage {
 
       .copy-btn.copied {
         background: #4ec9b0;
+      }
+
+      .welcome-footer {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        align-items: center;
+      }
+
+      .startup-preference {
+        padding: 12px 0;
+        border-top: 1px solid #3c3c3c;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+      }
+
+      .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        color: #969696;
+        font-size: 13px;
+        user-select: none;
+      }
+
+      .checkbox-label:hover {
+        color: #cccccc;
+      }
+
+      .checkbox-label input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        accent-color: #007acc;
       }
 
       .welcome-actions {

@@ -6103,9 +6103,25 @@ async function initializeCliToolDetector() {
 }
 
 // Initialize welcome page on startup
-function initializeWelcomePage() {
-    // Show welcome page on startup
-    showWelcomePage();
+async function initializeWelcomePage() {
+    // Check database preference for showing welcome page using our unified hive-ai.db
+    try {
+        const result = await window.databaseAPI.query(
+            'SELECT value FROM settings WHERE key = ?',
+            ['welcome.showOnStartup']
+        );
+        
+        const showOnStartup = !result || result.length === 0 || result[0]?.value === '1';
+        
+        // Only show welcome page if preference allows
+        if (showOnStartup) {
+            showWelcomePage();
+        }
+    } catch (error) {
+        console.error('Error checking welcome page preference:', error);
+        // Default to showing welcome page on error
+        showWelcomePage();
+    }
     
     // Listen for welcome page events
     window.addEventListener('open-documentation', (event: CustomEvent) => {

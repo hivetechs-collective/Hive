@@ -92,6 +92,13 @@ const initDatabase = () => {
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
   
+  // Create general settings table for application preferences
+  db.run(`CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  
   // Create stage_outputs table to track model usage per stage
   db.run(`CREATE TABLE IF NOT EXISTS stage_outputs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
