@@ -5721,32 +5721,11 @@ function setupResizeHandles() {
         });
     }
     
-    // Terminal collapse/expand
+    // Terminal collapse/expand (old terminal section - hidden and not used)
     const toggleTerminal = document.getElementById('toggle-terminal');
     const terminalContent = document.getElementById('terminal-content');
     
-    // Helper function to expand terminal (used by CLI tools)
-    function expandTerminal() {
-        if (terminalContent && terminalSection && toggleTerminal) {
-            if (terminalContent.style.display === 'none') {
-                terminalContent.style.display = 'block';
-                terminalSection.style.height = '200px';
-                toggleTerminal.textContent = '−';
-                console.log('[Terminal] Expanded terminal for CLI tool launch');
-            }
-        }
-    }
-    
-    // Make expandTerminal available globally for CLI tool launches
-    (window as any).expandTerminal = expandTerminal;
-    
     if (toggleTerminal && terminalContent && terminalSection) {
-        // Set terminal collapsed by default on app start
-        terminalContent.style.display = 'none';
-        terminalSection.style.height = '35px';
-        toggleTerminal.textContent = '+';
-        console.log('[Terminal] Terminal collapsed by default on startup');
-        
         toggleTerminal.addEventListener('click', () => {
             const isCollapsed = terminalContent.style.display === 'none';
             terminalContent.style.display = isCollapsed ? 'block' : 'none';
@@ -5759,6 +5738,13 @@ function setupResizeHandles() {
     const toggleConsensusPanel = document.getElementById('toggle-consensus-panel');
     
     if (toggleConsensusPanel && consensusPanel) {
+        // Set consensus panel collapsed by default on app start
+        consensusPanel.classList.add('collapsed');
+        consensusPanel.style.width = '40px';
+        toggleConsensusPanel.textContent = '+';
+        toggleConsensusPanel.title = 'Expand Panel';
+        console.log('[Consensus Panel] Set to collapsed by default on startup');
+        
         toggleConsensusPanel.addEventListener('click', () => {
             const isCollapsed = consensusPanel.classList.contains('collapsed');
             if (isCollapsed) {
