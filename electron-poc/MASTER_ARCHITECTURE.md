@@ -2876,6 +2876,109 @@ private sections: HelpSection[] = [
 ]
 ```
 
+### Welcome Page System (v1.8.325)
+**Implementation**: `src/components/welcome-page.ts`
+
+#### Design Philosophy
+- **Utility over marketing** - Focus on productivity, not feature advertising
+- **Respect user preferences** - Learn from GitHub Copilot and VS Code feedback
+- **Enterprise professional** - Clean, efficient, focused on work
+
+#### Three-Column Layout
+```
+┌─────────────────────────────────────────────────┐
+│  HIVE CONSENSUS                     [Settings ⚙] │
+├─────────────┬────────────────────────┬──────────┤
+│   START     │      RECENT            │  LEARN   │
+│             │                        │          │
+│ New Project │ ~/auth-system/         │ Shortcuts│
+│ Clone       │ ~/data-pipeline/       │ Workflows│
+│ Open Folder │ ~/ml-project/          │ What's New
+│             │ api-handler.ts         │          │
+│             │ database.sql           │          │
+│             │ config.yaml            │          │
+│             │                        │          │
+│             │ [Show all 25...]       │          │
+└─────────────┴────────────────────────┴──────────┘
+[✓] Show on startup              [Open Recent] [New]
+```
+
+#### Key Features
+1. **Large Recent Section**: 70% width when user has existing projects
+2. **Smart Layout**: Adapts based on usage patterns
+3. **Persistent Preferences**: Stored in ~/.hive-ai.db
+4. **No Redundant Marketing**: No feature descriptions for existing capabilities
+5. **Quick Actions**: Bottom bar for immediate productivity
+
+#### Database Schema
+```sql
+-- Welcome preferences stored in ~/.hive-ai.db
+CREATE TABLE IF NOT EXISTS welcome_settings (
+  id INTEGER PRIMARY KEY,
+  show_on_startup INTEGER DEFAULT 1,
+  layout_mode TEXT DEFAULT 'balanced', -- 'minimal', 'balanced', 'full'
+  recent_items_count INTEGER DEFAULT 15,
+  last_shown TIMESTAMP,
+  times_dismissed INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Usage analytics for continuous improvement
+CREATE TABLE IF NOT EXISTS welcome_analytics (
+  id INTEGER PRIMARY KEY,
+  action TEXT NOT NULL, -- 'click_recent', 'click_new', 'dismiss', etc
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Smart Behavior Rules
+1. **First launch**: Show full welcome with all three columns
+2. **Has recent projects**: Expand Recent section to 70% width
+3. **After 10 uses**: Default to minimal view (just Recent + quick actions)
+4. **After update**: Show "What's New" badge without forcing it
+5. **Dismissed 3+ times quickly**: Auto-disable with toast notification
+
+#### Implementation Phases
+1. **Phase 1**: Add "Show on startup" checkbox with database persistence
+2. **Phase 2**: Expand Recent section to proper size (15-20 items)
+3. **Phase 3**: Implement smart layout switching based on usage
+4. **Phase 4**: Add usage analytics for continuous improvement
+
+#### User Experience Lessons Applied
+- ❌ **Avoid**: Persistent panels that won't dismiss (GitHub Copilot mistake)
+- ❌ **Avoid**: Cramped Recent section (VS Code issue)
+- ❌ **Avoid**: Forced walkthroughs or tutorials
+- ✅ **Include**: Clear startup preference checkbox
+- ✅ **Include**: Large, useful Recent projects list
+- ✅ **Include**: Quick action buttons for common tasks
+
+#### Technical Implementation
+```typescript
+interface WelcomeSettings {
+  showOnStartup: boolean;
+  layoutMode: 'minimal' | 'balanced' | 'full';
+  recentCount: number;
+}
+
+// Store preference in database
+const savePreference = async (show: boolean) => {
+  await window.databaseAPI.execute(
+    'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+    ['welcome.showOnStartup', show ? '1' : '0']
+  );
+};
+
+// Load on startup
+const loadPreference = async () => {
+  const result = await window.databaseAPI.query(
+    'SELECT value FROM settings WHERE key = ?',
+    ['welcome.showOnStartup']
+  );
+  return result[0]?.value !== '0';
+};
+```
+
 #### Isolated Terminal Panel (TTYD Implementation v1.8.0)
 **Location**: `src/components/TTYDTerminalPanel.ts`
 - Completely isolated component with zero impact on rest of app
