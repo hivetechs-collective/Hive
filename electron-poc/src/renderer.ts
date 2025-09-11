@@ -706,7 +706,6 @@ document.body.innerHTML = `
         <div class="chat-input-area">
           <textarea id="chat-input" placeholder="Enter your question..." rows="2" style="resize: vertical; min-height: 40px; max-height: 200px; width: calc(100% - 200px); padding: 8px; font-family: inherit; font-size: 14px;"></textarea>
           <button id="send-chat" class="send-btn">Send</button>
-          <button id="test-progress" class="send-btn" style="background: #FFC107; margin-left: 5px;">Test Progress</button>
         </div>
       </div>
     </div>
@@ -799,100 +798,6 @@ let isProcessing = false;
 let conversationStartTime = 0;
 let settingsModal: SettingsModal | null = null;
 
-// TEST: Add a direct API test on window load
-window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
-    console.log('🔴🔴🔴 TESTING DIRECT API CALL');
-    
-    // Create a test button
-    const testBtn = document.createElement('button');
-    testBtn.textContent = 'TEST API';
-    testBtn.style.position = 'fixed';
-    testBtn.style.top = '10px';
-    testBtn.style.right = '10px';
-    testBtn.style.zIndex = '9999';
-    testBtn.style.backgroundColor = 'red';
-    testBtn.style.color = 'white';
-    testBtn.style.padding = '10px';
-    
-    testBtn.onclick = async () => {
-      console.log('🔴🔴🔴 TEST BUTTON CLICKED');
-      
-      // Test 1: Simple sync test
-      try {
-        if ((window as any).testAPI) {
-          console.log('🔴🔴🔴 TEST 1: Calling testAPI.test()');
-          const syncResult = (window as any).testAPI.test();
-          console.log('🔴🔴🔴 TEST 1 RESULT:', syncResult);
-        }
-      } catch (e) {
-        console.log('🔴🔴🔴 TEST 1 ERROR:', e);
-      }
-      
-      // Test 2: Async test via testAPI
-      try {
-        if ((window as any).testAPI && (window as any).testAPI.testAsync) {
-          console.log('🔴🔴🔴 TEST 2: Calling testAPI.testAsync()');
-          const asyncResult = await (window as any).testAPI.testAsync();
-          console.log('🔴🔴🔴 TEST 2 RESULT:', asyncResult);
-          
-          if (asyncResult && asyncResult.response) {
-            addChatMessage('TEST ASYNC SUCCESS', false);
-            addChatMessage(asyncResult.response, true);
-          }
-        }
-      } catch (e) {
-        console.log('🔴🔴🔴 TEST 2 ERROR:', e);
-      }
-      
-      // Test 3: Direct IPC via window.api
-      try {
-        if ((window as any).api && (window as any).api.invoke) {
-          console.log('🔴🔴🔴 TEST 3: Direct api.invoke()');
-          const directResult = await (window as any).api.invoke('backend-consensus-quick', {
-            query: 'TEST: Direct IPC call',
-            profile: 'Free Also'
-          });
-          console.log('🔴🔴🔴 TEST 3 RESULT:', directResult);
-          
-          if (directResult && directResult.response) {
-            addChatMessage('TEST DIRECT SUCCESS', false);
-            addChatMessage(directResult.response, true);
-          }
-        }
-      } catch (e) {
-        console.log('🔴🔴🔴 TEST 3 ERROR:', e);
-      }
-      
-      // Test 4: Original backendAPI test
-      try {
-        if ((window as any).backendAPI && (window as any).backendAPI.runQuickConsensus) {
-          console.log('🔴🔴🔴 TEST 4: backendAPI.runQuickConsensus EXISTS');
-          const result = await (window as any).backendAPI.runQuickConsensus({
-            query: 'TEST: What is 5 + 5?',
-            profile: 'Free Also'
-          });
-          console.log('🔴🔴🔴 TEST 4 RESULT:', result);
-          
-          // Also add to chat
-          if (result && result.response) {
-            addChatMessage('TEST: What is 5 + 5?', false);
-            addChatMessage(result.response, true);
-          }
-        } else {
-          console.log('🔴🔴🔴 TEST 4: NO backendAPI.runQuickConsensus!');
-          console.log('window.backendAPI:', (window as any).backendAPI);
-        }
-      } catch (error) {
-        console.log('🔴🔴🔴 TEST 4 ERROR:', error);
-        addChatMessage(`TEST ERROR: ${error}`, true);
-      }
-    };
-    
-    document.body.appendChild(testBtn);
-    console.log('🔴🔴🔴 TEST BUTTON ADDED');
-  }, 2000);
-});
 
 // Sidebar Panel Management
 function toggleSidebarPanel(panelType: 'explorer' | 'git') {
@@ -2313,74 +2218,6 @@ document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
   }
 });
 
-// Test Progress Bars button
-document.getElementById('test-progress')?.addEventListener('click', async () => {
-  console.log('🧪 Testing Progress Bars Sequentially');
-  addChatMessage('🧪 Testing progress bars sequentially...', true);
-  
-  // Helper function to animate progress bar
-  async function animateProgressBar(stage: string, modelName: string = 'test-model') {
-    console.log(`Testing ${stage} progress bar`);
-    
-    // Set status to running
-    updateStageStatus(stage, 'running');
-    updateModelDisplay(stage, modelName);
-    
-    // Animate progress from 0 to 100
-    for (let i = 0; i <= 100; i += 10) {
-      updateStageProgress(stage, i);
-      await new Promise(resolve => setTimeout(resolve, 200)); // 200ms between updates
-    }
-    
-    // Set to completed
-    updateStageStatus(stage, 'completed');
-    updateStageProgress(stage, 100);
-  }
-  
-  // Show neural consciousness
-  if (neuralConsciousness) {
-    neuralConsciousness.show();
-    
-    // Run through prep stages
-    await new Promise(resolve => setTimeout(resolve, 500));
-    neuralConsciousness.updatePhase('memory');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    neuralConsciousness.updatePhase('synthesis');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    neuralConsciousness.updatePhase('classification');
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  
-  // Test each progress bar sequentially - use actual profile models only
-  const stages: Array<{name: string, model: string, phase: 'generator' | 'refiner' | 'validator' | 'curator'}> = [
-    { name: 'generator', model: activeProfile?.generator, phase: 'generator' },
-    { name: 'refiner', model: activeProfile?.refiner, phase: 'refiner' },
-    { name: 'validator', model: activeProfile?.validator, phase: 'validator' },
-    { name: 'curator', model: activeProfile?.curator, phase: 'curator' }
-  ];
-  
-  for (const stage of stages) {
-    // Update neural consciousness phase
-    if (neuralConsciousness) {
-      neuralConsciousness.updatePhase(stage.phase);
-    }
-    
-    // Animate the progress bar
-    await animateProgressBar(stage.name, stage.model);
-    
-    // Brief pause between stages
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  
-  // Show completion
-  if (neuralConsciousness) {
-    neuralConsciousness.showCompletion();
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    neuralConsciousness.hide();
-  }
-  
-  addChatMessage('✅ Progress bar test complete!', true);
-});
 
 // Initialize WebSocket connection for streaming
 async function initializeWebSocket() {

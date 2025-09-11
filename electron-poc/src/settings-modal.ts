@@ -609,9 +609,21 @@ export class SettingsModal {
     });
 
     // Create profile button
-    document.getElementById('create-profile')?.addEventListener('click', () => {
-      this.showProfileCreationModal();
-    });
+    const createProfileBtn = document.getElementById('create-profile');
+    console.log('🔍 Looking for create-profile button:', createProfileBtn);
+    
+    if (createProfileBtn) {
+      console.log('✅ Found create-profile button, attaching event listener');
+      createProfileBtn.addEventListener('click', () => {
+        console.log('🔴 Create profile button clicked!');
+        this.showProfileCreationModal();
+      });
+    } else {
+      console.error('❌ create-profile button not found in DOM');
+      // Let's list all buttons to see what's available
+      const allButtons = document.querySelectorAll('button');
+      console.log('Available buttons:', Array.from(allButtons).map(btn => ({ id: btn.id, text: btn.textContent })));
+    }
   }
 
   private setupProfileCreationHandlers() {
@@ -1105,10 +1117,19 @@ export class SettingsModal {
   }
 
   private showProfileCreationModal() {
+    console.log('🟢 showProfileCreationModal called');
+    console.log('🟢 profileCreationModal element:', this.profileCreationModal);
+    
     if (this.profileCreationModal) {
+      console.log('🟢 Setting display to flex');
       this.profileCreationModal.style.display = 'flex';
       // Update model dropdowns when showing modal
       this.updateModelDropdowns();
+      console.log('🟢 Profile creation modal should now be visible');
+    } else {
+      console.error('❌ profileCreationModal is null! Looking for element in DOM...');
+      const found = document.getElementById('profile-creation-modal-overlay');
+      console.log('❌ Found element by ID search:', found);
     }
   }
 
