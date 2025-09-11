@@ -2069,6 +2069,79 @@ GET  /api/analytics           - Fetch usage analytics
 - **DOM Fragment Rendering**: Batched DOM updates for performance
 - **Efficient Re-renders**: Only updates changed content areas, preserves tree expansion state
 
+### Panel Collapse System (v1.8.322)
+**Implementation**: `src/renderer.ts`
+
+#### Overview
+The application features collapsible panels to maximize screen real estate and provide a cleaner initial interface. Both major side panels start collapsed by default on app startup.
+
+#### Panel Configuration
+
+##### TTYD Terminal Panel (Left Side)
+- **Location**: Left side of the application
+- **Contents**: CLI tool tabs and System Log
+- **Default State**: Collapsed on startup
+- **Toggle Button**: 
+  - Shows "+" when collapsed
+  - Shows "−" when expanded
+- **Element ID**: `isolated-terminal-panel`
+- **Toggle Button ID**: `toggle-isolated-terminal`
+- **Auto-Expand Behavior**: Automatically expands when any of the 6 AI CLI tools are launched
+- **Implementation**:
+  ```typescript
+  // Set TTYD terminal collapsed by default on app start
+  isolatedTerminalPanel.classList.add('collapsed');
+  isolatedTerminalPanel.style.width = '';
+  toggleIsolatedTerminal.textContent = '+';
+  toggleIsolatedTerminal.title = 'Expand Terminal Panel';
+  
+  // Helper function for CLI tool launches
+  function expandTTYDTerminal() {
+      if (isolatedTerminalPanel.classList.contains('collapsed')) {
+          isolatedTerminalPanel.classList.remove('collapsed');
+          isolatedTerminalPanel.style.width = '';
+          toggleIsolatedTerminal.textContent = '−';
+          toggleIsolatedTerminal.title = 'Collapse Terminal Panel';
+      }
+  }
+  ```
+
+##### Consensus Panel (Right Side)
+- **Location**: Right side of the application
+- **Contents**: Consensus chat interface and Neural Consciousness visualization
+- **Default State**: Collapsed on startup
+- **Toggle Button**:
+  - Shows "+" when collapsed
+  - Shows "−" when expanded
+- **Element ID**: `consensus-chat`
+- **Toggle Button ID**: `toggle-consensus-panel`
+- **Width States**:
+  - Collapsed: 40px (just shows toggle button)
+  - Expanded: 400px (full panel width)
+- **Implementation**:
+  ```typescript
+  // Set consensus panel collapsed by default on app start
+  consensusPanel.classList.add('collapsed');
+  consensusPanel.style.width = '40px';
+  toggleConsensusPanel.textContent = '+';
+  toggleConsensusPanel.title = 'Expand Panel';
+  ```
+
+#### User Experience Benefits
+1. **Maximized Editor Space**: Both panels collapsed by default provides maximum space for the code editor
+2. **Clean Initial Interface**: Less visual clutter on startup
+3. **Smart Auto-Expansion**: TTYD terminal auto-expands when needed (CLI tool launch)
+4. **Manual Control**: Users can toggle panels as needed via collapse/expand buttons
+5. **Visual Feedback**: Clear +/− indicators show panel state
+6. **Consistent Behavior**: Both panels follow the same interaction pattern
+
+#### Technical Implementation Details
+- **CSS Classes**: Uses `.collapsed` class to manage panel states
+- **Event Listeners**: Click handlers on toggle buttons for manual control
+- **Global Functions**: `expandTTYDTerminal()` exposed globally for CLI tool integration
+- **State Preservation**: Panel states are not persisted between sessions (always start collapsed)
+- **Responsive Sizing**: Uses CSS flexbox for proper layout when panels expand/collapse
+
 ### File Menu System
 **Implementation**: `src/index.ts` (main process)
 
