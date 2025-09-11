@@ -2878,6 +2878,9 @@ settingsModal = new SettingsModal(async () => {
 // Don't initialize modal - we're using tabs instead
 // settingsModal.initializeModal(document.body);
 
+// Expose to window for debugging and direct access
+(window as any).settingsModal = settingsModal;
+
 // Function to update just the conversation count from database
 async function updateConversationCount() {
   try {
@@ -5427,6 +5430,16 @@ setTimeout(() => {
                         if (container && settingsModal) {
                             if (container.innerHTML.trim() === '') {
                                 settingsModal.renderInContainer(container);
+                                // Ensure profile button works after rendering
+                                setTimeout(() => {
+                                    const profileBtn = document.getElementById('create-profile');
+                                    if (profileBtn) {
+                                        profileBtn.onclick = () => {
+                                            console.log('Profile button clicked via direct handler');
+                                            settingsModal.showProfileCreationModal();
+                                        };
+                                    }
+                                }, 100);
                             }
                         }
                     } else {
@@ -5489,6 +5502,16 @@ setTimeout(() => {
                             if (container.innerHTML.trim() === '') {
                                 console.log('Rendering settings in container:', container);
                                 settingsModal.renderInContainer(container);
+                                // Ensure profile button works after rendering
+                                setTimeout(() => {
+                                    const profileBtn = document.getElementById('create-profile');
+                                    if (profileBtn) {
+                                        profileBtn.onclick = () => {
+                                            console.log('Profile button clicked via direct handler');
+                                            settingsModal.showProfileCreationModal();
+                                        };
+                                    }
+                                }, 100);
                             } else {
                                 console.log('Settings already rendered in container');
                             }

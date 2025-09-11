@@ -1130,7 +1130,7 @@ export class SettingsModal {
     }
   }
 
-  private showProfileCreationModal() {
+  public showProfileCreationModal() {
     console.log('🟢 showProfileCreationModal called');
     console.log('🟢 profileCreationModal element:', this.profileCreationModal);
     
@@ -1508,9 +1508,35 @@ export class SettingsModal {
     });
   }
   
+  private ensureProfileCreationModal(): void {
+    // Check if profile creation modal already exists in DOM
+    if (!document.getElementById('profile-creation-modal-overlay')) {
+      // Add profile creation modal to body (it's an overlay, should be at body level)
+      const profileCreationHTML = this.createProfileCreationModal();
+      const profileCreationContainer = document.createElement('div');
+      profileCreationContainer.innerHTML = profileCreationHTML;
+      document.body.appendChild(profileCreationContainer.firstElementChild!);
+      
+      // Store reference to the modal
+      this.profileCreationModal = document.getElementById('profile-creation-modal-overlay');
+      
+      // Setup event handlers for the profile creation modal
+      this.setupProfileCreationHandlers();
+      
+      console.log('✅ Profile creation modal added to DOM');
+    } else {
+      // Modal already exists, just ensure we have the reference
+      this.profileCreationModal = document.getElementById('profile-creation-modal-overlay');
+      console.log('✅ Profile creation modal already in DOM');
+    }
+  }
+
   public renderInContainer(container: HTMLElement): void {
     // Store the container for context-aware toast notifications
     this.currentContainer = container;
+    
+    // Ensure profile creation modal is available in DOM
+    this.ensureProfileCreationModal();
     
     // Render the actual settings content (without modal wrapper) in the container
     const modalContent = this.createModal();
