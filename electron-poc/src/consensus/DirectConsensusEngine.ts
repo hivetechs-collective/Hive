@@ -17,7 +17,7 @@ export interface ConversationMessage {
   speaker: 'generator' | 'refiner' | 'validator';
   content: string;
   round: number;
-  consensus_opinion?: 'YES' | 'NO'; // Can this be improved? YES/NO
+  consensus_opinion?: 'YES' | 'NO'; // Is this the best answer? YES/NO
   tokens: number;
   cost: number;
   model: string;

@@ -1988,7 +1988,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
         consensusDiv.className = 'consensus-check';
         consensusDiv.style.cssText = 'background: #1e1e1e; padding: 10px; margin: 10px 0; border-left: 3px solid #3794ff;';
         consensusDiv.innerHTML = `
-          <div style="color: #969696; font-size: 12px; margin-bottom: 5px;">Can this be improved?</div>
+          <div style="color: #969696; font-size: 12px; margin-bottom: 5px;">Is this the best answer?</div>
           <div style="color: #cccccc;">
             🤖 Generator: <span style="color: ${data.generator === 'YES' ? '#f14c4c' : '#89d185'}">${data.generator}</span><br>
             🔧 Refiner: <span style="color: ${data.refiner === 'YES' ? '#f14c4c' : '#89d185'}">${data.refiner}</span><br>
