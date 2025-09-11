@@ -1990,9 +1990,9 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
         consensusDiv.innerHTML = `
           <div style="color: #969696; font-size: 12px; margin-bottom: 5px;">Is this the best answer?</div>
           <div style="color: #cccccc;">
-            <span style="color: #969696;">Generator:</span> <span style="color: ${data.generator === 'NO' ? '#89d185' : '#f14c4c'}">${data.generator}</span><br>
-            <span style="color: #969696;">Refiner:</span> <span style="color: ${data.refiner === 'NO' ? '#89d185' : '#f14c4c'}">${data.refiner}</span><br>
-            <span style="color: #969696;">Validator:</span> <span style="color: ${data.validator === 'NO' ? '#89d185' : '#f14c4c'}">${data.validator}</span><br>
+            <span style="color: #969696;">Generator:</span> <span style="color: ${data.generator === 'YES' ? '#89d185' : '#f14c4c'}">${data.generator}</span><br>
+            <span style="color: #969696;">Refiner:</span> <span style="color: ${data.refiner === 'YES' ? '#89d185' : '#f14c4c'}">${data.refiner}</span><br>
+            <span style="color: #969696;">Validator:</span> <span style="color: ${data.validator === 'YES' ? '#89d185' : '#f14c4c'}">${data.validator}</span><br>
             ${data.achieved ? '<span style="color: #89d185; font-weight: bold;">✨ Consensus Achieved!</span>' : '<span style="color: #f14c4c;">Continuing iteration...</span>'}
           </div>
         `;
