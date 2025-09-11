@@ -5061,7 +5061,23 @@ const resizeObserver = new ResizeObserver(() => {
 
 ## Version History & Recent Changes
 
-### v1.8.289 (Current - December 2024)
+### v1.8.319+ (Current - January 2025)
+**Profile Creation Modal Fix**
+
+#### Profile Management System Fix
+- **Modal Initialization**: Fixed profile creation modal not appearing when clicking "+ New Profile" button
+- **DOM Initialization**: Added `ensureProfileCreationModal()` method to properly add modal to DOM
+- **Tab-Based UI Compatibility**: Maintained compatibility with tab-based settings interface
+- **Event Handling**: Proper event delegation for profile creation button
+- **Z-Index Layering**: Modal properly overlays tab-based settings
+
+#### Technical Details
+- **Root Cause**: Switch from modal-based to tab-based settings broke profile creation modal initialization
+- **Solution**: Created `ensureProfileCreationModal()` that checks for existing modal before adding to DOM
+- **Location**: Modal added to document.body for proper z-index layering
+- **Prevention**: Modal only initialized once to prevent duplicates
+
+### v1.8.289 (December 2024)
 **Major UI/UX Overhaul**
 
 #### Welcome Page Enhancements
