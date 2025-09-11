@@ -608,22 +608,36 @@ export class SettingsModal {
       this.resetToDefaults();
     });
 
-    // Create profile button
-    const createProfileBtn = document.getElementById('create-profile');
-    console.log('🔍 Looking for create-profile button:', createProfileBtn);
-    
-    if (createProfileBtn) {
-      console.log('✅ Found create-profile button, attaching event listener');
-      createProfileBtn.addEventListener('click', () => {
-        console.log('🔴 Create profile button clicked!');
-        this.showProfileCreationModal();
-      });
-    } else {
-      console.error('❌ create-profile button not found in DOM');
-      // Let's list all buttons to see what's available
-      const allButtons = document.querySelectorAll('button');
-      console.log('Available buttons:', Array.from(allButtons).map(btn => ({ id: btn.id, text: btn.textContent })));
-    }
+    // Create profile button - use a more robust approach
+    setTimeout(() => {
+      const createProfileBtn = document.getElementById('create-profile');
+      console.log('🔍 Looking for create-profile button:', createProfileBtn);
+      
+      if (createProfileBtn) {
+        console.log('✅ Found create-profile button, attaching event listener');
+        // Remove any existing listeners first
+        createProfileBtn.replaceWith(createProfileBtn.cloneNode(true));
+        const newBtn = document.getElementById('create-profile');
+        
+        if (newBtn) {
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔴 Create profile button clicked!');
+            this.showProfileCreationModal();
+          });
+          
+          // Also add pointer-events to ensure it's clickable
+          (newBtn as HTMLElement).style.pointerEvents = 'auto';
+          (newBtn as HTMLElement).style.cursor = 'pointer';
+        }
+      } else {
+        console.error('❌ create-profile button not found in DOM');
+        // Let's list all buttons to see what's available
+        const allButtons = document.querySelectorAll('button');
+        console.log('Available buttons:', Array.from(allButtons).map(btn => ({ id: btn.id, text: btn.textContent })));
+      }
+    }, 100); // Small delay to ensure DOM is ready
   }
 
   private setupProfileCreationHandlers() {
@@ -1123,6 +1137,8 @@ export class SettingsModal {
     if (this.profileCreationModal) {
       console.log('🟢 Setting display to flex');
       this.profileCreationModal.style.display = 'flex';
+      // Ensure modal is on top
+      this.profileCreationModal.style.zIndex = '10000';
       // Update model dropdowns when showing modal
       this.updateModelDropdowns();
       console.log('🟢 Profile creation modal should now be visible');
