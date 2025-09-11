@@ -440,6 +440,9 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
           console.error('❌ Failed to store assistant message:', error);
         }
         
+        // Set consensus type for SIMPLE PATH
+        this.consensusType = 'direct' as any; // Direct Answer - no consensus needed
+        
         // Send completion
         this.sendConsensusComplete({
           response: simpleResult.content,
@@ -1445,11 +1448,17 @@ Consider all responses and provide your final answer to the original question.`;
       round: this.conversation?.rounds_completed || 0
     });
     
-    // Then send consensus-complete event
+    // CRITICAL: Add consensusType to the data being sent
+    const completeData = {
+      ...data,
+      consensusType: finalConsensusType
+    };
+    
+    // Then send consensus-complete event with consensusType included
     const allWindows = BrowserWindow.getAllWindows();
     allWindows.forEach(window => {
-      console.log('✅ Sending consensus-complete to renderer');
-      window.webContents.send('consensus-complete', data);
+      console.log(`✅ Sending consensus-complete to renderer with consensusType: ${finalConsensusType}`);
+      window.webContents.send('consensus-complete', completeData);
     });
   }
 

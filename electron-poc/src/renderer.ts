@@ -1666,6 +1666,10 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
               displayText = data.achieved ? 'Curator Decision' : '';
               color = data.achieved ? '#FF9800' : ''; // Orange when achieved
               break;
+            case 'direct':
+              displayText = data.achieved ? 'Direct Answer' : '';
+              color = data.achieved ? '#3794ff' : ''; // Blue when achieved
+              break;
             case 'pending':
               displayText = ''; // Don't show anything for pending state
               color = '';
@@ -1746,6 +1750,58 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
             console.log(`✅ DISPLAYED FINAL CLASSIFICATION: "${data.displayText}"`);
           } else {
             console.warn('⚠️ consensus-type element not found!');
+          }
+        });
+        
+        // CRITICAL: Also handle consensus-complete event to update classification
+        (window as any).api.receive('consensus-complete', (data: any) => {
+          console.log('🎯 CONSENSUS COMPLETE EVENT:', data);
+          
+          // Extract consensus type from the data
+          const consensusType = data?.consensusType || data?.consensus?.type;
+          
+          if (consensusType) {
+            // Update the consensus-type element with the final classification
+            const consensusTypeElement = document.getElementById('consensus-type');
+            if (consensusTypeElement) {
+              let displayText = '';
+              let color = '';
+              
+              switch(consensusType) {
+                case 'unanimous':
+                  displayText = 'Unanimous';
+                  color = '#4CAF50'; // Green
+                  break;
+                case 'majority':
+                  displayText = 'Majority';
+                  color = '#FFC107'; // Yellow/Amber
+                  break;
+                case 'curator_override':
+                  displayText = 'Curator Decision';
+                  color = '#FF9800'; // Orange
+                  break;
+                case 'direct':
+                  displayText = 'Direct Answer';
+                  color = '#3794ff'; // Blue
+                  break;
+              }
+              
+              if (displayText) {
+                // Clear any animation styles first
+                consensusTypeElement.style.animation = '';
+                consensusTypeElement.style.textShadow = '';
+                consensusTypeElement.style.fontFamily = '';
+                consensusTypeElement.style.whiteSpace = '';
+                
+                // Set the classification text
+                consensusTypeElement.textContent = displayText;
+                consensusTypeElement.style.color = color;
+                consensusTypeElement.style.fontWeight = 'bold';
+                consensusTypeElement.style.fontSize = '16px';
+                
+                console.log(`✅ CONSENSUS COMPLETE - DISPLAYING: "${displayText}" in ${color}`);
+              }
+            }
           }
         });
       }
