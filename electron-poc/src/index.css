@@ -893,6 +893,40 @@ body {
   pointer-events: none;
 }
 
+/* Consensus Toggle Button - Special Revolutionary Styling */
+.activity-btn.consensus-toggle {
+  color: #FFC107; /* Golden color for our unique feature */
+  transition: all 0.3s ease;
+}
+
+.activity-btn.consensus-toggle:hover {
+  color: #FFD54F; /* Lighter gold on hover */
+  background: rgba(255, 193, 7, 0.1);
+  border-color: rgba(255, 193, 7, 0.3);
+  filter: drop-shadow(0 0 8px rgba(255, 193, 7, 0.4));
+}
+
+.activity-btn.consensus-toggle.active {
+  color: #FFD54F;
+  background: rgba(255, 193, 7, 0.15);
+  border-color: #FFC107;
+  filter: drop-shadow(0 0 12px rgba(255, 193, 7, 0.6));
+  animation: golden-pulse 2s ease-in-out infinite;
+}
+
+@keyframes golden-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 12px rgba(255, 193, 7, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(255, 193, 7, 0.8));
+  }
+}
+
+.activity-btn.consensus-toggle svg {
+  filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));
+}
+
 /* Side Panel */
 .side-panel {
   flex: 1;

@@ -448,6 +448,27 @@ document.body.innerHTML = `
             <img src="${clineIcon}" width="24" height="24" alt="Cline" style="object-fit: contain;" />
             <span class="activity-tooltip">Cline</span>
           </button>
+          
+          <!-- Consensus Panel Toggle - Our Revolutionary Feature -->
+          <button class="activity-btn consensus-toggle" id="sidebar-consensus-toggle" aria-label="Consensus Panel">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));">
+              <!-- Hexagon (Hive cell) -->
+              <path d="M12 2L21.39 7v10L12 22 2.61 17V7z" stroke="currentColor" fill="none" stroke-width="1.5" opacity="0.9"/>
+              <!-- 4 Stage nodes -->
+              <circle cx="12" cy="7" r="1.8" fill="currentColor" opacity="0.7"/>
+              <circle cx="7" cy="12" r="1.8" fill="currentColor" opacity="0.7"/>
+              <circle cx="17" cy="12" r="1.8" fill="currentColor" opacity="0.7"/>
+              <circle cx="12" cy="17" r="1.8" fill="currentColor" opacity="0.7"/>
+              <!-- Center consensus point -->
+              <circle cx="12" cy="12" r="2" fill="currentColor"/>
+              <!-- Convergence lines -->
+              <line x1="12" y1="8.5" x2="12" y2="10" stroke="currentColor" stroke-width="0.8" opacity="0.5"/>
+              <line x1="8.5" y1="12" x2="10" y2="12" stroke="currentColor" stroke-width="0.8" opacity="0.5"/>
+              <line x1="15.5" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="0.8" opacity="0.5"/>
+              <line x1="12" y1="15.5" x2="12" y2="14" stroke="currentColor" stroke-width="0.8" opacity="0.5"/>
+            </svg>
+            <span class="activity-tooltip">Hive Consensus (4-Stage AI)</span>
+          </button>
         </div>
         
         <!-- Bottom section with fixed positioning -->
@@ -5759,6 +5780,38 @@ function setupResizeHandles() {
                 toggleConsensusPanel.title = 'Expand Panel';
             }
         });
+    }
+    
+    // Add sidebar consensus toggle button functionality
+    const sidebarConsensusToggle = document.getElementById('sidebar-consensus-toggle');
+    if (sidebarConsensusToggle && consensusPanel && toggleConsensusPanel) {
+        sidebarConsensusToggle.addEventListener('click', () => {
+            const isCollapsed = consensusPanel.classList.contains('collapsed');
+            if (isCollapsed) {
+                // Expand the consensus panel
+                consensusPanel.classList.remove('collapsed');
+                consensusPanel.style.width = '400px';
+                toggleConsensusPanel.textContent = '−';
+                toggleConsensusPanel.title = 'Collapse Panel';
+                sidebarConsensusToggle.classList.add('active');
+                console.log('[Sidebar Consensus] Expanded consensus panel');
+            } else {
+                // Collapse the consensus panel
+                consensusPanel.classList.add('collapsed');
+                consensusPanel.style.width = '40px';
+                toggleConsensusPanel.textContent = '+';
+                toggleConsensusPanel.title = 'Expand Panel';
+                sidebarConsensusToggle.classList.remove('active');
+                console.log('[Sidebar Consensus] Collapsed consensus panel');
+            }
+        });
+        
+        // Set initial state of sidebar button based on panel state
+        if (consensusPanel.classList.contains('collapsed')) {
+            sidebarConsensusToggle.classList.remove('active');
+        } else {
+            sidebarConsensusToggle.classList.add('active');
+        }
     }
 }
 

@@ -2069,11 +2069,11 @@ GET  /api/analytics           - Fetch usage analytics
 - **DOM Fragment Rendering**: Batched DOM updates for performance
 - **Efficient Re-renders**: Only updates changed content areas, preserves tree expansion state
 
-### Panel Collapse System (v1.8.322)
-**Implementation**: `src/renderer.ts`
+### Panel Collapse System (v1.8.324)
+**Implementation**: `src/renderer.ts`, `src/index.css`
 
 #### Overview
-The application features collapsible panels to maximize screen real estate and provide a cleaner initial interface. Both major side panels start collapsed by default on app startup.
+The application features collapsible panels to maximize screen real estate and provide a cleaner initial interface. Both major side panels start collapsed by default on app startup. A unique sidebar icon provides quick access to the revolutionary Consensus panel.
 
 #### Panel Configuration
 
@@ -2127,6 +2127,70 @@ The application features collapsible panels to maximize screen real estate and p
   toggleConsensusPanel.title = 'Expand Panel';
   ```
 
+#### Consensus Toggle Icon (v1.8.324)
+**Revolutionary Sidebar Feature**: A unique hexagon icon that represents our 4-stage consensus system
+
+##### Icon Design
+- **Shape**: Hexagon (representing Hive cell architecture)
+- **Elements**: 
+  - Outer hexagon border
+  - 4 nodes positioned at cardinal points (representing 4 consensus stages)
+  - Center node (representing convergence point)
+- **Color Scheme**: Golden (#FFC107) to highlight this unique feature
+- **Location**: Activity bar (left sidebar), positioned after Cline icon
+- **Element ID**: `sidebar-consensus-toggle`
+
+##### Visual Implementation
+```html
+<button class="activity-btn consensus-toggle" id="sidebar-consensus-toggle">
+  <svg width="24" height="24" viewBox="0 0 24 24">
+    <!-- Hexagon (Hive cell) -->
+    <path d="M12 2L21.39 7v10L12 22 2.61 17V7z" stroke="currentColor" fill="none"/>
+    <!-- 4 Stage nodes -->
+    <circle cx="12" cy="7" r="1.8" fill="currentColor" opacity="0.7"/>
+    <circle cx="7" cy="12" r="1.8" fill="currentColor" opacity="0.7"/>
+    <circle cx="17" cy="12" r="1.8" fill="currentColor" opacity="0.7"/>
+    <circle cx="12" cy="17" r="1.8" fill="currentColor" opacity="0.7"/>
+    <!-- Center consensus point -->
+    <circle cx="12" cy="12" r="2" fill="currentColor"/>
+  </svg>
+</button>
+```
+
+##### CSS Styling
+```css
+/* Special Revolutionary Styling */
+.activity-btn.consensus-toggle {
+  color: #FFC107; /* Golden color */
+  transition: all 0.3s ease;
+}
+
+.activity-btn.consensus-toggle:hover {
+  color: #FFD54F; /* Lighter gold on hover */
+  background: rgba(255, 193, 7, 0.1);
+  filter: drop-shadow(0 0 8px rgba(255, 193, 7, 0.4));
+}
+
+.activity-btn.consensus-toggle.active {
+  color: #FFD54F;
+  background: rgba(255, 193, 7, 0.15);
+  border-color: #FFC107;
+  filter: drop-shadow(0 0 12px rgba(255, 193, 7, 0.6));
+  animation: golden-pulse 2s ease-in-out infinite;
+}
+
+@keyframes golden-pulse {
+  0%, 100% { filter: drop-shadow(0 0 12px rgba(255, 193, 7, 0.6)); }
+  50% { filter: drop-shadow(0 0 20px rgba(255, 193, 7, 0.8)); }
+}
+```
+
+##### Functionality
+- **Click Action**: Toggles the Consensus panel open/closed
+- **State Synchronization**: Active state syncs with panel visibility
+- **Visual Feedback**: Golden pulse animation when active
+- **Tooltip**: "Consensus Panel (4-Stage System)"
+
 #### User Experience Benefits
 1. **Maximized Editor Space**: Both panels collapsed by default provides maximum space for the code editor
 2. **Clean Initial Interface**: Less visual clutter on startup
@@ -2134,6 +2198,8 @@ The application features collapsible panels to maximize screen real estate and p
 4. **Manual Control**: Users can toggle panels as needed via collapse/expand buttons
 5. **Visual Feedback**: Clear +/− indicators show panel state
 6. **Consistent Behavior**: Both panels follow the same interaction pattern
+7. **Quick Access Icon**: Golden Consensus icon in sidebar provides instant access to our revolutionary 4-stage system
+8. **Visual Distinction**: Unique hexagon design and golden glow makes the Consensus feature stand out as a core differentiator
 
 #### Technical Implementation Details
 - **CSS Classes**: Uses `.collapsed` class to manage panel states
