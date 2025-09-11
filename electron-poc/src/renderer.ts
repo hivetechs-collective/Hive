@@ -4525,9 +4525,9 @@ async function uninstallAllCliTools(): Promise<void> {
 async function launchCliTool(toolId: string): Promise<void> {
     console.log(`[CLI Tools] Launch requested for ${toolId}`);
     
-    // Auto-expand the terminal when launching a CLI tool
-    if ((window as any).expandTerminal) {
-        (window as any).expandTerminal();
+    // Auto-expand the TTYD terminal when launching a CLI tool
+    if ((window as any).expandTTYDTerminal) {
+        (window as any).expandTTYDTerminal();
     }
     
     // First, check if the tool is installed
@@ -5152,7 +5152,36 @@ setTimeout(() => {
         // Isolated terminal panel collapse/expand (exactly like consensus panel)
         const toggleIsolatedTerminal = document.getElementById('toggle-isolated-terminal');
         
+        // Helper function to expand TTYD terminal (used by CLI tools)
+        function expandTTYDTerminal() {
+            if (isolatedTerminalPanel && toggleIsolatedTerminal) {
+                if (isolatedTerminalPanel.classList.contains('collapsed')) {
+                    // Expand TTYD panel
+                    isolatedTerminalPanel.classList.remove('collapsed');
+                    isolatedTerminalPanel.style.width = ''; // Let CSS handle width via flex
+                    toggleIsolatedTerminal.textContent = '−';
+                    toggleIsolatedTerminal.title = 'Collapse Terminal Panel';
+                    
+                    // Check if center area is collapsed, if so, expand TTYD to fill
+                    if (centerArea && centerArea.classList.contains('collapsed')) {
+                        isolatedTerminalPanel.classList.add('expanded');
+                    }
+                    console.log('[TTYD Terminal] Expanded terminal for CLI tool launch');
+                }
+            }
+        }
+        
+        // Make expandTTYDTerminal available globally for CLI tool launches
+        (window as any).expandTTYDTerminal = expandTTYDTerminal;
+        
         if (toggleIsolatedTerminal && isolatedTerminalPanel) {
+            // Set TTYD terminal collapsed by default on app start
+            isolatedTerminalPanel.classList.add('collapsed');
+            isolatedTerminalPanel.style.width = ''; // Let CSS handle width
+            toggleIsolatedTerminal.textContent = '+';
+            toggleIsolatedTerminal.title = 'Expand Terminal Panel';
+            console.log('[TTYD Terminal] Terminal collapsed by default on startup');
+            
             toggleIsolatedTerminal.addEventListener('click', () => {
                 const isCollapsed = isolatedTerminalPanel.classList.contains('collapsed');
                 if (isCollapsed) {
