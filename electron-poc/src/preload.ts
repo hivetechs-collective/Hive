@@ -274,6 +274,12 @@ contextBridge.exposeInMainWorld('fileAPI', {
   }
 });
 
+// Database API
+contextBridge.exposeInMainWorld('databaseAPI', {
+  getSetting: (key: string) => ipcRenderer.invoke('db-get-setting', key),
+  setSetting: (key: string, value: string) => ipcRenderer.invoke('db-set-setting', key, value)
+});
+
 // Terminal API
 // Compatibility API for components expecting window.api
 contextBridge.exposeInMainWorld('api', {

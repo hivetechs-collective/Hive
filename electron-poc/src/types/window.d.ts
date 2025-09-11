@@ -86,6 +86,12 @@ declare global {
       onTerminalError(callback: (terminalId: string, error: string) => void): void;
     };
     
+    // Database API
+    databaseAPI: {
+      getSetting(key: string): Promise<string | null>;
+      setSetting(key: string, value: string): Promise<{ success: boolean }>;
+    };
+    
     // Electron API
     electronAPI: {
       getAnalytics(): Promise<any>;

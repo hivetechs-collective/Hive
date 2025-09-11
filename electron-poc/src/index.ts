@@ -4024,6 +4024,46 @@ ipcMain.handle('websocket-close', async () => {
   return { closed: true };
 });
 
+// Database settings handlers for simple key-value preferences
+ipcMain.handle('db-get-setting', async (_, key: string) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    
+    db.get('SELECT value FROM settings WHERE key = ?', [key], (err, row: any) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(row ? row.value : null);
+      }
+    });
+  });
+});
+
+ipcMain.handle('db-set-setting', async (_, key: string, value: string) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    
+    const timestamp = new Date().toISOString();
+    db.run(
+      'INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)',
+      [key, value, timestamp],
+      (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ success: true });
+        }
+      }
+    );
+  });
+});
+
 // Settings API handlers
 ipcMain.handle('settings-load', async () => {
   return new Promise((resolve, reject) => {

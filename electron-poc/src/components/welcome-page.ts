@@ -183,13 +183,10 @@ export class WelcomePage {
     try {
       // Try to load preference from database
       if (window.databaseAPI) {
-        const result = await window.databaseAPI.query(
-          'SELECT value FROM settings WHERE key = ?',
-          ['welcome.showOnStartup']
-        );
+        const value = await window.databaseAPI.getSetting('welcome.showOnStartup');
         
         // Default to true if no preference is saved
-        const showOnStartup = result.length === 0 || result[0]?.value !== '0';
+        const showOnStartup = !value || value !== '0';
         checkbox.checked = showOnStartup;
       }
     } catch (error) {
@@ -203,9 +200,9 @@ export class WelcomePage {
     try {
       if (window.databaseAPI) {
         // Save to database
-        await window.databaseAPI.execute(
-          'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-          ['welcome.showOnStartup', showOnStartup ? '1' : '0']
+        await window.databaseAPI.setSetting(
+          'welcome.showOnStartup',
+          showOnStartup ? '1' : '0'
         );
         
         // Show toast notification

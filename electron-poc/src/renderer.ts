@@ -6106,12 +6106,9 @@ async function initializeCliToolDetector() {
 async function initializeWelcomePage() {
     // Check database preference for showing welcome page using our unified hive-ai.db
     try {
-        const result = await window.databaseAPI.query(
-            'SELECT value FROM settings WHERE key = ?',
-            ['welcome.showOnStartup']
-        );
+        const value = await window.databaseAPI.getSetting('welcome.showOnStartup');
         
-        const showOnStartup = !result || result.length === 0 || result[0]?.value === '1';
+        const showOnStartup = !value || value === '1';
         
         // Only show welcome page if preference allows
         if (showOnStartup) {
