@@ -4696,6 +4696,93 @@ Without Python/AI Helpers, the consensus gets stuck at "router stage" and cannot
 - Real-time UI updates
 - Cost tracking per stage
 
+### Consensus Classification Display (v1.8.310+)
+
+#### Overview
+The consensus classification system provides visual feedback about the decision-making outcome of the 4-stage consensus pipeline. Classifications are displayed in the "Hive Consensus Progress" header upon completion.
+
+#### Classification Types
+
+1. **Direct Answer** (Simple Path)
+   - Color: Blue (#3794ff)
+   - Occurs when: Query goes directly to a single LLM (Generator) then Curator
+   - Indicates: Simple query that doesn't require consensus
+
+2. **Unanimous** (Complex Path)
+   - Color: Green (#4caf50)
+   - Occurs when: All models (Generator, Refiner, Validator) agree "NO" improvements needed
+   - Indicates: Strong consensus achieved
+
+3. **Majority** (Complex Path)
+   - Color: Yellow (#ffc107)
+   - Occurs when: 2 out of 3 models agree (e.g., Generator and Validator say "NO", Refiner says "YES")
+   - Indicates: Partial consensus achieved
+
+4. **Curator Decision** (Complex Path)
+   - Color: Orange (#ff9800)
+   - Occurs when: No consensus reached, Curator makes final decision
+   - Indicates: Curator override was needed
+
+#### Implementation Architecture
+
+```typescript
+// SimpleConsensusEngine.ts
+interface ConsensusType {
+  type: 'unanimous' | 'majority' | 'curator_override' | 'direct';
+  achieved: boolean;
+}
+
+// Consensus determination logic
+determineConsensusType(votes: boolean[]): string {
+  if (this.isSimplePath) {
+    return 'direct';  // Direct Answer for simple queries
+  }
+  
+  const yesVotes = votes.filter(v => v).length;
+  if (yesVotes === 0) return 'unanimous';
+  if (yesVotes <= 1) return 'majority';
+  return 'curator_override';
+}
+```
+
+#### UI Display Flow
+
+1. **During Consensus**: Fun phrases animate ("✨ ai's analyzing...", "🎭 models mingling...")
+2. **On Completion**: Classification replaces fun phrase in header
+3. **Location**: Displayed in `<span class="consensus-type">` next to "Hive Consensus Progress"
+
+#### Event Communication
+
+```typescript
+// Main process sends classification
+win.webContents.send('consensus-complete', {
+  response: finalResponse,
+  consensusType: this.consensusType,
+  totalTokens: metrics.totalTokens,
+  totalCost: metrics.totalCost
+});
+
+// Renderer receives and displays
+api.receive('consensus-complete', (data) => {
+  const consensusTypeElement = document.querySelector('.consensus-type');
+  consensusTypeElement.textContent = getClassificationText(data.consensusType);
+  consensusTypeElement.style.color = getClassificationColor(data.consensusType);
+});
+```
+
+#### Status Messages During Iteration
+
+The system displays real-time status during consensus iterations:
+```
+Is this the best answer?
+🤖 Generator: NO
+🔧 Refiner: NO  
+✅ Validator: YES
+Continuing iteration...
+```
+
+This provides transparency into the decision-making process before the final classification is shown.
+
 ---
 
 ## Visual Progress System
