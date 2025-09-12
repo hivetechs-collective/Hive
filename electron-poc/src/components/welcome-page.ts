@@ -1,4 +1,5 @@
 import { computeLayout, LayoutMode } from '../utils/welcome-layout';
+import { shouldShowOnStartup } from '../utils/welcome-prefs';
 
 export class WelcomePage {
   private container: HTMLElement;
@@ -859,7 +860,7 @@ export class WelcomePage {
     try {
       if (window.databaseAPI) {
         const value = await window.databaseAPI.getSetting('welcome.showOnStartup');
-        const showOnStartup = !value || value !== '0';
+        const showOnStartup = shouldShowOnStartup(value as any);
         const checkbox = this.container.querySelector('#show-on-startup') as HTMLInputElement;
         if (checkbox) checkbox.checked = showOnStartup;
         // Load layout mode preference

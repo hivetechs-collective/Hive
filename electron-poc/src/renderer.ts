@@ -6021,12 +6021,13 @@ async function initializeCliToolDetector() {
 }
 
 // Initialize welcome page on startup
+import { shouldShowOnStartup } from './utils/welcome-prefs';
+
 async function initializeWelcomePage() {
     // Check database preference for showing welcome page using our unified hive-ai.db
     try {
         const value = await window.databaseAPI.getSetting('welcome.showOnStartup');
-        
-        const showOnStartup = !value || value === '1';
+        const showOnStartup = shouldShowOnStartup(value as any);
         
         // Only show welcome page if preference allows
         if (showOnStartup) {
