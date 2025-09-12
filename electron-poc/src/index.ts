@@ -1571,15 +1571,24 @@ async function scheduleAutoBackupIfDue() {
     });
     const days = Math.max(1, parseInt(daysStr || '7', 10));
     const lastIso = settings.last;
+    const snoozeUntil = await new Promise<string | null>((resolve) => {
+      db!.get('SELECT value FROM settings WHERE key = ?',[ 'backup.snoozeUntil' ], (err: any, row: any) => resolve(err ? null : (row ? row.value : null)));
+    });
+    if (snoozeUntil) {
+      const snoozeDate = new Date(snoozeUntil);
+      if (!isNaN(snoozeDate.getTime()) && Date.now() < snoozeDate.getTime()) {
+        return; // snoozed
+      }
+    }
     const last = lastIso ? new Date(lastIso) : null;
     const ms = days * 24 * 60 * 60 * 1000;
     const overdue = !last || ((Date.now() - last.getTime()) >= ms);
     if (overdue && mainWindow) {
       const res = await dialog.showMessageBox(mainWindow, {
         type: 'question',
-        buttons: ['Enable Auto Backup', 'Backup Now', 'Dismiss'],
+        buttons: ['Enable Auto Backup', 'Backup Now', 'Remind Me Later', 'Dismiss'],
         defaultId: 0,
-        cancelId: 2,
+        cancelId: 3,
         title: 'Backup Reminder',
         message: 'Protect your data: enable auto backup or create a backup now?',
         detail: 'Auto backups are currently disabled and your last backup appears to be older than recommended.'
@@ -1590,6 +1599,9 @@ async function scheduleAutoBackupIfDue() {
         db!.run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', ['backup.frequency', 'weekly']);
       } else if (res.response === 1) {
         await performBackupWithRetention();
+      } else if (res.response === 2) {
+        const until = new Date(Date.now() + ms).toISOString();
+        db!.run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', ['backup.snoozeUntil', until]);
       }
     }
   }

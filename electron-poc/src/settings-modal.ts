@@ -311,6 +311,16 @@ export class SettingsModal {
                   <input id="backup-dir" placeholder="Backup folder" style="flex:1;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
                   <button id="choose-backup-dir" class="btn btn-secondary">Choose…</button>
                 </div>
+                <div style="margin-top:8px; display:flex; gap:16px; align-items:center;">
+                  <label style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" id="backup-always-encrypt" /> Always encrypt backups
+                  </label>
+                  <label style="display:flex; align-items:center; gap:6px;">
+                    Reminder every
+                    <input id="backup-reminder-days" type="number" min="1" max="90" value="7" style="width:70px;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
+                    days when disabled
+                  </label>
+                </div>
               </div>
               <small class="help-text">Backups include all settings, sessions, recents, profiles, and analytics in ~/.hive/hive-ai.db</small>
             </div>
@@ -674,9 +684,11 @@ export class SettingsModal {
           overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
           const modal = document.createElement('div');
           modal.style.width = '460px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '20vh auto'; modal.style.padding = '16px';
+          // Default encryption checkbox based on setting
+          const defaultEnc = ((await (window as any).databaseAPI?.getSetting?.('backup.alwaysEncrypt')) || '0') === '1';
           modal.innerHTML = `
             <div style=\"font-weight:600; margin-bottom:8px\">Backup Options</div>
-            <label style=\"display:flex;align-items:center;gap:8px;margin-bottom:8px\"><input id=\"enc-enabled\" type=\"checkbox\" /> Encrypt backup</label>
+            <label style=\"display:flex;align-items:center;gap:8px;margin-bottom:8px\"><input id=\"enc-enabled\" type=\"checkbox\" ${defaultEnc ? 'checked' : ''}/> Encrypt backup</label>
             <input id=\"enc-password\" type=\"password\" placeholder=\"Password (required if encrypting)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
             <div style=\"display:flex; gap:8px; justify-content:flex-end\">
               <button id=\"enc-cancel\" class=\"btn btn-secondary\">Cancel</button>
@@ -758,14 +770,20 @@ export class SettingsModal {
         const freq = await (window as any).databaseAPI?.getSetting?.('backup.frequency');
         const ret = await (window as any).databaseAPI?.getSetting?.('backup.retentionCount');
         const dir = await (window as any).databaseAPI?.getSetting?.('backup.dir');
+        const alwaysEnc = await (window as any).databaseAPI?.getSetting?.('backup.alwaysEncrypt');
+        const remindDays = await (window as any).databaseAPI?.getSetting?.('backup.reminderDays');
         const chk = document.getElementById('backup-auto-enabled') as HTMLInputElement;
         const sel = document.getElementById('backup-frequency') as HTMLSelectElement;
         const num = document.getElementById('backup-retention') as HTMLInputElement;
         const inp = document.getElementById('backup-dir') as HTMLInputElement;
+        const enc = document.getElementById('backup-always-encrypt') as HTMLInputElement;
+        const rmd = document.getElementById('backup-reminder-days') as HTMLInputElement;
         if (chk) chk.checked = (enabled || '0') === '1';
         if (sel && (freq === 'manual' || freq === 'on-exit' || freq === 'daily' || freq === 'weekly')) sel.value = freq;
         if (num) num.value = String(Math.max(1, parseInt(ret || '7', 10)));
         if (inp) inp.value = dir || '';
+        if (enc) enc.checked = (alwaysEnc || '0') === '1';
+        if (rmd) rmd.value = String(Math.max(1, parseInt(remindDays || '7', 10)));
       } catch {}
     })();
 
@@ -778,6 +796,12 @@ export class SettingsModal {
     });
     document.getElementById('backup-retention')?.addEventListener('change', async (e) => {
       try { await (window as any).databaseAPI?.setSetting?.('backup.retentionCount', (e.target as HTMLInputElement).value); } catch {}
+    });
+    document.getElementById('backup-always-encrypt')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.alwaysEncrypt', (e.target as HTMLInputElement).checked ? '1' : '0'); } catch {}
+    });
+    document.getElementById('backup-reminder-days')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.reminderDays', (e.target as HTMLInputElement).value); } catch {}
     });
     document.getElementById('choose-backup-dir')?.addEventListener('click', async () => {
       const res = await (window as any).electronAPI?.showOpenDialog?.({ properties: ['openDirectory', 'createDirectory'] });
