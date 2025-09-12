@@ -491,8 +491,9 @@ export class WelcomePage {
 
   private showGettingStarted() {
     console.log('Showing getting started guide...');
-    // Open getting started documentation
-    window.open('https://docs.hivetechs.com/getting-started', '_blank');
+    // Show internal documentation
+    const event = new CustomEvent('showDocumentation', { detail: { section: 'getting-started' } });
+    window.dispatchEvent(event);
   }
 
   private async openFolder() {
@@ -511,19 +512,22 @@ export class WelcomePage {
 
   private showShortcuts() {
     console.log('Showing keyboard shortcuts...');
-    // Open documentation about keyboard shortcuts
-    window.open('https://docs.hivetechs.com/shortcuts', '_blank');
+    // Show internal documentation
+    const event = new CustomEvent('showDocumentation', { detail: { section: 'shortcuts' } });
+    window.dispatchEvent(event);
   }
 
   private showWorkflows() {
     console.log('Showing AI workflows...');
-    // Open documentation about AI workflows
-    window.open('https://docs.hivetechs.com/ai-workflows', '_blank');
+    // Show internal documentation
+    const event = new CustomEvent('showDocumentation', { detail: { section: 'ai-workflows' } });
+    window.dispatchEvent(event);
   }
 
   private showWhatsNew() {
     console.log('Showing what\'s new...');
-    // Open changelog or release notes
-    window.open('https://docs.hivetechs.com/changelog', '_blank');
+    // Show internal documentation
+    const event = new CustomEvent('showDocumentation', { detail: { section: 'whats-new' } });
+    window.dispatchEvent(event);
   }
 }

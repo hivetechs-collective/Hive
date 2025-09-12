@@ -277,7 +277,23 @@ contextBridge.exposeInMainWorld('fileAPI', {
 // Database API
 contextBridge.exposeInMainWorld('databaseAPI', {
   getSetting: (key: string) => ipcRenderer.invoke('db-get-setting', key),
-  setSetting: (key: string, value: string) => ipcRenderer.invoke('db-set-setting', key, value)
+  setSetting: (key: string, value: string) => ipcRenderer.invoke('db-set-setting', key, value),
+  
+  // Session persistence
+  saveSession: (folderPath: string, tabs: any[], activeTab: string | null) => 
+    ipcRenderer.invoke('db-save-session', folderPath, tabs, activeTab),
+  loadSession: (folderPath: string) => 
+    ipcRenderer.invoke('db-load-session', folderPath),
+  clearSession: (folderPath: string) => 
+    ipcRenderer.invoke('db-clear-session', folderPath),
+  
+  // Recent folders
+  addRecentFolder: (folderPath: string, tabCount: number) => 
+    ipcRenderer.invoke('db-add-recent-folder', folderPath, tabCount),
+  getRecentFolders: () => 
+    ipcRenderer.invoke('db-get-recent-folders'),
+  removeRecentFolder: (folderPath: string) => 
+    ipcRenderer.invoke('db-remove-recent-folder', folderPath)
 });
 
 // Terminal API

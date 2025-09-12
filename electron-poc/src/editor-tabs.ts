@@ -426,17 +426,22 @@ export class EditorTabs {
     const editorEl = document.getElementById(`editor-${tabId}`);
     if (editorEl) {
       editorEl.style.display = 'block';
+      
+      // Force Monaco editor to recalculate its layout after becoming visible
+      // This fixes the black content issue
+      const editor = this.editors.get(tabId);
+      if (editor) {
+        // Use setTimeout to ensure the DOM has updated before layout
+        setTimeout(() => {
+          editor.layout();
+          editor.focus();
+        }, 0);
+      }
     }
 
     // Update active tab
     this.activeTabId = tabId;
     this.renderTabs();
-
-    // Focus editor
-    const editor = this.editors.get(tabId);
-    if (editor) {
-      editor.focus();
-    }
   }
 
   /**
@@ -977,6 +982,72 @@ export class EditorTabs {
       this.autoSaveTimeouts.forEach(timeout => clearTimeout(timeout));
       this.autoSaveTimeouts.clear();
     }
+  }
+  
+  /**
+   * Get current session data for persistence
+   */
+  public getSessionData(): { tabs: any[], activeTab: string | null } {
+    const sessionTabs = this.tabs.map(tab => ({
+      id: tab.id,
+      path: tab.path,
+      name: tab.name,
+      isDirty: tab.isDirty,
+      language: tab.language
+    }));
+    
+    return {
+      tabs: sessionTabs,
+      activeTab: this.activeTabId
+    };
+  }
+  
+  /**
+   * Restore session from saved data
+   */
+  public async restoreSession(sessionData: { tabs: any[], activeTab: string | null }): Promise<void> {
+    console.log('[EditorTabs] Restoring session with', sessionData.tabs.length, 'tabs');
+    
+    // Clear existing tabs first
+    this.closeAllTabs();
+    
+    // Restore each tab
+    for (const tabData of sessionData.tabs) {
+      try {
+        // Read file content if it's a file tab
+        if (tabData.path && window.fileAPI) {
+          const content = await window.fileAPI.readFile(tabData.path);
+          await this.openFile(tabData.path, content);
+        }
+      } catch (error) {
+        console.error('[EditorTabs] Failed to restore tab:', tabData.path, error);
+      }
+    }
+    
+    // Restore active tab
+    if (sessionData.activeTab && this.tabs.find(t => t.id === sessionData.activeTab)) {
+      this.activateTab(sessionData.activeTab);
+    }
+    
+    console.log('[EditorTabs] Session restored successfully');
+  }
+  
+  /**
+   * Close all tabs
+   */
+  public closeAllTabs(): void {
+    // Close each tab
+    while (this.tabs.length > 0) {
+      const tab = this.tabs[0];
+      this.closeTab(tab.id);
+    }
+  }
+  
+  /**
+   * Get the count of open tabs
+   */
+  public getTabCount(): number {
+    return this.tabs.length;
   }
   
   /**

@@ -99,6 +99,24 @@ const initDatabase = () => {
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
   
+  // Create sessions table for workspace persistence
+  db.run(`CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    folder_path TEXT NOT NULL UNIQUE,
+    tabs TEXT NOT NULL,
+    active_tab TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  
+  // Create recent_folders table
+  db.run(`CREATE TABLE IF NOT EXISTS recent_folders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    folder_path TEXT NOT NULL UNIQUE,
+    last_opened TEXT DEFAULT CURRENT_TIMESTAMP,
+    tab_count INTEGER DEFAULT 0
+  )`);
+  
   // Create stage_outputs table to track model usage per stage
   db.run(`CREATE TABLE IF NOT EXISTS stage_outputs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4057,6 +4075,164 @@ ipcMain.handle('db-set-setting', async (_, key: string, value: string) => {
         if (err) {
           reject(err);
         } else {
+          resolve({ success: true });
+        }
+      }
+    );
+  });
+});
+
+// Session persistence handlers
+ipcMain.handle('db-save-session', async (_, folderPath: string, tabs: any[], activeTab: string | null) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    
+    const timestamp = new Date().toISOString();
+    const tabsJson = JSON.stringify(tabs);
+    
+    db.run(
+      `INSERT OR REPLACE INTO sessions (folder_path, tabs, active_tab, updated_at) 
+       VALUES (?, ?, ?, ?)`,
+      [folderPath, tabsJson, activeTab, timestamp],
+      (err) => {
+        if (err) {
+          logger.error('[Session] Failed to save session:', err);
+          reject(err);
+        } else {
+          logger.info(`[Session] Saved session for ${folderPath} with ${tabs.length} tabs`);
+          resolve({ success: true });
+        }
+      }
+    );
+  });
+});
+
+ipcMain.handle('db-load-session', async (_, folderPath: string) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    
+    db.get(
+      'SELECT tabs, active_tab FROM sessions WHERE folder_path = ?',
+      [folderPath],
+      (err, row: any) => {
+        if (err) {
+          logger.error('[Session] Failed to load session:', err);
+          reject(err);
+        } else if (row) {
+          try {
+            const tabs = JSON.parse(row.tabs);
+            logger.info(`[Session] Loaded session for ${folderPath} with ${tabs.length} tabs`);
+            resolve({ tabs, activeTab: row.active_tab });
+          } catch (parseErr) {
+            logger.error('[Session] Failed to parse session data:', parseErr);
+            resolve(null);
+          }
+        } else {
+          logger.info(`[Session] No session found for ${folderPath}`);
+          resolve(null);
+        }
+      }
+    );
+  });
+});
+
+ipcMain.handle('db-clear-session', async (_, folderPath: string) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    
+    db.run(
+      'DELETE FROM sessions WHERE folder_path = ?',
+      [folderPath],
+      (err) => {
+        if (err) {
+          logger.error('[Session] Failed to clear session:', err);
+          reject(err);
+        } else {
+          logger.info(`[Session] Cleared session for ${folderPath}`);
+          resolve({ success: true });
+        }
+      }
+    );
+  });
+});
+
+// Recent folders handlers
+ipcMain.handle('db-add-recent-folder', async (_, folderPath: string, tabCount: number = 0) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    
+    const timestamp = new Date().toISOString();
+    
+    db.run(
+      `INSERT OR REPLACE INTO recent_folders (folder_path, last_opened, tab_count) 
+       VALUES (?, ?, ?)`,
+      [folderPath, timestamp, tabCount],
+      (err) => {
+        if (err) {
+          logger.error('[Recent] Failed to add recent folder:', err);
+          reject(err);
+        } else {
+          logger.info(`[Recent] Added folder ${folderPath} to recent list`);
+          resolve({ success: true });
+        }
+      }
+    );
+  });
+});
+
+ipcMain.handle('db-get-recent-folders', async () => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    
+    db.all(
+      `SELECT folder_path, last_opened, tab_count 
+       FROM recent_folders 
+       ORDER BY last_opened DESC 
+       LIMIT 10`,
+      [],
+      (err, rows) => {
+        if (err) {
+          logger.error('[Recent] Failed to get recent folders:', err);
+          reject(err);
+        } else {
+          resolve(rows || []);
+        }
+      }
+    );
+  });
+});
+
+ipcMain.handle('db-remove-recent-folder', async (_, folderPath: string) => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    
+    db.run(
+      'DELETE FROM recent_folders WHERE folder_path = ?',
+      [folderPath],
+      (err) => {
+        if (err) {
+          logger.error('[Recent] Failed to remove recent folder:', err);
+          reject(err);
+        } else {
+          logger.info(`[Recent] Removed folder ${folderPath} from recent list`);
           resolve({ success: true });
         }
       }

@@ -6873,3 +6873,21 @@ window.addEventListener('showExplorerWithDialog', async () => {
         await (window as any).openFolder();
     }
 });
+
+// Handle documentation events from welcome page
+window.addEventListener('showDocumentation', (event: any) => {
+    const section = event.detail?.section || 'getting-started';
+    console.log(`[Welcome] Opening documentation section: ${section}`);
+    
+    // Hide welcome page
+    hideWelcomePage();
+    
+    // Show help panel with the requested section
+    showHelpPanel(section);
+    
+    // Activate documentation button
+    const docBtn = document.querySelector('[data-view="documentation"]') as HTMLElement;
+    if (docBtn) {
+        docBtn.classList.add('active');
+    }
+});
