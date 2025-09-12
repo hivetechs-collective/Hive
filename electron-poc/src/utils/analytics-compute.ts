@@ -13,11 +13,12 @@ export interface AnalyticsResult {
   modelUsage: { [model: string]: number };
   costByModel: { [model: string]: number };
   hourlyStats: Array<{ hour: string; queries: number; cost: number; avgTime: number }>;
+  alerts?: Array<{ type: 'warning' | 'error' | 'info'; message: string; timestamp: string }>;
 }
 
 export type AnalyticsPeriod = '24h' | '7d' | '30d';
 
-export async function computeAnalytics(db: Database, userId: string, period: AnalyticsPeriod = '24h'): Promise<AnalyticsResult> {
+export async function computeAnalytics(db: Database, userId: string | '*' = '*', period: AnalyticsPeriod = '24h'): Promise<AnalyticsResult> {
   return new Promise((resolve) => {
     const result: any = {};
 
@@ -27,14 +28,17 @@ export async function computeAnalytics(db: Database, userId: string, period: Ana
     const windowStartISO = new Date(now.getTime() - periodHours * 3600_000).toISOString();
 
     // Queries in selected period
+    const userFilter = userId === '*' ? '' : ' AND user_id = ? ';
+    const userParams: any[] = userId === '*' ? [] : [userId];
+
     db.get(
-      `SELECT COUNT(*) as count FROM conversation_usage WHERE timestamp >= ? AND user_id = ?`,
-      [windowStartISO, userId],
+      `SELECT COUNT(*) as count FROM conversation_usage WHERE timestamp >= ? ${userFilter}`,
+      [windowStartISO, ...userParams],
       (err1, row1: any) => {
         result.todayQueries = row1?.count || 0;
 
         // Total queries
-        db.get(`SELECT COUNT(*) as count FROM conversation_usage WHERE user_id = ?`, [userId], (errT, rowT: any) => {
+        db.get(`SELECT COUNT(*) as count FROM conversation_usage ${userId === '*' ? '' : 'WHERE user_id = ?'}`, userParams, (errT, rowT: any) => {
           result.totalQueries = rowT?.count || 0;
 
           // Period cost/tokens + avg time
@@ -43,8 +47,8 @@ export async function computeAnalytics(db: Database, userId: string, period: Ana
              FROM conversations c
              INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
              LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-             WHERE cu.timestamp >= ? AND cu.user_id = ?`,
-            [windowStartISO, userId],
+             WHERE cu.timestamp >= ? ${userFilter}`,
+            [windowStartISO, ...userParams],
             (err2, row2: any) => {
               result.todayCost = row2?.total_cost || 0;
               result.todayAvgResponseTime = row2?.avg_time || 0;
@@ -60,8 +64,8 @@ export async function computeAnalytics(db: Database, userId: string, period: Ana
                  FROM conversations c
                  INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
                  LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-                 WHERE cu.user_id = ?`,
-                [userId],
+                 ${userId === '*' ? '' : 'WHERE cu.user_id = ?'}`,
+                userParams,
                 (err3, row3: any) => {
                   result.totalCost = row3?.total_cost || 0;
                   result.avgResponseTime = row3?.avg_time || 0;
@@ -78,8 +82,8 @@ export async function computeAnalytics(db: Database, userId: string, period: Ana
                      INNER JOIN conversations c ON c.id = cu.conversation_id
                      LEFT JOIN knowledge_conversations kc ON c.id = kc.conversation_id
                      LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-                     WHERE cu.user_id = ? ORDER BY cu.timestamp DESC LIMIT 10`,
-                    [userId],
+                     ${userId === '*' ? '' : 'WHERE cu.user_id = ?'} ORDER BY cu.timestamp DESC LIMIT 10`,
+                    userParams,
                     (err4, rows4: any[]) => {
                       result.recentActivity = rows4 || [];
 
@@ -88,8 +92,8 @@ export async function computeAnalytics(db: Database, userId: string, period: Ana
                         `SELECT so.model, COUNT(*) as count, SUM(so.cost) as totalCost
                          FROM stage_outputs so
                          INNER JOIN conversation_usage cu ON so.conversation_id = cu.conversation_id
-                         WHERE cu.user_id = ? GROUP BY so.model ORDER BY totalCost DESC`,
-                        [userId],
+                         ${userId === '*' ? '' : 'WHERE cu.user_id = ?'} GROUP BY so.model ORDER BY totalCost DESC`,
+                        userParams,
                         (err5, rows5: any[]) => {
                           const modelUsage: any = {};
                           const modelCosts: any = {};
@@ -119,8 +123,8 @@ export async function computeAnalytics(db: Database, userId: string, period: Ana
                                FROM conversation_usage cu
                                LEFT JOIN conversations c ON c.id = cu.conversation_id
                                LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-                               WHERE cu.timestamp >= ? AND cu.timestamp < ? AND cu.user_id = ?`,
-                              [start, end, userId],
+                               WHERE cu.timestamp >= ? AND cu.timestamp < ? ${userFilter}`,
+                              [start, end, ...userParams],
                               (err6, row6: any) => {
                                 const hourLabel = new Date(start).getHours().toString().padStart(2, '0') + ':00';
                                 hourly.push({ hour: hourLabel, queries: row6?.queries || 0, cost: row6?.cost || 0, avgTime: row6?.avg_time || 0 });

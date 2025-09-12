@@ -5877,7 +5877,19 @@ ipcMain.handle('get-analytics-ro', async (_e, period?: '24h' | '7d' | '30d') => 
     if (!dbFilePath) throw new Error('DB path not set');
     const ro = new Database(dbFilePath, (Database as any).OPEN_READONLY || undefined);
     const userId = '3034c561-e193-4968-a575-f1b165d31a5b';
-    const data = await computeAnalytics(ro, userId, period || '24h');
+    let data = await computeAnalytics(ro, userId, period || '24h');
+    // Fallback: if zero queries in period for this user, aggregate across all users
+    if (!data || data.todayQueries === 0) {
+      const aggregated = await computeAnalytics(ro, '*', period || '24h');
+      if (aggregated.todayQueries > 0) {
+        aggregated.alerts = (aggregated.alerts || []).concat([{
+          type: 'info',
+          message: 'No data for current user; showing aggregated analytics',
+          timestamp: new Date().toISOString()
+        }]);
+        data = aggregated;
+      }
+    }
     ro.close?.();
     return data;
   } catch (e) {
