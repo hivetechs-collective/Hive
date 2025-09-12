@@ -1009,15 +1009,15 @@ export class EditorTabs {
     console.log('[EditorTabs] Restoring session with', sessionData.tabs.length, 'tabs');
     
     // Clear existing tabs first
-    this.closeAllTabs();
+    this.closeAllTabsSync();
     
     // Restore each tab
     for (const tabData of sessionData.tabs) {
       try {
         // Read file content if it's a file tab
         if (tabData.path && window.fileAPI) {
-          const content = await window.fileAPI.readFile(tabData.path);
-          await this.openFile(tabData.path, content);
+          // Just pass the path, openFile will read the content
+          await this.openFile(tabData.path);
         }
       } catch (error) {
         console.error('[EditorTabs] Failed to restore tab:', tabData.path, error);
@@ -1033,9 +1033,9 @@ export class EditorTabs {
   }
   
   /**
-   * Close all tabs
+   * Close all tabs (sync version for immediate cleanup)
    */
-  public closeAllTabs(): void {
+  public closeAllTabsSync(): void {
     // Close each tab
     while (this.tabs.length > 0) {
       const tab = this.tabs[0];
