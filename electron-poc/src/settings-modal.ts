@@ -669,8 +669,41 @@ export class SettingsModal {
           defaultPath: 'hive-ai-backup.sqlite'
         });
         if (save && !save.canceled && save.filePath) {
-          await (window as any).databaseAPI?.backup?.(save.filePath);
-          await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Backup Complete', message: `Saved to: ${save.filePath}` });
+          // Simple inline prompt for encryption
+          const overlay = document.createElement('div');
+          overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
+          const modal = document.createElement('div');
+          modal.style.width = '460px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '20vh auto'; modal.style.padding = '16px';
+          modal.innerHTML = `
+            <div style=\"font-weight:600; margin-bottom:8px\">Backup Options</div>
+            <label style=\"display:flex;align-items:center;gap:8px;margin-bottom:8px\"><input id=\"enc-enabled\" type=\"checkbox\" /> Encrypt backup</label>
+            <input id=\"enc-password\" type=\"password\" placeholder=\"Password (required if encrypting)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
+            <div style=\"display:flex; gap:8px; justify-content:flex-end\">
+              <button id=\"enc-cancel\" class=\"btn btn-secondary\">Cancel</button>
+              <button id=\"enc-ok\" class=\"btn btn-primary\">Backup</button>
+            </div>
+          `;
+          overlay.appendChild(modal); document.body.appendChild(overlay);
+          await new Promise<void>((resolve) => {
+            (modal.querySelector('#enc-cancel') as HTMLElement).addEventListener('click', () => { document.body.removeChild(overlay); resolve(); });
+            (modal.querySelector('#enc-ok') as HTMLElement).addEventListener('click', async () => {
+              const enabled = (modal.querySelector('#enc-enabled') as HTMLInputElement).checked;
+              const pwd = (modal.querySelector('#enc-password') as HTMLInputElement).value;
+              if (enabled && !pwd) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup', message: 'Password required when encrypting.' });
+                return;
+              }
+              document.body.removeChild(overlay);
+              try {
+                const opts: any = enabled ? { destPath: save.filePath, password: pwd } : { destPath: save.filePath };
+                await (window as any).databaseAPI?.backup?.(opts);
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Backup Complete', message: `Saved to: ${save.filePath}` });
+              } catch (e) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
+              }
+              resolve();
+            });
+          });
         }
       } catch (e) {
         await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
@@ -683,8 +716,35 @@ export class SettingsModal {
           properties: ['openFile']
         });
         if (open && !open.canceled && open.filePaths && open.filePaths[0]) {
-          await (window as any).databaseAPI?.restore?.(open.filePaths[0]);
-          await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Restore Complete', message: 'Database restored. Please restart the application.' });
+          // Ask for password (optional)
+          const overlay = document.createElement('div');
+          overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
+          const modal = document.createElement('div');
+          modal.style.width = '460px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '20vh auto'; modal.style.padding = '16px';
+          modal.innerHTML = `
+            <div style=\"font-weight:600; margin-bottom:8px\">Restore Options</div>
+            <input id=\"enc-password-restore\" type=\"password\" placeholder=\"Password (leave blank if not encrypted)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
+            <div style=\"display:flex; gap:8px; justify-content:flex-end\">
+              <button id=\"enc-cancel-restore\" class=\"btn btn-secondary\">Cancel</button>
+              <button id=\"enc-ok-restore\" class=\"btn btn-primary\">Restore</button>
+            </div>
+          `;
+          overlay.appendChild(modal); document.body.appendChild(overlay);
+          await new Promise<void>((resolve) => {
+            (modal.querySelector('#enc-cancel-restore') as HTMLElement).addEventListener('click', () => { document.body.removeChild(overlay); resolve(); });
+            (modal.querySelector('#enc-ok-restore') as HTMLElement).addEventListener('click', async () => {
+              const pwd = (modal.querySelector('#enc-password-restore') as HTMLInputElement).value;
+              document.body.removeChild(overlay);
+              try {
+                const opts: any = pwd ? { srcPath: open.filePaths[0], password: pwd } : { srcPath: open.filePaths[0] };
+                await (window as any).databaseAPI?.restore?.(opts);
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Restore Complete', message: 'Database restored. Please restart the application.' });
+              } catch (e) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(e) });
+              }
+              resolve();
+            });
+          });
         }
       } catch (e) {
         await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(e) });

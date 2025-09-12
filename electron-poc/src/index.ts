@@ -901,17 +901,41 @@ const registerGitHandlers = () => {
   });
 
   // Backup database using VACUUM INTO for a consistent snapshot
-  ipcMain.handle('db-backup', async (_evt, destPath: string) => {
+  ipcMain.handle('db-backup', async (_evt, opts: any) => {
     return new Promise((resolve, reject) => {
       try {
         if (!db) { reject('Database not initialized'); return; }
+        const destPath = typeof opts === 'string' ? opts : opts?.destPath;
         if (!destPath) { reject('Destination path required'); return; }
-        // Sanitize single quotes in path for SQL literal
+        const password: string | undefined = typeof opts === 'object' ? (opts.password || undefined) : undefined;
+        // Produce a plain snapshot file first
         const safe = String(destPath).replace(/'/g, "''");
-        // Checkpoint WAL then VACUUM INTO snapshot file
+        const plainPath = password ? destPath + '.tmpplain' : destPath;
+        const safePlain = String(plainPath).replace(/'/g, "''");
         db!.exec(`PRAGMA wal_checkpoint(TRUNCATE);`);
-        db!.exec(`VACUUM INTO '${safe}';`);
-        resolve({ success: true, path: destPath });
+        db!.exec(`VACUUM INTO '${safePlain}';`);
+        if (password) {
+          // Encrypt plain snapshot into destPath
+          try {
+            const crypto = require('crypto');
+            const salt = crypto.randomBytes(16);
+            const iv = crypto.randomBytes(12);
+            const key = crypto.scryptSync(password, salt, 32);
+            const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+            const data = fs.readFileSync(plainPath);
+            const enc = Buffer.concat([cipher.update(data), cipher.final()]);
+            const tag = cipher.getAuthTag();
+            const header = Buffer.from('HIVEENC1');
+            const out = Buffer.concat([header, salt, iv, tag, enc]);
+            fs.writeFileSync(destPath, out);
+            fs.unlinkSync(plainPath);
+          } catch (e) {
+            try { if (fs.existsSync(plainPath)) fs.unlinkSync(plainPath); } catch {}
+            reject(e);
+            return;
+          }
+        }
+        resolve({ success: true, path: destPath, encrypted: !!password });
       } catch (err) {
         logger.error('[DB] Backup failed', { error: err });
         reject(err);
@@ -920,15 +944,47 @@ const registerGitHandlers = () => {
   });
 
   // Restore database from a provided snapshot
-  ipcMain.handle('db-restore', async (_evt, srcPath: string) => {
+  ipcMain.handle('db-restore', async (_evt, opts: any) => {
     return new Promise((resolve, reject) => {
       try {
+        const srcPath = typeof opts === 'string' ? opts : opts?.srcPath;
+        const password: string | undefined = typeof opts === 'object' ? (opts.password || undefined) : undefined;
         if (!srcPath) { reject('Source path required'); return; }
         if (!db) { reject('Database not initialized'); return; }
         const targetPath = (db as any).filename as string;
-        // Validate source DB integrity
         const { Database: SqliteDatabase } = require('sqlite3');
-        const srcDb = new SqliteDatabase(srcPath);
+        // If encrypted, decrypt to temp
+        let candidatePath = srcPath;
+        try {
+          const fd = fs.openSync(srcPath, 'r');
+          const header = Buffer.alloc(8);
+          fs.readSync(fd, header, 0, 8, 0);
+          fs.closeSync(fd);
+          if (header.toString() === 'HIVEENC1') {
+            if (!password) {
+              reject(new Error('Encrypted backup requires password'));
+              return;
+            }
+            const blob = fs.readFileSync(srcPath);
+            const salt = blob.subarray(8, 24);
+            const iv = blob.subarray(24, 36);
+            const tag = blob.subarray(36, 52);
+            const enc = blob.subarray(52);
+            const crypto = require('crypto');
+            const key = crypto.scryptSync(password, salt, 32);
+            const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+            decipher.setAuthTag(tag);
+            const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
+            const tmp = targetPath + '.tmprestore';
+            fs.writeFileSync(tmp, dec);
+            candidatePath = tmp;
+          }
+        } catch (e) {
+          reject(e);
+          return;
+        }
+        // Validate candidate DB integrity
+        const srcDb = new SqliteDatabase(candidatePath);
         srcDb.get('PRAGMA integrity_check', (err: any, row: any) => {
           if (err) {
             srcDb.close();
@@ -949,7 +1005,8 @@ const registerGitHandlers = () => {
               return;
             }
             try {
-              fs.copyFileSync(srcPath, targetPath);
+              fs.copyFileSync(candidatePath, targetPath);
+              if (candidatePath.endsWith('.tmprestore')) { try { fs.unlinkSync(candidatePath); } catch {} }
               // Reopen DB
               initDatabase();
               resolve({ success: true, path: targetPath });
@@ -1504,6 +1561,36 @@ async function scheduleAutoBackupIfDue() {
   if (freq === 'daily' || freq === 'weekly') {
     if (isBackupDue(settings.last, freq)) {
       await performBackupWithRetention();
+    }
+  }
+  // Reminder if auto not enabled and last backup older than reminderDays
+  const enabled = (settings.enabled || '0') === '1';
+  if (!enabled) {
+    const daysStr = await new Promise<string | null>((resolve) => {
+      db!.get('SELECT value FROM settings WHERE key = ?',[ 'backup.reminderDays' ], (err: any, row: any) => resolve(err ? null : (row ? row.value : null)));
+    });
+    const days = Math.max(1, parseInt(daysStr || '7', 10));
+    const lastIso = settings.last;
+    const last = lastIso ? new Date(lastIso) : null;
+    const ms = days * 24 * 60 * 60 * 1000;
+    const overdue = !last || ((Date.now() - last.getTime()) >= ms);
+    if (overdue && mainWindow) {
+      const res = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['Enable Auto Backup', 'Backup Now', 'Dismiss'],
+        defaultId: 0,
+        cancelId: 2,
+        title: 'Backup Reminder',
+        message: 'Protect your data: enable auto backup or create a backup now?',
+        detail: 'Auto backups are currently disabled and your last backup appears to be older than recommended.'
+      });
+      if (res.response === 0) {
+        // Enable weekly by default
+        db!.run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', ['backup.autoEnabled', '1']);
+        db!.run('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)', ['backup.frequency', 'weekly']);
+      } else if (res.response === 1) {
+        await performBackupWithRetention();
+      }
     }
   }
 }
