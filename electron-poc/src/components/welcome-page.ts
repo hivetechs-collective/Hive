@@ -97,6 +97,12 @@ export class WelcomePage {
                 </svg>
                 <span>Clone Repository</span>
               </button>
+              <button class="action-item" id="open-terminal-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 17l6-6-6-6"/><path d="M14 19h6"/>
+                </svg>
+                <span>Open Terminal…</span>
+              </button>
               <button class="action-item" id="open-folder-btn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
@@ -545,11 +551,21 @@ export class WelcomePage {
     });
 
     document.getElementById('clone-repo-btn')?.addEventListener('click', () => {
-      (window as any).cloneRepository?.();
+      this.showCloneDialog();
     });
 
     document.getElementById('open-folder-btn')?.addEventListener('click', () => {
       this.openFolder();
+    });
+
+    document.getElementById('open-terminal-btn')?.addEventListener('click', async () => {
+      try {
+        const result = await (window as any).electronAPI.showOpenDialog({ properties: ['openDirectory'] });
+        if (!result.canceled && result.filePaths.length > 0) {
+          const id = `term-${Date.now()}`;
+          await (window as any).terminalAPI?.createTerminalProcess?.({ terminalId: id, cwd: result.filePaths[0] });
+        }
+      } catch (e) { console.error('Failed to open terminal:', e); }
     });
 
     document.getElementById('getting-started-btn')?.addEventListener('click', () => {
@@ -847,7 +863,7 @@ export class WelcomePage {
         const name = await (window as any).electronAPI.showInputDialog('New Project', 'Enter project name:');
         if (!name) return;
         const template = await (window as any).electronAPI.showInputDialog('Project Template', 'Enter template (node|python|rust|empty):');
-        const tpl = (template || 'empty').trim().toLowerCase();
+        const tpl = ((template || 'empty').trim().toLowerCase()) as any;
         const destSel = await (window as any).electronAPI.showOpenDialog({
           properties: ['openDirectory', 'createDirectory'],
           title: 'Select location for project'
@@ -861,23 +877,27 @@ export class WelcomePage {
           await (window as any).fileAPI.createFolder(parent, name);
         }
         
-        // Scaffold minimal template
+        // Scaffold using shared helper
         try {
-          if (tpl === 'node') {
-            await (window as any).fileAPI.writeFile(`${projectPath}/package.json`, JSON.stringify({ name, version: '0.1.0', scripts: { start: 'node index.js' } }, null, 2));
-            await (window as any).fileAPI.writeFile(`${projectPath}/index.js`, "console.log('Hello from Node project');\n");
-            await (window as any).fileAPI.writeFile(`${projectPath}/.gitignore`, "node_modules\n.DS_Store\n");
-          } else if (tpl === 'python') {
-            await (window as any).fileAPI.writeFile(`${projectPath}/main.py`, "print('Hello from Python project')\n");
-            await (window as any).fileAPI.writeFile(`${projectPath}/.gitignore`, "__pycache__/\n.DS_Store\n");
-          } else if (tpl === 'rust') {
-            // Minimal Cargo setup
-            await (window as any).fileAPI.createFolder(projectPath, 'src');
-            await (window as any).fileAPI.writeFile(`${projectPath}/Cargo.toml`, `[package]\nname = "${name}"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n`);
-            await (window as any).fileAPI.writeFile(`${projectPath}/src/main.rs`, "fn main() {\n    println!(\"Hello from Rust project\");\n}\n");
-            await (window as any).fileAPI.writeFile(`${projectPath}/.gitignore`, "target/\n.DS_Store\n");
-          } else {
-            await (window as any).fileAPI.writeFile(`${projectPath}/README.md`, `# ${name}\n\nCreated with Hive Consensus IDE.`);
+          const { getScaffoldFiles } = await import('../utils/template-scaffold');
+          const files = getScaffoldFiles(tpl, name);
+          for (const f of files) {
+            if (f.isDir) {
+              await (window as any).fileAPI.createFolder(projectPath, f.path.replace(/\/$/, ''));
+            } else if (typeof f.content === 'string') {
+              const full = `${projectPath}/${f.path}`;
+              const dir = full.split('/').slice(0, -1).join('/');
+              if (dir) {
+                const existsDir = await (window as any).fileAPI.fileExists(dir);
+                if (!existsDir) {
+                  // Best-effort: create intermediate folder one level deep if needed
+                  const parentDir = dir.split('/').slice(0, -1).join('/');
+                  const folderName = dir.split('/').pop();
+                  if (parentDir && folderName) await (window as any).fileAPI.createFolder(parentDir, folderName);
+                }
+              }
+              await (window as any).fileAPI.writeFile(full, f.content);
+            }
           }
         } catch (e) {
           console.warn('[Welcome] Template scaffold failed:', e);
@@ -938,7 +958,7 @@ export class WelcomePage {
         <div>Show Welcome</div><div>Cmd/Ctrl+Shift+W</div>
         <div>Go to File</div><div>Cmd/Ctrl+P</div>
         <div>Go to Line</div><div>Cmd/Ctrl+G</div>
-        <div>Toggle Terminal</div><div>Cmd/Ctrl+`</div>
+        <div>Toggle Terminal</div><div>Cmd/Ctrl+&#96;</div>
         <div>Save</div><div>Cmd/Ctrl+S</div>
       </div>
     `;
@@ -966,6 +986,67 @@ export class WelcomePage {
     // Show internal documentation
     const event = new CustomEvent('showDocumentation', { detail: { section: 'whats-new' } });
     window.dispatchEvent(event);
+  }
+  
+  private async showCloneDialog() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.5)'; overlay.style.zIndex = '2000';
+    const modal = document.createElement('div');
+    modal.style.width = '560px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '12vh auto'; modal.style.padding = '16px';
+    modal.innerHTML = `
+      <div style="font-weight:600; margin-bottom:8px">Clone Repository</div>
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <button class="footer-btn" id="tab-url">URL</button>
+        <button class="footer-btn" id="tab-github">GitHub</button>
+      </div>
+      <div id="pane-url">
+        <input id="clone-url" placeholder="https://github.com/org/repo(.git) or git@github.com:org/repo(.git)" style="width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+      </div>
+      <div id="pane-github" style="display:none">
+        <div style="display:flex; gap:8px">
+          <input id="gh-owner" placeholder="owner" style="flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+          <input id="gh-repo" placeholder="repo" style="flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
+        <button class="footer-btn" id="clone-cancel">Cancel</button>
+        <button class="footer-btn" id="clone-confirm">Clone…</button>
+      </div>
+    `;
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    const byId = (id: string) => modal.querySelector(`#${id}`) as HTMLElement;
+    const paneUrl = byId('pane-url') as HTMLElement; const paneGh = byId('pane-github') as HTMLElement;
+    byId('tab-url').addEventListener('click', () => { paneUrl.style.display = 'block'; paneGh.style.display = 'none'; });
+    byId('tab-github').addEventListener('click', () => { paneUrl.style.display = 'none'; paneGh.style.display = 'block'; });
+    byId('clone-cancel').addEventListener('click', () => document.body.removeChild(overlay));
+    byId('clone-confirm').addEventListener('click', async () => {
+      try {
+        let url = (modal.querySelector('#clone-url') as HTMLInputElement)?.value?.trim();
+        if (paneGh.style.display !== 'none') {
+          const owner = (modal.querySelector('#gh-owner') as HTMLInputElement)?.value?.trim();
+          const repo = (modal.querySelector('#gh-repo') as HTMLInputElement)?.value?.trim();
+          if (owner && repo) url = `https://github.com/${owner}/${repo}.git`;
+        }
+        const { isValidRepoUrl } = await import('../utils/clone-validate');
+        if (!isValidRepoUrl(url)) { await (window as any).electronAPI.showMessageBox({ type: 'error', title: 'Invalid URL', message: 'Please enter a valid Git repository URL.' }); return; }
+        const result = await (window as any).electronAPI.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Select destination' });
+        if (result.canceled || result.filePaths.length === 0) return;
+        const parentDir = result.filePaths[0];
+        const notice = document.createElement('div'); notice.className = 'status-toast cloning'; notice.textContent = 'Cloning repository...'; document.body.appendChild(notice);
+        try {
+          const cloneResult = await (window as any).gitAPI.clone(url, parentDir);
+          notice.remove();
+          if (!cloneResult || !cloneResult.success) {
+            await (window as any).electronAPI.showMessageBox({ type: 'error', title: 'Clone Failed', message: cloneResult?.error || 'Clone failed' });
+            return;
+          }
+          const destPath = cloneResult.destination;
+          this.openRecentFolder(destPath);
+          document.body.removeChild(overlay);
+        } catch (e) { notice.remove(); throw e; }
+      } catch (e) { console.error('Clone dialog error:', e); }
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
   }
   
   // Enable drag-and-drop to open a folder quickly

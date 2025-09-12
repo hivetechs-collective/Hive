@@ -1,7 +1,7 @@
 {
   "name": "hive-consensus",
   "productName": "Hive Consensus",
-  "version": "1.8.340",
+  "version": "1.8.341",
   "description": "Hive Consensus - AI-powered development environment",
   "main": ".webpack/main",
   "scripts": {
@@ -24,7 +24,8 @@
     "build:complete": "node scripts/build-production-dmg.js",
     "build:visual": "node scripts/build-with-progress.js",
     "requirements": "node scripts/comprehensive-build-check.js",
-    "test": "echo 'Tests would run here'",
+    "test": "npm run test:welcome",
+    "test:welcome": "npm run verify:types && node scripts/test-welcome-db.js && ts-node tests/welcome-logic.test.ts && ts-node tests/template-scaffold.test.ts && ts-node tests/clone-validate.test.ts",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx ."
   },
