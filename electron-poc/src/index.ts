@@ -891,6 +891,71 @@ const registerGitHandlers = () => {
       });
     });
   });
+
+  // Backup database using VACUUM INTO for a consistent snapshot
+  ipcMain.handle('db-backup', async (_evt, destPath: string) => {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!db) { reject('Database not initialized'); return; }
+        if (!destPath) { reject('Destination path required'); return; }
+        // Sanitize single quotes in path for SQL literal
+        const safe = String(destPath).replace(/'/g, "''");
+        // Checkpoint WAL then VACUUM INTO snapshot file
+        db!.exec(`PRAGMA wal_checkpoint(TRUNCATE);`);
+        db!.exec(`VACUUM INTO '${safe}';`);
+        resolve({ success: true, path: destPath });
+      } catch (err) {
+        logger.error('[DB] Backup failed', { error: err });
+        reject(err);
+      }
+    });
+  });
+
+  // Restore database from a provided snapshot
+  ipcMain.handle('db-restore', async (_evt, srcPath: string) => {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!srcPath) { reject('Source path required'); return; }
+        if (!db) { reject('Database not initialized'); return; }
+        const targetPath = (db as any).filename as string;
+        // Validate source DB integrity
+        const { Database: SqliteDatabase } = require('sqlite3');
+        const srcDb = new SqliteDatabase(srcPath);
+        srcDb.get('PRAGMA integrity_check', (err: any, row: any) => {
+          if (err) {
+            srcDb.close();
+            reject(err);
+            return;
+          }
+          const result = row ? Object.values(row)[0] : 'unknown';
+          if (String(result).toLowerCase() !== 'ok') {
+            srcDb.close();
+            reject(new Error('Integrity check failed for backup file'));
+            return;
+          }
+          // Close both DBs, copy file, re-init
+          srcDb.close();
+          (db as any).close((closeErr: any) => {
+            if (closeErr) {
+              reject(closeErr);
+              return;
+            }
+            try {
+              fs.copyFileSync(srcPath, targetPath);
+              // Reopen DB
+              initDatabase();
+              resolve({ success: true, path: targetPath });
+            } catch (copyErr) {
+              reject(copyErr);
+            }
+          });
+        });
+      } catch (err) {
+        logger.error('[DB] Restore failed', { error: err });
+        reject(err);
+      }
+    });
+  });
   
   // Get submodule diff
   ipcMain.handle('git-submodule-diff', async (_, submodulePath: string) => {

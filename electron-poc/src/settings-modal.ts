@@ -282,6 +282,19 @@ export class SettingsModal {
               </div>
             </div>
             
+            <!-- Advanced (Database) Section -->
+            <div class="settings-section">
+              <h3>Advanced</h3>
+              <p class="section-description">Database maintenance and backup</p>
+              <div class="button-group">
+                <button id="db-backup" class="btn btn-secondary">Backup Database…</button>
+                <button id="db-restore" class="btn btn-secondary">Restore Database…</button>
+                <button id="db-integrity" class="btn btn-secondary">Integrity Check</button>
+                <button id="db-compact" class="btn btn-secondary">Compact Database</button>
+              </div>
+              <small class="help-text">Backups include all settings, sessions, recents, profiles, and analytics in ~/.hive/hive-ai.db</small>
+            </div>
+          
           </div>
           
           <div class="settings-footer">
@@ -606,6 +619,56 @@ export class SettingsModal {
     // Reset settings button
     document.getElementById('reset-settings')?.addEventListener('click', () => {
       this.resetToDefaults();
+    });
+
+    // Database maintenance handlers
+    document.getElementById('db-integrity')?.addEventListener('click', async () => {
+      try {
+        const res = await (window as any).databaseAPI?.integrityCheck?.();
+        await (window as any).electronAPI?.showMessageBox?.({
+          type: 'info',
+          title: 'Database Integrity',
+          message: `Integrity check: ${res?.result || 'unknown'}`
+        });
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Integrity Check Failed', message: String(e) });
+      }
+    });
+    document.getElementById('db-compact')?.addEventListener('click', async () => {
+      try {
+        await (window as any).databaseAPI?.compact?.();
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Database Compacted', message: 'VACUUM completed successfully.' });
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Compact Failed', message: String(e) });
+      }
+    });
+    document.getElementById('db-backup')?.addEventListener('click', async () => {
+      try {
+        const save = await (window as any).electronAPI?.showSaveDialog?.({
+          title: 'Save Database Backup',
+          defaultPath: 'hive-ai-backup.sqlite'
+        });
+        if (save && !save.canceled && save.filePath) {
+          await (window as any).databaseAPI?.backup?.(save.filePath);
+          await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Backup Complete', message: `Saved to: ${save.filePath}` });
+        }
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
+      }
+    });
+    document.getElementById('db-restore')?.addEventListener('click', async () => {
+      try {
+        const open = await (window as any).electronAPI?.showOpenDialog?.({
+          title: 'Select Database Backup',
+          properties: ['openFile']
+        });
+        if (open && !open.canceled && open.filePaths && open.filePaths[0]) {
+          await (window as any).databaseAPI?.restore?.(open.filePaths[0]);
+          await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Restore Complete', message: 'Database restored. Please restart the application.' });
+        }
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(e) });
+      }
     });
 
     // Create profile button - use a more robust approach

@@ -304,6 +304,9 @@ contextBridge.exposeInMainWorld('databaseAPI', {
   logWelcomeAction: (action: string) => ipcRenderer.invoke('db-welcome-analytics-log', action),
   compact: () => ipcRenderer.invoke('db-compact'),
   integrityCheck: () => ipcRenderer.invoke('db-integrity-check')
+  ,
+  backup: (destPath: string) => ipcRenderer.invoke('db-backup', destPath),
+  restore: (srcPath: string) => ipcRenderer.invoke('db-restore', srcPath)
 });
 
 // Terminal API
