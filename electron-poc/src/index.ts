@@ -1064,6 +1064,60 @@ const registerDialogHandlers = () => {
       return false;
     }
   });
+
+  // Reveal a file in OS file manager
+  ipcMain.handle('reveal-in-folder', async (_evt, targetPath: string) => {
+    try {
+      shell.showItemInFolder(targetPath);
+      return true;
+    } catch (e) {
+      logger.error('[Reveal] Failed', { error: e });
+      return false;
+    }
+  });
+  // Open a path (file or folder) with OS default
+  ipcMain.handle('open-path', async (_evt, targetPath: string) => {
+    try {
+      const res = await shell.openPath(targetPath);
+      return res === '';
+    } catch (e) {
+      logger.error('[OpenPath] Failed', { error: e });
+      return false;
+    }
+  });
+  // List backups in configured backup dir
+  ipcMain.handle('list-backups', async () => {
+    try {
+      // Determine backup dir using same logic as performBackupWithRetention
+      let dirSetting: string | null = await new Promise((resolve) => {
+        db!.get('SELECT value FROM settings WHERE key = ?',[ 'backup.dir' ], (err: any, row: any) => resolve(err ? null : (row ? row.value : null)));
+      });
+      if (!dirSetting || dirSetting.trim() === '') dirSetting = process.env.HIVE_BACKUP_DIR || null;
+      const dir = dirSetting && dirSetting.trim() !== '' ? dirSetting : getBackupDir();
+      if (!fs.existsSync(dir)) return [];
+      const entries = fs.readdirSync(dir)
+        .filter(f => f.endsWith('.sqlite'))
+        .map(f => {
+          const p = path.join(dir, f);
+          const s = fs.statSync(p);
+          return { name: f, path: p, size: s.size, mtimeMs: s.mtimeMs };
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs);
+      return entries;
+    } catch (e) {
+      logger.error('[Backups] list failed', { error: e });
+      return [];
+    }
+  });
+  ipcMain.handle('delete-backup', async (_evt, filePath: string) => {
+    try {
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      return true;
+    } catch (e) {
+      logger.error('[Backups] delete failed', { error: e });
+      return false;
+    }
+  });
   
   ipcMain.handle('show-input-dialog', async (_, title: string, defaultValue?: string) => {
     // For now, use a simple prompt-like dialog
@@ -1508,7 +1562,14 @@ function getBackupDir(): string {
 
 async function performBackupWithRetention(): Promise<string | null> {
   if (!db) return null;
-  const dir = getBackupDir();
+  // Prefer user-configured backup.dir if set, else env/default
+  let dirSetting: string | null = await new Promise((resolve) => {
+    db!.get('SELECT value FROM settings WHERE key = ?',[ 'backup.dir' ], (err: any, row: any) => resolve(err ? null : (row ? row.value : null)));
+  });
+  if (!dirSetting || dirSetting.trim() === '') dirSetting = process.env.HIVE_BACKUP_DIR || null;
+  const dir = dirSetting && dirSetting.trim() !== '' ? dirSetting : getBackupDir();
+  if (!fs.existsSync(dir)) { try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  }
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const dest = path.join(dir, `hive-ai-backup-${ts}.sqlite`);
   // Use existing IPC handler logic but call locally

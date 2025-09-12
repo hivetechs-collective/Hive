@@ -198,7 +198,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuShowWelcome: (callback: () => void) => {
     ipcRenderer.on('menu-show-welcome', callback);
   },
-  getVersion: () => ipcRenderer.invoke('get-app-version')
+  getVersion: () => ipcRenderer.invoke('get-app-version'),
+  // Backup helpers
+  listBackups: () => ipcRenderer.invoke('list-backups'),
+  deleteBackup: (filePath: string) => ipcRenderer.invoke('delete-backup', filePath),
+  revealInFolder: (filePath: string) => ipcRenderer.invoke('reveal-in-folder', filePath),
+  openPath: (targetPath: string) => ipcRenderer.invoke('open-path', targetPath)
 });
 
 // Git API

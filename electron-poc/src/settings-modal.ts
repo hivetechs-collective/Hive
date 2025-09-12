@@ -291,6 +291,7 @@ export class SettingsModal {
                 <button id="db-restore" class="btn btn-secondary">Restore Database…</button>
                 <button id="db-integrity" class="btn btn-secondary">Integrity Check</button>
                 <button id="db-compact" class="btn btn-secondary">Compact Database</button>
+                <button id="db-view-backups" class="btn btn-secondary">View Backups…</button>
               </div>
               <div class="form-group" style="margin-top: 10px;">
                 <label>Auto Backup</label>
@@ -670,6 +671,86 @@ export class SettingsModal {
         await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Database Compacted', message: 'VACUUM completed successfully.' });
       } catch (e) {
         await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Compact Failed', message: String(e) });
+      }
+    });
+    document.getElementById('db-view-backups')?.addEventListener('click', async () => {
+      try {
+        const list = await (window as any).electronAPI?.listBackups?.();
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
+        const modal = document.createElement('div');
+        modal.style.width = '720px'; modal.style.maxHeight = '70vh'; modal.style.overflow = 'auto'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '12vh auto'; modal.style.padding = '16px';
+        const rows = (list || []).map((f: any) => `
+          <div class=\"backup-row\" style=\"display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid #2d2d30\">
+            <div style=\"flex:1;min-width:0\">
+              <div style=\"font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">${f.name}</div>
+              <div style=\"font-size:11px;color:#858585\">${new Date(f.mtimeMs).toLocaleString()}</div>
+            </div>
+            <div style=\"width:120px;color:#ccc\">${(f.size/1024/1024).toFixed(2)} MB</div>
+            <button class=\"btn btn-secondary\" data-reveal=\"${f.path}\">Reveal</button>
+            <button class=\"btn btn-secondary\" data-restore=\"${f.path}\">Restore</button>
+            <button class=\"btn btn-danger\" data-delete=\"${f.path}\">Delete</button>
+          </div>`).join('');
+        modal.innerHTML = `
+          <div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:8px\">
+            <div style=\"font-weight:600\">Backups</div>
+            <div style=\"display:flex;gap:8px\">
+              <button id=\"open-backup-folder\" class=\"btn btn-secondary\">Open Backup Folder</button>
+              <button id=\"close-backups\" class=\"btn btn-secondary\">Close</button>
+            </div>
+          </div>
+          <div>${rows || '<div style=\"color:#888\">No backups found</div>'}</div>
+        `;
+        overlay.appendChild(modal); document.body.appendChild(overlay);
+        (modal.querySelector('#close-backups') as HTMLElement)?.addEventListener('click', () => document.body.removeChild(overlay));
+        (modal.querySelector('#open-backup-folder') as HTMLElement)?.addEventListener('click', async () => {
+          const dir = (document.getElementById('backup-dir') as HTMLInputElement)?.value || '';
+          if (dir) await (window as any).electronAPI?.openPath?.(dir);
+        });
+        modal.querySelectorAll('button[data-reveal]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+          const p = (e.currentTarget as HTMLElement).getAttribute('data-reveal')!;
+          await (window as any).electronAPI?.revealInFolder?.(p);
+        }));
+        modal.querySelectorAll('button[data-delete]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+          const p = (e.currentTarget as HTMLElement).getAttribute('data-delete')!;
+          const confirm = await (window as any).electronAPI?.showMessageBox?.({ type: 'warning', buttons: ['Delete','Cancel'], defaultId: 1, cancelId: 1, title: 'Delete Backup', message: `Delete backup?`, detail: p });
+          if (confirm?.response === 0) {
+            await (window as any).electronAPI?.deleteBackup?.(p);
+            document.body.removeChild(overlay);
+            (document.getElementById('db-view-backups') as HTMLButtonElement)?.click();
+          }
+        }));
+        modal.querySelectorAll('button[data-restore]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+          const p = (e.currentTarget as HTMLElement).getAttribute('data-restore')!;
+          // Ask for password (optional)
+          const ov = document.createElement('div');
+          ov.style.position = 'fixed'; ov.style.inset = '0'; ov.style.background = 'rgba(0,0,0,0.35)'; ov.style.zIndex = '3200';
+          const md = document.createElement('div');
+          md.style.width = '460px'; md.style.background = '#1f1f1f'; md.style.border = '1px solid #2d2d30'; md.style.borderRadius = '8px'; md.style.margin = '20vh auto'; md.style.padding = '16px';
+          md.innerHTML = `
+            <div style=\"font-weight:600; margin-bottom:8px\">Restore Options</div>
+            <input id=\"enc-password-restore2\" type=\"password\" placeholder=\"Password (leave blank if not encrypted)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
+            <div style=\"display:flex; gap:8px; justify-content:flex-end\">
+              <button id=\"enc-cancel-restore2\" class=\"btn btn-secondary\">Cancel</button>
+              <button id=\"enc-ok-restore2\" class=\"btn btn-primary\">Restore</button>
+            </div>
+          `;
+          ov.appendChild(md); document.body.appendChild(ov);
+          (md.querySelector('#enc-cancel-restore2') as HTMLElement).addEventListener('click', () => document.body.removeChild(ov));
+          (md.querySelector('#enc-ok-restore2') as HTMLElement).addEventListener('click', async () => {
+            const pwd = (md.querySelector('#enc-password-restore2') as HTMLInputElement).value;
+            document.body.removeChild(ov);
+            try {
+              const opts: any = pwd ? { srcPath: p, password: pwd } : { srcPath: p };
+              await (window as any).databaseAPI?.restore?.(opts);
+              await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Restore Complete', message: 'Database restored. Please restart the application.' });
+            } catch (err) {
+              await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(err) });
+            }
+          });
+        }));
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backups', message: String(e) });
       }
     });
     document.getElementById('db-backup')?.addEventListener('click', async () => {
