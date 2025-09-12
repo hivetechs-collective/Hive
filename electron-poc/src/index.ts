@@ -142,15 +142,36 @@ const initDatabase = () => {
 
   db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at)`);
 
-  // Minimal messages table used by DirectConsensusEngine storage path
+  // Messages table used by memory/context systems and consensus logging
   db.run(`CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     conversation_id TEXT,
     role TEXT,
     content TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+    stage TEXT,
+    model_used TEXT,
+    tokens_used INTEGER DEFAULT 0,
+    cost REAL DEFAULT 0,
+    consensus_path TEXT,
+    consensus_rounds INTEGER,
+    parent_message_id TEXT,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // Migration: ensure expected columns exist on messages
+  db.all(`PRAGMA table_info(messages)`, [], (err: any, cols: any[]) => {
+    if (err || !cols) return;
+    const names = new Set((cols || []).map((c: any) => c.name));
+    const addCol = (sql: string) => db.run(sql, [], () => {});
+    if (!names.has('stage')) addCol(`ALTER TABLE messages ADD COLUMN stage TEXT`);
+    if (!names.has('model_used')) addCol(`ALTER TABLE messages ADD COLUMN model_used TEXT`);
+    if (!names.has('tokens_used')) addCol(`ALTER TABLE messages ADD COLUMN tokens_used INTEGER DEFAULT 0`);
+    if (!names.has('cost')) addCol(`ALTER TABLE messages ADD COLUMN cost REAL DEFAULT 0`);
+    if (!names.has('consensus_path')) addCol(`ALTER TABLE messages ADD COLUMN consensus_path TEXT`);
+    if (!names.has('consensus_rounds')) addCol(`ALTER TABLE messages ADD COLUMN consensus_rounds INTEGER`);
+    if (!names.has('parent_message_id')) addCol(`ALTER TABLE messages ADD COLUMN parent_message_id TEXT`);
+    if (!names.has('timestamp')) addCol(`ALTER TABLE messages ADD COLUMN timestamp TEXT DEFAULT CURRENT_TIMESTAMP`);
+  });
 
   // Knowledge conversations: support both legacy (id, question, answer) and new (conversation_id, final_answer, source_of_truth)
   db.run(`CREATE TABLE IF NOT EXISTS knowledge_conversations (

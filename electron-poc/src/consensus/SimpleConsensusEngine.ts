@@ -264,6 +264,21 @@ export class SimpleConsensusEngine {
       
       // Generate conversation ID if not provided
       this.conversationId = request.conversationId || `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Ensure a conversations row exists early to satisfy FKs for messages/usage
+      try {
+        const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // same user used for usage analytics
+        const title = (request.query || 'Consensus Query').substring(0, 100);
+        const ts = new Date().toISOString();
+        const stmt = this.db.prepare(`
+          INSERT OR IGNORE INTO conversations (
+            id, user_id, title, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?)
+        `);
+        stmt.run(this.conversationId, userId, title, ts, ts);
+      } catch (err) {
+        console.error('❌ Failed to ensure conversations row:', err);
+      }
       
       this.conversation = {
         consensus_id: consensusId,
