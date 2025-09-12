@@ -79,7 +79,10 @@ import { EditorTabs } from './editor-tabs';
 import { StatusBar } from './status-bar';
 import { ttydTerminalPanel } from './components/TTYDTerminalPanel';
 import { helpViewer } from './components/help-viewer';
-import { welcomePage } from './components/welcome-page';
+import { WelcomePage } from './components/welcome-page';
+
+// Create welcome page instance
+let welcomePageInstance: WelcomePage | null = null;
 
 // Current opened folder state
 let currentOpenedFolder: string | null = null;
@@ -3223,8 +3226,11 @@ function showWelcomePage(): void {
     // Show welcome panel
     welcomePanel.style.display = 'block';
     
-    // Mount the welcome page
-    welcomePage.mount(welcomePanel);
+    // Create and render the welcome page
+    if (!welcomePageInstance) {
+        welcomePageInstance = new WelcomePage(welcomePanel);
+    }
+    welcomePageInstance.render();
 }
 
 /**
@@ -3235,7 +3241,11 @@ function hideWelcomePage(): void {
     const editorArea = document.getElementById('editor-area');
     
     if (welcomePanel) {
-        welcomePage.unmount();
+        // Clear the welcome page instance
+        if (welcomePageInstance) {
+            welcomePanel.innerHTML = '';
+            welcomePageInstance = null;
+        }
         welcomePanel.style.display = 'none';
     }
     
@@ -5403,25 +5413,13 @@ setTimeout(() => {
                     const isVisible = welcomePanel.style.display === 'block';
                     
                     if (isVisible) {
-                        // Hide welcome panel
-                        welcomePanel.style.display = 'none';
+                        // Hide welcome panel using the hide function
+                        hideWelcomePage();
                         btn.classList.remove('active');
+                        currentView = null;
                     } else {
-                        // Hide all other panels
-                        const helpPanel = document.getElementById('help-panel');
-                        const settingsPanel = panels.settings || document.getElementById('settings-panel');
-                        const analyticsPanel = document.getElementById('analytics-panel');
-                        const memoryPanel = document.getElementById('memory-panel');
-                        const cliToolsPanel = document.getElementById('cli-tools-panel');
-                        
-                        if (helpPanel) helpPanel.style.display = 'none';
-                        if (settingsPanel) settingsPanel.style.display = 'none';
-                        if (analyticsPanel) analyticsPanel.style.display = 'none';
-                        if (memoryPanel) memoryPanel.style.display = 'none';
-                        if (cliToolsPanel) cliToolsPanel.style.display = 'none';
-                        
-                        // Show welcome
-                        welcomePanel.style.display = 'block';
+                        // Show welcome panel using the show function which creates/renders the WelcomePage
+                        showWelcomePage();
                         
                         // Update button states
                         activityButtons.forEach(b => {
@@ -5430,6 +5428,7 @@ setTimeout(() => {
                             }
                         });
                         btn.classList.add('active');
+                        currentView = 'welcome';
                     }
                 }
                 return;
@@ -5837,6 +5836,9 @@ async function handleOpenFolder(folderPath: string) {
         // Update window title with folder name
         const folderName = folderPath.split('/').pop() || folderPath;
         document.title = `Hive Consensus - ${folderName}`;
+        
+        // Save to recent folders
+        await saveRecentFolder(folderPath);
         
         // Initialize Git manager with the new folder
         if (window.gitAPI) {
@@ -6742,6 +6744,37 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
     });
 }
 
+// Save a folder to recent folders
+async function saveRecentFolder(folderPath: string) {
+    try {
+        if (!window.databaseAPI) return;
+        
+        // Get existing recent folders
+        const recentJson = await window.databaseAPI.getSetting('recent.folders');
+        let recentFolders = recentJson ? JSON.parse(recentJson) : [];
+        
+        // Remove if already exists (to move to top)
+        recentFolders = recentFolders.filter((item: any) => item.path !== folderPath);
+        
+        // Add to top
+        const folderName = folderPath.split('/').pop() || folderPath;
+        recentFolders.unshift({
+            path: folderPath,
+            name: folderName,
+            lastOpened: new Date().toISOString()
+        });
+        
+        // Keep only 20 most recent
+        recentFolders = recentFolders.slice(0, 20);
+        
+        // Save back to database
+        await window.databaseAPI.setSetting('recent.folders', JSON.stringify(recentFolders));
+        console.log('[Recent] Saved folder to recent:', folderPath);
+    } catch (error) {
+        console.error('[Recent] Failed to save recent folder:', error);
+    }
+}
+
 // Close the current folder
 window.closeFolder = () => {
     // Clear current folder
@@ -6772,3 +6805,71 @@ window.closeFolder = () => {
     
     console.log('[CloseFolder] Folder closed');
 };
+
+// Listen for custom events from Welcome page
+window.addEventListener('openFolderInExplorer', async (event: any) => {
+    const path = event.detail?.path;
+    if (!path) return;
+    
+    console.log('[Welcome] Opening folder in Explorer:', path);
+    
+    // Expand the path (handle ~)
+    const homeDir = (window as any).electronAPI?.homeDir || '/Users/' + (window as any).electronAPI?.username || '';
+    const expandedPath = path.replace(/^~/, homeDir);
+    
+    // Set the current opened folder
+    currentOpenedFolder = expandedPath;
+    (window as any).currentOpenedFolder = expandedPath;
+    
+    // Hide welcome page
+    hideWelcomePage();
+    
+    // Show and activate Explorer
+    const explorerBtn = document.querySelector('[data-view="explorer"]') as HTMLElement;
+    const explorerContainer = document.getElementById('explorer-content');
+    
+    if (explorerBtn && explorerContainer) {
+        // Activate Explorer button
+        explorerBtn.click();
+        
+        // Initialize Explorer with the folder
+        explorerContainer.innerHTML = '';
+        window.fileExplorer = new VSCodeExplorerExact(explorerContainer);
+        await window.fileExplorer.initialize(expandedPath);
+        
+        // Setup file selection handler
+        window.fileExplorer.onFileSelect((filePath: string) => {
+            console.log('File selected from Explorer:', filePath);
+            if (window.editorTabs) {
+                window.editorTabs.openFile(filePath).catch((err: any) => {
+                    console.error('Error opening file:', err);
+                });
+            }
+        });
+        
+        // Update window title
+        const folderName = expandedPath.split('/').pop() || expandedPath;
+        document.title = `${folderName} - Hive Consensus`;
+        
+        // Save to recent folders
+        await saveRecentFolder(expandedPath);
+    }
+});
+
+window.addEventListener('showExplorerWithDialog', async () => {
+    console.log('[Welcome] Showing Explorer with folder dialog');
+    
+    // Hide welcome page
+    hideWelcomePage();
+    
+    // Show and activate Explorer
+    const explorerBtn = document.querySelector('[data-view="explorer"]') as HTMLElement;
+    if (explorerBtn) {
+        explorerBtn.click();
+    }
+    
+    // Open folder dialog
+    if ((window as any).openFolder) {
+        await (window as any).openFolder();
+    }
+});
