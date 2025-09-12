@@ -317,6 +317,9 @@ export class SettingsModal {
                     <input type="checkbox" id="backup-always-encrypt" /> Always encrypt backups
                   </label>
                   <label style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" id="backup-always-compress" /> Always compress backups
+                  </label>
+                  <label style="display:flex; align-items:center; gap:6px;">
                     Reminder every
                     <input id="backup-reminder-days" type="number" min="1" max="90" value="7" style="width:70px;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
                     days when disabled
@@ -673,6 +676,56 @@ export class SettingsModal {
         await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Compact Failed', message: String(e) });
       }
     });
+    document.getElementById('db-backup')?.addEventListener('click', async () => {
+      try {
+        const save = await (window as any).electronAPI?.showSaveDialog?.({
+          title: 'Save Database Backup',
+          defaultPath: 'hive-ai-backup.sqlite'
+        });
+        if (save && !save.canceled && save.filePath) {
+          const defEnc = ((await (window as any).databaseAPI?.getSetting?.('backup.alwaysEncrypt')) || '0') === '1';
+          const defCmp = ((await (window as any).databaseAPI?.getSetting?.('backup.alwaysCompress')) || '0') === '1';
+          const overlay = document.createElement('div');
+          overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
+          const modal = document.createElement('div');
+          modal.style.width = '460px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '20vh auto'; modal.style.padding = '16px';
+          modal.innerHTML = `
+            <div style=\"font-weight:600; margin-bottom:8px\">Backup Options</div>
+            <label style=\"display:flex;align-items:center;gap:8px;margin-bottom:8px\"><input id=\"enc-enabled\" type=\"checkbox\" ${defEnc ? 'checked' : ''}/> Encrypt backup</label>
+            <label style=\"display:flex;align-items:center;gap:8px;margin-bottom:8px\"><input id=\"cmp-enabled\" type=\"checkbox\" ${defCmp ? 'checked' : ''}/> Compress backup</label>
+            <input id=\"enc-password\" type=\"password\" placeholder=\"Password (required if encrypting)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
+            <div style=\"display:flex; gap:8px; justify-content:flex-end\">
+              <button id=\"enc-cancel\" class=\"btn btn-secondary\">Cancel</button>
+              <button id=\"enc-ok\" class=\"btn btn-primary\">Backup</button>
+            </div>
+          `;
+          overlay.appendChild(modal); document.body.appendChild(overlay);
+          await new Promise<void>((resolve) => {
+            (modal.querySelector('#enc-cancel') as HTMLElement).addEventListener('click', () => { document.body.removeChild(overlay); resolve(); });
+            (modal.querySelector('#enc-ok') as HTMLElement).addEventListener('click', async () => {
+              const enabled = (modal.querySelector('#enc-enabled') as HTMLInputElement).checked;
+              const cmp = (modal.querySelector('#cmp-enabled') as HTMLInputElement).checked;
+              const pwd = (modal.querySelector('#enc-password') as HTMLInputElement).value;
+              if (enabled && !pwd) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup', message: 'Password required when encrypting.' });
+                return;
+              }
+              document.body.removeChild(overlay);
+              try {
+                const opts: any = Object.assign({ destPath: save.filePath }, enabled ? { password: pwd } : {}, cmp ? { compress: true } : {});
+                await (window as any).databaseAPI?.backup?.(opts);
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Backup Complete', message: `Saved to: ${save.filePath}` });
+              } catch (e) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
+              }
+              resolve();
+            });
+          });
+        }
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
+      }
+    });
     document.getElementById('db-view-backups')?.addEventListener('click', async () => {
       try {
         const list = await (window as any).electronAPI?.listBackups?.();
@@ -695,11 +748,12 @@ export class SettingsModal {
           <div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:8px\">
             <div style=\"font-weight:600\">Backups</div>
             <div style=\"display:flex;gap:8px\">
+              <input id=\"backup-search\" placeholder=\"Search...\" style=\"background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;\" />
               <button id=\"open-backup-folder\" class=\"btn btn-secondary\">Open Backup Folder</button>
               <button id=\"close-backups\" class=\"btn btn-secondary\">Close</button>
             </div>
           </div>
-          <div>${rows || '<div style=\"color:#888\">No backups found</div>'}</div>
+          <div id=\"backups-list\">${rows || '<div style=\"color:#888\">No backups found</div>'}</div>
         `;
         overlay.appendChild(modal); document.body.appendChild(overlay);
         (modal.querySelector('#close-backups') as HTMLElement)?.addEventListener('click', () => document.body.removeChild(overlay));
@@ -707,25 +761,26 @@ export class SettingsModal {
           const dir = (document.getElementById('backup-dir') as HTMLInputElement)?.value || '';
           if (dir) await (window as any).electronAPI?.openPath?.(dir);
         });
-        modal.querySelectorAll('button[data-reveal]')?.forEach(btn => btn.addEventListener('click', async (e) => {
-          const p = (e.currentTarget as HTMLElement).getAttribute('data-reveal')!;
-          await (window as any).electronAPI?.revealInFolder?.(p);
-        }));
-        modal.querySelectorAll('button[data-delete]')?.forEach(btn => btn.addEventListener('click', async (e) => {
-          const p = (e.currentTarget as HTMLElement).getAttribute('data-delete')!;
-          const confirm = await (window as any).electronAPI?.showMessageBox?.({ type: 'warning', buttons: ['Delete','Cancel'], defaultId: 1, cancelId: 1, title: 'Delete Backup', message: `Delete backup?`, detail: p });
-          if (confirm?.response === 0) {
-            await (window as any).electronAPI?.deleteBackup?.(p);
-            document.body.removeChild(overlay);
-            (document.getElementById('db-view-backups') as HTMLButtonElement)?.click();
-          }
-        }));
-        modal.querySelectorAll('button[data-restore]')?.forEach(btn => btn.addEventListener('click', async (e) => {
-          const p = (e.currentTarget as HTMLElement).getAttribute('data-restore')!;
-          // Ask for password (optional)
-          const ov = document.createElement('div');
-          ov.style.position = 'fixed'; ov.style.inset = '0'; ov.style.background = 'rgba(0,0,0,0.35)'; ov.style.zIndex = '3200';
-          const md = document.createElement('div');
+        const wireActions = () => {
+          modal.querySelectorAll('button[data-reveal]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+            const p = (e.currentTarget as HTMLElement).getAttribute('data-reveal')!;
+            await (window as any).electronAPI?.revealInFolder?.(p);
+          }));
+          modal.querySelectorAll('button[data-delete]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+            const p = (e.currentTarget as HTMLElement).getAttribute('data-delete')!;
+            const confirm = await (window as any).electronAPI?.showMessageBox?.({ type: 'warning', buttons: ['Delete','Cancel'], defaultId: 1, cancelId: 1, title: 'Delete Backup', message: `Delete backup?`, detail: p });
+            if (confirm?.response === 0) {
+              await (window as any).electronAPI?.deleteBackup?.(p);
+              document.body.removeChild(overlay);
+              (document.getElementById('db-view-backups') as HTMLButtonElement)?.click();
+            }
+          }));
+          modal.querySelectorAll('button[data-restore]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+            const p = (e.currentTarget as HTMLElement).getAttribute('data-restore')!;
+            // Ask for password (optional)
+            const ov = document.createElement('div');
+            ov.style.position = 'fixed'; ov.style.inset = '0'; ov.style.background = 'rgba(0,0,0,0.35)'; ov.style.zIndex = '3200';
+            const md = document.createElement('div');
           md.style.width = '460px'; md.style.background = '#1f1f1f'; md.style.border = '1px solid #2d2d30'; md.style.borderRadius = '8px'; md.style.margin = '20vh auto'; md.style.padding = '16px';
           md.innerHTML = `
             <div style=\"font-weight:600; margin-bottom:8px\">Restore Options</div>
@@ -748,7 +803,26 @@ export class SettingsModal {
               await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(err) });
             }
           });
-        }));
+          }));
+        };
+        wireActions();
+        (modal.querySelector('#backup-search') as HTMLInputElement)?.addEventListener('input', (e) => {
+          const q = (e.target as HTMLInputElement).value.toLowerCase();
+          const filtered = (list || []).filter((f: any) => f.name.toLowerCase().includes(q));
+          const rows2 = filtered.map((f: any) => `
+            <div class=\"backup-row\" style=\"display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid #2d2d30\">
+              <div style=\"flex:1;min-width:0\">
+                <div style=\"font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">${f.name}</div>
+                <div style=\"font-size:11px;color:#858585\">${new Date(f.mtimeMs).toLocaleString()}</div>
+              </div>
+              <div style=\"width:120px;color:#ccc\">${(f.size/1024/1024).toFixed(2)} MB</div>
+              <button class=\"btn btn-secondary\" data-reveal=\"${f.path}\">Reveal</button>
+              <button class=\"btn btn-secondary\" data-restore=\"${f.path}\">Restore</button>
+              <button class=\"btn btn-danger\" data-delete=\"${f.path}\">Delete</button>
+            </div>`).join('');
+          (modal.querySelector('#backups-list') as HTMLElement).innerHTML = rows2 || '<div style=\"color:#888\">No backups found</div>';
+          wireActions();
+        });
       } catch (e) {
         await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backups', message: String(e) });
       }
@@ -852,18 +926,21 @@ export class SettingsModal {
         const ret = await (window as any).databaseAPI?.getSetting?.('backup.retentionCount');
         const dir = await (window as any).databaseAPI?.getSetting?.('backup.dir');
         const alwaysEnc = await (window as any).databaseAPI?.getSetting?.('backup.alwaysEncrypt');
+        const alwaysComp = await (window as any).databaseAPI?.getSetting?.('backup.alwaysCompress');
         const remindDays = await (window as any).databaseAPI?.getSetting?.('backup.reminderDays');
         const chk = document.getElementById('backup-auto-enabled') as HTMLInputElement;
         const sel = document.getElementById('backup-frequency') as HTMLSelectElement;
         const num = document.getElementById('backup-retention') as HTMLInputElement;
         const inp = document.getElementById('backup-dir') as HTMLInputElement;
         const enc = document.getElementById('backup-always-encrypt') as HTMLInputElement;
+        const cmp = document.getElementById('backup-always-compress') as HTMLInputElement;
         const rmd = document.getElementById('backup-reminder-days') as HTMLInputElement;
         if (chk) chk.checked = (enabled || '0') === '1';
         if (sel && (freq === 'manual' || freq === 'on-exit' || freq === 'daily' || freq === 'weekly')) sel.value = freq;
         if (num) num.value = String(Math.max(1, parseInt(ret || '7', 10)));
         if (inp) inp.value = dir || '';
         if (enc) enc.checked = (alwaysEnc || '0') === '1';
+        if (cmp) cmp.checked = (alwaysComp || '0') === '1';
         if (rmd) rmd.value = String(Math.max(1, parseInt(remindDays || '7', 10)));
       } catch {}
     })();
@@ -880,6 +957,9 @@ export class SettingsModal {
     });
     document.getElementById('backup-always-encrypt')?.addEventListener('change', async (e) => {
       try { await (window as any).databaseAPI?.setSetting?.('backup.alwaysEncrypt', (e.target as HTMLInputElement).checked ? '1' : '0'); } catch {}
+    });
+    document.getElementById('backup-always-compress')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.alwaysCompress', (e.target as HTMLInputElement).checked ? '1' : '0'); } catch {}
     });
     document.getElementById('backup-reminder-days')?.addEventListener('change', async (e) => {
       try { await (window as any).databaseAPI?.setSetting?.('backup.reminderDays', (e.target as HTMLInputElement).value); } catch {}
