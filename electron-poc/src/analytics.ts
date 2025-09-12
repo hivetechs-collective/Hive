@@ -58,6 +58,7 @@ export class AnalyticsDashboard {
   private data: AnalyticsData | null = null;
   private updateInterval: NodeJS.Timeout | null = null;
   private chartUpdateInterval: NodeJS.Timeout | null = null;
+  private period: '24h' | '7d' | '30d' = '24h';
 
   constructor() {
     this.initializeData();
@@ -123,7 +124,7 @@ export class AnalyticsDashboard {
       
       if (electronAPI && electronAPI.getAnalytics) {
         console.log('Calling getAnalytics...');
-        const analyticsData = await electronAPI.getAnalytics();
+        const analyticsData = await electronAPI.getAnalytics(this.period);
         console.log('Analytics data received:', analyticsData);
         console.log('Recent activity sample:', analyticsData?.recentActivity?.slice(0, 2));
         
@@ -239,7 +240,10 @@ export class AnalyticsDashboard {
     this.container.innerHTML = `
       <div class="analytics-dashboard">
         <div class="analytics-header">
-          <h2>📊 Analytics Dashboard</h2>
+          <h2 class="analytics-title">
+            <span class="icon icon-graph"></span>
+            <span>Analytics Dashboard</span>
+          </h2>
           <div class="analytics-controls">
             <select class="period-selector">
               <option value="24h">Last 24 Hours</option>
@@ -253,23 +257,23 @@ export class AnalyticsDashboard {
         <!-- Key Metrics Row -->
         <div class="metrics-grid">
           <div class="metric-card">
-            <div class="metric-icon">📅</div>
+              <div class="metric-icon"><span class="icon icon-calendar"></span></div>
             <div class="metric-content">
               <div class="metric-value" id="today-queries">0</div>
-              <div class="metric-label">Today's Queries</div>
+              <div class="metric-label" id="period-queries-label">Period Queries</div>
             </div>
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">💵</div>
+              <div class="metric-icon"><span class="icon icon-dollar"></span></div>
             <div class="metric-content">
               <div class="metric-value" id="today-cost">$0.00</div>
-              <div class="metric-label">Today's Cost</div>
+              <div class="metric-label" id="period-cost-label">Period Cost</div>
             </div>
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">📈</div>
+              <div class="metric-icon"><span class="icon icon-activity"></span></div>
             <div class="metric-content">
               <div class="metric-value" id="total-queries">0</div>
               <div class="metric-label">All-Time Queries</div>
@@ -277,7 +281,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">💰</div>
+              <div class="metric-icon"><span class="icon icon-balance"></span></div>
             <div class="metric-content">
               <div class="metric-value" id="total-cost">$0.00</div>
               <div class="metric-label">Total Cost</div>
@@ -285,7 +289,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">✅</div>
+              <div class="metric-icon"><span class="icon icon-check"></span></div>
             <div class="metric-content">
               <div class="metric-value" id="success-rate">0%</div>
               <div class="metric-label">Success Rate</div>
@@ -293,7 +297,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">⚡</div>
+              <div class="metric-icon"><span class="icon icon-bolt"></span></div>
             <div class="metric-content">
               <div class="metric-value" id="avg-response">0s</div>
               <div class="metric-label">Avg Response</div>
@@ -304,7 +308,7 @@ export class AnalyticsDashboard {
         <!-- Charts Row -->
         <div class="charts-row">
           <div class="chart-container">
-            <h3>Query Volume (24h)</h3>
+            <h3 id="volume-title">Query Volume</h3>
             <div class="line-chart" id="volume-chart">
               <canvas id="volume-canvas"></canvas>
             </div>
@@ -377,22 +381,40 @@ export class AnalyticsDashboard {
     `;
 
     this.attachEventListeners();
+    // Set initial titles/labels for default period
+    const volTitle = this.container?.querySelector('#volume-title');
+    if (volTitle) (volTitle as HTMLElement).textContent = `Query Volume (${this.period.toUpperCase()})`;
+    const pq = this.container?.querySelector('#period-queries-label');
+    if (pq) (pq as HTMLElement).textContent = 'Period Queries';
+    const pc = this.container?.querySelector('#period-cost-label');
+    if (pc) (pc as HTMLElement).textContent = 'Period Cost';
     this.fetchAnalyticsData();
   }
 
   private attachEventListeners(): void {
-    const refreshBtn = this.container?.querySelector('.refresh-btn');
+    const refreshBtn = this.container?.querySelector('.refresh-btn') as HTMLElement | null;
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
         this.fetchAnalyticsData();
-        this.animateRefresh(refreshBtn as HTMLElement);
+        this.animateRefresh(refreshBtn);
       });
     }
 
-    const periodSelector = this.container?.querySelector('.period-selector') as HTMLSelectElement;
+    const periodSelector = this.container?.querySelector('.period-selector') as HTMLSelectElement | null;
     if (periodSelector) {
       periodSelector.addEventListener('change', () => {
-        // Update data based on selected period
+        const val = periodSelector.value as any;
+        if (val === '24h' || val === '7d' || val === '30d') {
+          this.period = val;
+        } else {
+          this.period = '24h';
+        }
+        const volTitle = this.container?.querySelector('#volume-title');
+        if (volTitle) volTitle.textContent = `Query Volume (${this.period.toUpperCase()})`;
+        const pq = this.container?.querySelector('#period-queries-label');
+        if (pq) pq.textContent = 'Period Queries';
+        const pc = this.container?.querySelector('#period-cost-label');
+        if (pc) pc.textContent = 'Period Cost';
         this.fetchAnalyticsData();
       });
     }

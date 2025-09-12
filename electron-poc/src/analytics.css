@@ -39,6 +39,28 @@
   color: var(--text-primary);
 }
 
+.analytics-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  color: var(--text-primary);
+}
+
+.icon:before { display: inline-block; }
+.icon-graph:before { content: '📊'; }
+.icon-calendar:before { content: '📅'; }
+.icon-dollar:before { content: '💵'; }
+.icon-activity:before { content: '📈'; }
+.icon-balance:before { content: '💰'; }
+.icon-check:before { content: '✅'; }
+.icon-bolt:before { content: '⚡'; }
+
 .analytics-controls {
   display: flex;
   gap: 12px;

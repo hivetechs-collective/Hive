@@ -15,14 +15,21 @@ export interface AnalyticsResult {
   hourlyStats: Array<{ hour: string; queries: number; cost: number; avgTime: number }>;
 }
 
-export async function computeAnalytics(db: Database, userId: string): Promise<AnalyticsResult> {
+export type AnalyticsPeriod = '24h' | '7d' | '30d';
+
+export async function computeAnalytics(db: Database, userId: string, period: AnalyticsPeriod = '24h'): Promise<AnalyticsResult> {
   return new Promise((resolve) => {
     const result: any = {};
 
-    // Today queries
+    // Determine time window for the selected period
+    const now = new Date();
+    const periodHours = period === '24h' ? 24 : period === '7d' ? 7 * 24 : 30 * 24;
+    const windowStartISO = new Date(now.getTime() - periodHours * 3600_000).toISOString();
+
+    // Queries in selected period
     db.get(
-      `SELECT COUNT(*) as count FROM conversation_usage WHERE date(timestamp, 'localtime') = date('now', 'localtime') AND user_id = ?`,
-      [userId],
+      `SELECT COUNT(*) as count FROM conversation_usage WHERE timestamp >= ? AND user_id = ?`,
+      [windowStartISO, userId],
       (err1, row1: any) => {
         result.todayQueries = row1?.count || 0;
 
@@ -30,14 +37,14 @@ export async function computeAnalytics(db: Database, userId: string): Promise<An
         db.get(`SELECT COUNT(*) as count FROM conversation_usage WHERE user_id = ?`, [userId], (errT, rowT: any) => {
           result.totalQueries = rowT?.count || 0;
 
-          // Today cost/tokens + avg time
+          // Period cost/tokens + avg time
           db.get(
             `SELECT SUM(c.total_cost) as total_cost, SUM(c.total_tokens_input) as total_input, SUM(c.total_tokens_output) as total_output, AVG(pm.total_duration / 1000.0) as avg_time
              FROM conversations c
              INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
              LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-             WHERE date(cu.timestamp, 'localtime') = date('now', 'localtime') AND cu.user_id = ?`,
-            [userId],
+             WHERE cu.timestamp >= ? AND cu.user_id = ?`,
+            [windowStartISO, userId],
             (err2, row2: any) => {
               result.todayCost = row2?.total_cost || 0;
               result.todayAvgResponseTime = row2?.avg_time || 0;
@@ -135,4 +142,3 @@ export async function computeAnalytics(db: Database, userId: string): Promise<An
     );
   });
 }
-

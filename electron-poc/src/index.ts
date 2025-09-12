@@ -5872,12 +5872,12 @@ ipcMain.handle('get-analytics', async () => {
 });
 
 // Read-only analytics computation using a separate DB handle
-ipcMain.handle('get-analytics-ro', async () => {
+ipcMain.handle('get-analytics-ro', async (_e, period?: '24h' | '7d' | '30d') => {
   try {
     if (!dbFilePath) throw new Error('DB path not set');
     const ro = new Database(dbFilePath, (Database as any).OPEN_READONLY || undefined);
     const userId = '3034c561-e193-4968-a575-f1b165d31a5b';
-    const data = await computeAnalytics(ro, userId);
+    const data = await computeAnalytics(ro, userId, period || '24h');
     ro.close?.();
     return data;
   } catch (e) {

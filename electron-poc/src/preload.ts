@@ -108,7 +108,7 @@ contextBridge.exposeInMainWorld('settingsAPI', {
 
 // Analytics API
 contextBridge.exposeInMainWorld('electronAPI', {
-  getAnalytics: () => ipcRenderer.invoke('get-analytics-ro'),
+  getAnalytics: (period?: '24h' | '7d' | '30d') => ipcRenderer.invoke('get-analytics-ro', period),
   saveConversation: (data: any) => ipcRenderer.invoke('save-conversation', data),
   getUsageCount: () => ipcRenderer.invoke('get-usage-count'),
   showInputDialog: (title: string, defaultValue?: string) => ipcRenderer.invoke('show-input-dialog', title, defaultValue),

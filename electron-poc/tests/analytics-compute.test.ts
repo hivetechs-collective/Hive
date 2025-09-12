@@ -8,7 +8,7 @@ function test(name: string, fn: () => Promise<void> | void) {
 
 const USER_ID = '3034c561-e193-4968-a575-f1b165d31a5b';
 
-test('analytics updates after inserting a conversation', async () => {
+test('analytics updates after inserting a conversation (24h)', async () => {
   const dbPath = __dirname + '/../hive-ai.db';
   const db = new Database(dbPath);
 
@@ -49,11 +49,21 @@ test('analytics updates after inserting a conversation', async () => {
   await run(db, `INSERT INTO conversation_usage (user_id, conversation_id, timestamp) VALUES (?, ?, ?)`, [USER_ID, convId, now]);
   await run(db, `INSERT OR REPLACE INTO performance_metrics (conversation_id, timestamp, total_duration, total_cost, created_at) VALUES (?, ?, ?, ?, ?)`, [convId, now, 2500, 1.23, now]);
 
-  const data = await computeAnalytics(db, USER_ID);
+  const data = await computeAnalytics(db, USER_ID, '24h');
   assert.ok(data.todayQueries >= 1, 'todayQueries should be >= 1');
   assert.ok(data.todayCost >= 1.23, 'todayCost should include inserted cost');
   assert.ok(data.todayTokenUsage.total >= 150, 'todayTokenUsage total should include tokens');
 
+  db.close();
+});
+
+test('analytics period selection 7d/30d compute without error', async () => {
+  const dbPath = __dirname + '/../hive-ai.db';
+  const db = new Database(dbPath);
+  const d7 = await computeAnalytics(db, USER_ID, '7d');
+  const d30 = await computeAnalytics(db, USER_ID, '30d');
+  assert.ok(d7.todayQueries >= 0);
+  assert.ok(d30.todayQueries >= d7.todayQueries);
   db.close();
 });
 
