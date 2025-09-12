@@ -45,21 +45,15 @@
   gap: 10px;
 }
 
-.icon {
-  display: inline-block;
+.analytics-title svg {
   width: 18px;
   height: 18px;
-  color: var(--text-primary);
 }
 
-.icon:before { display: inline-block; }
-.icon-graph:before { content: '📊'; }
-.icon-calendar:before { content: '📅'; }
-.icon-dollar:before { content: '💵'; }
-.icon-activity:before { content: '📈'; }
-.icon-balance:before { content: '💰'; }
-.icon-check:before { content: '✅'; }
-.icon-bolt:before { content: '⚡'; }
+.metric-icon svg {
+  width: 20px;
+  height: 20px;
+}
 
 .analytics-controls {
   display: flex;

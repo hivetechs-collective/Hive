@@ -39,6 +39,17 @@ test('analytics updates after inserting a conversation (24h)', async () => {
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`, []);
 
+  // Ensure stage_outputs for model usage
+  await run(db, `CREATE TABLE IF NOT EXISTS stage_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL,
+    stage_name TEXT NOT NULL,
+    model TEXT NOT NULL,
+    tokens_used INTEGER DEFAULT 0,
+    cost REAL DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`, []);
+
   const convId = `conv_test_${Date.now()}`;
   const now = new Date().toISOString();
 
@@ -48,11 +59,17 @@ test('analytics updates after inserting a conversation (24h)', async () => {
   ]);
   await run(db, `INSERT INTO conversation_usage (user_id, conversation_id, timestamp) VALUES (?, ?, ?)`, [USER_ID, convId, now]);
   await run(db, `INSERT OR REPLACE INTO performance_metrics (conversation_id, timestamp, total_duration, total_cost, created_at) VALUES (?, ?, ?, ?, ?)`, [convId, now, 2500, 1.23, now]);
+  // Add stage outputs for model usage aggregation
+  await run(db, `INSERT INTO stage_outputs (conversation_id, stage_name, model, tokens_used, cost, created_at) VALUES (?, 'Generator', 'anthropic/claude-sonnet', 75, 0.2, ?)`, [convId, now]);
+  await run(db, `INSERT INTO stage_outputs (conversation_id, stage_name, model, tokens_used, cost, created_at) VALUES (?, 'Refiner', 'openai/gpt-4o', 50, 0.3, ?)`, [convId, now]);
 
   const data = await computeAnalytics(db, USER_ID, '24h');
   assert.ok(data.todayQueries >= 1, 'todayQueries should be >= 1');
   assert.ok(data.todayCost >= 1.23, 'todayCost should include inserted cost');
   assert.ok(data.todayTokenUsage.total >= 150, 'todayTokenUsage total should include tokens');
+  // Model usage should have entries
+  const keys = Object.keys(data.modelUsage || {});
+  assert.ok(keys.length >= 1, 'modelUsage should include at least one model');
 
   db.close();
 });

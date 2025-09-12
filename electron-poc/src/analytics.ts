@@ -246,7 +246,7 @@ export class AnalyticsDashboard {
       <div class="analytics-dashboard">
         <div class="analytics-header">
           <h2 class="analytics-title">
-            <span class="icon icon-graph"></span>
+            ${this.icon('graph')}
             <span>Analytics Dashboard</span>
           </h2>
           <div class="analytics-controls">
@@ -255,14 +255,14 @@ export class AnalyticsDashboard {
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
             </select>
-            <button class="refresh-btn" title="Refresh">🔄</button>
+            <button class="refresh-btn" title="Refresh">${this.icon('refresh')}</button>
           </div>
         </div>
 
         <!-- Key Metrics Row -->
         <div class="metrics-grid">
           <div class="metric-card">
-              <div class="metric-icon"><span class="icon icon-calendar"></span></div>
+            <div class="metric-icon">${this.icon('calendar')}</div>
             <div class="metric-content">
               <div class="metric-value" id="today-queries">0</div>
               <div class="metric-label" id="period-queries-label">Period Queries</div>
@@ -270,7 +270,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-              <div class="metric-icon"><span class="icon icon-dollar"></span></div>
+            <div class="metric-icon">${this.icon('dollar')}</div>
             <div class="metric-content">
               <div class="metric-value" id="today-cost">$0.00</div>
               <div class="metric-label" id="period-cost-label">Period Cost</div>
@@ -278,7 +278,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-              <div class="metric-icon"><span class="icon icon-activity"></span></div>
+            <div class="metric-icon">${this.icon('activity')}</div>
             <div class="metric-content">
               <div class="metric-value" id="total-queries">0</div>
               <div class="metric-label">All-Time Queries</div>
@@ -286,7 +286,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-              <div class="metric-icon"><span class="icon icon-balance"></span></div>
+            <div class="metric-icon">${this.icon('balance')}</div>
             <div class="metric-content">
               <div class="metric-value" id="total-cost">$0.00</div>
               <div class="metric-label">Total Cost</div>
@@ -294,7 +294,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-              <div class="metric-icon"><span class="icon icon-check"></span></div>
+            <div class="metric-icon">${this.icon('check')}</div>
             <div class="metric-content">
               <div class="metric-value" id="success-rate">0%</div>
               <div class="metric-label">Success Rate</div>
@@ -302,7 +302,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-              <div class="metric-icon"><span class="icon icon-bolt"></span></div>
+            <div class="metric-icon">${this.icon('bolt')}</div>
             <div class="metric-content">
               <div class="metric-value" id="avg-response">0s</div>
               <div class="metric-label">Avg Response</div>
@@ -394,6 +394,28 @@ export class AnalyticsDashboard {
     const pc = this.container?.querySelector('#period-cost-label');
     if (pc) (pc as HTMLElement).textContent = 'Period Cost';
     this.fetchAnalyticsData();
+  }
+
+  private icon(name: 'graph' | 'refresh' | 'calendar' | 'dollar' | 'activity' | 'balance' | 'check' | 'bolt'): string {
+    const common = 'width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+    switch (name) {
+      case 'graph':
+        return `<svg ${common}><path d="M3 3v18h18"/><path d="M7 13l3 3 7-7"/></svg>`;
+      case 'refresh':
+        return `<svg ${common}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"/></svg>`;
+      case 'calendar':
+        return `<svg ${common}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+      case 'dollar':
+        return `<svg ${common}><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+      case 'activity':
+        return `<svg ${common}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
+      case 'balance':
+        return `<svg ${common}><path d="M12 2v20"/><path d="M7 6h10"/><path d="M7 10h10"/><path d="M7 14h10"/><path d="M7 18h10"/></svg>`;
+      case 'check':
+        return `<svg ${common}><path d="M20 6L9 17l-5-5"/></svg>`;
+      case 'bolt':
+        return `<svg ${common}><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>`;
+    }
   }
 
   private attachEventListeners(): void {
