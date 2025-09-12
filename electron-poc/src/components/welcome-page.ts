@@ -558,7 +558,7 @@ export class WelcomePage {
 
     // Start column actions
     document.getElementById('new-project-btn')?.addEventListener('click', () => {
-      this.createNewProject();
+      this.showNewProjectDialog();
     });
 
     document.getElementById('clone-repo-btn')?.addEventListener('click', () => {
@@ -971,6 +971,85 @@ export class WelcomePage {
     })();
   }
 
+  private async showNewProjectDialog() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '2200';
+    const modal = document.createElement('div');
+    modal.style.width = '640px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '12vh auto'; modal.style.padding = '16px';
+    modal.innerHTML = `
+      <div style="font-weight:600; margin-bottom:8px">Create New Project</div>
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px;">
+        <button class="footer-btn tpl" data-tpl="node">Node</button>
+        <button class="footer-btn tpl" data-tpl="python">Python</button>
+        <button class="footer-btn tpl" data-tpl="rust">Rust</button>
+        <button class="footer-btn tpl" data-tpl="empty">Empty</button>
+      </div>
+      <input id="np-name" placeholder="Project name" style="width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px" />
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <input id="np-dir" placeholder="Choose location..." style="flex:1;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
+        <button id="np-choose" class="footer-btn">Choose…</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px; margin-bottom:12px"><input id="np-git" type="checkbox" checked /> Initialize Git</label>
+      <div style="display:flex; gap:8px; justify-content:flex-end">
+        <button id="np-cancel" class="footer-btn">Cancel</button>
+        <button id="np-create" class="footer-btn">Create</button>
+      </div>
+    `;
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    let selectedTpl: 'node'|'python'|'rust'|'empty' = 'empty';
+    modal.querySelectorAll('.tpl').forEach(btn => btn.addEventListener('click', (e) => {
+      modal.querySelectorAll('.tpl').forEach(b => (b as HTMLElement).style.background = '#2d2d30');
+      const el = e.currentTarget as HTMLElement; el.style.background = '#38383b';
+      selectedTpl = el.getAttribute('data-tpl') as any;
+    }));
+    (modal.querySelector('#np-choose') as HTMLElement).addEventListener('click', async () => {
+      const res = await (window as any).electronAPI?.showOpenDialog?.({ properties: ['openDirectory', 'createDirectory'] });
+      if (res && !res.canceled && res.filePaths && res.filePaths[0]) {
+        (modal.querySelector('#np-dir') as HTMLInputElement).value = res.filePaths[0];
+      }
+    });
+    (modal.querySelector('#np-cancel') as HTMLElement).addEventListener('click', () => document.body.removeChild(overlay));
+    (modal.querySelector('#np-create') as HTMLElement).addEventListener('click', async () => {
+      try {
+        const name = (modal.querySelector('#np-name') as HTMLInputElement).value.trim();
+        const parent = (modal.querySelector('#np-dir') as HTMLInputElement).value.trim();
+        const doGit = (modal.querySelector('#np-git') as HTMLInputElement).checked;
+        if (!name || !parent) {
+          await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'New Project', message: 'Please enter a name and choose a location.' });
+          return;
+        }
+        const projectPath = `${parent.replace(/\/$/, '')}/${name}`;
+        const exists = await (window as any).fileAPI.fileExists(projectPath);
+        if (!exists) await (window as any).fileAPI.createFolder(parent, name);
+        try {
+          const { getScaffoldFiles } = await import('../utils/template-scaffold');
+          const files = getScaffoldFiles(selectedTpl, name);
+          for (const f of files) {
+            if (f.isDir) {
+              await (window as any).fileAPI.createFolder(projectPath, f.path.replace(/\/$/, ''));
+            } else if (typeof f.content === 'string') {
+              const full = `${projectPath}/${f.path}`;
+              const dir = full.split('/').slice(0, -1).join('/');
+              const dirExists = await (window as any).fileAPI.fileExists(dir);
+              if (!dirExists) {
+                const parentDir = dir.split('/').slice(0, -1).join('/');
+                const folderName = dir.split('/').pop();
+                if (parentDir && folderName) await (window as any).fileAPI.createFolder(parentDir, folderName);
+              }
+              await (window as any).fileAPI.writeFile(full, f.content);
+            }
+          }
+        } catch (e) { console.warn('[Welcome] Template scaffold failed:', e); }
+        if (doGit) { try { await (window as any).gitAPI.initRepo(projectPath); } catch {} }
+        try { (window as any).databaseAPI?.logWelcomeAction?.(`create_template_${selectedTpl}`); } catch {}
+        document.body.removeChild(overlay);
+        this.openRecentFolder(projectPath);
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'New Project', message: String(e) });
+      }
+    });
+  }
+
   private showGettingStarted() {
     console.log('Showing getting started guide...');
     // Show internal documentation
@@ -1054,17 +1133,24 @@ export class WelcomePage {
     modal.style.width = '560px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '12vh auto'; modal.style.padding = '16px';
     modal.innerHTML = `
       <div style="font-weight:600; margin-bottom:8px">Clone Repository</div>
-      <div style="display:flex; gap:8px; margin-bottom:8px">
-        <button class="footer-btn" id="tab-url">URL</button>
-        <button class="footer-btn" id="tab-github">GitHub</button>
+      <div style=\"display:flex; gap:8px; margin-bottom:8px\">
+        <button class=\"footer-btn\" id=\"tab-url\">URL</button>
+        <button class=\"footer-btn\" id=\"tab-github\">GitHub</button>
+        <button class=\"footer-btn\" id=\"tab-gitlab\">GitLab</button>
       </div>
       <div id="pane-url">
         <input id="clone-url" placeholder="https://github.com/org/repo(.git) or git@github.com:org/repo(.git)" style="width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
       </div>
-      <div id="pane-github" style="display:none">
-        <div style="display:flex; gap:8px">
-          <input id="gh-owner" placeholder="owner" style="flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
-          <input id="gh-repo" placeholder="repo" style="flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+      <div id=\"pane-github\" style=\"display:none\">
+        <div style=\"display:flex; gap:8px\">
+          <input id=\"gh-owner\" placeholder=\"owner\" style=\"flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px\" />
+          <input id=\"gh-repo\" placeholder=\"repo\" style=\"flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px\" />
+        </div>
+      </div>
+      <div id=\"pane-gitlab\" style=\"display:none\">
+        <div style=\"display:flex; gap:8px\">
+          <input id=\"gl-group\" placeholder=\"group\" style=\"flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px\" />
+          <input id=\"gl-repo\" placeholder=\"repo\" style=\"flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px\" />
         </div>
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
@@ -1074,9 +1160,10 @@ export class WelcomePage {
     `;
     overlay.appendChild(modal); document.body.appendChild(overlay);
     const byId = (id: string) => modal.querySelector(`#${id}`) as HTMLElement;
-    const paneUrl = byId('pane-url') as HTMLElement; const paneGh = byId('pane-github') as HTMLElement;
-    byId('tab-url').addEventListener('click', () => { paneUrl.style.display = 'block'; paneGh.style.display = 'none'; });
-    byId('tab-github').addEventListener('click', () => { paneUrl.style.display = 'none'; paneGh.style.display = 'block'; });
+    const paneUrl = byId('pane-url') as HTMLElement; const paneGh = byId('pane-github') as HTMLElement; const paneGl = byId('pane-gitlab') as HTMLElement;
+    byId('tab-url').addEventListener('click', () => { paneUrl.style.display = 'block'; paneGh.style.display = 'none'; paneGl.style.display = 'none'; });
+    byId('tab-github').addEventListener('click', () => { paneUrl.style.display = 'none'; paneGh.style.display = 'block'; paneGl.style.display = 'none'; });
+    byId('tab-gitlab').addEventListener('click', () => { paneUrl.style.display = 'none'; paneGh.style.display = 'none'; paneGl.style.display = 'block'; });
     byId('clone-cancel').addEventListener('click', () => document.body.removeChild(overlay));
     byId('clone-confirm').addEventListener('click', async () => {
       try {
@@ -1085,6 +1172,10 @@ export class WelcomePage {
           const owner = (modal.querySelector('#gh-owner') as HTMLInputElement)?.value?.trim();
           const repo = (modal.querySelector('#gh-repo') as HTMLInputElement)?.value?.trim();
           if (owner && repo) url = `https://github.com/${owner}/${repo}.git`;
+        } else if (paneGl.style.display !== 'none') {
+          const group = (modal.querySelector('#gl-group') as HTMLInputElement)?.value?.trim();
+          const repo = (modal.querySelector('#gl-repo') as HTMLInputElement)?.value?.trim();
+          if (group && repo) url = `https://gitlab.com/${group}/${repo}.git`;
         }
         const { isValidRepoUrl } = await import('../utils/clone-validate');
         if (!isValidRepoUrl(url)) { await (window as any).electronAPI.showMessageBox({ type: 'error', title: 'Invalid URL', message: 'Please enter a valid Git repository URL.' }); return; }
