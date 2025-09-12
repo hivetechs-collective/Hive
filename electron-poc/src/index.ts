@@ -127,6 +127,73 @@ const initDatabase = () => {
     tab_count INTEGER DEFAULT 0
   )`);
   
+  // Conversations and related analytics tables (ensure before stage_outputs)
+  db.run(`CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    title TEXT,
+    profile_id TEXT,
+    total_cost REAL DEFAULT 0,
+    total_tokens_input INTEGER DEFAULT 0,
+    total_tokens_output INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at)`);
+
+  // Minimal messages table used by DirectConsensusEngine storage path
+  db.run(`CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT,
+    role TEXT,
+    content TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+  )`);
+
+  // Knowledge conversations: support both legacy (id, question, answer) and new (conversation_id, final_answer, source_of_truth)
+  db.run(`CREATE TABLE IF NOT EXISTS knowledge_conversations (
+    kc_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT, -- optional legacy id
+    conversation_id TEXT,
+    question TEXT,
+    answer TEXT,
+    final_answer TEXT,
+    source_of_truth TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS conversation_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS performance_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+    total_duration INTEGER,
+    total_cost REAL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS cost_analytics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL,
+    total_cost REAL,
+    cost_per_token REAL,
+    model_costs TEXT,
+    optimization_potential REAL DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+  )`);
+
   // Create stage_outputs table to track model usage per stage
   db.run(`CREATE TABLE IF NOT EXISTS stage_outputs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
