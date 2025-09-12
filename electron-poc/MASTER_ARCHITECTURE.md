@@ -2998,7 +2998,13 @@ CREATE TABLE IF NOT EXISTS welcome_analytics (
    - One‑time “Basics tour” prompt on first run
 4. **Phase 4 — Layout & analytics**
    - Layout modes: minimal/balanced/full via `welcome.layoutMode`
-   - `welcome_analytics` event logging: click_recent, clone_success, dismissed, etc.
+   - `welcome_analytics` event logging: `click_recent`, `clone_success`, `clone_fail`, `open_shortcuts`, `open_recents_modal`, `clear_recents`, `restore_session`, etc.
+
+### Layout Modes
+- `minimal`: Focus on Recent (80%) + Start (20%), hide Learn.
+- `balanced`: Recent (70%), Start (15%), Learn (15%).
+- `full`: Recent (60%), Start (20%), Learn (20%).
+Stored as `welcome.layoutMode` in settings. UI toggle cycles modes and persists immediately.
 
 #### User Experience Lessons Applied
 - ❌ **Avoid**: Persistent panels that won't dismiss (GitHub Copilot mistake)
@@ -16760,3 +16766,40 @@ flowchart LR
 Notes
 - Terminal launch uses ProcessManager + PortManager; tool names shown in terminal tabs.
 - Memory Service exposes universal API for all tools; status refreshes are event‑driven.
+## Unified Database Strategy (Production)
+
+We use a single ACID SQLite database as the source of truth for the IDE: `~/.hive/hive-ai.db`.
+
+Goals
+- Single backup/restore unit for all persistent data (settings, recents, sessions, memory, analytics).
+- ACID guarantees with WAL journaling for durability and performance.
+- Clean separation: main process owns the connection; renderers access via IPC only.
+
+Connection & PRAGMA
+- Single connection opened in main process (`src/index.ts`).
+- PRAGMA settings applied at init:
+  - `PRAGMA foreign_keys=ON;`
+  - `PRAGMA journal_mode=WAL;`
+  - `PRAGMA synchronous=NORMAL;` (use `FULL` for max durability if needed)
+  - `PRAGMA busy_timeout=5000;`
+
+Schema versioning & migrations
+- Maintain a `schema_version` (or equivalent) table; apply idempotent, forward-only migrations on startup.
+- Keep all `CREATE TABLE IF NOT EXISTS` statements centralized in init.
+
+Backup/Restore/Integrity
+- Provide commands (IPC + UI) for:
+  - Backup export (checkpoint WAL, then copy file) and restore.
+  - Integrity check: `PRAGMA integrity_check;`
+  - Compact DB: `VACUUM;`
+
+Testing and environment overrides
+- Never write tests against the production DB path.
+- Support `HIVE_DB_PATH` env var to override the DB location for tests and tooling.
+- Our test scripts use a local `electron-poc/hive-ai.db` for isolation.
+
+Tables used by Welcome
+- `settings` — key/value for: `welcome.showOnStartup`, `welcome.lastSeenVersion`, `welcome.tourSeen`, `welcome.layoutMode`.
+- `recent_folders` — structured recents with `folder_path`, `last_opened`, `tab_count`.
+- `sessions` — stores folder session tabs and active tab for restoration.
+- `welcome_analytics` — event logging for feature usage (e.g., `click_recent`, `clone_success`, `dismissed`).

@@ -52,16 +52,24 @@ let mainWindow: BrowserWindow | null = null;
 
 // Initialize SQLite database connection - use the existing hive-ai.db
 const initDatabase = () => {
-  // Use the actual Hive database location
-  const dbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
+  // Use override path for tests if provided, else default to ~/.hive/hive-ai.db
+  const overridePath = process.env.HIVE_DB_PATH;
+  const defaultHiveDir = path.join(os.homedir(), '.hive');
+  const dbPath = overridePath || path.join(defaultHiveDir, 'hive-ai.db');
   
-  // Create .hive directory if it doesn't exist
-  const hiveDir = path.join(os.homedir(), '.hive');
+  // Create parent directory if it doesn't exist
+  const hiveDir = path.dirname(dbPath);
   if (!fs.existsSync(hiveDir)) {
     fs.mkdirSync(hiveDir, { recursive: true });
   }
   
   db = new Database(dbPath);
+  
+  // Apply recommended PRAGMAs
+  db.exec('PRAGMA foreign_keys=ON;');
+  db.exec('PRAGMA journal_mode=WAL;');
+  db.exec('PRAGMA synchronous=NORMAL;');
+  db.exec('PRAGMA busy_timeout=5000;');
   
   // The database already exists with proper schema
   // Just ensure the configurations table exists (matching Rust implementation)
@@ -178,6 +186,13 @@ const initDatabase = () => {
           ON consensus_iterations(stage_name, model_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_consensus_iterations_datetime 
           ON consensus_iterations(datetime)`);
+
+  // Welcome analytics table
+  db.run(`CREATE TABLE IF NOT EXISTS welcome_analytics (
+    id INTEGER PRIMARY KEY,
+    action TEXT NOT NULL,
+    timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
 };
 
 // Toggle to switch between implementations
@@ -842,6 +857,39 @@ const registerGitHandlers = () => {
       logger.error('[Git] Failed to get submodule status:', error);
       return `Error: ${error}`;
     }
+  });
+
+  // Welcome analytics logging
+  ipcMain.handle('db-welcome-analytics-log', async (_, action: string) => {
+    return new Promise((resolve, reject) => {
+      if (!db) { reject('Database not initialized'); return; }
+      db.run('INSERT INTO welcome_analytics (action, timestamp) VALUES (?, CURRENT_TIMESTAMP)', [action], (err) => {
+        if (err) {
+          logger.error('[WelcomeAnalytics] Failed to log action:', action, err);
+          reject(err);
+        } else {
+          resolve({ success: true });
+        }
+      });
+    });
+  });
+
+  // DB maintenance helpers
+  ipcMain.handle('db-compact', async () => {
+    return new Promise((resolve, reject) => {
+      if (!db) { reject('Database not initialized'); return; }
+      db.run('VACUUM', [], (err) => {
+        if (err) reject(err); else resolve({ success: true });
+      });
+    });
+  });
+  ipcMain.handle('db-integrity-check', async () => {
+    return new Promise((resolve, reject) => {
+      if (!db) { reject('Database not initialized'); return; }
+      db.get('PRAGMA integrity_check', [], (err, row: any) => {
+        if (err) reject(err); else resolve({ result: row ? Object.values(row)[0] : 'unknown' });
+      });
+    });
   });
   
   // Get submodule diff

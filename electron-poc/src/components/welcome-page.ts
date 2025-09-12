@@ -1,6 +1,7 @@
 export class WelcomePage {
   private container: HTMLElement;
   private recentItems: Array<{path: string, name: string, type: 'file' | 'folder', lastOpened?: Date}> = [];
+  private hasRestorableSession: boolean = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -186,7 +187,7 @@ export class WelcomePage {
             </label>
           </div>
           <div class="footer-right">
-            ${hasRecentItems ? '<button class="footer-btn" id="restore-session-btn">Restore Session</button>' : ''}
+            <button class="footer-btn" id="restore-session-btn" style="display:none">Restore Session</button>
             <button class="footer-btn" id="open-recent-btn">Open Recent ▾</button>
             <button class="footer-btn" id="show-all-recents-btn">Show All…</button>
             <button class="footer-btn" id="clear-recents-btn">Clear</button>
@@ -202,6 +203,9 @@ export class WelcomePage {
     this.enableDragAndDrop();
     await this.loadPreferences();
     await this.updateWhatsNewBadge();
+    await this.computeRestoreSessionAvailability();
+    this.updateRestoreButtonVisibility();
+    await this.maybeShowBasicsTourPrompt();
   }
 
   private getStyles(): string {
@@ -578,6 +582,7 @@ export class WelcomePage {
         const target = e.currentTarget as HTMLElement;
         const path = target.dataset.path;
         if (path) {
+          try { (window as any).databaseAPI?.logWelcomeAction?.('click_recent'); } catch {}
           this.openRecentFolder(path);
         }
       });
@@ -585,14 +590,17 @@ export class WelcomePage {
 
     // Learn column actions
     document.getElementById('shortcuts-btn')?.addEventListener('click', () => {
+      try { (window as any).databaseAPI?.logWelcomeAction?.('open_shortcuts'); } catch {}
       this.showShortcuts();
     });
 
     document.getElementById('workflows-btn')?.addEventListener('click', () => {
+      try { (window as any).databaseAPI?.logWelcomeAction?.('open_workflows'); } catch {}
       this.showWorkflows();
     });
 
     document.getElementById('whats-new-btn')?.addEventListener('click', () => {
+      try { (window as any).databaseAPI?.logWelcomeAction?.('open_whats_new'); } catch {}
       this.showWhatsNew();
       // Mark current version as seen to clear badge
       (async () => {
@@ -639,6 +647,7 @@ export class WelcomePage {
 
     // Show All recents modal
     document.getElementById('show-all-recents-btn')?.addEventListener('click', () => {
+      try { (window as any).databaseAPI?.logWelcomeAction?.('open_recents_modal'); } catch {}
       this.showAllRecentsModal();
     });
 
@@ -650,6 +659,7 @@ export class WelcomePage {
         }
         this.recentItems = [];
         this.render();
+        try { (window as any).databaseAPI?.logWelcomeAction?.('clear_recents'); } catch {}
       } catch (err) {
         console.error('Failed to clear recent folders:', err);
       }
@@ -659,6 +669,7 @@ export class WelcomePage {
     document.getElementById('restore-session-btn')?.addEventListener('click', () => {
       if (this.recentItems.length > 0) {
         const p = this.recentItems[0].path;
+        try { (window as any).databaseAPI?.logWelcomeAction?.('restore_session'); } catch {}
         this.openRecentFolder(p);
       }
     });
@@ -852,6 +863,20 @@ export class WelcomePage {
       // On error, hide badge
       const badge = document.getElementById('whats-new-badge') as HTMLElement;
       if (badge) badge.style.display = 'none';
+    }
+  }
+
+  private async computeRestoreSessionAvailability() {
+    try {
+      if (this.recentItems.length > 0 && (window as any).databaseAPI?.loadSession) {
+        const first = this.recentItems[0].path;
+        const session = await (window as any).databaseAPI.loadSession(first);
+        this.hasRestorableSession = !!(session && session.tabs && session.tabs.length > 0);
+      } else {
+        this.hasRestorableSession = false;
+      }
+    } catch {
+      this.hasRestorableSession = false;
     }
   }
 
@@ -1073,5 +1098,39 @@ export class WelcomePage {
     };
     dropzone.addEventListener('drop', handleDrop);
     root.addEventListener('drop', handleDrop);
+  }
+
+  private updateRestoreButtonVisibility() {
+    const btn = document.getElementById('restore-session-btn') as HTMLElement;
+    if (!btn) return;
+    btn.style.display = this.hasRestorableSession ? 'inline-block' : 'none';
+  }
+
+  private async maybeShowBasicsTourPrompt() {
+    try {
+      const seen = await window.databaseAPI.getSetting('welcome.tourSeen');
+      if (seen === '1') return;
+    } catch {}
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '1500';
+    const modal = document.createElement('div');
+    modal.style.width = '520px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '18vh auto'; modal.style.padding = '16px';
+    modal.innerHTML = `
+      <div style="font-weight:600; margin-bottom:4px">Welcome to Hive Consensus</div>
+      <div style="color:#bcbcbc; margin-bottom:12px">Quick tour of basics? You can always find docs later under Help.</div>
+      <div style="display:flex; gap:8px; justify-content:flex-end">
+        <button class="footer-btn" id="tour-skip">Skip</button>
+        <button class="footer-btn" id="tour-start">Start Tour</button>
+      </div>
+    `;
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    const done = async () => { try { await window.databaseAPI.setSetting('welcome.tourSeen', '1'); } catch {}; document.body.removeChild(overlay); };
+    (modal.querySelector('#tour-skip') as HTMLElement)?.addEventListener('click', done);
+    (modal.querySelector('#tour-start') as HTMLElement)?.addEventListener('click', () => {
+      const event = new CustomEvent('showDocumentation', { detail: { section: 'getting-started' } });
+      window.dispatchEvent(event);
+      done();
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) done(); });
   }
 }

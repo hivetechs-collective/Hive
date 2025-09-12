@@ -299,7 +299,11 @@ contextBridge.exposeInMainWorld('databaseAPI', {
     ipcRenderer.invoke('db-remove-recent-folder', folderPath)
   ,
   clearRecentFolders: () => 
-    ipcRenderer.invoke('db-clear-recent-folders')
+    ipcRenderer.invoke('db-clear-recent-folders'),
+  // Welcome analytics and DB maintenance
+  logWelcomeAction: (action: string) => ipcRenderer.invoke('db-welcome-analytics-log', action),
+  compact: () => ipcRenderer.invoke('db-compact'),
+  integrityCheck: () => ipcRenderer.invoke('db-integrity-check')
 });
 
 // Terminal API
