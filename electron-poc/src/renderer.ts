@@ -1812,6 +1812,11 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
           const tokensVal = data.totalTokens || 0;
           const costVal = data.totalCost || 0;
           saveConsensusAnalytics(tokensVal, costVal, convId);
+          // If Analytics panel is visible, refresh it
+          const analyticsPanel = document.getElementById('analytics-panel');
+          if (analyticsPanel && analyticsPanel.style.display !== 'none') {
+            try { (window as any).analyticsDashboard?.refresh?.(); } catch {}
+          }
         } catch (e) {
           console.error('Failed to persist analytics on consensus-complete:', e);
         }

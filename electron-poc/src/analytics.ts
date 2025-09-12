@@ -113,6 +113,11 @@ export class AnalyticsDashboard {
     }
   }
 
+  // Public refresh API for external triggers (e.g., on consensus-complete)
+  public async refresh(): Promise<void> {
+    await this.fetchAnalyticsData();
+  }
+
   private async fetchAnalyticsData(): Promise<void> {
     try {
       console.log('Fetching analytics data...');
