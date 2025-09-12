@@ -128,23 +128,11 @@ export class AnalyticsDashboard {
       console.log('ElectronAPI available:', !!electronAPI);
       
       if (electronAPI && electronAPI.getAnalytics) {
-        console.log('Calling getAnalytics (RO)...');
-        let analyticsData = await electronAPI.getAnalytics(this.period);
-        console.log('Analytics data received (RO):', analyticsData);
-        
-        // Fallback to legacy channel if RO returns null
-        if (!analyticsData && (window as any).api?.invoke) {
-          console.log('RO analytics null; falling back to legacy get-analytics');
-          try {
-            analyticsData = await (window as any).api.invoke('get-analytics');
-            console.log('Analytics data received (legacy):', analyticsData);
-          } catch (e) {
-            console.error('Legacy analytics fetch failed:', e);
-          }
-        }
-
+        console.log('Calling getAnalytics...');
+        const analyticsData = await electronAPI.getAnalytics();
+        console.log('Analytics data received:', analyticsData);
         if (analyticsData) {
-          this.data = analyticsData;
+          this.data = this.processConsensusMetrics(analyticsData);
           this.updateDashboard();
           return;
         }

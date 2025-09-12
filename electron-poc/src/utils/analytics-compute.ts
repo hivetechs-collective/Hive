@@ -24,16 +24,19 @@ export async function computeAnalytics(db: Database, userId: string | '*' = '*',
 
     // Determine time window for the selected period
     const now = new Date();
-    const periodHours = period === '24h' ? 24 : period === '7d' ? 7 * 24 : 30 * 24;
-    const windowStartISO = new Date(now.getTime() - periodHours * 3600_000).toISOString();
+    const windowClause = period === '24h'
+      ? `timestamp >= datetime('now','-24 hours')`
+      : period === '7d'
+      ? `timestamp >= datetime('now','-7 days')`
+      : `timestamp >= datetime('now','-30 days')`;
 
     // Queries in selected period
     const userFilter = userId === '*' ? '' : ' AND user_id = ? ';
     const userParams: any[] = userId === '*' ? [] : [userId];
 
     db.get(
-      `SELECT COUNT(*) as count FROM conversation_usage WHERE timestamp >= ? ${userFilter}`,
-      [windowStartISO, ...userParams],
+      `SELECT COUNT(*) as count FROM conversation_usage WHERE ${windowClause} ${userFilter}`,
+      userParams,
       (err1, row1: any) => {
         result.todayQueries = row1?.count || 0;
 
@@ -47,8 +50,8 @@ export async function computeAnalytics(db: Database, userId: string | '*' = '*',
              FROM conversations c
              INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
              LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-             WHERE cu.timestamp >= ? ${userFilter}`,
-            [windowStartISO, ...userParams],
+             WHERE ${windowClause} ${userFilter}`,
+            userParams,
             (err2, row2: any) => {
               result.todayCost = row2?.total_cost || 0;
               result.todayAvgResponseTime = row2?.avg_time || 0;
@@ -109,22 +112,22 @@ export async function computeAnalytics(db: Database, userId: string | '*' = '*',
 
                           // Hourly stats last 24h
                           const hourly: any[] = [];
-                          const now = new Date();
-                          const next = (i: number) => {
+                  const now = new Date();
+                  const next = (i: number) => {
                             if (i < 0) {
                               result.hourlyStats = hourly;
                               resolve(result as AnalyticsResult);
                               return;
                             }
-                            const start = new Date(now.getTime() - (i + 1) * 3600_000).toISOString();
-                            const end = new Date(now.getTime() - i * 3600_000).toISOString();
+                            const startISO = new Date(now.getTime() - (i + 1) * 3600_000).toISOString();
+                            const endISO = new Date(now.getTime() - i * 3600_000).toISOString();
                             db.get(
                               `SELECT COUNT(DISTINCT cu.conversation_id) as queries, SUM(c.total_cost) as cost, AVG(pm.total_duration / 1000.0) as avg_time
                                FROM conversation_usage cu
                                LEFT JOIN conversations c ON c.id = cu.conversation_id
                                LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-                               WHERE cu.timestamp >= ? AND cu.timestamp < ? ${userFilter}`,
-                              [start, end, ...userParams],
+                               WHERE datetime(cu.timestamp) >= datetime(?) AND datetime(cu.timestamp) < datetime(?) ${userFilter}`,
+                              [startISO, endISO, ...userParams],
                               (err6, row6: any) => {
                                 const hourLabel = new Date(start).getHours().toString().padStart(2, '0') + ':00';
                                 hourly.push({ hour: hourLabel, queries: row6?.queries || 0, cost: row6?.cost || 0, avgTime: row6?.avg_time || 0 });

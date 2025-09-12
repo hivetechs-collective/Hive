@@ -3141,8 +3141,9 @@ function showAnalyticsPanel(): void {
     // Show analytics panel
     analyticsPanel.style.display = 'block';
     
-    // Mount the analytics dashboard
+    // Mount and expose the analytics dashboard for global refreshes
     analyticsDashboard.mount(analyticsPanel);
+    (window as any).analyticsDashboard = analyticsDashboard;
     
     // Add Analytics tab if it doesn't exist
     const tabsContainer = document.querySelector('.editor-tabs');
