@@ -2699,45 +2699,41 @@ The application uses a sophisticated panel management system to handle multiple 
 2. **Right Panels**: Terminal, Consensus (right side)
 3. **Center Panels**: Editor tabs, Welcome, Documentation, Settings, Analytics, Memory, CLI Tools
 
-**Visibility Rules**:
-- Only one center panel visible at a time
-- Side panels operate independently
-- Special panels (Welcome, Documentation, Settings) have dedicated handlers
-- Regular center panels use tab-based system with close buttons
+**Visibility Rules (Centralized Controller)**:
+- Exactly one center panel is visible at a time (Welcome, Help, Settings, Analytics, Memory, CLI Tools).
+- Side panels (Explorer/Git) are independent of center panels.
+- All show/hide logic is centralized to eliminate overlap bugs.
 
-**Toggle Behavior**:
+**Centralized Center Panel Controller (v1.9)**
+We replaced ad-hoc `style.display` toggling with a single state controller and a pure state machine:
+
 ```typescript
-// Welcome button toggles (not just opens)
-if (view === 'welcome') {
-  const isVisible = welcomePanel.style.display === 'block';
-  if (isVisible) {
-    welcomePanel.style.display = 'none';
-    button.classList.remove('active');
-  } else {
-    // Hide other panels and show welcome
-    welcomePanel.style.display = 'block';
-    button.classList.add('active');
-  }
+type CenterView = 'welcome' | 'help' | 'settings' | 'memory' | 'cli-tools' | 'analytics';
+let currentCenterView: CenterView | null = 'welcome';
+let lastCenterView: CenterView | null = null;
+
+function hideAllCenterPanels() {
+  // Hides welcome, help, settings, memory, cli-tools, analytics and any .content-panel/.panel-content
 }
 
-// Documentation uses similar toggle pattern
-if (view === 'documentation') {
-  const isVisible = helpPanel.style.display === 'block';
-  helpPanel.style.display = isVisible ? 'none' : 'block';
-  // Update active states
+function setCenterView(view: CenterView | null, opts?: { section?: string }) {
+  // Toggle rule: clicking the active view closes it and restores last view; if none, falls back to Welcome.
+  // Welcome is the base view; toggling Welcome off is a no-op.
+  // Internally hides all center panels, then shows the requested one and updates button states.
 }
 ```
 
-**Dedicated Handlers for Special Panels**:
-- **Welcome**: Toggles with home icon, hides all other center panels
-- **Documentation**: Toggles with document icon, can overlay other panels
-- **Settings**: Ensures visibility regardless of other panel states
+Pure state machine: `src/utils/panel-state.ts` (`nextStateOnToggle`) with tests in `tests/panel-state.test.ts` ensures deterministic transitions and fewer regressions.
 
-**Tab System for Regular Panels**:
-- Analytics, Memory Service, CLI Tools use tabs
-- Each tab has a close button (×)
-- Tabs persist until explicitly closed
-- Multiple tabs can exist but only one visible
+**Dedicated Handlers** (called by controller):
+- `showWelcomePage()` — mounts Welcome and hides others via controller.
+- `showHelpPanel(section)` — mounts Help and navigates to section.
+- `showSettingsPanel()` — renders Settings once and shows panel.
+- `showMemoryPanel()` — opens Memory Dashboard.
+- `showCliToolsPanel()` — renders AI CLI Tools panel.
+- `showAnalyticsPanel()` — mounts Analytics dashboard.
+
+Buttons map to views via `data-view` → `setCenterView(...)`. Explorer/Git still use `toggleSidebarPanel(...)` and are independent.
 
 ##### Activity Bar Icons (v1.8.289)
 
@@ -2950,7 +2946,7 @@ private sections: HelpSection[] = [
 3. **Open Recent dropdown**: Quick top 10 with Clear and Remove
 4. **DB‑backed**: Persistent preferences and recent folders in `~/.hive/hive-ai.db`
 5. **What’s New badge**: Shown only on version change; cleared on open
-6. **Drag‑and‑drop**: Drop a folder to open (visible dropzone in Start)
+6. Drag‑and‑drop: Removed for macOS UX simplicity (no dropzone)
 7. **Continuity**: Restore last session (tabs + active tab) when available
 8. **Shortcuts modal**: In‑app quick cheat sheet; link to full docs
 
@@ -2999,6 +2995,36 @@ CREATE TABLE IF NOT EXISTS welcome_analytics (
 4. **Phase 4 — Layout & analytics**
    - Layout modes: minimal/balanced/full via `welcome.layoutMode`
    - `welcome_analytics` event logging: `click_recent`, `clone_success`, `clone_fail`, `open_shortcuts`, `open_recents_modal`, `clear_recents`, `restore_session`, etc.
+
+### Layout Modes
+- `minimal`: Focus on Recent (80%) + Start (20%), hide Learn.
+- `balanced`: Recent (70%), Start (15%), Learn (15%).
+- `full`: Recent (60%), Start (20%), Learn (20%).
+Stored as `welcome.layoutMode` in settings. UI toggle cycles modes and persists immediately.
+
+### Welcome v1.9 Feature Matrix
+- Start actions: New Project (template scaffold + git init), Open Folder, Clone Repository (URL/GitHub tabs), Open Terminal.
+- Recents: 20 inline; Open Recent ▾ (top 10 + remove); Show All modal (search, Open, Restore, Terminal, Remove); Clear.
+- Learn: Keyboard Shortcuts (inline modal), AI Workflows, What’s New (version-aware badge; clears when opened).
+- Drag-and-drop: Removed (no Start dropzone).
+- Recents source of truth: merge structured `recent_folders` table with legacy `recent.folders` JSON key; de-duplicate by `folder_path`, prefer most recent `last_opened`, then sort desc and limit to 20.
+- Layout toggle applies regardless of recents presence (persisted under `welcome.layoutMode`).
+- Continuity: Restore Session button when the most recent folder has saved tabs.
+- Layout selector: Minimal/Balanced/Full toggle in footer.
+- Analytics: Welcome actions logged to `welcome_analytics` for UX telemetry (see DB section).
+
+### Persisted Keys (Welcome)
+- `welcome.showOnStartup` — '1'|'0'
+- `welcome.layoutMode` — 'minimal'|'balanced'|'full'
+- `welcome.lastSeenVersion` — string (compared to app version)
+- `welcome.tourSeen` — '1' once the Basics Tour is dismissed/started
+
+### Analytics Events (Welcome)
+Stored in `welcome_analytics (id, action, timestamp)`
+- `click_recent`, `open_recents_modal`, `clear_recents`, `restore_session`
+- `open_shortcuts`, `open_workflows`, `open_whats_new`
+- `layout_toggle_minimal|balanced|full`
+- `clone_success`, `clone_fail`
 
 ### Layout Modes
 - `minimal`: Focus on Recent (80%) + Start (20%), hide Learn.
@@ -16799,6 +16825,45 @@ Testing and environment overrides
 - Our test scripts use a local `electron-poc/hive-ai.db` for isolation.
 
 Tables used by Welcome
+
+## Backup & Restore (Production)
+
+### Goals
+- One-click manual backups; safe, consistent snapshots.
+- Automatic backups (On Exit, Daily, Weekly) with retention and user folder selection.
+- Optional encryption and compression for cloud-friendly backups.
+- Simple restore with integrity check and password prompt (if encrypted).
+
+### Operations & IPC
+- Backup: `db-backup` (opts: `{ destPath, password?, compress? }`) → WAL checkpoint + `VACUUM INTO` → optional gzip → optional AES‑256‑GCM encryption.
+- Restore: `db-restore` (opts: `{ srcPath, password? }`) → detect type → decrypt/decompress → integrity_check → replace DB and reinit.
+- Integrity: `db-integrity-check` → `PRAGMA integrity_check` result.
+- Compact: `db-compact` → `VACUUM`.
+- List backups: `list-backups` (reads configured folder; returns name, path, size, mtime).
+- Delete backup: `delete-backup`.
+- Reveal/Open: `reveal-in-folder`, `open-path`.
+
+### File formats
+- Plain: `*.sqlite`
+- Compressed: `*.sqlite.gz`
+- Encrypted: header `HIVEENC1` + salt + iv + tag + ciphertext (sqlite payload)
+- Encrypted+Compressed: header `HIVEENC2` + salt + iv + tag + ciphertext (gzip payload)
+
+### Settings (Backup)
+- `backup.autoEnabled` — '1'|'0'
+- `backup.frequency` — 'manual'|'on-exit'|'daily'|'weekly'
+- `backup.retentionCount` — number (default 7)
+- `backup.dir` — backup folder (user-selected; cloud-friendly)
+- `backup.alwaysEncrypt` — '1'|'0' (default OFF)
+- `backup.alwaysCompress` — '1'|'0' (default OFF)
+- `backup.lastBackupAt` — ISO timestamp of last completed backup
+- `backup.reminderDays` — number of days (default 7)
+- `backup.snoozeUntil` — ISO timestamp to snooze backup reminders
+
+### UX
+- Settings > Advanced: Backup/Restore/Integrity/Compact; Auto backup controls; Always encrypt/compress; Reminder interval; View Backups (manager).
+- Reminder (when disabled): Enable Auto Backup / Backup Now / Remind Me Later (snooze) / Dismiss.
+- View Backups: list, search filter, reveal, restore, delete, open backup folder.
 - `settings` — key/value for: `welcome.showOnStartup`, `welcome.lastSeenVersion`, `welcome.tourSeen`, `welcome.layoutMode`.
 - `recent_folders` — structured recents with `folder_path`, `last_opened`, `tab_count`.
 - `sessions` — stores folder session tabs and active tab for restoration.

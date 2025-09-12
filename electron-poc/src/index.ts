@@ -1123,7 +1123,7 @@ const registerDialogHandlers = () => {
       const dir = dirSetting && dirSetting.trim() !== '' ? dirSetting : getBackupDir();
       if (!fs.existsSync(dir)) return [];
       const entries = fs.readdirSync(dir)
-        .filter(f => f.endsWith('.sqlite'))
+        .filter(f => f.endsWith('.sqlite') || f.endsWith('.sqlite.gz'))
         .map(f => {
           const p = path.join(dir, f);
           const s = fs.statSync(p);

@@ -5,7 +5,6 @@ export class WelcomePage {
   private recentItems: Array<{path: string, name: string, type: 'file' | 'folder', lastOpened?: Date}> = [];
   private hasRestorableSession: boolean = false;
   private currentLayoutMode: LayoutMode = 'balanced';
-  private hasRestorableSession: boolean = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -13,47 +12,63 @@ export class WelcomePage {
   }
 
   private async loadRecentItems() {
-    // Load recent folders from database
+    // Load recent folders from both structured table and legacy JSON, then merge
     try {
-      if (window.databaseAPI) {
-        // Try structured recent_folders table first
-        try {
-          const api: any = window.databaseAPI as any;
-          if (api.getRecentFolders) {
-            const rows = await api.getRecentFolders();
-            if (Array.isArray(rows)) {
-              this.recentItems = rows.map((row: any) => ({
-                path: row.folder_path,
-                name: (row.folder_path || '').split('/').pop() || row.folder_path,
-                type: 'folder' as const,
-                lastOpened: row.last_opened ? new Date(row.last_opened) : undefined
-              }));
-              return;
+      if (!window.databaseAPI) {
+        this.recentItems = [];
+        return;
+      }
+
+      const mergedMap = new Map<string, { path: string; name: string; type: 'file' | 'folder'; lastOpened?: Date }>();
+
+      // Structured: recent_folders table
+      try {
+        const api: any = window.databaseAPI as any;
+        if (api.getRecentFolders) {
+          const rows = await api.getRecentFolders();
+          if (Array.isArray(rows)) {
+            for (const row of rows) {
+              const p = row.folder_path as string;
+              const n = (p || '').split('/').pop() || p;
+              const lo = row.last_opened ? new Date(row.last_opened) : undefined;
+              mergedMap.set(p, { path: p, name: n, type: 'folder', lastOpened: lo });
             }
           }
-        } catch (e) {
-          console.warn('[Welcome] Structured recent folders failed, falling back:', e);
         }
-        // Get recent folders from database
+      } catch (e) {
+        console.warn('[Welcome] Structured recent folders failed, will merge with legacy:', e);
+      }
+
+      // Legacy JSON: settings key recent.folders
+      try {
         const recentFoldersJson = await window.databaseAPI.getSetting('recent.folders');
         if (recentFoldersJson) {
-          const recentFolders = JSON.parse(recentFoldersJson);
-          this.recentItems = recentFolders
-            .filter((item: any) => item.path && (item.name || item.path))
-            .slice(0, 20) // Limit to 20 most recent (per architecture spec)
-            .map((item: any) => ({
-              path: item.path,
-              name: item.name || item.path.split('/').pop(),
-              type: 'folder' as const,
-              lastOpened: item.lastOpened ? new Date(item.lastOpened) : undefined
-            }));
-        } else {
-          this.recentItems = [];
+          const list = JSON.parse(recentFoldersJson);
+          if (Array.isArray(list)) {
+            for (const item of list) {
+              if (!item || !item.path) continue;
+              const p = String(item.path);
+              const n = item.name || p.split('/').pop() || p;
+              const lo = item.lastOpened ? new Date(item.lastOpened) : undefined;
+              const existing = mergedMap.get(p);
+              // Prefer the most recent lastOpened across sources
+              const newer = (!existing?.lastOpened || (lo && lo > (existing.lastOpened as Date))) ? lo : existing?.lastOpened;
+              mergedMap.set(p, { path: p, name: n, type: 'folder', lastOpened: newer });
+            }
+          }
         }
-      } else {
-        // Fallback to empty if database not available
-        this.recentItems = [];
+      } catch (e) {
+        console.warn('[Welcome] Legacy recent.folders load failed:', e);
       }
+
+      // Build sorted list by lastOpened desc (undefined at end), limit 20
+      const all = Array.from(mergedMap.values());
+      all.sort((a, b) => {
+        const at = a.lastOpened ? a.lastOpened.getTime() : 0;
+        const bt = b.lastOpened ? b.lastOpened.getTime() : 0;
+        return bt - at;
+      });
+      this.recentItems = all.slice(0, 20);
     } catch (error) {
       console.error('Failed to load recent folders:', error);
       this.recentItems = [];
@@ -61,6 +76,8 @@ export class WelcomePage {
   }
 
   async render() {
+    // Ensure recents are loaded before rendering UI
+    await this.loadRecentItems();
     // Add styles
     const existingStyle = document.getElementById('welcome-page-styles');
     if (!existingStyle) {
@@ -70,9 +87,18 @@ export class WelcomePage {
       document.head.appendChild(style);
     }
 
-    // Determine layout based on recent items and layout mode
-    const hasRecentItems = this.recentItems.length > 0;
-    const layout = computeLayout(this.currentLayoutMode, hasRecentItems);
+    // Load persisted layout mode before computing layout
+    try {
+      if ((window as any).databaseAPI?.getSetting) {
+        const modeVal = await (window as any).databaseAPI.getSetting('welcome.layoutMode');
+        if (modeVal === 'minimal' || modeVal === 'balanced' || modeVal === 'full') {
+          this.currentLayoutMode = modeVal;
+        }
+      }
+    } catch {}
+
+    // Determine layout based on current mode. Apply layout regardless of recents to make toggle visible
+    const layout = computeLayout(this.currentLayoutMode, true);
     const startColumnWidth = layout.startWidth;
     const recentColumnWidth = layout.recentWidth;
     const learnColumnWidth = layout.learnWidth;
@@ -122,10 +148,6 @@ export class WelcomePage {
                 </svg>
                 <span>Getting Started</span>
               </button>
-              <div class="dropzone" id="welcome-dropzone">
-                <div class="dropzone-icon">📁</div>
-                <div class="dropzone-text">Drop a folder to open</div>
-              </div>
             </div>
           </div>
 
@@ -207,7 +229,6 @@ export class WelcomePage {
     `;
 
     this.attachEventListeners();
-    this.enableDragAndDrop();
     await this.loadPreferences();
     await this.updateWhatsNewBadge();
     await this.computeRestoreSessionAvailability();
@@ -471,34 +492,7 @@ export class WelcomePage {
         color: #999; border: none; background: transparent; cursor: pointer;
       }
 
-      /* Drag-and-drop dropzone */
-      .dropzone {
-        margin-top: 12px;
-        padding: 14px;
-        border: 1px dashed #3a3a3a;
-        border-radius: 6px;
-        text-align: center;
-        color: #9aa0a6;
-        background: rgba(255,255,255,0.02);
-        transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
-        user-select: none;
-      }
-      .dropzone:hover {
-        border-color: #4a4a4d;
-        color: #bcbcbc;
-      }
-      .dropzone.dragover {
-        border-color: #FFC107;
-        background: rgba(255,193,7,0.08);
-        color: #ffd777;
-      }
-      .dropzone-icon {
-        font-size: 18px;
-        margin-bottom: 6px;
-      }
-      .dropzone-text {
-        font-size: 12px;
-      }
+      /* Drag-and-drop dropzone removed intentionally */
 
       .checkbox-container {
         display: flex;
@@ -572,9 +566,22 @@ export class WelcomePage {
     document.getElementById('open-terminal-btn')?.addEventListener('click', async () => {
       try {
         const result = await (window as any).electronAPI.showOpenDialog({ properties: ['openDirectory'] });
-        if (!result.canceled && result.filePaths.length > 0) {
-          const id = `term-${Date.now()}`;
-          await (window as any).terminalAPI?.createTerminalProcess?.({ terminalId: id, cwd: result.filePaths[0] });
+        if (result && !result.canceled && result.filePaths && result.filePaths[0]) {
+          const cwd = result.filePaths[0];
+          // Set current folder context for terminal panel
+          (window as any).currentOpenedFolder = cwd;
+          // Hide welcome and expand terminal panel if available
+          const hideEvt = new CustomEvent('close-welcome');
+          window.dispatchEvent(hideEvt);
+          try { (window as any).expandTTYDTerminal?.(); } catch {}
+          // Prefer creating a terminal tab via TTYD panel so UI shows immediately
+          if ((window as any).isolatedTerminal && (window as any).isolatedTerminal.createTerminalTab) {
+            await (window as any).isolatedTerminal.createTerminalTab();
+          } else {
+            // Fallback: create process directly
+            const id = `term-${Date.now()}`;
+            await (window as any).terminalAPI?.createTerminalProcess?.({ terminalId: id, cwd });
+          }
         }
       } catch (e) { console.error('Failed to open terminal:', e); }
     });
@@ -801,8 +808,15 @@ export class WelcomePage {
         const p = (e.currentTarget as HTMLElement).getAttribute('data-terminal');
         if (!p) return;
         try {
-          const id = `term-${Date.now()}`;
-          await (window as any).terminalAPI?.createTerminalProcess?.({ terminalId: id, cwd: p, command: undefined });
+          // Set context and show terminal panel
+          (window as any).currentOpenedFolder = p;
+          try { (window as any).expandTTYDTerminal?.(); } catch {}
+          if ((window as any).isolatedTerminal?.createTerminalTab) {
+            await (window as any).isolatedTerminal.createTerminalTab();
+          } else {
+            const id = `term-${Date.now()}`;
+            await (window as any).terminalAPI?.createTerminalProcess?.({ terminalId: id, cwd: p, command: undefined });
+          }
         } catch (err) { console.error('Failed to open terminal:', err); }
       }));
 
@@ -842,14 +856,12 @@ export class WelcomePage {
   }
 
   private async loadPreferences() {
-    const checkbox = this.container.querySelector('#show-on-startup') as HTMLInputElement;
-    if (!checkbox) return;
-    
     try {
       if (window.databaseAPI) {
         const value = await window.databaseAPI.getSetting('welcome.showOnStartup');
         const showOnStartup = !value || value !== '0';
-        checkbox.checked = showOnStartup;
+        const checkbox = this.container.querySelector('#show-on-startup') as HTMLInputElement;
+        if (checkbox) checkbox.checked = showOnStartup;
         // Load layout mode preference
         const modeVal = await window.databaseAPI.getSetting('welcome.layoutMode');
         const m = (modeVal as any) as string | null;
@@ -861,7 +873,8 @@ export class WelcomePage {
       }
     } catch (error) {
       console.error('Failed to load welcome preferences:', error);
-      checkbox.checked = true;
+      const checkbox = this.container.querySelector('#show-on-startup') as HTMLInputElement;
+      if (checkbox) checkbox.checked = true;
       this.currentLayoutMode = 'balanced';
     }
   }
@@ -1113,15 +1126,13 @@ export class WelcomePage {
   }
 
   private showWorkflows() {
-    console.log('Showing AI workflows...');
-    // Show internal documentation
+    // Open Help panel to the AI Workflows section
     const event = new CustomEvent('showDocumentation', { detail: { section: 'ai-workflows' } });
     window.dispatchEvent(event);
   }
 
   private showWhatsNew() {
-    console.log('Showing what\'s new...');
-    // Show internal documentation
+    // Open Help panel to the What's New section
     const event = new CustomEvent('showDocumentation', { detail: { section: 'whats-new' } });
     window.dispatchEvent(event);
   }
@@ -1201,31 +1212,7 @@ export class WelcomePage {
     overlay.addEventListener('click', (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
   }
   
-  // Enable drag-and-drop to open a folder quickly
-  private enableDragAndDrop() {
-    const root = this.container.querySelector('.welcome-page') as HTMLElement;
-    const dropzone = this.container.querySelector('#welcome-dropzone') as HTMLElement;
-    if (!root || !dropzone) return;
-
-    const stop = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
-    ['dragenter','dragover','dragleave','drop'].forEach(type => root.addEventListener(type, stop));
-
-    // Visual highlight
-    const add = () => dropzone.classList.add('dragover');
-    const remove = () => dropzone.classList.remove('dragover');
-    ['dragenter','dragover'].forEach(t => root.addEventListener(t, add));
-    ['dragleave','drop'].forEach(t => root.addEventListener(t, remove));
-
-    const handleDrop = (e: DragEvent) => {
-      if (!e.dataTransfer) return;
-      const file = e.dataTransfer.files?.[0];
-      if (!file) return;
-      const path = (file as any).path as string;
-      if (path) this.openRecentFolder(path);
-    };
-    dropzone.addEventListener('drop', handleDrop);
-    root.addEventListener('drop', handleDrop);
-  }
+  // Drag-and-drop to open folders removed by design
 
   private updateRestoreButtonVisibility() {
     const btn = document.getElementById('restore-session-btn') as HTMLElement;

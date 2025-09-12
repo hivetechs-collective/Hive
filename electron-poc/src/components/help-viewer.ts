@@ -116,6 +116,65 @@ export class HelpViewer {
       `
     },
     {
+      id: 'ai-workflows',
+      title: 'AI Workflows',
+      icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v2H2zM2 7h8v2H2zM2 11h12v2H2z"/></svg>`,
+      content: `
+        <h2>AI Workflows for Developers</h2>
+        <p>Use these fast, repeatable workflows to accelerate common dev tasks.</p>
+
+        <h3>Code Navigation</h3>
+        <div class="code-block">
+          <div class="code-header">Quickly locate code and context</div>
+          <pre><code>"Open the repo and list key modules"
+"Summarize the architecture from MASTER_ARCHITECTURE.md"
+"Find all usages of fetchProjectConfig()"</code></pre>
+        </div>
+
+        <h3>Bug Triaging</h3>
+        <div class="code-block">
+          <div class="code-header">Drive from symptom to root cause</div>
+          <pre><code>"Search logs for the error signature"
+"Trace the error path through the code"
+"Suggest a minimal safe fix with tests"</code></pre>
+        </div>
+
+        <h3>Refactor & Tests</h3>
+        <div class="code-block">
+          <div class="code-header">Iterate safely</div>
+          <pre><code>"Propose a refactor plan for X"
+"Add focused tests around Y"
+"Show diff-only patch for review"</code></pre>
+        </div>
+
+        <h3>Memory & DB</h3>
+        <p>Tell your AI tool to read: <code>~/.MEMORY.md</code> for unified memory and <code>~/.hive-ai.db</code> for direct queries.</p>
+      `
+    },
+    {
+      id: 'whats-new',
+      title: "What's New",
+      icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4 4 .5-3 3 .8 4.5L8 11l-3.8 2 1-4.5-3-3L6 5z"/></svg>`,
+      content: `
+        <h2>Hive v1.8.345 — Highlights</h2>
+        <ul>
+          <li>Welcome v1.9: Recents UX, templates, clone (URL/GitHub/GitLab), layout modes.</li>
+          <li>Session restore and one-time Basics Tour prompt.</li>
+          <li>Unified SQLite DB with WAL, integrity check, and analytics logging.</li>
+          <li>Backup/Restore with encryption (AES-256-GCM), compression, retention, and reminders.</li>
+          <li>Settings visibility fix when switching panels.</li>
+        </ul>
+
+        <h3>Quick Actions</h3>
+        <div class="code-block">
+          <div class="code-header">Explore the new features</div>
+          <pre><code>Open Welcome → Try New Project (template)
+Open Welcome → Clone Repository (GitHub tab)
+Settings → Advanced → View Backups</code></pre>
+        </div>
+      `
+    },
+    {
       id: 'memory-query',
       title: 'Memory Query',
       icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">

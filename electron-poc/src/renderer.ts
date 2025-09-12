@@ -3116,10 +3116,12 @@ function showAnalyticsPanel(): void {
     const helpPanel = document.getElementById('help-panel');
     const memoryPanel = document.getElementById('memory-panel');
     const cliToolsPanel = document.getElementById('cli-tools-panel');
+    const settingsPanel = document.getElementById('settings-panel');
     if (welcomePanel) welcomePanel.style.display = 'none';
     if (helpPanel) helpPanel.style.display = 'none';
     if (memoryPanel) memoryPanel.style.display = 'none';
     if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+    if (settingsPanel) settingsPanel.style.display = 'none';
     
     // Show analytics panel
     analyticsPanel.style.display = 'block';
@@ -3194,6 +3196,126 @@ function hideAnalyticsPanel(): void {
 /**
  * Show the welcome page
  */
+function hideAllCenterPanels(): void {
+    const welcomePanel = document.getElementById('welcome-panel');
+    const helpPanel = document.getElementById('help-panel');
+    const analyticsPanel = document.getElementById('analytics-panel');
+    const memoryPanel = document.getElementById('memory-panel');
+    const cliToolsPanel = document.getElementById('cli-tools-panel');
+    const settingsPanel = document.getElementById('settings-panel');
+
+    if (welcomePanel) welcomePanel.style.display = 'none';
+    if (helpPanel) helpPanel.style.display = 'none';
+    if (analyticsPanel) analyticsPanel.style.display = 'none';
+    if (memoryPanel) memoryPanel.style.display = 'none';
+    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+    if (settingsPanel) settingsPanel.style.display = 'none';
+
+    // Best-effort: hide any dynamically created content panels
+    document.querySelectorAll('.content-panel, .panel-content').forEach(el => {
+        (el as HTMLElement).style.display = 'none';
+    });
+}
+
+// Centralized center view state
+type CenterView = 'welcome' | 'help' | 'settings' | 'memory' | 'cli-tools' | 'analytics';
+let currentCenterView: CenterView | null = 'welcome';
+let lastCenterView: CenterView | null = null;
+
+function updateActivityBarActive(view: CenterView | null) {
+    // Clear active from center panel buttons (keep Explorer/Git independent)
+    document.querySelectorAll('.activity-btn').forEach(btn => {
+        const v = btn.getAttribute('data-view');
+        if (v && v !== 'explorer' && v !== 'git') {
+            btn.classList.remove('active');
+        }
+    });
+    if (!view) return;
+    const dataView = view === 'help' ? 'documentation' : view;
+    const btn = document.querySelector(`.activity-btn[data-view="${dataView}"]`);
+    if (btn) btn.classList.add('active');
+}
+
+async function showSettingsPanel(): Promise<void> {
+    const settingsPanel = document.getElementById('settings-panel');
+    if (!settingsPanel) return;
+    settingsPanel.style.display = 'block';
+    const container = document.getElementById('settings-container');
+    if (container && settingsModal) {
+        if (container.innerHTML.trim() === '') {
+            settingsModal.renderInContainer(container);
+            setTimeout(() => {
+                const profileBtn = document.getElementById('create-profile');
+                if (profileBtn) {
+                    profileBtn.onclick = () => settingsModal!.showProfileCreationModal();
+                }
+            }, 100);
+        }
+    }
+}
+
+function showCliToolsPanel(): void {
+    const cliPanel = document.getElementById('cli-tools-panel');
+    if (cliPanel) {
+        cliPanel.style.display = 'block';
+        renderCliToolsPanel();
+    }
+}
+
+function showMemoryPanel(): void {
+    const memoryPanel = document.getElementById('memory-panel');
+    if (memoryPanel) {
+        memoryPanel.style.display = 'block';
+        openMemoryDashboard();
+    }
+}
+
+function setCenterView(view: CenterView | null, opts?: { section?: string }) {
+    // Toggle off → return to last view or Welcome (Welcome is base; do nothing if no fallback)
+    if (view !== null && currentCenterView === view) {
+        const fallback: CenterView | null = (lastCenterView && lastCenterView !== currentCenterView) ? lastCenterView : (view === 'welcome' ? null : 'welcome');
+        if (fallback) setCenterView(fallback, opts);
+        return;
+    }
+
+    if (view === null) {
+        const fallback: CenterView | null = (lastCenterView && lastCenterView !== currentCenterView) ? lastCenterView : (currentCenterView === 'welcome' ? null : 'welcome');
+        if (fallback && currentCenterView !== fallback) {
+            setCenterView(fallback, opts);
+        }
+        return;
+    }
+
+    // Transition
+    hideAllCenterPanels();
+    const prev = currentCenterView;
+
+    switch (view) {
+        case 'welcome':
+            showWelcomePage();
+            break;
+        case 'help':
+            showHelpPanel(opts?.section || 'getting-started');
+            break;
+        case 'settings':
+            void showSettingsPanel();
+            break;
+        case 'memory':
+            showMemoryPanel();
+            break;
+        case 'cli-tools':
+            showCliToolsPanel();
+            break;
+        case 'analytics':
+            showAnalyticsPanel();
+            break;
+    }
+
+    lastCenterView = prev;
+    currentCenterView = view;
+    updateActivityBarActive(view);
+}
+
 function showWelcomePage(): void {
     const welcomePanel = document.getElementById('welcome-panel');
     const helpPanel = document.getElementById('help-panel');
@@ -3204,13 +3326,8 @@ function showWelcomePage(): void {
         return;
     }
     
-    // Hide all other panels
-    const memoryPanel = document.getElementById('memory-panel');
-    const cliToolsPanel = document.getElementById('cli-tools-panel');
-    if (helpPanel) helpPanel.style.display = 'none';
-    if (analyticsPanel) analyticsPanel.style.display = 'none';
-    if (memoryPanel) memoryPanel.style.display = 'none';
-    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+    // Hide all other panels (including settings)
+    hideAllCenterPanels();
     
     // Show welcome panel
     welcomePanel.style.display = 'block';
@@ -3258,13 +3375,8 @@ function showHelpPanel(section?: string): void {
         return;
     }
     
-    // Hide all other panels
-    const memoryPanel = document.getElementById('memory-panel');
-    const cliToolsPanel = document.getElementById('cli-tools-panel');
-    if (welcomePanel) welcomePanel.style.display = 'none';
-    if (analyticsPanel) analyticsPanel.style.display = 'none';
-    if (memoryPanel) memoryPanel.style.display = 'none';
-    if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+    // Hide all other panels first
+    hideAllCenterPanels();
     
     // Show help panel
     helpPanel.style.display = 'block';
@@ -5369,211 +5481,27 @@ setTimeout(() => {
         btn.addEventListener('click', () => {
             const view = btn.getAttribute('data-view');
             if (!view) return;
-            
-            // Handle sidebar views (Explorer, Git) separately from center panels
+
             if (view === 'explorer' || view === 'git') {
-                // For Explorer and Git, toggle the sidebar panel only
-                if (currentView === view) {
-                    // Already active, toggle off
-                    toggleSidebarPanel(view as 'explorer' | 'git');
-                    btn.classList.remove('active');
-                    currentView = null;
-                } else {
-                    // Not active, toggle on
-                    // Remove active from all buttons first
-                    activityButtons.forEach(b => b.classList.remove('active'));
-                    // Hide all center panels (don't interfere with sidebar)
-                    Object.values(panels).forEach(p => {
-                        if (p) p.style.display = 'none';
-                    });
-                    
-                    toggleSidebarPanel(view as 'explorer' | 'git');
-                    btn.classList.add('active');
-                    currentView = view;
-                }
-                return; // Exit early for sidebar panels
-            }
-            
-            // Handle welcome button - toggles the welcome page
-            if (view === 'welcome') {
-                const welcomePanel = document.getElementById('welcome-panel');
-                if (welcomePanel) {
-                    // Check if already visible
-                    const isVisible = welcomePanel.style.display === 'block';
-                    
-                    if (isVisible) {
-                        // Hide welcome panel using the hide function
-                        hideWelcomePage();
-                        btn.classList.remove('active');
-                        currentView = null;
-                    } else {
-                        // Show welcome panel using the show function which creates/renders the WelcomePage
-                        showWelcomePage();
-                        
-                        // Update button states
-                        activityButtons.forEach(b => {
-                            if (b.getAttribute('data-view') !== 'explorer' && b.getAttribute('data-view') !== 'git') {
-                                b.classList.remove('active');
-                            }
-                        });
-                        btn.classList.add('active');
-                        currentView = 'welcome';
-                    }
-                }
+                toggleSidebarPanel(view as 'explorer' | 'git');
                 return;
             }
-            
-            // Handle documentation button specially - it toggles the help panel
-            if (view === 'documentation') {
-                const helpPanel = document.getElementById('help-panel');
-                if (helpPanel) {
-                    if (helpPanel.style.display === 'none') {
-                        // Show documentation
-                        showHelpPanel('getting-started');
-                        btn.classList.add('active');
-                    } else {
-                        // Hide documentation
-                        hideHelpPanel();
-                        btn.classList.remove('active');
-                        // Show welcome panel
-                        const welcomePanel = document.getElementById('welcome-panel');
-                        if (welcomePanel) {
-                            welcomePanel.style.display = 'block';
-                        }
-                    }
-                }
-                return;
-            }
-            
-            // Handle settings button specially to ensure consistent visibility
-            if (view === 'settings') {
-                const settingsPanel = panels.settings || document.getElementById('settings-panel');
-                if (settingsPanel) {
-                    // Hide all other panels first
-                    const helpPanel = document.getElementById('help-panel');
-                    const welcomePanel = document.getElementById('welcome-panel');
-                    const analyticsPanel = document.getElementById('analytics-panel');
-                    const memoryPanel = document.getElementById('memory-panel');
-                    const cliToolsPanel = document.getElementById('cli-tools-panel');
-                    
-                    if (settingsPanel.style.display === 'none') {
-                        // Hide all other panels
-                        if (helpPanel) helpPanel.style.display = 'none';
-                        if (welcomePanel) welcomePanel.style.display = 'none';
-                        if (analyticsPanel) analyticsPanel.style.display = 'none';
-                        if (memoryPanel) memoryPanel.style.display = 'none';
-                        if (cliToolsPanel) cliToolsPanel.style.display = 'none';
-                        
-                        // Show settings
-                        settingsPanel.style.display = 'block';
-                        btn.classList.add('active');
-                        
-                        // Initialize settings if needed
-                        const container = document.getElementById('settings-container');
-                        if (container && settingsModal) {
-                            if (container.innerHTML.trim() === '') {
-                                settingsModal.renderInContainer(container);
-                                // Ensure profile button works after rendering
-                                setTimeout(() => {
-                                    const profileBtn = document.getElementById('create-profile');
-                                    if (profileBtn) {
-                                        profileBtn.onclick = () => {
-                                            console.log('Profile button clicked via direct handler');
-                                            settingsModal.showProfileCreationModal();
-                                        };
-                                    }
-                                }, 100);
-                            }
-                        }
-                    } else {
-                        // Hide settings
-                        settingsPanel.style.display = 'none';
-                        btn.classList.remove('active');
-                        // Show welcome panel
-                        if (welcomePanel) {
-                            welcomePanel.style.display = 'block';
-                        }
-                    }
-                    
-                    // Remove active from other buttons
-                    activityButtons.forEach(b => {
-                        if (b !== btn && b.getAttribute('data-view') !== 'explorer' && b.getAttribute('data-view') !== 'git') {
-                            b.classList.remove('active');
-                        }
-                    });
-                }
-                return;
-            }
-            
-            // Handle center panels (Analytics, Memory, CLI Tools)
-            if (currentView === view) {
-                const panel = panels[view];
-                if (panel) {
-                    if (panel.style.display === 'none') {
-                        panel.style.display = 'block';
-                        btn.classList.add('active');
-                    } else {
-                        panel.style.display = 'none';
-                        btn.classList.remove('active');
-                        currentView = null;
-                        return;
-                    }
-                }
-            } else {
-                // Hide all center panels
-                Object.values(panels).forEach(p => {
-                    if (p) p.style.display = 'none';
-                });
-                
-                // Remove active from all buttons
-                activityButtons.forEach(b => b.classList.remove('active'));
-                
-                // Show selected center panel
-                const panel = panels[view];
-                if (panel) {
-                    console.log('Showing center panel for view:', view, panel);
-                    panel.style.display = 'block';
-                    btn.classList.add('active');
-                    currentView = view;
-                    
-                    // Handle special panel initialization
-                    if (view === 'settings') {
-                        console.log('Rendering settings panel...');
-                        const container = document.getElementById('settings-container');
-                        if (container && settingsModal) {
-                            // Check if container is empty (not yet rendered)
-                            if (container.innerHTML.trim() === '') {
-                                console.log('Rendering settings in container:', container);
-                                settingsModal.renderInContainer(container);
-                                // Ensure profile button works after rendering
-                                setTimeout(() => {
-                                    const profileBtn = document.getElementById('create-profile');
-                                    if (profileBtn) {
-                                        profileBtn.onclick = () => {
-                                            console.log('Profile button clicked via direct handler');
-                                            settingsModal.showProfileCreationModal();
-                                        };
-                                    }
-                                }, 100);
-                            } else {
-                                console.log('Settings already rendered in container');
-                            }
-                        } else if (!settingsModal) {
-                            console.error('Settings modal not initialized');
-                        } else {
-                            console.error('Settings container not found');
-                        }
-                    } else if (view === 'analytics' && analyticsPanel) {
-                        showAnalyticsPanel();
-                    } else if (view === 'cli-tools') {
-                        console.log('Opening CLI Tools panel...');
-                        renderCliToolsPanel();
-                    } else if (view === 'memory') {
-                        console.log('Opening Memory Dashboard...');
-                        openMemoryDashboard();
-                    }
-                }
-            }
+
+            // Map data-view values to center views
+            const mapping: { [k: string]: CenterView } = {
+                'welcome': 'welcome',
+                'documentation': 'help',
+                'settings': 'settings',
+                'memory': 'memory',
+                'cli-tools': 'cli-tools',
+                'analytics': 'analytics'
+            };
+            const target = mapping[view];
+            if (!target) return;
+
+            // For documentation default to getting-started
+            const opts = target === 'help' ? { section: 'getting-started' } : undefined;
+            setCenterView(target, opts as any);
         });
     });
     
@@ -6194,6 +6122,50 @@ window.cloneRepository = async () => {
 
 // Testing Git modification indicator
 
+// Override cloneRepository with functional implementation (kept after initial assignment to ensure latest)
+window.cloneRepository = async () => {
+    try {
+        const repoUrl = await window.electronAPI.showInputDialog('Clone Repository', 'Enter repository URL (https/ssh):');
+        if (!repoUrl) return;
+        
+        const result = await window.electronAPI.showOpenDialog({
+            properties: ['openDirectory', 'createDirectory'],
+            title: 'Select destination folder for clone'
+        });
+        if (result.canceled || result.filePaths.length === 0) return;
+        const parentDir = result.filePaths[0];
+        
+        const notice = document.createElement('div');
+        notice.className = 'status-toast cloning';
+        notice.textContent = 'Cloning repository...';
+        document.body.appendChild(notice);
+        
+        const cloneResult = await (window as any).gitAPI.clone(repoUrl, parentDir);
+        
+        notice.remove();
+        
+        if (!cloneResult || !cloneResult.success) {
+            await window.electronAPI.showMessageBox({
+                type: 'error',
+                title: 'Clone Failed',
+                message: cloneResult?.error || 'Clone failed'
+            });
+            return;
+        }
+        
+        const destPath: string = cloneResult.destination;
+        console.log('[Clone] Completed. Opening folder:', destPath);
+        handleOpenFolder(destPath);
+    } catch (error) {
+        console.error('Failed to clone repository:', error);
+        await window.electronAPI.showMessageBox({
+            type: 'error',
+            title: 'Clone Error',
+            message: (error as any)?.message || String(error)
+        });
+    }
+};
+
 
 // ========== HELP MODAL FUNCTIONS ==========
 function showGettingStartedModal() {
@@ -6736,27 +6708,34 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
 async function saveRecentFolder(folderPath: string) {
     try {
         if (!window.databaseAPI) return;
-        
-        // Get existing recent folders
-        const recentJson = await window.databaseAPI.getSetting('recent.folders');
-        let recentFolders = recentJson ? JSON.parse(recentJson) : [];
-        
-        // Remove if already exists (to move to top)
-        recentFolders = recentFolders.filter((item: any) => item.path !== folderPath);
-        
-        // Add to top
-        const folderName = folderPath.split('/').pop() || folderPath;
-        recentFolders.unshift({
-            path: folderPath,
-            name: folderName,
-            lastOpened: new Date().toISOString()
-        });
-        
-        // Keep only 20 most recent
-        recentFolders = recentFolders.slice(0, 20);
-        
-        // Save back to database
-        await window.databaseAPI.setSetting('recent.folders', JSON.stringify(recentFolders));
+
+        // Prefer structured table for recents
+        try {
+            if (window.databaseAPI.addRecentFolder) {
+                await window.databaseAPI.addRecentFolder(folderPath, 0);
+            }
+        } catch (e) {
+            console.warn('[Recent] addRecentFolder failed, falling back to settings:', e);
+        }
+
+        // Also maintain legacy JSON for backward compatibility
+        try {
+            const recentJson = await window.databaseAPI.getSetting('recent.folders');
+            let recentFolders = recentJson ? JSON.parse(recentJson) : [];
+            // Remove if already exists (to move to top)
+            recentFolders = recentFolders.filter((item: any) => item.path !== folderPath);
+            // Add to top
+            const folderName = folderPath.split('/').pop() || folderPath;
+            recentFolders.unshift({
+                path: folderPath,
+                name: folderName,
+                lastOpened: new Date().toISOString()
+            });
+            // Keep only 20 most recent
+            recentFolders = recentFolders.slice(0, 20);
+            await window.databaseAPI.setSetting('recent.folders', JSON.stringify(recentFolders));
+        } catch {}
+
         console.log('[Recent] Saved folder to recent:', folderPath);
     } catch (error) {
         console.error('[Recent] Failed to save recent folder:', error);
@@ -6862,18 +6841,7 @@ window.addEventListener('showExplorerWithDialog', async () => {
 window.addEventListener('showDocumentation', (event: any) => {
     const section = event.detail?.section || 'getting-started';
     console.log(`[Welcome] Opening documentation section: ${section}`);
-    
-    // Hide welcome page
-    hideWelcomePage();
-    
-    // Show help panel with the requested section
-    showHelpPanel(section);
-    
-    // Activate documentation button
-    const docBtn = document.querySelector('[data-view="documentation"]') as HTMLElement;
-    if (docBtn) {
-        docBtn.classList.add('active');
-    }
+    setCenterView('help', { section });
 });
 // Ensure editor view is visible and overlays are hidden before opening a file
 function openFileAndFocusEditor(filePath: string) {
