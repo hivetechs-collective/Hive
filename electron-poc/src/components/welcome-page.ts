@@ -1,6 +1,10 @@
+import { computeLayout, LayoutMode } from '../utils/welcome-layout';
+
 export class WelcomePage {
   private container: HTMLElement;
   private recentItems: Array<{path: string, name: string, type: 'file' | 'folder', lastOpened?: Date}> = [];
+  private hasRestorableSession: boolean = false;
+  private currentLayoutMode: LayoutMode = 'balanced';
   private hasRestorableSession: boolean = false;
 
   constructor(container: HTMLElement) {
@@ -66,10 +70,12 @@ export class WelcomePage {
       document.head.appendChild(style);
     }
 
-    // Determine layout based on recent items
+    // Determine layout based on recent items and layout mode
     const hasRecentItems = this.recentItems.length > 0;
-    const recentColumnWidth = hasRecentItems ? '70%' : '33.33%';
-    const sideColumnWidth = hasRecentItems ? '15%' : '33.33%';
+    const layout = computeLayout(this.currentLayoutMode, hasRecentItems);
+    const startColumnWidth = layout.startWidth;
+    const recentColumnWidth = layout.recentWidth;
+    const learnColumnWidth = layout.learnWidth;
 
     this.container.innerHTML = `
       <div class="welcome-page">
@@ -83,7 +89,7 @@ export class WelcomePage {
         </div>
 
         <div class="welcome-columns">
-          <div class="welcome-column start-column" style="width: ${sideColumnWidth}">
+          <div class="welcome-column start-column" style="width: ${startColumnWidth}">
             <h2 class="column-title">START</h2>
             <div class="column-content">
                 <button class="action-item" id="new-project-btn">
@@ -148,7 +154,7 @@ export class WelcomePage {
             </div>
           </div>
 
-          <div class="welcome-column learn-column" style="width: ${sideColumnWidth}">
+          <div class="welcome-column learn-column" style="width: ${learnColumnWidth}; ${layout.showLearn ? '' : 'display:none;'}">
             <h2 class="column-title">LEARN</h2>
             <div class="column-content">
               <button class="action-item" id="shortcuts-btn">
@@ -191,6 +197,7 @@ export class WelcomePage {
             <button class="footer-btn" id="open-recent-btn">Open Recent ▾</button>
             <button class="footer-btn" id="show-all-recents-btn">Show All…</button>
             <button class="footer-btn" id="clear-recents-btn">Clear</button>
+            <button class="footer-btn" id="layout-toggle-btn">Layout: ${this.currentLayoutMode[0].toUpperCase()}${this.currentLayoutMode.slice(1)}</button>
           </div>
         </div>
 
@@ -673,6 +680,24 @@ export class WelcomePage {
         this.openRecentFolder(p);
       }
     });
+
+    // Toggle layout mode
+    document.getElementById('layout-toggle-btn')?.addEventListener('click', async () => {
+      const next = this.nextLayoutMode(this.currentLayoutMode);
+      this.currentLayoutMode = next;
+      try {
+        await (window as any).databaseAPI?.setSetting('welcome.layoutMode', next);
+        (window as any).databaseAPI?.logWelcomeAction?.(`layout_toggle_${next}`);
+      } catch {}
+      // Re-render welcome to apply new widths/visibility
+      this.render();
+    });
+  }
+
+  private nextLayoutMode(m: LayoutMode): LayoutMode {
+    if (m === 'minimal') return 'balanced';
+    if (m === 'balanced') return 'full';
+    return 'minimal';
   }
 
   private renderRecentPopover() {
@@ -825,10 +850,19 @@ export class WelcomePage {
         const value = await window.databaseAPI.getSetting('welcome.showOnStartup');
         const showOnStartup = !value || value !== '0';
         checkbox.checked = showOnStartup;
+        // Load layout mode preference
+        const modeVal = await window.databaseAPI.getSetting('welcome.layoutMode');
+        const m = (modeVal as any) as string | null;
+        if (m === 'minimal' || m === 'balanced' || m === 'full') {
+          this.currentLayoutMode = m;
+        } else {
+          this.currentLayoutMode = 'balanced';
+        }
       }
     } catch (error) {
       console.error('Failed to load welcome preferences:', error);
       checkbox.checked = true;
+      this.currentLayoutMode = 'balanced';
     }
   }
 
@@ -1062,10 +1096,12 @@ export class WelcomePage {
           const cloneResult = await (window as any).gitAPI.clone(url, parentDir);
           notice.remove();
           if (!cloneResult || !cloneResult.success) {
+            try { (window as any).databaseAPI?.logWelcomeAction?.('clone_fail'); } catch {}
             await (window as any).electronAPI.showMessageBox({ type: 'error', title: 'Clone Failed', message: cloneResult?.error || 'Clone failed' });
             return;
           }
           const destPath = cloneResult.destination;
+          try { (window as any).databaseAPI?.logWelcomeAction?.('clone_success'); } catch {}
           this.openRecentFolder(destPath);
           document.body.removeChild(overlay);
         } catch (e) { notice.remove(); throw e; }

@@ -863,14 +863,14 @@ const registerGitHandlers = () => {
   ipcMain.handle('db-welcome-analytics-log', async (_, action: string) => {
     return new Promise((resolve, reject) => {
       if (!db) { reject('Database not initialized'); return; }
-      db.run('INSERT INTO welcome_analytics (action, timestamp) VALUES (?, CURRENT_TIMESTAMP)', [action], (err) => {
-        if (err) {
-          logger.error('[WelcomeAnalytics] Failed to log action:', action, err);
-          reject(err);
-        } else {
-          resolve({ success: true });
-        }
-      });
+      try {
+        const safeAction = String(action || '').replace(/'/g, "''");
+        db!.exec(`INSERT INTO welcome_analytics (action, timestamp) VALUES ('${safeAction}', CURRENT_TIMESTAMP);`);
+        resolve({ success: true });
+      } catch (err) {
+        logger.error('[WelcomeAnalytics] Failed to log action', { action, error: err });
+        reject(err);
+      }
     });
   });
 
@@ -878,7 +878,7 @@ const registerGitHandlers = () => {
   ipcMain.handle('db-compact', async () => {
     return new Promise((resolve, reject) => {
       if (!db) { reject('Database not initialized'); return; }
-      db.run('VACUUM', [], (err) => {
+      db.run('VACUUM', (err) => {
         if (err) reject(err); else resolve({ success: true });
       });
     });
@@ -886,7 +886,7 @@ const registerGitHandlers = () => {
   ipcMain.handle('db-integrity-check', async () => {
     return new Promise((resolve, reject) => {
       if (!db) { reject('Database not initialized'); return; }
-      db.get('PRAGMA integrity_check', [], (err, row: any) => {
+      db.get('PRAGMA integrity_check', (err, row: any) => {
         if (err) reject(err); else resolve({ result: row ? Object.values(row)[0] : 'unknown' });
       });
     });
