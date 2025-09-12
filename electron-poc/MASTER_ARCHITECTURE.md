@@ -18,6 +18,7 @@
 15. [CLI Tools Management](#cli-tools-management)
 16. [AI Tools Launch Tracking & Database](#ai-tools-launch-tracking--database)
 17. [Future Enhancements](#future-enhancements)
+18. [Architecture Diagrams](#architecture-diagrams)
 
 ---
 
@@ -2297,6 +2298,37 @@ Help Menu (Simplified v1.8.289)
 - Tab click/close events
 - Drag & drop support (planned)
 
+#### Production Layout v1.8.340 (Editor & Panels)
+
+To guarantee the editor is always visible and sized correctly in production, the center area follows a strict DOM and CSS contract:
+
+Structure (in `src/renderer.ts` and `src/editor-tabs.ts`):
+- `#editor-area` (center content root)
+- `.editor-tabs-wrapper` (tab bar; 35px fixed height)
+- `.editor-tabs-bar` (scrollable tab strip inside wrapper)
+- `.editors-container` (fills remaining height below tab bar)
+- `.editor-container` (one per open tab; positioned to fill container)
+
+Key CSS rules (in `src/index.css`):
+- `#editor-area { display: flex; flex-direction: column; min-height: 0; position: relative; z-index: 2; }`
+- `.editor-tabs-wrapper { height: 35px; }`
+- `.editors-container { flex: 1 1 auto; min-height: 0; position: relative; height: calc(100% - 35px); }`
+- `.editor-container { position: absolute; top:0; left:0; right:0; bottom:0; width:100%; height:100%; }`
+
+Overlay management when opening files:
+- Center overlays use `.panel-content` (Welcome, Help/Docs, Analytics, Memory, CLI tools).
+- When opening a file (via Explorer or SCM), the renderer hides all `.panel-content`, ensures `#editor-area` is `display:block`, and expands `#center-area` if collapsed.
+- Implementation: `openFileAndFocusEditor(filePath)` helper centralizes this logic; all file opens call it.
+
+Why this design:
+- Prevents the editor from being obscured by center overlays.
+- Explicit height on `.editors-container` avoids zero-height flex regressions during future UI changes.
+- Z-index on `#editor-area` keeps the editor above any stray elements.
+
+SCM and Explorer integration:
+- Explorer `onFileSelect` and SCM open actions route through `openFileAndFocusEditor()` to guarantee visibility and focus.
+- Editor creation triggers a layout pass (`editor.layout()` on activation) to avoid black content issues.
+
 ### Component Hierarchy
 ```
 App Root (renderer.ts)
@@ -2649,6 +2681,15 @@ Recommended minimum: 1400px for all panels visible
 ```
 
 ##### Panel Visibility Management (v1.8.289)
+
+##### Editor Visibility Regression & Fix (v1.8.340)
+- Symptom: Files opened from Explorer/SCM created editors successfully but content remained invisible.
+- Root cause: Editors container had computed height 0 due to overlay stacking and missing explicit height.
+- Fixes applied:
+  - Added explicit height to `.editors-container` (`calc(100% - 35px)` below tab bar).
+  - Centralized overlay hiding + center expansion in a single helper during file opens.
+  - Ensured `#editor-area` has higher stacking context (`z-index: 2`).
+- Result: Files and SCM diffs open with visible editor content; Source Control commit list and Explorer interactions remain unaffected.
 
 **Overview**
 The application uses a sophisticated panel management system to handle multiple overlapping panels in the center area while maintaining proper visibility and toggle states.
@@ -6901,22 +6942,28 @@ npm run make
 5. **Automate Build Verification**: Catch issues before users see them
 6. **Monitor First Launch**: Most issues appear on first run from Finder
 
-**Production Build Commands Summary**:
+**Canonical Build (Recommended — Single Command)**
 ```bash
-# Complete production build and test
-npm run verify-build      # Run all tests and checks
-npm run make:production   # Build DMG with verification
-npm run test:dmg         # Test the built DMG
-
-# Quick rebuild for testing
-npm run make             # Just build DMG
-open out/make/*.dmg      # Install and test manually
-
-# Release process
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin v1.0.0
-# CI/CD builds and uploads automatically
+# Full, verified, dependency-safe build + DMG + auto-install
+npm run build:complete
 ```
+
+What it does (high level):
+- Verifies structure and tools, cleans artifacts, bundles binaries (ttyd/git/node)
+- Installs deps, rebuilds native modules for Electron, prepares Python runtime
+- Runs verifications (modules/types/paths), builds via webpack, packages DMG
+- Mounts DMG and auto-installs app to `/Applications`
+
+Outputs and logs:
+- DMG: `electron-poc/out/make/Hive Consensus.dmg`
+- Installed app: `/Applications/Hive Consensus.app`
+- Live log: `/tmp/hive-build-progress.log` (Terminal window tails this)
+- Build logs: `electron-poc/build-logs/`
+
+Notes:
+- Phase 11/17 (Application Build) is the longest — webpack + packaging; expect several minutes.
+- Use only `npm run build:complete` for release builds to ensure all dependencies are correctly handled.
+- Dev-only alternatives exist but skip verification steps — not for releases.
 
 #### Optimized Dynamic Port Architecture (Revolutionary Design)
 
@@ -7223,16 +7270,28 @@ BACKEND_SERVER_PORTS=21000-21100
 - Analytics on port usage patterns
 - Multi-instance support with unique ports
 
-### Build System
+### Build System (Canonical)
 ```bash
-# Development
-npm start           # Electron Forge dev server
-
-# Production
-npm run premake     # Build Memory Service
-npm run package     # Package for current platform
-npm run make       # Create distributables
+# The only supported way to build releases
+npm run build:complete
 ```
+
+Why this command only:
+- Ensures binary bundling (ttyd, git, node) happens before webpack
+- Rebuilds native modules to match the exact Electron ABI
+- Prepares and verifies the Python runtime
+- Runs module/type/path verification before packaging
+- Creates the DMG and auto-installs to `/Applications` for a clean test
+
+Developer shortcuts (not for releases):
+```bash
+npm start          # Dev run via Electron Forge
+npm run build      # Webpack only (no packaging/verification)
+```
+
+Timing and expectations:
+- Phase 11/17 “Application Build” is the heaviest step (webpack + forge packaging). Expect 2–5 minutes depending on cache/state.
+- Progress appears in a Terminal tail of `/tmp/hive-build-progress.log` and in `build-logs/current-status.json`.
 
 ### Configuration Files
 ```
@@ -16448,3 +16507,238 @@ AI tools need explicit SQLite commands:
 - **v1.8.274**: Fixed symlink creation logic to handle empty files
 - **v1.8.273**: Moved symlink creation from launch to installation
 - **v1.8.267**: Fixed database initialization race conditions
+
+---
+
+## Architecture Diagrams
+
+This section provides visual diagrams (with simple ASCII fallbacks) to give a holistic overview of Hive’s production architecture. Diagrams avoid hardcoded ports and reflect the zero‑fallback, IPC‑first design.
+
+<a id="diagram-system-overview"></a>
+### 1) System Overview (Processes & Data Flow)
+
+```mermaid
+flowchart LR
+  subgraph Renderer[Renderer (UI)]
+    R1[Chat/Consensus UI]
+    R2[File Explorer]
+    R3[Editor Tabs]
+    R4[Git UI]
+    R5[Memory Dashboard]
+    R6[Settings/Analytics]
+  end
+
+  subgraph Main[Electron Main]
+    PM[ProcessManager]
+    POR[PortManager]
+    DB[(SQLite ~/.hive/hive-ai.db)]
+    DCE[DirectConsensusEngine]
+    IPC[IPC Handlers]
+  end
+
+  subgraph Services[Child Processes]
+    MS[Memory Service (Node)]
+    T1[TTYD Terminal 1]
+    Tn[TTYD Terminal N]
+  end
+
+  OR[OpenRouter API]
+  D1[(Cloudflare D1 Sync)]
+
+  R1 -- IPC --> IPC
+  R2 -- IPC --> IPC
+  R3 -- IPC --> IPC
+  R4 -- IPC --> IPC
+  R5 -- IPC --> IPC
+  R6 -- IPC --> IPC
+
+  IPC --> PM
+  PM --- POR
+  PM -. spawn with env(PORT) .-> MS
+  PM -. spawn/assign .-> T1
+  PM -. spawn/assign .-> Tn
+  DCE -. http(s) .-> OR
+  DB <-. sync .-> D1
+
+  R5 <-. http/ws on dynamic port .-> MS
+  note right of R5: Renderer discovers service port via IPC
+```
+
+ASCII fallback
+
+```
+[Renderer] --IPC--> [Main: IPC/ProcessManager/PortManager/DB/DirectConsensus]
+   |                                          |
+   |                                          +-- spawn(env PORT) --> [Memory Service]
+   |                                          +-- spawn(assign) -----> [TTYD Terminals]
+   |                                          +-- D1 sync ----------- [Cloudflare D1]
+   +-- HTTP/WS (dynamic, via IPC discovery) --> [Memory Service]
+Main/DirectConsensus -- HTTP(S) --> OpenRouter API
+```
+
+<a id="diagram-startup-sequence"></a>
+### 2) Startup Sequence (No Timeouts, Event‑Driven)
+
+```mermaid
+sequenceDiagram
+  participant SO as StartupOrchestrator
+  participant POR as PortManager
+  participant PM as ProcessManager
+  participant MS as Memory Service
+  participant UI as Splash/Renderer
+
+  SO->>POR: initialize() (pre-scan ranges, build pools)
+  POR-->>SO: scan complete
+  SO->>PM: initialize + register configs/handlers
+  SO->>PM: start(memory-service)
+  PM->>POR: allocatePortForService("memory-service")
+  POR-->>PM: port (from pool or ephemeral)
+  PM->>MS: spawn with env PORT
+  MS-->>PM: IPC { type: 'ready', port }
+  PM-->>SO: process:progress {ready, port}
+  SO-->>UI: update progress UI (neural animation)
+  SO->>UI: transition to main window when complete
+```
+
+ASCII fallback
+
+```
+StartupOrchestrator -> PortManager: pre-scan
+PortManager -> StartupOrchestrator: pools ready
+StartupOrchestrator -> ProcessManager: init + start(memory-service)
+ProcessManager -> PortManager: allocate
+PortManager -> ProcessManager: port
+ProcessManager -> MemoryService: spawn with env(PORT)
+MemoryService -> ProcessManager: ready(port)
+ProcessManager -> StartupOrchestrator: progress(ready, port)
+StartupOrchestrator -> UI: update + transition
+```
+
+<a id="diagram-dynamic-port-allocation"></a>
+### 3) Dynamic Port Allocation (Zero‑Fallback)
+
+```mermaid
+flowchart TD
+  A[initialize()] --> B[discover ranges or seed defaults on timeout]
+  B --> C[parallel scan: build available pools]
+  C --> D[allocatePortForService(name)]
+  D -->|pool has port| E[pop + double-check availability]
+  D -->|pool empty| F[get ephemeral port from OS]
+  E --> G[record allocation for service]
+  F --> G
+  G --> H[spawn child with env PORT]
+  H --> I[service runs]
+  I -->|exit/crash| J[releasePort(name) + cleanup]
+  J --> C
+```
+
+ASCII fallback
+
+```
+pre-scan -> pools -> allocate(name)
+  -> pool hit => assign
+  -> pool miss => ephemeral
+spawn child with env(PORT)
+on exit => release allocation
+```
+
+<a id="diagram-consensus-pipeline"></a>
+### 4) Consensus Pipeline (Iterative, Profile‑Driven)
+
+```mermaid
+flowchart LR
+  UQ[User Question] --> CTX[Retrieve Context + Memories]
+  CTX --> GEN[Generator]
+  GEN --> REF[Refiner]
+  REF --> VAL[Validator]
+  VAL --> CC{Consensus Achieved?}
+  CC -- YES --> CUR[Curator]
+  CC -- NO  --> NEXT[Another Iteration]
+  NEXT --> GEN
+  CUR --> OUT[Final Answer]
+  OUT --> LOG[(consensus_iterations rows per stage/round)]
+```
+
+Notes
+- Models and prices resolved from DB profiles and model tables.
+- Each stage logs tokens/costs; flags record “NO” votes.
+
+<a id="diagram-data-model"></a>
+### 5) Data Model Overview
+
+```mermaid
+flowchart TB
+  U[(users)] --- C[(conversations)]
+  C --- M[(messages)]
+  C --- CU[(conversation_usage)]
+  CP[(consensus_profiles)]
+  CS[(consensus_settings)]
+  CI[(consensus_iterations)]
+  CFG[(configurations)]
+
+  CS --- CP
+  CI --- C
+  M --- C
+```
+
+Relationship highlights
+- conversations.user_id → users.id
+- messages.conversation_id → conversations.id
+- consensus_settings.value → consensus_profiles.id (active profile)
+- consensus_iterations.consensus_id groups all rounds for one conversation
+
+<a id="diagram-communication-ipc"></a>
+### 6) Communication & IPC Map
+
+```mermaid
+flowchart LR
+  R[Renderer] -- IPC --> M[Main]
+  M -- IPC --> MS[Memory Service]
+  R -- HTTP/WS (dynamic) --> MS
+  M -- sync --> D1[(Cloudflare D1)]
+  M -- https --> OR[OpenRouter]
+```
+
+Key points
+- Renderer discovers service ports via IPC; services never advertise fixed ports.
+- Memory Service DB access is via IPC to Main (no direct file I/O from child).
+
+<a id="diagram-ui-layout"></a>
+### 7) UI Layout (Panels & Behavior)
+
+ASCII layout
+
+```
+┌ Activity Bar ┐┌──────────────────────── Center Editor ───────────────────────┐┌ Consensus Panel ┐
+│  (icons)     ││  Tabs   │                                                │ │ (toggleable)   │
+├──────────────┤│─────────┼──────────────────────────────────────────────────│ ├────────────────┤
+│ File Explorer││ Editor  │                                                │ │   Status       │
+│ (tree)       ││         │                                                │ │   Details      │
+├──────────────┤│         │                                                │ └────────────────┘
+│ Isolated     ││         │                                                │
+│ Terminal(s)  ││         │                                                │
+└──────────────┘└───────────────────────────────────────────────────────────┘
+         ▲ fixed width; expands when center collapses; no resize jitter
+```
+
+Behavior
+- Fixed left terminal panel width; expands only when center collapses.
+- Panel collapse/expand preserves layout without ResizeObserver jitter.
+
+<a id="diagram-ai-cli-tools"></a>
+### 8) AI CLI Tools Integration (High‑Level)
+
+```mermaid
+flowchart LR
+  DET[Detector + Registry] --> UI[Tool Cards]
+  UI -->|Install| PKG[Package Manager / Binary Fetch]
+  UI -->|Configure| CFG[Wrapper + Paths + Env]
+  UI -->|Launch| TERM[Terminal (TTyD)]
+  TERM --> TOOL[AI CLI]
+  TOOL -->|HTTP/WS| MS[Memory Service]
+  MS --> DB[(~/.hive/hive-ai.db via IPC)]
+```
+
+Notes
+- Terminal launch uses ProcessManager + PortManager; tool names shown in terminal tabs.
+- Memory Service exposes universal API for all tools; status refreshes are event‑driven.

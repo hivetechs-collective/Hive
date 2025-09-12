@@ -1,6 +1,11 @@
 /**
  * ProcessManager - Manages child processes lifecycle for production
  * Handles spawning, monitoring, restarting, and cleanup
+ *
+ * Diagrams
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-system-overview
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-startup-sequence
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-dynamic-port-allocation
  */
 
 import { ChildProcess, fork, spawn } from 'child_process';

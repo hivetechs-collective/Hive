@@ -1186,7 +1186,8 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0; /* Important for nested flexbox */
-  position: relative;
+  position: relative; /* ensure stacking context for editor */
+  z-index: 2; /* keep editor above any stray center overlays */
   max-width: 100%; /* Prevent extending beyond container */
 }
 
@@ -1322,9 +1323,9 @@ body {
   overflow: hidden;
 }
 
-/* Ensure editor tabs have space for the collapse button */
+/* Remove extra padding; tab bar provides its own height */
 .center-area .editor-area {
-  padding-top: 35px; /* Space for collapse button */
+  padding-top: 0;
 }
 
 /* Editor tabs wrapper positioning */
@@ -1405,6 +1406,71 @@ body {
   display: flex;
   align-items: center;
   overflow-x: auto;
+}
+
+/* New EditorTabs architecture (Aug/Sep 2025) */
+.editor-tabs-wrapper {
+  display: flex;
+  align-items: center;
+  height: 35px;
+  background: #2d2d30;
+  border-bottom: 1px solid var(--border-color);
+  gap: 6px;
+}
+
+.editor-tabs-bar {
+  flex: 1 1 auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+}
+
+.tab-nav-button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.tab-nav-button.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 6px;
+}
+
+.tab-action-button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.editors-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  background: var(--background-primary);
+  overflow: hidden;
+  /* Ensure the editors area occupies remaining height under the tab bar */
+  height: calc(100% - 35px);
+}
+
+.editor-container {
+  width: 100%;
+  height: 100%;
 }
 
 .tab {

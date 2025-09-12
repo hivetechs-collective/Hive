@@ -1,6 +1,10 @@
 /**
  * PortManager - Optimized port allocation for diverse environments
  * Pre-scans ports at startup for instant allocation without delays
+ *
+ * Diagrams
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-dynamic-port-allocation
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-system-overview
  */
 
 import * as net from 'net';

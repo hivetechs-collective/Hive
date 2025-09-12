@@ -889,18 +889,7 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                             // Connect to editor tabs when files are selected
                             window.fileExplorer.onFileSelect((filePath: string) => {
                                 console.log('File selected:', filePath);
-                                if (window.editorTabs) {
-                                    // Wrap in try-catch to prevent errors from bubbling to webpack
-                                    try {
-                                        window.editorTabs.openFile(filePath).catch((err: any) => {
-                                            console.error('Error opening file:', err);
-                                        });
-                                    } catch (err) {
-                                        console.error('Error calling openFile:', err);
-                                    }
-                                } else {
-                                    console.error('editorTabs not found');
-                                }
+                                openFileAndFocusEditor(filePath);
                             });
                         } else {
                             console.log('Explorer already showing correct folder:', currentOpenedFolder);
@@ -5865,18 +5854,7 @@ async function handleOpenFolder(folderPath: string) {
                 // Reconnect file selection handler for the editor
                 window.fileExplorer.onFileSelect((filePath: string) => {
                     console.log('File selected:', filePath);
-                    if (window.editorTabs) {
-                        // Wrap in try-catch to prevent errors from bubbling to webpack
-                        try {
-                            window.editorTabs.openFile(filePath).catch((err: any) => {
-                                console.error('Error opening file:', err);
-                            });
-                        } catch (err) {
-                            console.error('Error calling openFile:', err);
-                        }
-                    } else {
-                        console.error('editorTabs not found');
-                    }
+                    openFileAndFocusEditor(filePath);
                 });
             } else {
                 // Explorer is not visible, just clear the existing instance so it gets recreated with the new folder when activated
@@ -5964,6 +5942,16 @@ async function handleOpenFolder(folderPath: string) {
 async function handleOpenFile(filePath: string) {
     try {
         console.log('[Menu] Opening file:', filePath);
+        // Ensure center overlays are hidden so the editor is visible
+        hideWelcomePage();
+        const helpPanel = document.getElementById('help-panel');
+        const analyticsPanel = document.getElementById('analytics-panel');
+        const memoryPanel = document.getElementById('memory-panel');
+        const cliToolsPanel = document.getElementById('cli-tools-panel');
+        if (helpPanel) helpPanel.style.display = 'none';
+        if (analyticsPanel) analyticsPanel.style.display = 'none';
+        if (memoryPanel) memoryPanel.style.display = 'none';
+        if (cliToolsPanel) cliToolsPanel.style.display = 'none';
         
         // If no folder is currently opened, open the parent folder
         if (!currentOpenedFolder) {
@@ -6840,11 +6828,7 @@ window.addEventListener('openFolderInExplorer', async (event: any) => {
         // Setup file selection handler
         window.fileExplorer.onFileSelect((filePath: string) => {
             console.log('File selected from Explorer:', filePath);
-            if (window.editorTabs) {
-                window.editorTabs.openFile(filePath).catch((err: any) => {
-                    console.error('Error opening file:', err);
-                });
-            }
+            openFileAndFocusEditor(filePath);
         });
         
         // Update window title
@@ -6891,3 +6875,55 @@ window.addEventListener('showDocumentation', (event: any) => {
         docBtn.classList.add('active');
     }
 });
+// Ensure editor view is visible and overlays are hidden before opening a file
+function openFileAndFocusEditor(filePath: string) {
+  // Hide overlays that live in the center area
+  hideWelcomePage();
+  const helpPanel = document.getElementById('help-panel');
+  const analyticsPanel = document.getElementById('analytics-panel');
+  const memoryPanel = document.getElementById('memory-panel');
+  const cliToolsPanel = document.getElementById('cli-tools-panel');
+  if (helpPanel) helpPanel.style.display = 'none';
+  if (analyticsPanel) analyticsPanel.style.display = 'none';
+  if (memoryPanel) memoryPanel.style.display = 'none';
+  if (cliToolsPanel) cliToolsPanel.style.display = 'none';
+  // Ensure all panel-content are hidden
+  document.querySelectorAll('.panel-content').forEach(el => (el as HTMLElement).style.display = 'none');
+
+  // Make sure editor-area is visible
+  const editorArea = document.getElementById('editor-area');
+  if (editorArea) editorArea.style.display = 'block';
+
+  // Ensure center area is expanded
+  const centerArea = document.getElementById('center-area');
+  if (centerArea && centerArea.classList.contains('collapsed')) {
+    centerArea.classList.remove('collapsed');
+  }
+
+  // Open the file in tabs
+  if (window.editorTabs) {
+    try {
+      window.editorTabs.openFile(filePath).catch((err: any) => {
+        console.error('Error opening file:', err);
+      });
+    } catch (err) {
+      console.error('Error calling openFile:', err);
+    }
+  } else {
+    console.error('editorTabs not found');
+  }
+
+  // Debug visibility and sizing after DOM updates
+  setTimeout(() => {
+    const activeContainer = document.querySelector('.editors-container .editor-container[style*="display: block"], .editors-container .editor-container:not([style])') as HTMLElement | null;
+    const rectEditorArea = editorArea?.getBoundingClientRect();
+    const rectEditors = (document.querySelector('.editors-container') as HTMLElement | null)?.getBoundingClientRect();
+    const rectActive = activeContainer?.getBoundingClientRect();
+    console.log('[Editor Debug] editor-area visible:', editorArea ? (getComputedStyle(editorArea).display !== 'none') : false,
+                'size:', rectEditorArea?.width, 'x', rectEditorArea?.height);
+    console.log('[Editor Debug] editors-container size:', rectEditors?.width, 'x', rectEditors?.height);
+    console.log('[Editor Debug] active editor size:', rectActive?.width, 'x', rectActive?.height);
+    const welcomePanel = document.getElementById('welcome-panel');
+    console.log('[Editor Debug] welcome-panel display:', welcomePanel ? getComputedStyle(welcomePanel).display : 'missing');
+  }, 50);
+}

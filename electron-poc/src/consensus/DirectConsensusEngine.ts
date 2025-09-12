@@ -1,3 +1,5 @@
+// Reference diagram: electron-poc/MASTER_ARCHITECTURE.md#diagram-consensus-pipeline
+// See also communication map: electron-poc/MASTER_ARCHITECTURE.md#diagram-communication-ipc
 import { BrowserWindow } from 'electron';
 // Use native fetch (available in Node 18+)
 

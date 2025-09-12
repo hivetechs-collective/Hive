@@ -4,6 +4,8 @@ import { logger } from '../utils/SafeLogger';
 import { PidTracker } from '../utils/PidTracker';
 import { PortManager } from '../utils/PortManager';
 
+// Reference diagram: electron-poc/MASTER_ARCHITECTURE.md#diagram-startup-sequence
+
 interface ServiceCheck {
     id: string;
     name: string;
