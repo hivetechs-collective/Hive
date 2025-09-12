@@ -2917,7 +2917,7 @@ private sections: HelpSection[] = [
 ]
 ```
 
-### Welcome Page System (v1.8.325)
+### Welcome Page System (v1.9.x)
 **Implementation**: `src/components/welcome-page.ts`
 
 #### Design Philosophy
@@ -2930,7 +2930,7 @@ private sections: HelpSection[] = [
 ┌─────────────────────────────────────────────────┐
 │  HIVE CONSENSUS                     [Settings ⚙] │
 ├─────────────┬────────────────────────┬──────────┤
-│   START     │      RECENT            │  LEARN   │
+│   START     │              RECENT            │  LEARN   │
 │             │                        │          │
 │ New Project │ ~/auth-system/         │ Shortcuts│
 │ Clone       │ ~/data-pipeline/       │ Workflows│
@@ -2941,15 +2941,18 @@ private sections: HelpSection[] = [
 │             │                        │          │
 │             │ [Show all 25...]       │          │
 └─────────────┴────────────────────────┴──────────┘
-[✓] Show on startup              [Open Recent] [New]
+[✓] Show on startup   [Open Recent ▼]   [Show All…]   [Clear]
 ```
 
-#### Key Features
-1. **Large Recent Section**: 70% width when user has existing projects
-2. **Smart Layout**: Adapts based on usage patterns
-3. **Persistent Preferences**: Stored in ~/.hive-ai.db
-4. **No Redundant Marketing**: No feature descriptions for existing capabilities
-5. **Quick Actions**: Bottom bar for immediate productivity
+#### Key Features (Developer‑Focused)
+1. **Primary actions**: New Project, Clone Repository, Open Folder, Getting Started
+2. **Recents first**: Large Recent (70% width), 20 items inline, search + Show All modal
+3. **Open Recent dropdown**: Quick top 10 with Clear and Remove
+4. **DB‑backed**: Persistent preferences and recent folders in `~/.hive/hive-ai.db`
+5. **What’s New badge**: Shown only on version change; cleared on open
+6. **Drag‑and‑drop**: Drop a folder to open (visible dropzone in Start)
+7. **Continuity**: Restore last session (tabs + active tab) when available
+8. **Shortcuts modal**: In‑app quick cheat sheet; link to full docs
 
 #### Database Schema
 ```sql
@@ -2975,16 +2978,27 @@ CREATE TABLE IF NOT EXISTS welcome_analytics (
 
 #### Smart Behavior Rules
 1. **First launch**: Show full welcome with all three columns
-2. **Has recent projects**: Expand Recent section to 70% width
-3. **After 10 uses**: Default to minimal view (just Recent + quick actions)
-4. **After update**: Show "What's New" badge without forcing it
-5. **Dismissed 3+ times quickly**: Auto-disable with toast notification
+2. **Has recent projects**: Expand Recent to 70% (side columns 15% each)
+3. **After 10 uses**: Default to minimal view (Recent + quick actions)
+4. **After update**: Show What’s New badge until opened once
+5. **Dismissed 3+ times quickly**: Auto-disable with toast
 
-#### Implementation Phases
-1. **Phase 1**: Add "Show on startup" checkbox with database persistence
-2. **Phase 2**: Expand Recent section to proper size (15-20 items)
-3. **Phase 3**: Implement smart layout switching based on usage
-4. **Phase 4**: Add usage analytics for continuous improvement
+#### Implementation Phases (v1.9)
+1. **Phase 1 — Make core actions complete**
+   - Open Recent dropdown with top 10 + Clear; Remove per item
+   - Show All modal with search, Open, Remove, optional Pin
+   - Shortcuts modal (inline) + link to full docs
+   - What’s New badge logic using stored `welcome.lastSeenVersion`
+2. **Phase 2 — High‑value flows**
+   - Create from Template (Node/Python/Rust) with Git init
+   - Clone dialog provider tabs (URL/GitHub/GitLab); progress toasts
+   - Open Terminal Here for selected project
+3. **Phase 3 — Continuity & onboarding**
+   - Restore last session button (when session exists)
+   - One‑time “Basics tour” prompt on first run
+4. **Phase 4 — Layout & analytics**
+   - Layout modes: minimal/balanced/full via `welcome.layoutMode`
+   - `welcome_analytics` event logging: click_recent, clone_success, dismissed, etc.
 
 #### User Experience Lessons Applied
 - ❌ **Avoid**: Persistent panels that won't dismiss (GitHub Copilot mistake)
@@ -3019,6 +3033,10 @@ const loadPreference = async () => {
   return result[0]?.value !== '0';
 };
 ```
+
+Additional keys in `settings` table:
+- `welcome.lastSeenVersion`: string (last app version that dismissed What’s New)
+- `welcome.layoutMode`: 'minimal' | 'balanced' | 'full'
 
 #### Isolated Terminal Panel (TTYD Implementation v1.8.0)
 **Location**: `src/components/TTYDTerminalPanel.ts`
