@@ -233,6 +233,9 @@ contextBridge.exposeInMainWorld('gitAPI', {
   pushForceWithLease: () => ipcRenderer.invoke('git-push-force-lease'),
   pushCustom: (command: string) => ipcRenderer.invoke('git-push-custom', command),
   pushDryRun: (options?: any) => ipcRenderer.invoke('git-push-dry-run', options)
+  ,
+  // Clone repository into a parent directory
+  clone: (url: string, parentDirectory: string) => ipcRenderer.invoke('git-clone', url, parentDirectory)
 });
 
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown
@@ -294,6 +297,9 @@ contextBridge.exposeInMainWorld('databaseAPI', {
     ipcRenderer.invoke('db-get-recent-folders'),
   removeRecentFolder: (folderPath: string) => 
     ipcRenderer.invoke('db-remove-recent-folder', folderPath)
+  ,
+  clearRecentFolders: () => 
+    ipcRenderer.invoke('db-clear-recent-folders')
 });
 
 // Terminal API

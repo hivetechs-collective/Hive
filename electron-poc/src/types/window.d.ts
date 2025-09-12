@@ -62,6 +62,7 @@ declare global {
         commitCount: number;
         recommendation: string;
       }>;
+      clone(url: string, parentDirectory: string): Promise<{ success: boolean; destination?: string; output?: string; error?: string }>;
     };
     
     // Terminal API
@@ -90,6 +91,14 @@ declare global {
     databaseAPI: {
       getSetting(key: string): Promise<string | null>;
       setSetting(key: string, value: string): Promise<{ success: boolean }>;
+      // Session persistence
+      saveSession?(folderPath: string, tabs: any[], activeTab: string | null): Promise<any>;
+      loadSession?(folderPath: string): Promise<any>;
+      clearSession?(folderPath: string): Promise<any>;
+      // Recent folders
+      addRecentFolder?(folderPath: string, tabCount: number): Promise<any>;
+      getRecentFolders?(): Promise<Array<{ folder_path: string; last_opened: string; tab_count: number }>>;
+      removeRecentFolder?(folderPath: string): Promise<any>;
     };
     
     // Electron API

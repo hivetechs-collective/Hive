@@ -741,6 +741,55 @@ const registerGitHandlers = () => {
     return await gitManager.getFileDiff(commitHash, filePath);
   });
   
+  // Clone repository (enterprise auth via EnhancedGitManager)
+  ipcMain.handle('git-clone', async (_,
+    url: string,
+    parentDirectory: string
+  ) => {
+    try {
+      if (!url || !parentDirectory) {
+        throw new Error('Missing repository URL or destination');
+      }
+      
+      // Derive repo folder name from URL
+      const repoNameMatch = url
+        .replace(/\\\\/g, '/')
+        .split('/')
+        .pop() || 'repository';
+      const normalizedName = repoNameMatch.replace(/\.git$/, '');
+      const destination = path.join(parentDirectory, normalizedName);
+      
+      // Ensure parent exists
+      if (!fs.existsSync(parentDirectory)) {
+        fs.mkdirSync(parentDirectory, { recursive: true });
+      }
+      
+      // If destination exists and is non-empty, fail fast to avoid overwriting
+      if (fs.existsSync(destination)) {
+        const listing = fs.readdirSync(destination);
+        if (listing.length > 0) {
+          throw new Error(`Destination already exists and is not empty: ${destination}`);
+        }
+      }
+      
+      // Use EnhancedGitManager for authenticated clone
+      const cloneManager = new EnhancedGitManager(destination);
+      const result = await cloneManager.clone(url, destination);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Clone failed');
+      }
+      
+      // Initialize git manager for this new repo path so UI can use Git features immediately
+      await initGitManager(destination);
+      
+      return { success: true, destination, output: result.output };
+    } catch (error: any) {
+      logger.error('[Git] Clone failed:', error);
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+  
   // Update Git manager when folder changes
   ipcMain.handle('git-set-folder', async (_, folderPath: string) => {
     logger.info('[Git] Setting folder to:', folderPath || '(none)');
@@ -4203,7 +4252,7 @@ ipcMain.handle('db-get-recent-folders', async () => {
       `SELECT folder_path, last_opened, tab_count 
        FROM recent_folders 
        ORDER BY last_opened DESC 
-       LIMIT 10`,
+       LIMIT 20`,
       [],
       (err, rows) => {
         if (err) {
@@ -4237,6 +4286,25 @@ ipcMain.handle('db-remove-recent-folder', async (_, folderPath: string) => {
         }
       }
     );
+  });
+});
+
+// Clear all recent folders
+ipcMain.handle('db-clear-recent-folders', async () => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+    db.run('DELETE FROM recent_folders', [], (err) => {
+      if (err) {
+        logger.error('[Recent] Failed to clear recent folders:', err);
+        reject(err);
+      } else {
+        logger.info('[Recent] Cleared all recent folders');
+        resolve({ success: true });
+      }
+    });
   });
 });
 
