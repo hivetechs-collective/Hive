@@ -292,6 +292,26 @@ export class SettingsModal {
                 <button id="db-integrity" class="btn btn-secondary">Integrity Check</button>
                 <button id="db-compact" class="btn btn-secondary">Compact Database</button>
               </div>
+              <div class="form-group" style="margin-top: 10px;">
+                <label>Auto Backup</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <label style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" id="backup-auto-enabled" /> Enable
+                  </label>
+                  <select id="backup-frequency" style="background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;">
+                    <option value="manual">Manual</option>
+                    <option value="on-exit">On Exit</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                  <input id="backup-retention" type="number" min="1" max="60" value="7" style="width:80px;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
+                  <span style="color:#888;">retained backups</span>
+                </div>
+                <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                  <input id="backup-dir" placeholder="Backup folder" style="flex:1;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
+                  <button id="choose-backup-dir" class="btn btn-secondary">Choose…</button>
+                </div>
+              </div>
               <small class="help-text">Backups include all settings, sessions, recents, profiles, and analytics in ~/.hive/hive-ai.db</small>
             </div>
           
@@ -668,6 +688,43 @@ export class SettingsModal {
         }
       } catch (e) {
         await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(e) });
+      }
+    });
+
+    // Load backup settings
+    (async () => {
+      try {
+        const enabled = await (window as any).databaseAPI?.getSetting?.('backup.autoEnabled');
+        const freq = await (window as any).databaseAPI?.getSetting?.('backup.frequency');
+        const ret = await (window as any).databaseAPI?.getSetting?.('backup.retentionCount');
+        const dir = await (window as any).databaseAPI?.getSetting?.('backup.dir');
+        const chk = document.getElementById('backup-auto-enabled') as HTMLInputElement;
+        const sel = document.getElementById('backup-frequency') as HTMLSelectElement;
+        const num = document.getElementById('backup-retention') as HTMLInputElement;
+        const inp = document.getElementById('backup-dir') as HTMLInputElement;
+        if (chk) chk.checked = (enabled || '0') === '1';
+        if (sel && (freq === 'manual' || freq === 'on-exit' || freq === 'daily' || freq === 'weekly')) sel.value = freq;
+        if (num) num.value = String(Math.max(1, parseInt(ret || '7', 10)));
+        if (inp) inp.value = dir || '';
+      } catch {}
+    })();
+
+    // Save backup settings when changed
+    document.getElementById('backup-auto-enabled')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.autoEnabled', (e.target as HTMLInputElement).checked ? '1' : '0'); } catch {}
+    });
+    document.getElementById('backup-frequency')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.frequency', (e.target as HTMLSelectElement).value); } catch {}
+    });
+    document.getElementById('backup-retention')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.retentionCount', (e.target as HTMLInputElement).value); } catch {}
+    });
+    document.getElementById('choose-backup-dir')?.addEventListener('click', async () => {
+      const res = await (window as any).electronAPI?.showOpenDialog?.({ properties: ['openDirectory', 'createDirectory'] });
+      const inp = document.getElementById('backup-dir') as HTMLInputElement;
+      if (res && !res.canceled && res.filePaths && res.filePaths[0]) {
+        inp.value = res.filePaths[0];
+        try { await (window as any).databaseAPI?.setSetting?.('backup.dir', res.filePaths[0]); } catch {}
       }
     });
 

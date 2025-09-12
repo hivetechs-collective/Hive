@@ -25,7 +25,7 @@
     "build:visual": "node scripts/build-with-progress.js",
     "requirements": "node scripts/comprehensive-build-check.js",
     "test": "npm run test:welcome",
-    "test:welcome": "npm run verify:types && node scripts/test-welcome-db.js && ts-node tests/welcome-logic.test.ts && ts-node tests/template-scaffold.test.ts && ts-node tests/clone-validate.test.ts",
+    "test:welcome": "npm run verify:types && node scripts/test-welcome-db.js && ts-node tests/welcome-logic.test.ts && ts-node tests/template-scaffold.test.ts && ts-node tests/clone-validate.test.ts && ts-node tests/welcome-layout.test.ts && ts-node tests/backup-policy.test.ts",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx ."
   },
