@@ -1805,6 +1805,16 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
         if (data.totalTokens) totalTokens = data.totalTokens;
         if (data.totalCost) totalCost = data.totalCost;
         updateConsensusStats();
+
+        // Persist analytics to DB using the engine-provided conversationId
+        try {
+          const convId = data.conversationId || undefined;
+          const tokensVal = data.totalTokens || 0;
+          const costVal = data.totalCost || 0;
+          saveConsensusAnalytics(tokensVal, costVal, convId);
+        } catch (e) {
+          console.error('Failed to persist analytics on consensus-complete:', e);
+        }
       });
       
       // New iterative consensus event handlers
@@ -5030,11 +5040,11 @@ const loadSessionMetrics = () => {
 };
 
 // Save consensus analytics
-const saveConsensusAnalytics = async (totalTokens: number, totalCost: number) => {
+const saveConsensusAnalytics = async (totalTokens: number, totalCost: number, conversationId?: string) => {
   const timestamp = new Date().toISOString();
   
-  // Generate a unique conversation ID
-  const conversationId = `conv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  // Use provided conversationId when available to align with engine usage
+  const convId = conversationId || `conv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
   // Get the current question from the chat
   const chatContent = document.getElementById('chat-content');
@@ -5051,14 +5061,14 @@ const saveConsensusAnalytics = async (totalTokens: number, totalCost: number) =>
     if (electronAPI && electronAPI.saveConversation) {
       // Log the values being saved
       console.log('💾 Saving conversation with:', {
-        conversationId,
+        conversationId: convId,
         totalCost,
         totalTokens,
         question: lastUserMessage.substring(0, 50) + '...'
       });
       
       const saved = await electronAPI.saveConversation({
-        conversationId,
+        conversationId: convId,
         question: lastUserMessage,
         answer: lastAssistantMessage,
         totalCost,

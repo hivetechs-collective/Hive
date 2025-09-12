@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { Database } from 'sqlite3';
+import { computeAnalytics } from './utils/analytics-compute';
 import { spawn, ChildProcess } from 'child_process';
 import { GitManager } from './git-manager';
 import { GitManagerV2 } from './git-manager-v2';
@@ -49,6 +50,7 @@ const processManager = new ProcessManager();
 setProcessManagerReference(processManager);
 
 let db: Database | null = null;
+let dbFilePath: string | null = null;
 let mainWindow: BrowserWindow | null = null;
 // Help is now integrated into the main window - no separate help window needed
 
@@ -58,6 +60,7 @@ const initDatabase = () => {
   const overridePath = process.env.HIVE_DB_PATH;
   const defaultHiveDir = path.join(os.homedir(), '.hive');
   const dbPath = overridePath || path.join(defaultHiveDir, 'hive-ai.db');
+  dbFilePath = dbPath;
   
   // Create parent directory if it doesn't exist
   const hiveDir = path.dirname(dbPath);
@@ -5866,6 +5869,21 @@ ipcMain.handle('get-analytics', async () => {
       });
     });
   });
+});
+
+// Read-only analytics computation using a separate DB handle
+ipcMain.handle('get-analytics-ro', async () => {
+  try {
+    if (!dbFilePath) throw new Error('DB path not set');
+    const ro = new Database(dbFilePath, (Database as any).OPEN_READONLY || undefined);
+    const userId = '3034c561-e193-4968-a575-f1b165d31a5b';
+    const data = await computeAnalytics(ro, userId);
+    ro.close?.();
+    return data;
+  } catch (e) {
+    logger.error('get-analytics-ro failed:', e);
+    return null;
+  }
 });
 
 // Memory Service is now managed entirely by ProcessManager
