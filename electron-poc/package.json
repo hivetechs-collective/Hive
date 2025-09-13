@@ -1,7 +1,7 @@
 {
   "name": "hive-consensus",
   "productName": "Hive Consensus",
-  "version": "1.8.365",
+  "version": "1.8.371",
   "description": "Hive Consensus - AI-powered development environment",
   "main": ".webpack/main",
   "scripts": {

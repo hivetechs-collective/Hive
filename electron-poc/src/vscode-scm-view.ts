@@ -147,6 +147,11 @@ export class VSCodeSCMView {
       if (contentElement) {
         contentElement.innerHTML = groups.map(group => this.renderResourceGroup(group)).join('');
         this.attachEventListeners();
+        // Also update header badges when refreshing existing view
+        try {
+          const badges = this.container.querySelector('.scm-badges') as HTMLElement | null;
+          if (badges) badges.innerHTML = this.buildHeaderBadgesHtml();
+        } catch {}
         return; // Don't recreate the entire view
       }
     }
@@ -167,37 +172,7 @@ export class VSCodeSCMView {
           <div class="scm-status-branch" style="position: relative;">
             <span class="codicon codicon-git-branch"></span>
             <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView.showBranchSwitcher()">${this.gitStatus.branch}</span>
-            ${((this.gitStatus.ahead || 0) > 0) ? `
-              <span class=\"badge\" style=\"background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px; cursor: pointer;\" 
-                    onclick=\"window.scmView?.push()\"
-                    title=\"Click to push\">↑${this.gitStatus.ahead}</span>
-            ` : ''}
-            ${((this.gitStatus.behind || 0) > 0) ? `
-              <span class=\"badge\" style=\"background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px; cursor: pointer;\" 
-                    onclick=\"window.scmView?.pullAndPush()\"
-                    title=\"Click to sync (pull then push)\">↓${this.gitStatus.behind}</span>
-            ` : ''}
-            ${(() => { 
-                const files = (this.gitStatus?.files || []);
-                const working = (f:any) => (f.working_dir || f.working || ' ');
-                const s = files.filter((f:any) => f.index && f.index !== ' ' && f.index !== '?').length;
-                const m = files.filter((f:any) => { const w = working(f); return w !== ' ' && w !== '?' && (f.index === ' ' || f.index === undefined); }).length;
-                const u = files.filter((f:any) => working(f) === '?' || f.index === '?').length;
-                // Always show S/M/U badges; disable when zero with lower opacity and no click
-                const mk = (label:string, count:number, group:'staged'|'changes'|'untracked', color:string) => {
-                  const base = `background:${color};color:white;padding:2px 6px;border-radius:10px;margin-left:8px;font-size:11px;`;
-                  if (count>0) {
-                    return `<span class=\\"badge\\" style=\\"${base}cursor:pointer;\\" onclick=\\"window.scmView?.scrollToGroup('${group}')\\" title=\\"${label}\\">${label}:${count}</span>`;
-                  } else {
-                    return `<span class=\\"badge\\" style=\\"${base}opacity:0.6;cursor:default;\\" title=\\"${label}: 0\\">${label}:0</span>`;
-                  }
-                };
-                return [
-                  mk('S', s, 'staged', '#3c873a'),
-                  mk('M', m, 'changes', '#d19a66'),
-                  mk('U', u, 'untracked', '#6a737d')
-                ].join(' ');
-            })()}
+            <span class="scm-badges">${this.buildHeaderBadgesHtml()}</span>
           </div>
           <div class="scm-status-actions">
             <!-- Removed redundant sync and refresh buttons -->
@@ -306,6 +281,27 @@ export class VSCodeSCMView {
         this.gitGraphView.refresh();
       }
     }, 1000); // Increased delay to ensure Git is fully ready
+  }
+
+  private buildHeaderBadgesHtml(): string {
+    const ahead = this.gitStatus?.ahead || 0;
+    const behind = this.gitStatus?.behind || 0;
+    const files = (this.gitStatus?.files || []) as any[];
+    const working = (f:any) => (f.working_dir || f.working || ' ');
+    const s = files.filter((f:any) => f.index && f.index !== ' ' && f.index !== '?').length;
+    const m = files.filter((f:any) => { const w = working(f); return w !== ' ' && w !== '?' && (f.index === ' ' || f.index === undefined); }).length;
+    const u = files.filter((f:any) => working(f) === '?' || f.index === '?').length;
+    const mk = (icon:string, count:number, title:string, onclick?: string, margin='8px') => {
+      const clickable = !!onclick && count >= 0; // allow click even with zero as info
+      const style = `display:inline-flex;align-items:center;gap:3px;margin-left:${margin};${onclick?'cursor:pointer;opacity:1;':'cursor:default;opacity:0.6;'}`;
+      return `<span class=\"badge\" style=\"${style}\" title=\"${title}\" ${onclick?`onclick=\"${onclick}\"`:''}><span class=\"codicon ${icon}\"></span><span>${count}</span></span>`;
+    };
+    const push = mk('codicon-cloud-upload', ahead, ahead>0?'Click to push':'Nothing to push', ahead>0?'window.scmView?.push()':'');
+    const pull = mk('codicon-cloud-download', behind, behind>0?'Click to pull':'Up to date', behind>0?'window.scmView?.pull()':'', '4px');
+    const sBadge = mk('codicon-check', s, 'Staged', s>0?"window.scmView?.scrollToGroup('staged')":'', '8px');
+    const mBadge = mk('codicon-diff', m, 'Modified', m>0?"window.scmView?.scrollToGroup('changes')":'', '8px');
+    const uBadge = mk('codicon-diff-added', u, 'Untracked', u>0?"window.scmView?.scrollToGroup('untracked')":'', '8px');
+    return [push, pull, sBadge, mBadge, uBadge].join(' ');
   }
 
   private groupResources(): ResourceGroup[] {
