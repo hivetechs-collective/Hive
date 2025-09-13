@@ -3360,10 +3360,18 @@ function showMemoryPanel(): void {
 }
 
 function setCenterView(view: CenterView | null, opts?: { section?: string }) {
-    // Toggle off → return to last view or Welcome (Welcome is base; do nothing if no fallback)
+    // Idempotent behavior: clicking the same view again simply focuses it (no toggle to Welcome)
     if (view !== null && currentCenterView === view) {
-        const fallback: CenterView | null = (lastCenterView && lastCenterView !== currentCenterView) ? lastCenterView : (view === 'welcome' ? null : 'welcome');
-        if (fallback) setCenterView(fallback, opts);
+        // Ensure the requested view is visible if it was accidentally hidden
+        switch (view) {
+            case 'settings': void showSettingsPanel(); break;
+            case 'memory': showMemoryPanel(); break;
+            case 'cli-tools': showCliToolsPanel(); break;
+            case 'analytics': showAnalyticsPanel(); break;
+            case 'help': showHelpPanel(opts?.section || 'getting-started'); break;
+            case 'welcome': showWelcomePage(); break;
+        }
+        updateActivityBarActive(view);
         return;
     }
 
