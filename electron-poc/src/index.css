@@ -1361,6 +1361,18 @@ body {
   overflow-y: auto;
 }
 
+/* Ensure Settings panel is scrollable within unified window layout */
+#settings-panel {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Avoid nested scrollbars inside Settings when rendered in panel mode */
+#settings-panel .settings-content {
+  overflow-y: visible;
+}
+
 .content-panel .panel-header {
   display: flex;
   justify-content: space-between;
