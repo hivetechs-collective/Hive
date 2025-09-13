@@ -242,6 +242,13 @@ contextBridge.exposeInMainWorld('gitAPI', {
   clone: (url: string, parentDirectory: string) => ipcRenderer.invoke('git-clone', url, parentDirectory)
 });
 
+// Maintenance API
+contextBridge.exposeInMainWorld('maintenanceAPI', {
+  modelsSyncNow: () => ipcRenderer.invoke('models-sync-now'),
+  profilesMigrateV2: () => ipcRenderer.invoke('profiles-migrate-v2'),
+  usageSyncNow: () => ipcRenderer.invoke('usage-sync-now')
+});
+
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown
 const safeInvoke = async (channel: string, ...args: any[]) => {
   try {

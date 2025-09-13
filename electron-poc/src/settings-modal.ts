@@ -340,6 +340,18 @@ export class SettingsModal {
                 <small class="help-text">When enabled, SCM binds to the currently opened folder instead of auto-detecting the nearest Git root. Disable to get repo‑root SCM for monorepos.</small>
               </div>
             </div>
+
+            <!-- Maintenance Section -->
+            <div class="settings-section">
+              <h3>Maintenance</h3>
+              <p class="section-description">Keep models, profiles, and usage in sync</p>
+              <div class="button-group" style="display:flex; gap:8px; flex-wrap: wrap;">
+                <button id="btn-models-sync-now" class="btn btn-secondary">Sync Models Now</button>
+                <button id="btn-profiles-migrate-v2" class="btn btn-secondary">Migrate Profiles to Internal IDs</button>
+                <button id="btn-usage-sync-now" class="btn btn-secondary">Sync Usage Now</button>
+              </div>
+              <small class="help-text">Model sync pulls the latest providers/models from OpenRouter into the unified database. Profiles migration preserves a stable internal ID per model to tolerate renames/deprecations. Usage sync flushes any queued D1 usage records.</small>
+            </div>
           
           </div>
           
@@ -627,6 +639,27 @@ export class SettingsModal {
           }
         }
       });
+    });
+
+    // Maintenance actions
+    const toast = (msg: string) => {
+      const n = document.createElement('div');
+      n.className = 'status-toast';
+      n.textContent = msg;
+      document.body.appendChild(n);
+      setTimeout(() => n.remove(), 2000);
+    };
+    document.getElementById('btn-models-sync-now')?.addEventListener('click', async () => {
+      try { await (window as any).maintenanceAPI?.modelsSyncNow(); toast('Models synced'); } catch (e) { toast('Model sync failed'); }
+    });
+    document.getElementById('btn-profiles-migrate-v2')?.addEventListener('click', async () => {
+      try {
+        const res = await (window as any).maintenanceAPI?.profilesMigrateV2();
+        toast(res?.ok ? 'Profiles migrated' : 'Profiles migration failed');
+      } catch (e) { toast('Profiles migration failed'); }
+    });
+    document.getElementById('btn-usage-sync-now')?.addEventListener('click', async () => {
+      try { await (window as any).maintenanceAPI?.usageSyncNow(); toast('Usage sync complete'); } catch (e) { toast('Usage sync failed'); }
     });
 
     // Handle typing in API key fields
