@@ -2794,23 +2794,80 @@ async function updateGitStatusBar() {
                     return w !== ' ' && w !== '?';
                 }).length;
 
-                // Add or update compact counts span
+                // Add or update compact counts span (now using codicons & interactive actions)
                 const countsClass = 'git-counts';
                 let countsSpan = branchElement!.querySelector(`.${countsClass}`) as HTMLElement | null;
                 if (!countsSpan) {
                     countsSpan = document.createElement('span');
                     countsSpan.className = countsClass;
                     countsSpan.style.marginLeft = '6px';
-                    countsSpan.style.opacity = '0.9';
+                    countsSpan.style.opacity = '0.95';
                     branchElement!.appendChild(countsSpan);
                 }
-                const parts: string[] = [];
-                if ((status.ahead || 0) > 0) parts.push(`↑${status.ahead}`);
-                if ((status.behind || 0) > 0) parts.push(`↓${status.behind}`);
-                // Always show S/M/U in status bar for clarity, even when zero
-                parts.push(`S:${staged} M:${modified} U:${untracked}`);
-                countsSpan.textContent = parts.join(' ');
-                countsSpan.title = 'S: Staged • M: Modified • U: Untracked';
+                const ahead = status.ahead || 0;
+                const behind = status.behind || 0;
+                const mkBadge = (icon: string, count: number, action?: string, title?: string, extra?: string) => {
+                  const clickable = action && count > 0;
+                  const cursor = clickable ? 'pointer' : 'default';
+                  const opacity = clickable ? '1' : '0.6';
+                  const data = clickable ? `data-action="${action}"` : '';
+                  return `
+                    <span class="sb-badge sb-action" ${data} style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;cursor:${cursor};opacity:${opacity};${extra || ''}" title="${title || ''}">
+                      <span class="codicon ${icon}"></span>
+                      <span class="sb-count">${count}</span>
+                    </span>`;
+                };
+                const mkCount = (icon: string, label: string, count: number, group?: string, color?: string) => {
+                  const clickable = !!group && count > 0;
+                  const cursor = clickable ? 'pointer' : 'default';
+                  const opacity = clickable ? '1' : '0.6';
+                  const data = clickable ? `data-action="scroll" data-group="${group}"` : '';
+                  const style = `display:inline-flex;align-items:center;gap:3px;margin-left:8px;cursor:${cursor};opacity:${opacity};${color ? `color:${color};` : ''}`;
+                  return `
+                    <span class="sb-badge sb-action" ${data} style="${style}" title="${label}">
+                      <span class="codicon ${icon}"></span>
+                      <span class="sb-count">${count}</span>
+                    </span>`;
+                };
+
+                let html = '';
+                // Directional actions
+                html += mkBadge('codicon-cloud-upload', ahead, 'push', ahead > 0 ? 'Push (ahead)' : 'Nothing to push');
+                html += mkBadge('codicon-cloud-download', behind, 'pull', behind > 0 ? 'Pull (behind)' : 'Up to date');
+                if (ahead > 0 && behind > 0) {
+                  html += mkBadge('codicon-sync', ahead + behind, 'sync', 'Sync (pull then push)');
+                }
+                // File counts (always visible)
+                html += mkCount('codicon-check', 'Staged', staged, 'staged');
+                html += mkCount('codicon-diff', 'Modified', modified, 'changes', '#d19a66');
+                html += mkCount('codicon-diff-added', 'Untracked', untracked, 'untracked');
+
+                countsSpan.innerHTML = html;
+
+                // Bind click handlers once per render
+                countsSpan.onclick = async (ev: MouseEvent) => {
+                  const target = (ev.target as HTMLElement).closest('.sb-action') as HTMLElement | null;
+                  if (!target) return;
+                  const action = target.getAttribute('data-action');
+                  if (action === 'push' && ahead > 0) {
+                    try { await (window as any).gitAPI.push(); } catch (e) { console.error('Push failed:', e); }
+                  } else if (action === 'pull' && behind > 0) {
+                    try { await (window as any).gitAPI.pull(); } catch (e) { console.error('Pull failed:', e); }
+                  } else if (action === 'sync' && ahead > 0 && behind > 0) {
+                    try { await (window as any).gitAPI.sync(); } catch (e) { console.error('Sync failed:', e); }
+                  } else if (action === 'scroll') {
+                    try {
+                      const group = target.getAttribute('data-group') as 'staged'|'changes'|'untracked' | null;
+                      if (group) {
+                        showSidebarPanel('git');
+                        // Give SCM time to render
+                        setTimeout(() => {
+                          try { (window as any).scmView?.scrollToGroup(group); } catch {}
+                        }, 150);
+                      }
+                    } catch {}
+                  }
+                };
 
                 // Make the branch item open the Git panel when clicked
                 if (branchElement && !branchElement.getAttribute('data-click-bound')) {
