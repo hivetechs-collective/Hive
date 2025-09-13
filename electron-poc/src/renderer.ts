@@ -1017,6 +1017,19 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
         }
     }
 }
+
+// Ensure a sidebar panel is visible without toggling it closed if already open
+function showSidebarPanel(panelType: 'explorer' | 'git') {
+    const sidebarPanel = document.getElementById('sidebar-panel');
+    const explorerSidebar = document.getElementById('explorer-sidebar');
+    const gitSidebar = document.getElementById('git-sidebar');
+    if (!sidebarPanel || !explorerSidebar || !gitSidebar) return;
+
+    const target = document.getElementById(`${panelType}-sidebar`);
+    const isVisible = sidebarPanel.classList.contains('active') && target && target.style.display !== 'none';
+    if (isVisible) return; // already open, do nothing
+    toggleSidebarPanel(panelType);
+}
 let dailyUsageCount = 0;
 let dailyLimit = 5;
 let totalTokens = 0;
@@ -2794,12 +2807,14 @@ async function updateGitStatusBar() {
                 const parts: string[] = [];
                 if ((status.ahead || 0) > 0) parts.push(`↑${status.ahead}`);
                 if ((status.behind || 0) > 0) parts.push(`↓${status.behind}`);
-                if (staged > 0 || modified > 0 || untracked > 0) parts.push(`S:${staged} M:${modified} U:${untracked}`);
-                countsSpan.textContent = parts.length ? parts.join(' ') : '';
+                // Always show S/M/U in status bar for clarity, even when zero
+                parts.push(`S:${staged} M:${modified} U:${untracked}`);
+                countsSpan.textContent = parts.join(' ');
+                countsSpan.title = 'S: Staged • M: Modified • U: Untracked';
 
                 // Make the branch item open the Git panel when clicked
                 if (branchElement && !branchElement.getAttribute('data-click-bound')) {
-                    branchElement.addEventListener('click', () => toggleSidebarPanel('git'));
+                    branchElement.addEventListener('click', () => showSidebarPanel('git'));
                     branchElement.setAttribute('data-click-bound', 'true');
                 }
             } else {
@@ -6800,7 +6815,7 @@ window.addEventListener('openFolderInExplorer', async (event: any) => {
     console.log('[Welcome] Delegating folder open to handleOpenFolder:', expandedPath);
     await handleOpenFolder(expandedPath);
     // Ensure SCM shows immediately for Git context
-    try { toggleSidebarPanel('git'); } catch {}
+    try { showSidebarPanel('git'); } catch {}
 });
 
 window.addEventListener('showExplorerWithDialog', async () => {
