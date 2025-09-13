@@ -2379,7 +2379,7 @@ App Root (renderer.ts)
 │   ├── Progress Bars
 │   └── Chat Interface
 ├── Status Bar
-│   ├── Git Branch (if repository open)
+│   ├── Git Branch (if repository open) + S/M/U + ↑/↓
 │   ├── Hive User + Plan (center)
 │   └── Usage Counter (used/remaining today)
 └── Modals
@@ -2464,9 +2464,36 @@ The application's DOM (Document Object Model) is a tree structure that defines t
 - **Activity Bar**: 48px width, never resizes
 - **Title Bar**: 30px height, spans full width
 - **Status Bar**: 22px height, spans full width
-  - Left: current Git branch when a repository is open
+  - Left: current Git branch (click toggles Source Control panel), ahead/behind (↑/↓), and file counts:
+    - S (staged), M (modified), U (untracked). Counts update on Git operations.
   - Center: current Hive user (email), membership plan, and conversations used/remaining today
   - Right: reserved (no backend or IPC indicators)
+
+#### Git UX — Unified Flows & Indicators (v1.8.367)
+
+- Single source of truth for opening folders
+  - All “Open Folder” paths (Welcome recent, File menu, SCM button) delegate to a unified handler which:
+    - Sets the global `currentOpenedFolder`
+    - Calls `git-set-folder` (IPC) to initialize the Git manager
+    - Refreshes the status bar and initializes Explorer/SCM consistently
+  - Welcome recent now opens Source Control automatically to make branch and counts visible immediately.
+
+- Status Bar (left)
+  - Branch name shown when a repository is open; clicking it toggles the Source Control panel.
+  - Indicators:
+    - `↑N` `↓M` for ahead/behind (hidden when 0 to reduce visual noise)
+    - `S:x M:y U:z` for file counts, computed from Git porcelain v2 status
+  - Counts update on open/close folder and on Git operations (SCM emits a `git-status-changed` event).
+
+- Source Control header
+  - Shows branch name and badges:
+    - `↑N`/`↓M` (hidden when 0)
+    - `S:x`, `M:y`, `U:z` — badges are interactive; clicking scrolls to the respective group.
+
+Known UX notes
+- Current behavior toggles SCM when the branch label is clicked (open/close). Recommended refinement: clicking always opens/focuses SCM and doesn’t close it if already visible.
+- SCM header currently hides badges when zero. Consider always showing `S:0` and `U:0` to reduce ambiguity.
+- Add VS Code–style icons and tooltips to S/M/U in status bar and SCM header to improve affordance (planned).
 
 **2. Collapsible Panels**
 - **Sidebar Panel**: 260px default width, can collapse to 0
