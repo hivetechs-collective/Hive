@@ -289,6 +289,23 @@ const initDatabase = () => {
     round_number INTEGER DEFAULT 1
   )`);
   
+  // Profiles v2: store internal IDs for stage models
+  db.run(`CREATE TABLE IF NOT EXISTS consensus_profiles_v2 (
+    id TEXT PRIMARY KEY,
+    profile_name TEXT UNIQUE,
+    generator_internal_id TEXT,
+    refiner_internal_id TEXT,
+    validator_internal_id TEXT,
+    curator_internal_id TEXT,
+    max_consensus_rounds INTEGER DEFAULT 3,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (generator_internal_id) REFERENCES openrouter_models(internal_id),
+    FOREIGN KEY (refiner_internal_id) REFERENCES openrouter_models(internal_id),
+    FOREIGN KEY (validator_internal_id) REFERENCES openrouter_models(internal_id),
+    FOREIGN KEY (curator_internal_id) REFERENCES openrouter_models(internal_id)
+  )`);
+
   // Create indexes for better query performance
   db.run(`CREATE INDEX IF NOT EXISTS idx_consensus_iterations_consensus_id 
           ON consensus_iterations(consensus_id)`);
@@ -545,6 +562,40 @@ async function enforceUsageLimitOrThrow(): Promise<void> {
     throw new Error('Daily conversation limit reached. Please purchase credits or try again tomorrow.');
   }
 }
+
+// Migrate consensus_profiles → consensus_profiles_v2 with internal IDs
+ipcMain.handle('profiles-migrate-v2', async () => {
+  if (!db) return { ok: false, error: 'DB not initialized' };
+  const summary = { total: 0, migrated: 0, partial: 0 } as any;
+  const rows: any[] = await new Promise((resolve, reject) => db!.all('SELECT * FROM consensus_profiles', [], (e: any, r: any[]) => e ? reject(e) : resolve(r)));
+  summary.total = rows.length;
+  for (const row of rows) {
+    const id = row.id;
+    const name = row.profile_name;
+    const stageIds: Record<string, string | null> = { generator: null, refiner: null, validator: null, curator: null };
+    const stages = [ ['generator', row.generator_model], ['refiner', row.refiner_model], ['validator', row.validator_model], ['curator', row.curator_model] ] as const;
+    for (const [k, model] of stages) {
+      const map: any = await new Promise((resolve) => db!.get('SELECT internal_id FROM openrouter_models WHERE openrouter_id = ? LIMIT 1', [model], (e: any, r: any) => resolve(r)));
+      stageIds[k] = map?.internal_id || null;
+    }
+    const ts = new Date().toISOString();
+    await new Promise((resolve) => db!.run(`INSERT INTO consensus_profiles_v2 (
+        id, profile_name, generator_internal_id, refiner_internal_id, validator_internal_id, curator_internal_id, max_consensus_rounds, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        profile_name=excluded.profile_name,
+        generator_internal_id=excluded.generator_internal_id,
+        refiner_internal_id=excluded.refiner_internal_id,
+        validator_internal_id=excluded.validator_internal_id,
+        curator_internal_id=excluded.curator_internal_id,
+        max_consensus_rounds=excluded.max_consensus_rounds,
+        updated_at=excluded.updated_at`,
+      [id, name, stageIds.generator, stageIds.refiner, stageIds.validator, stageIds.curator, row.max_consensus_rounds || 3, ts, ts], () => resolve(null)));
+    const complete = Object.values(stageIds).every(v => !!v);
+    if (complete) summary.migrated++; else summary.partial++;
+  }
+  return { ok: true, summary };
+});
 
 const registerGitHandlers = () => {
   // Git IPC handlers
@@ -5034,6 +5085,17 @@ ipcMain.handle('settings-test-keys', async (_, { openrouterKey, hiveKey }) => {
               // Store validated license info in database
               if (db) {
                 const timestamp = new Date().toISOString();
+                // Persist user id for usage tracking
+                if (userId) {
+                  db.run(
+                    `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
+                     VALUES (?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(key) DO UPDATE SET
+                     value = excluded.value,
+                     updated_at = excluded.updated_at`,
+                    ['hive_user_id', userId, 0, userId, timestamp, timestamp]
+                  );
+                }
                 db.run(
                   `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
                    VALUES (?, ?, ?, ?, ?, ?)
