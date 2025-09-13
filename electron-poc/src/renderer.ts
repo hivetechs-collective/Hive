@@ -5969,7 +5969,7 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
         }
         
         // Reinitialize SCM view to show welcome message
-        const scmContainer = document.getElementById('source-control-content');
+        const scmContainer = document.getElementById('git-content');
         if (scmContainer) {
             // Destroy old view and create new one
             if (window.scmView) {
@@ -6909,3 +6909,7 @@ function openFileAndFocusEditor(filePath: string) {
     console.log('[Editor Debug] welcome-panel display:', welcomePanel ? getComputedStyle(welcomePanel).display : 'missing');
   }, 50);
 }
+// Update status bar when Git status changes (e.g., stage/commit/pull/push)
+window.addEventListener('git-status-changed', () => {
+  try { updateGitStatusBar(); } catch (e) { console.error('Failed to update status bar from git-status-changed:', e); }
+});

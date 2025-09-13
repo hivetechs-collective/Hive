@@ -85,6 +85,10 @@ export class VSCodeSCMView {
     }
     // Always render, even if there was an error
     this.render();
+    // Notify other UI (e.g., status bar) that Git status changed
+    try {
+      window.dispatchEvent(new CustomEvent('git-status-changed', { detail: { status: this.gitStatus } }));
+    } catch {}
     console.log('[SCM] Render complete');
   }
 
@@ -163,12 +167,16 @@ export class VSCodeSCMView {
           <div class="scm-status-branch" style="position: relative;">
             <span class="codicon codicon-git-branch"></span>
             <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView.showBranchSwitcher()">${this.gitStatus.branch}</span>
-            <span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px; cursor: ${(this.gitStatus.ahead || 0) > 0 ? 'pointer' : 'default'};" 
-                  onclick="${(this.gitStatus.ahead || 0) > 0 ? 'window.scmView?.push()' : ''}"
-                  title="${(this.gitStatus.ahead || 0) > 0 ? 'Click to push' : 'Nothing to push'}">↑${this.gitStatus.ahead || 0}</span>
-            <span class="badge" style="background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px; cursor: ${(this.gitStatus.behind || 0) > 0 ? 'pointer' : 'default'};" 
-                  onclick="${(this.gitStatus.behind || 0) > 0 ? 'window.scmView?.pullAndPush()' : ''}"
-                  title="${(this.gitStatus.behind || 0) > 0 ? 'Click to sync (pull then push)' : 'Up to date'}">↓${this.gitStatus.behind || 0}</span>
+            ${((this.gitStatus.ahead || 0) > 0) ? `
+              <span class=\"badge\" style=\"background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px; cursor: pointer;\" 
+                    onclick=\"window.scmView?.push()\"
+                    title=\"Click to push\">↑${this.gitStatus.ahead}</span>
+            ` : ''}
+            ${((this.gitStatus.behind || 0) > 0) ? `
+              <span class=\"badge\" style=\"background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px; cursor: pointer;\" 
+                    onclick=\"window.scmView?.pullAndPush()\"
+                    title=\"Click to sync (pull then push)\">↓${this.gitStatus.behind}</span>
+            ` : ''}
           </div>
           <div class="scm-status-actions">
             <!-- Removed redundant sync and refresh buttons -->

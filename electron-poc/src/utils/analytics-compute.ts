@@ -129,7 +129,7 @@ export async function computeAnalytics(db: Database, userId: string | '*' = '*',
                                WHERE datetime(cu.timestamp) >= datetime(?) AND datetime(cu.timestamp) < datetime(?) ${userFilter}`,
                               [startISO, endISO, ...userParams],
                               (err6, row6: any) => {
-                                const hourLabel = new Date(start).getHours().toString().padStart(2, '0') + ':00';
+                                const hourLabel = new Date(startISO).getHours().toString().padStart(2, '0') + ':00';
                                 hourly.push({ hour: hourLabel, queries: row6?.queries || 0, cost: row6?.cost || 0, avgTime: row6?.avg_time || 0 });
                                 next(i - 1);
                               }

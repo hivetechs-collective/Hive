@@ -129,7 +129,7 @@ export class AnalyticsDashboard {
       
       if (electronAPI && electronAPI.getAnalytics) {
         console.log('Calling getAnalytics...');
-        const analyticsData = await electronAPI.getAnalytics();
+        const analyticsData = await electronAPI.getAnalytics(this.period);
         console.log('Analytics data received:', analyticsData);
         if (analyticsData) {
           this.data = this.processConsensusMetrics(analyticsData);
