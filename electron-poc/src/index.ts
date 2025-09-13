@@ -636,6 +636,39 @@ ipcMain.handle('profiles-migrate-v2', async () => {
   return { ok: true, summary };
 });
 
+// Rebind a single profile to current internal IDs (best available)
+ipcMain.handle('profiles-rebind-active', async (_e, profileIdOrName: string) => {
+  if (!db) return { ok: false, error: 'DB not initialized' };
+  const row: any = await new Promise((resolve) => db!.get(
+    `SELECT * FROM consensus_profiles WHERE id = ? OR profile_name = ?`,
+    [profileIdOrName, profileIdOrName],
+    (_: any, r: any) => resolve(r)
+  ));
+  if (!row) return { ok: false, error: 'Profile not found' };
+  const id = row.id; const name = row.profile_name;
+  const stages = [ ['generator', row.generator_model], ['refiner', row.refiner_model], ['validator', row.validator_model], ['curator', row.curator_model] ] as const;
+  const stageIds: Record<string, string | null> = { generator: null, refiner: null, validator: null, curator: null };
+  for (const [k, model] of stages) {
+    const map: any = await new Promise((resolve) => db!.get('SELECT internal_id FROM openrouter_models WHERE openrouter_id = ? LIMIT 1', [model], (_: any, r: any) => resolve(r)));
+    stageIds[k] = map?.internal_id || null;
+  }
+  const ts = new Date().toISOString();
+  await new Promise((resolve) => db!.run(`INSERT INTO consensus_profiles_v2 (
+      id, profile_name, generator_internal_id, refiner_internal_id, validator_internal_id, curator_internal_id, max_consensus_rounds, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      profile_name=excluded.profile_name,
+      generator_internal_id=excluded.generator_internal_id,
+      refiner_internal_id=excluded.refiner_internal_id,
+      validator_internal_id=excluded.validator_internal_id,
+      curator_internal_id=excluded.curator_internal_id,
+      max_consensus_rounds=excluded.max_consensus_rounds,
+      updated_at=excluded.updated_at`,
+    [id, name, stageIds.generator, stageIds.refiner, stageIds.validator, stageIds.curator, row.max_consensus_rounds || 3, ts, ts], () => resolve(null)));
+  const complete = Object.values(stageIds).every(v => !!v);
+  return { ok: true, complete };
+});
+
 const registerGitHandlers = () => {
   // Git IPC handlers
   ipcMain.handle('git-status', async () => {

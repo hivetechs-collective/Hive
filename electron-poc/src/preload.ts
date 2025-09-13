@@ -246,7 +246,8 @@ contextBridge.exposeInMainWorld('gitAPI', {
 contextBridge.exposeInMainWorld('maintenanceAPI', {
   modelsSyncNow: () => ipcRenderer.invoke('models-sync-now'),
   profilesMigrateV2: () => ipcRenderer.invoke('profiles-migrate-v2'),
-  usageSyncNow: () => ipcRenderer.invoke('usage-sync-now')
+  usageSyncNow: () => ipcRenderer.invoke('usage-sync-now'),
+  profilesRebindActive: (profileIdOrName: string) => ipcRenderer.invoke('profiles-rebind-active', profileIdOrName)
 });
 
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown

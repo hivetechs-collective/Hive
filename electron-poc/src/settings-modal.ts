@@ -277,8 +277,9 @@ export class SettingsModal {
                 ${this.renderProfiles()}
               </div>
               
-              <div class="button-group">
+              <div class="button-group" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                 <button id="create-profile" class="btn btn-secondary">+ New Profile</button>
+                <button id="btn-profile-rebind" class="btn btn-secondary">Rebind Selected to Current Best</button>
               </div>
             </div>
             
@@ -660,6 +661,22 @@ export class SettingsModal {
     });
     document.getElementById('btn-usage-sync-now')?.addEventListener('click', async () => {
       try { await (window as any).maintenanceAPI?.usageSyncNow(); toast('Usage sync complete'); } catch (e) { toast('Usage sync failed'); }
+    });
+
+    // Rebind selected profile to current best (internal IDs)
+    document.getElementById('btn-profile-rebind')?.addEventListener('click', async () => {
+      try {
+        const pid = this.selectedProfileId;
+        if (!pid) { this.showMessage('Select a profile first', 'warning'); return; }
+        const res = await (window as any).maintenanceAPI?.profilesRebindActive(pid);
+        if (res?.ok) {
+          this.showMessage(res.complete ? 'Profile rebound to current best' : 'Profile rebound (partial)', 'success');
+        } else {
+          this.showMessage('Rebind failed', 'error');
+        }
+      } catch (e) {
+        this.showMessage('Rebind failed', 'error');
+      }
     });
 
     // Handle typing in API key fields
