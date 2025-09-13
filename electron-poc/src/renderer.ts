@@ -2901,6 +2901,49 @@ async function updateGitStatusBar() {
                     branchElement.addEventListener('click', () => showSidebarPanel('git'));
                     branchElement.setAttribute('data-click-bound', 'true');
                 }
+                // Context menu for SCM root controls
+                if (branchElement && !branchElement.getAttribute('data-context-bound')) {
+                    branchElement.addEventListener('contextmenu', (ev) => {
+                        ev.preventDefault();
+                        try {
+                            const menu = document.createElement('div');
+                            menu.style.position = 'fixed';
+                            menu.style.left = `${ev.clientX}px`;
+                            menu.style.top = `${ev.clientY}px`;
+                            menu.style.background = '#2a2a2e';
+                            menu.style.border = '1px solid #3a3a3a';
+                            menu.style.borderRadius = '6px';
+                            menu.style.padding = '6px';
+                            menu.style.zIndex = '99999';
+                            const mkItem = (label: string, handler: () => void) => {
+                                const item = document.createElement('div');
+                                item.textContent = label; item.style.padding = '6px 10px'; item.style.cursor = 'pointer';
+                                item.addEventListener('mouseenter', () => item.style.background = '#343438');
+                                item.addEventListener('mouseleave', () => item.style.background = 'transparent');
+                                item.addEventListener('click', () => { try { handler(); } finally { document.body.removeChild(menu); } });
+                                return item;
+                            };
+                            const repoRoot = status.repoPath as string | undefined;
+                            if (repoRoot && (window as any).currentOpenedFolder && repoRoot !== (window as any).currentOpenedFolder) {
+                                menu.appendChild(mkItem('Switch SCM to Git Root', async () => {
+                                    try { await (window as any).gitAPI.setFolder(repoRoot); await updateGitStatusBar(); } catch (e) { console.error(e); }
+                                }));
+                            }
+                            menu.appendChild(mkItem('Use Opened Folder as SCM Root', async () => {
+                                try { if ((window as any).currentOpenedFolder) { await (window as any).gitAPI.setFolder((window as any).currentOpenedFolder); await updateGitStatusBar(); } } catch (e) { console.error(e); }
+                            }));
+                            if (repoRoot) {
+                                menu.appendChild(mkItem('Reveal Git Root in Finder', async () => {
+                                    try { await (window as any).electronAPI.openPath(repoRoot); } catch (e) { console.error(e); }
+                                }));
+                            }
+                            document.body.appendChild(menu);
+                            const close = (e: any) => { if (e.target !== menu) { try { document.body.removeChild(menu); } catch {} document.removeEventListener('click', close); } };
+                            setTimeout(() => document.addEventListener('click', close), 0);
+                        } catch (e) { console.error('Context menu error:', e); }
+                    });
+                    branchElement.setAttribute('data-context-bound', 'true');
+                }
             } else {
                 // Not a Git repo, hide Git info
                 if (branchElement) branchElement.style.display = 'none';
@@ -6237,6 +6280,78 @@ initializeCliToolDetector();
 initializeWelcomePage();
 
 // Define global functions for opening folder and cloning repository
+async function openUnifiedCloneDialog(): Promise<void> {
+    // Reuse the Welcome page clone dialog UX (URL/GitHub/GitLab tabs)
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.5)'; overlay.style.zIndex = '2000';
+    const modal = document.createElement('div');
+    modal.style.width = '560px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '12vh auto'; modal.style.padding = '16px';
+    modal.innerHTML = `
+      <div style="font-weight:600; margin-bottom:8px">Clone Repository</div>
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <button class="footer-btn" id="tab-url">URL</button>
+        <button class="footer-btn" id="tab-github">GitHub</button>
+        <button class="footer-btn" id="tab-gitlab">GitLab</button>
+      </div>
+      <div id="pane-url">
+        <input id="clone-url" placeholder="https://github.com/org/repo(.git) or git@github.com:org/repo(.git)" style="width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+      </div>
+      <div id="pane-github" style="display:none">
+        <div style="display:flex; gap:8px">
+          <input id="gh-owner" placeholder="owner" style="flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+          <input id="gh-repo" placeholder="repo" style="flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+        </div>
+      </div>
+      <div id="pane-gitlab" style="display:none">
+        <div style="display:flex; gap:8px">
+          <input id="gl-group" placeholder="group" style="flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+          <input id="gl-repo" placeholder="repo" style="flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
+        <button class="footer-btn" id="clone-cancel">Cancel</button>
+        <button class="footer-btn" id="clone-confirm">Clone…</button>
+      </div>`;
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    const byId = (id: string) => modal.querySelector(`#${id}`) as HTMLElement;
+    const paneUrl = byId('pane-url') as HTMLElement; const paneGh = byId('pane-github') as HTMLElement; const paneGl = byId('pane-gitlab') as HTMLElement;
+    byId('tab-url').addEventListener('click', () => { paneUrl.style.display = 'block'; paneGh.style.display = 'none'; paneGl.style.display = 'none'; });
+    byId('tab-github').addEventListener('click', () => { paneUrl.style.display = 'none'; paneGh.style.display = 'block'; paneGl.style.display = 'none'; });
+    byId('tab-gitlab').addEventListener('click', () => { paneUrl.style.display = 'none'; paneGh.style.display = 'none'; paneGl.style.display = 'block'; });
+    byId('clone-cancel').addEventListener('click', () => document.body.removeChild(overlay));
+    byId('clone-confirm').addEventListener('click', async () => {
+      try {
+        let url = (modal.querySelector('#clone-url') as HTMLInputElement)?.value?.trim();
+        if (paneGh.style.display !== 'none') {
+          const owner = (modal.querySelector('#gh-owner') as HTMLInputElement)?.value?.trim();
+          const repo = (modal.querySelector('#gh-repo') as HTMLInputElement)?.value?.trim();
+          if (owner && repo) url = `https://github.com/${owner}/${repo}.git`;
+        } else if (paneGl.style.display !== 'none') {
+          const group = (modal.querySelector('#gl-group') as HTMLInputElement)?.value?.trim();
+          const repo = (modal.querySelector('#gl-repo') as HTMLInputElement)?.value?.trim();
+          if (group && repo) url = `https://gitlab.com/${group}/${repo}.git`;
+        }
+        const { isValidRepoUrl } = await import('./utils/clone-validate');
+        if (!isValidRepoUrl(url)) { await (window as any).electronAPI.showMessageBox({ type: 'error', title: 'Invalid URL', message: 'Please enter a valid Git repository URL.' }); return; }
+        const result = await (window as any).electronAPI.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Select destination' });
+        if (result.canceled || result.filePaths.length === 0) return;
+        const parentDir = result.filePaths[0];
+        const notice = document.createElement('div'); notice.className = 'status-toast cloning'; notice.textContent = 'Cloning repository...'; document.body.appendChild(notice);
+        try {
+          const cloneResult = await (window as any).gitAPI.clone(url, parentDir);
+          notice.remove();
+          if (!cloneResult || !cloneResult.success) {
+            await (window as any).electronAPI.showMessageBox({ type: 'error', title: 'Clone Failed', message: cloneResult?.error || 'Clone failed' });
+            return;
+          }
+          const destPath = cloneResult.destination;
+          (window as any).openFolder(destPath);
+          document.body.removeChild(overlay);
+        } catch (e) { notice.remove(); throw e; }
+      } catch (e) { console.error('Clone dialog error:', e); }
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
+}
 window.openFolder = async (folderPath?: string) => {
     try {
         // If a folder path is provided, open it directly
@@ -6267,75 +6382,12 @@ window.openFolder = async (folderPath?: string) => {
     }
 };
 
-window.cloneRepository = async () => {
-    try {
-        // For now, show a prompt for the repository URL
-        const repoUrl = await window.electronAPI.showInputDialog('Clone Repository', 'Enter repository URL:');
-        
-        if (repoUrl) {
-            // Select destination folder
-            const result = await window.electronAPI.showOpenDialog({
-                properties: ['openDirectory', 'createDirectory'],
-                title: 'Select destination folder for clone'
-            });
-            
-            if (!result.canceled && result.filePaths.length > 0) {
-                const destPath = result.filePaths[0];
-                // TODO: Implement actual git clone functionality
-                console.log('Would clone', repoUrl, 'to', destPath);
-                alert(`Clone functionality coming soon!\nWould clone: ${repoUrl}\nTo: ${destPath}`);
-            }
-        }
-    } catch (error) {
-        console.error('Failed to clone repository:', error);
-    }
-};
+window.cloneRepository = async () => { await openUnifiedCloneDialog(); };
 
 // Testing Git modification indicator
 
 // Override cloneRepository with functional implementation (kept after initial assignment to ensure latest)
-window.cloneRepository = async () => {
-    try {
-        const repoUrl = await window.electronAPI.showInputDialog('Clone Repository', 'Enter repository URL (https/ssh):');
-        if (!repoUrl) return;
-        
-        const result = await window.electronAPI.showOpenDialog({
-            properties: ['openDirectory', 'createDirectory'],
-            title: 'Select destination folder for clone'
-        });
-        if (result.canceled || result.filePaths.length === 0) return;
-        const parentDir = result.filePaths[0];
-        
-        const notice = document.createElement('div');
-        notice.className = 'status-toast cloning';
-        notice.textContent = 'Cloning repository...';
-        document.body.appendChild(notice);
-        
-        const cloneResult = await (window as any).gitAPI.clone(repoUrl, parentDir);
-        
-        notice.remove();
-        
-        if (!cloneResult || !cloneResult.success) {
-            await window.electronAPI.showMessageBox({
-                type: 'error',
-                title: 'Clone Failed',
-                message: cloneResult?.error || 'Clone failed'
-            });
-            return;
-        }
-        
-        const destPath: string = cloneResult.destination;
-        console.log('[Clone] Completed. Opening folder:', destPath);
-        handleOpenFolder(destPath);
-    } catch (error) {
-        console.error('Failed to clone repository:', error);
-        await window.electronAPI.showMessageBox({
-            type: 'error',
-            title: 'Clone Error',
-            message: (error as any)?.message || String(error)
-        });
-    }
-};
+window.cloneRepository = async () => { await openUnifiedCloneDialog(); };
 
 
 // ========== HELP MODAL FUNCTIONS ==========

@@ -323,6 +323,22 @@ const findGitRoot = async (startPath: string): Promise<string | null> => {
   }
 };
 
+const getConfigValue = async (key: string): Promise<string | null> => {
+  return new Promise((resolve) => {
+    try {
+      db?.get('SELECT value FROM configurations WHERE key = ?', [key], (err: any, row: any) => {
+        if (err || !row) return resolve(null);
+        resolve(String(row.value ?? ''));
+      });
+    } catch { resolve(null); }
+  });
+};
+
+const shouldPreferOpenedFolderRoot = async (): Promise<boolean> => {
+  const v = await getConfigValue('git_prefer_opened_folder_root');
+  return v === 'true';
+};
+
 const initGitManager = async (folderPath?: string) => {
   if (!folderPath) {
     logger.info('[Main] No folder path provided, GitManager will return null status');
@@ -330,12 +346,20 @@ const initGitManager = async (folderPath?: string) => {
     gitManager = null;
     return;
   }
-  // Auto-detect nearest Git root above the provided folder
-  const detectedRoot = await findGitRoot(folderPath);
-  const repoPathToUse = detectedRoot || folderPath;
-  if (detectedRoot && detectedRoot !== folderPath) {
-    logger.info(`[Main] Auto-detected Git root: ${detectedRoot} (from ${folderPath})`);
-  }
+  // Decide repo path: either prefer opened folder, or auto-detect nearest Git root
+  let repoPathToUse = folderPath;
+  try {
+    const preferOpened = await shouldPreferOpenedFolderRoot();
+    if (!preferOpened) {
+      const detectedRoot = await findGitRoot(folderPath);
+      if (detectedRoot && detectedRoot !== folderPath) {
+        repoPathToUse = detectedRoot;
+        logger.info(`[Main] Auto-detected Git root: ${detectedRoot} (from ${folderPath})`);
+      }
+    } else {
+      logger.info('[Main] Respecting preference: using opened folder as Git root');
+    }
+  } catch {}
   
   if (GIT_MANAGER_VERSION === 2) {
     logger.info('[Main] Using EnhancedGitManager with authentication support for:', repoPathToUse);
@@ -4752,10 +4776,14 @@ ipcMain.handle('settings-load', async () => {
                   db.get('SELECT value FROM configurations WHERE key = ?', ['show_costs'], (err5, row5: any) => {
                     if (row5) settings.showCosts = row5.value === 'true';
                     
-                    db.get('SELECT value FROM configurations WHERE key = ?', ['max_daily_conversations'], (err6, row6: any) => {
-                      if (row6) settings.maxDailyConversations = row6.value;
-                      resolve(settings);
-                    });
+                  db.get('SELECT value FROM configurations WHERE key = ?', ['max_daily_conversations'], (err6, row6: any) => {
+                    if (row6) settings.maxDailyConversations = row6.value;
+                      // Load Git preference
+                      db.get('SELECT value FROM configurations WHERE key = ?', ['git_prefer_opened_folder_root'], (err7, row7: any) => {
+                        if (row7) settings.gitPreferOpenedFolderRoot = row7.value === 'true';
+                        resolve(settings);
+                      });
+                  });
                   });
                 });
               });
@@ -5189,6 +5217,16 @@ ipcMain.handle('settings-save-all', async (_, settings) => {
            value = excluded.value,
            updated_at = excluded.updated_at`,
           ['max_daily_conversations', settings.maxDailyConversations.toString(), 0, userId, timestamp, timestamp]
+        );
+      }
+      if (settings.gitPreferOpenedFolderRoot !== undefined) {
+        db.run(
+          `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+           value = excluded.value,
+           updated_at = excluded.updated_at`,
+          ['git_prefer_opened_folder_root', settings.gitPreferOpenedFolderRoot ? 'true' : 'false', 0, userId, timestamp, timestamp]
         );
       }
       

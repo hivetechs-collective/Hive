@@ -328,6 +328,18 @@ export class SettingsModal {
               </div>
               <small class="help-text">Backups include all settings, sessions, recents, profiles, and analytics in ~/.hive/hive-ai.db</small>
             </div>
+
+            <!-- Source Control Section -->
+            <div class="settings-section">
+              <h3>Source Control</h3>
+              <p class="section-description">Git integration preferences</p>
+              <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="git-prefer-opened-folder-root" /> Prefer opened folder as Git root
+                </label>
+                <small class="help-text">When enabled, SCM binds to the currently opened folder instead of auto-detecting the nearest Git root. Disable to get repo‑root SCM for monorepos.</small>
+              </div>
+            </div>
           
           </div>
           
@@ -1113,6 +1125,13 @@ export class SettingsModal {
         this.refreshLicenseStatus(settings.hiveKey);
       }
 
+      // Load Git preference
+      try {
+        const gitPrefer = settings.gitPreferOpenedFolderRoot === true || settings.gitPreferOpenedFolderRoot === 'true';
+        const gitChk = document.getElementById('git-prefer-opened-folder-root') as HTMLInputElement | null;
+        if (gitChk) gitChk.checked = !!gitPrefer;
+      } catch {}
+
       // Load selected profile from active_profile_id
       if (settings.activeProfileId || settings.activeProfileName) {
         // Try to find matching profile in all profiles (expert + custom)
@@ -1345,10 +1364,12 @@ export class SettingsModal {
 
     try {
       // Save all settings including the selected profile
+      const gitPrefer = (document.getElementById('git-prefer-opened-folder-root') as HTMLInputElement | null)?.checked || false;
       await (window as any).settingsAPI.saveAllSettings({
         openrouterKey,
         hiveKey,
-        selectedProfile: this.selectedProfileId
+        selectedProfile: this.selectedProfileId,
+        gitPreferOpenedFolderRoot: gitPrefer
       });
       
       // Profile is now saved to database, the callback will reload it
