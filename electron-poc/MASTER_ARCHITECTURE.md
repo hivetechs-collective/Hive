@@ -2212,6 +2212,88 @@ Implementation: `src/index.ts`, `src/settings-modal.ts`, `src/renderer.ts`
     - Reveal Git Root in Finder
   - Branch tooltip shows the active Git root path.
 
+## Maintenance & Daily Processes (Unified DB)
+
+All maintenance is centered on a single source of truth: the unified SQLite database at `~/.hive/hive-ai.db`. Processes are designed to be non‑blocking, idempotent, and verifiable.
+
+### 1) OpenRouter Provider/Model Sync (Daily)
+
+Purpose: Keep a current local catalog of models and providers for Settings → Profiles and cost accounting, while remaining resilient to removals/renames upstream.
+
+- Data flow
+  - Fetch `https://openrouter.ai/api/v1/models` with the user’s OpenRouter key.
+  - Upsert providers and models into the unified DB; never delete — mark rows inactive.
+  - Keep a stable `internal_id` for each model (derived deterministically from `openrouter_id`).
+  - Preserve alias mapping in `model_aliases` so historical references remain resolvable.
+
+- Unified DB tables
+  - `openrouter_providers(provider_id PK, name, website, last_seen_at, is_active)`
+  - `openrouter_models(internal_id PK, openrouter_id UNIQUE, provider_id FK, name, description, context_window, pricing_input, pricing_output, is_active, last_seen_at, replaced_by)`
+  - `model_aliases(internal_id, openrouter_id, active, PRIMARY KEY(internal_id, openrouter_id))`
+
+- Scheduling & controls
+  - Runs shortly after startup and every 24h.
+  - Manual trigger: IPC `models-sync-now` (Settings → Maintenance → “Sync Models Now”).
+  - Writes last sync timestamp to `configurations('openrouter_last_sync')`.
+
+- Guarantees
+  - No hard deletes — historical models are marked `is_active=0` and remain resolvable via `model_aliases`.
+  - Pricing and context window attributes are updated atomically with each sync.
+
+### 2) Profiles v2 & Internal IDs
+
+Purpose: Ensure stable profile configuration across provider/model removals or renames by binding to internal IDs.
+
+- Storage
+  - `consensus_profiles_v2` with stage columns referencing `internal_id`: `generator_internal_id`, `refiner_internal_id`, `validator_internal_id`, `curator_internal_id`.
+  - `max_consensus_rounds` remains part of the profile.
+
+- Migration
+  - IPC `profiles-migrate-v2` maps existing `consensus_profiles` (openrouter_id strings) to v2 internal IDs using `openrouter_models` lookups.
+  - Partial migrations are allowed; runtime resolution (next point) tolerates incomplete cases.
+
+- Runtime resolution
+  - Consensus engines resolve stage models at runtime via a resolver:
+    - Accepts either an `internal_id` (preferred) or legacy `openrouter_id`/name.
+    - If a model is inactive or aliased, resolves to the current active `openrouter_id` using `model_aliases`.
+    - Guarantees that downstream OpenRouter calls always target a valid, current model.
+
+- UI intents
+  - Profiles UI continues to show human‑friendly model names and providers.
+  - A “Rebind to current best” flow (optional) can update v2 fields explicitly after a deprecation.
+
+### 3) Usage Tracking & Cloudflare D1
+
+Purpose: Track per‑user daily usage (one conversation equals one consensus pipeline run), enforce limits, and sync to D1 for licensing/credits.
+
+- Local accounting (DB)
+  - `conversation_usage(user_id, conversation_id, timestamp)` — appended when a consensus run completes.
+  - `d1_usage_queue(id, user_id, conversation_id, timestamp, status, attempts, last_error)` — background queue for D1 sync.
+  - `configurations` holds `hive_user_id`, `hive_daily_limit`, and `hive_remaining` returned by D1 validation.
+
+- Enforcement (pre‑consensus)
+  - Before executing consensus, read the effective daily limit from `configurations`.
+  - Count today’s `conversation_usage` for the current user.
+  - Block start if used ≥ limit (unless tier is unlimited), with clear UI to purchase credits.
+
+- D1 sync (background)
+  - Scheduler posts queued usage (`user_id`, `conversation_id`, `timestamp`) to the D1 gateway with exponential retry.
+  - Manual trigger: IPC `usage-sync-now` (Settings → Maintenance → “Sync Usage Now”).
+  - Minimal payload; errors logged in `d1_usage_queue.last_error`.
+
+- Identity & security
+  - `hive_user_id` and `hive_license_key` stored securely in the unified DB.
+  - D1 usage posts use Bearer token (license key) with an explicit User-Agent.
+
+### 4) Settings → Maintenance Controls
+
+- Controls in app:
+  - “Sync Models Now” → `models-sync-now`
+  - “Migrate Profiles to Internal IDs” → `profiles-migrate-v2`
+  - “Sync Usage Now” → `usage-sync-now`
+
+- Non‑blocking: All maintenance buttons are safe to run repeatedly; tasks are idempotent.
+
 
 #### Consensus Toggle Icon (v1.8.324)
 **Revolutionary Sidebar Feature**: A unique hexagon icon that represents our 4-stage consensus system
