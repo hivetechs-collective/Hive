@@ -5434,12 +5434,18 @@ ipcMain.handle('save-conversation', async (_, data: {
     const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // sales@hivetechs.io
     const timestamp = new Date().toISOString();
     
-    // Insert into conversations table
+    // Upsert into conversations table (update totals if row exists)
     db.run(`
       INSERT INTO conversations (
         id, user_id, title, total_cost, total_tokens_input, total_tokens_output, 
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        total_cost = excluded.total_cost,
+        total_tokens_input = excluded.total_tokens_input,
+        total_tokens_output = excluded.total_tokens_output,
+        updated_at = excluded.updated_at
     `, [
       data.conversationId,
       userId,
@@ -5461,6 +5467,10 @@ ipcMain.handle('save-conversation', async (_, data: {
         INSERT INTO knowledge_conversations (
           conversation_id, question, final_answer, source_of_truth, created_at
         ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(conversation_id) DO UPDATE SET
+          question = excluded.question,
+          final_answer = excluded.final_answer,
+          source_of_truth = excluded.source_of_truth
       `, [
         data.conversationId,
         data.question,
@@ -5513,13 +5523,18 @@ ipcMain.handle('save-conversation', async (_, data: {
       
       // Insert into performance_metrics if duration provided
       if (data.duration) {
-        db.run(`
-          INSERT INTO performance_metrics (
-            conversation_id, timestamp, total_duration, total_cost, created_at
-          ) VALUES (?, ?, ?, ?, ?)
-        `, [data.conversationId, timestamp, data.duration, data.totalCost || 0, timestamp], (err4) => {
-          if (err4) logger.error('Error saving performance metrics:', err4);
-        });
+      db.run(`
+        INSERT INTO performance_metrics (
+          conversation_id, timestamp, total_duration, total_cost, created_at
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(conversation_id) DO UPDATE SET
+          timestamp = excluded.timestamp,
+          total_duration = excluded.total_duration,
+          total_cost = excluded.total_cost,
+          created_at = excluded.created_at
+      `, [data.conversationId, timestamp, data.duration, data.totalCost || 0, timestamp], (err4) => {
+        if (err4) logger.error('Error saving performance metrics:', err4);
+      });
       }
       
       // Insert into cost_analytics
@@ -5578,7 +5593,7 @@ ipcMain.handle('get-usage-count', async () => {
   });
 });
 
-ipcMain.handle('get-analytics', async () => {
+ipcMain.handle('get-analytics', async (_e, period?: '24h' | '7d' | '30d') => {
   return new Promise((resolve) => {
     if (!db) {
       logger.error('Database not initialized for analytics');
@@ -5588,22 +5603,23 @@ ipcMain.handle('get-analytics', async () => {
 
     const analyticsData: any = {};
     
-    // Calculate date ranges
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    // Period window clause for SQLite ISO timestamps
+    const p = period || '24h';
+    const windowClause = p === '7d'
+      ? `datetime(timestamp) >= datetime('now','-7 days')`
+      : p === '30d'
+      ? `datetime(timestamp) >= datetime('now','-30 days')`
+      : `datetime(timestamp) >= datetime('now','-24 hours')`;
     
     // Get user-specific data - using the logged-in user's ID
     // This comes from the D1 validation response stored earlier
     const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // sales@hivetechs.io user ID
     
-    // Get TODAY's queries for this user from conversation_usage table
-    // Use UTC dates consistently since timestamps are stored in UTC
+    // Get period queries for this user from conversation_usage table
     db.get(`
       SELECT COUNT(*) as count 
       FROM conversation_usage 
-      WHERE date(timestamp, 'localtime') = date('now', 'localtime') 
+      WHERE ${windowClause}
       AND user_id = ?
     `, [userId], (err1, row1: any) => {
       if (err1) {
@@ -5624,8 +5640,7 @@ ipcMain.handle('get-analytics', async () => {
         logger.info('Analytics - Total queries for user:', rowTotal?.count);
         analyticsData.totalQueries = rowTotal?.count || 0;
       
-        // Get TODAY's cost and token usage - join with conversation_usage for user filtering
-        // Convert UTC timestamps to localtime for date comparison
+      // Get period cost and token usage - join with conversation_usage for user filtering
         db.get(`
           SELECT 
             SUM(c.total_cost) as total_cost,
@@ -5635,7 +5650,7 @@ ipcMain.handle('get-analytics', async () => {
           FROM conversations c
           INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
           LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-          WHERE date(cu.timestamp, 'localtime') = date('now', 'localtime')
+          WHERE ${p === '7d' ? `datetime(cu.timestamp) >= datetime('now','-7 days')` : p === '30d' ? `datetime(cu.timestamp) >= datetime('now','-30 days')` : `datetime(cu.timestamp) >= datetime('now','-24 hours')`}
           AND cu.user_id = ?
         `, [userId], (err2, row2: any) => {
         if (err2) logger.error('Error getting today cost data:', err2);
@@ -5648,7 +5663,7 @@ ipcMain.handle('get-analytics', async () => {
             input: row2?.total_input || 0,
             output: row2?.total_output || 0
           };
-          
+        
           // Get all-time totals - join with conversation_usage for user filtering
           db.get(`
             SELECT 
