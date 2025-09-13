@@ -169,7 +169,7 @@ export class VSCodeSCMView {
           flex-shrink: 0;
           border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #1e1e1e);
         ">
-          <div class="scm-status-branch" style="position: relative;">
+          <div class="scm-status-branch" style="position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <span class="codicon codicon-git-branch"></span>
             <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView.showBranchSwitcher()">${this.gitStatus.branch}</span>
             <span class="scm-badges">${this.buildHeaderBadgesHtml()}</span>
@@ -414,7 +414,11 @@ export class VSCodeSCMView {
   public scrollToGroup(groupId: 'staged' | 'changes' | 'untracked') {
     try {
       const el = this.container.querySelector(`.scm-resource-group[data-group="${groupId}"]`) as HTMLElement | null;
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const content = this.container.querySelector('.scm-view-content') as HTMLElement | null;
+      if (el && content) {
+        const targetTop = el.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop - 4;
+        content.scrollTo({ top: targetTop, behavior: 'smooth' });
+      }
     } catch (e) {
       console.warn('scrollToGroup failed', e);
     }
