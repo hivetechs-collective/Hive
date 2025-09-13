@@ -2185,6 +2185,34 @@ Key CSS hooks
 .content-panel { display: none; flex: 1; }
 ```
 
+### Source Control Welcome Experience (v1.8.380)
+Implementation: `src/vscode-scm-view.ts`, `src/renderer.ts`, `src/index.ts`
+
+- When no folder is open or the current folder has no Git repository, clicking the Source Control icon presents two actions:
+  - Open Folder — identical to Welcome → Open Folder (native dialog, unified handler).
+  - Clone Repository — uses the same multi‑provider clone dialog as the Welcome page (URL/GitHub/GitLab tabs), with URL validation and post‑clone open.
+- The Clone dialog drives `gitAPI.clone()` in the main process, then opens the cloned folder using the same `handleOpenFolder()` pipeline.
+
+### SCM Root Behavior & Preference (v1.8.380)
+Implementation: `src/index.ts`, `src/settings-modal.ts`, `src/renderer.ts`
+
+- Auto‑detect nearest Git root (default):
+  - Detects root via `rev-parse --show-toplevel`, falls back to walking parent directories for `.git`.
+  - Initializes Git manager at the repo root for accurate S/M/U and ahead/behind in monorepos.
+  - `git-status` IPC returns the active `repoPath` so the UI can show the root in the status bar tooltip.
+
+- SCM Root Preference (Settings → Source Control):
+  - “Prefer opened folder as Git root” (`git_prefer_opened_folder_root`).
+  - When enabled, SCM binds to the currently opened folder instead of auto‑detecting the repo root.
+
+- Status Bar SCM context menu:
+  - Right‑click branch item to open a minimal menu with:
+    - Switch SCM to Git Root (if different from opened folder)
+    - Use Opened Folder as SCM Root
+    - Reveal Git Root in Finder
+  - Branch tooltip shows the active Git root path.
+
+
 #### Consensus Toggle Icon (v1.8.324)
 **Revolutionary Sidebar Feature**: A unique hexagon icon that represents our 4-stage consensus system
 
@@ -13579,7 +13607,7 @@ electron-poc/
 **Maintainer**: Hive Development Team
 
 ### Change Log
-- **v1.8.248 (2025-09-09)**: Direct API Integration - Eliminated MCP Complexity
+ - **v1.8.248 (2025-09-09)**: Direct API Integration - Eliminated MCP Complexity
   - **Architectural Simplification**: Replaced complex MCP protocol with direct HTTP API calls
   - **Eliminated Dependencies**: Removed all MCP wrapper scripts and external protocol dependencies
   - **Faster Performance**: 2-5ms response times vs MCP protocol overhead
@@ -13617,6 +13645,11 @@ electron-poc/
    - On-demand creation of `#settings-panel`, `#memory-panel`, `#cli-tools-panel` when first used.
    - `ensureEditorAreaReady()` hides overlays, expands center area, shows `#editor-area`; editors container hidden when panels show.
    - Added integration test `tests/center-view.test.ts` to complement `tests/panel-state.test.ts`.
+ - **v1.8.380 (2025-09-13)**: Enterprise SCM root + unified clone
+   - Auto‑detect nearest Git root for SCM (with .git walk‑up fallback) and show root in branch tooltip.
+   - New preference: “Prefer opened folder as Git root” — switch between repo‑root SCM and folder‑scoped SCM.
+   - Status bar SCM context menu: Switch to Git Root, Use Opened Folder, Reveal Root in Finder.
+   - SCM Welcome “Clone Repository” uses the same multi‑provider dialog as Welcome (URL/GitHub/GitLab), with validation and auto‑open.
   - **Automatic Version Incrementing**: Build script now auto-increments version for tracking builds
   - **Port Scanning Timeout**: Added 3-second timeout to prevent app hanging during port initialization
   - **Environment Variable Fix**: Fixed PORT env var not being passed to Memory Service in production
