@@ -577,10 +577,9 @@ document.body.innerHTML = `
             <button class="terminal-btn" id="close-terminal" title="Close">×</button>
           </div>
         </div>
-        <div class="terminal-content" id="terminal-content">
+      <div class="terminal-content" id="terminal-content">
           <div id="terminal-output">
             <div class="terminal-line">[${new Date().toLocaleTimeString()}] Hive Consensus initialized</div>
-            <div class="terminal-line" id="backend-server-line">[${new Date().toLocaleTimeString()}] System initializing...</div>
           </div>
         </div>
       </div>
@@ -2770,6 +2769,34 @@ async function updateGitStatusBar() {
                 // Update branch name
                 if (branchNameElement) {
                     branchNameElement.textContent = status.branch || 'main';
+                }
+
+                // Compute simple counts and ahead/behind
+                const files = status.files || [];
+                const untracked = files.filter(f => (f.working === '?' || f.index === '?')).length;
+                const staged = files.filter(f => f.index && f.index !== ' ' && f.index !== '?').length;
+                const modified = files.filter(f => f.working && f.working !== ' ' && f.working !== '?').length;
+
+                // Add or update compact counts span
+                const countsClass = 'git-counts';
+                let countsSpan = branchElement!.querySelector(`.${countsClass}`) as HTMLElement | null;
+                if (!countsSpan) {
+                    countsSpan = document.createElement('span');
+                    countsSpan.className = countsClass;
+                    countsSpan.style.marginLeft = '6px';
+                    countsSpan.style.opacity = '0.9';
+                    branchElement!.appendChild(countsSpan);
+                }
+                const parts: string[] = [];
+                if ((status.ahead || 0) > 0) parts.push(`↑${status.ahead}`);
+                if ((status.behind || 0) > 0) parts.push(`↓${status.behind}`);
+                if (staged > 0 || modified > 0 || untracked > 0) parts.push(`S:${staged} M:${modified} U:${untracked}`);
+                countsSpan.textContent = parts.length ? parts.join(' ') : '';
+
+                // Make the branch item open the Git panel when clicked
+                if (branchElement && !branchElement.getAttribute('data-click-bound')) {
+                    branchElement.addEventListener('click', () => toggleSidebarPanel('git'));
+                    branchElement.setAttribute('data-click-bound', 'true');
                 }
             } else {
                 // Not a Git repo, hide Git info
