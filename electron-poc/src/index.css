@@ -1408,6 +1408,24 @@ body {
   color: var(--text-primary);
 }
 
+/* Lightweight toast notifications for maintenance actions */
+.status-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(25, 25, 26, 0.95);
+  color: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px 12px;
+  z-index: 10000;
+  font-size: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.status-toast.success { border-color: #2e7d32; }
+.status-toast.error { border-color: #c62828; }
+.status-toast.info { border-color: #1565c0; }
+
 .horizontal-resize {
   top: 0;
   left: 0;

@@ -643,39 +643,63 @@ export class SettingsModal {
     });
 
     // Maintenance actions
-    const toast = (msg: string) => {
+    const toast = (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
       const n = document.createElement('div');
-      n.className = 'status-toast';
+      n.className = `status-toast ${type}`;
       n.textContent = msg;
       document.body.appendChild(n);
       setTimeout(() => n.remove(), 2000);
     };
-    document.getElementById('btn-models-sync-now')?.addEventListener('click', async () => {
-      try { await (window as any).maintenanceAPI?.modelsSyncNow(); toast('Models synced'); } catch (e) { toast('Model sync failed'); }
+    document.getElementById('btn-models-sync-now')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement;
+      const old = btn.textContent || '';
+      btn.disabled = true; btn.textContent = 'Syncing…';
+      try { await (window as any).maintenanceAPI?.modelsSyncNow(); toast('Models synced', 'success'); }
+      catch (e) { toast('Model sync failed', 'error'); }
+      finally { btn.disabled = false; btn.textContent = old; }
     });
-    document.getElementById('btn-profiles-migrate-v2')?.addEventListener('click', async () => {
+    document.getElementById('btn-profiles-migrate-v2')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement;
+      const old = btn.textContent || '';
+      btn.disabled = true; btn.textContent = 'Migrating…';
       try {
         const res = await (window as any).maintenanceAPI?.profilesMigrateV2();
-        toast(res?.ok ? 'Profiles migrated' : 'Profiles migration failed');
-      } catch (e) { toast('Profiles migration failed'); }
+        toast(res?.ok ? 'Profiles migrated' : 'Profiles migration failed', res?.ok ? 'success' : 'error');
+      } catch (e) { toast('Profiles migration failed', 'error'); }
+      finally { btn.disabled = false; btn.textContent = old; }
     });
-    document.getElementById('btn-usage-sync-now')?.addEventListener('click', async () => {
-      try { await (window as any).maintenanceAPI?.usageSyncNow(); toast('Usage sync complete'); } catch (e) { toast('Usage sync failed'); }
+    document.getElementById('btn-usage-sync-now')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement;
+      const old = btn.textContent || '';
+      btn.disabled = true; btn.textContent = 'Syncing…';
+      try { await (window as any).maintenanceAPI?.usageSyncNow(); toast('Usage sync complete', 'success'); }
+      catch (e) { toast('Usage sync failed', 'error'); }
+      finally { btn.disabled = false; btn.textContent = old; }
     });
 
     // Rebind selected profile to current best (internal IDs)
-    document.getElementById('btn-profile-rebind')?.addEventListener('click', async () => {
+    document.getElementById('btn-profile-rebind')?.addEventListener('click', async (ev) => {
       try {
         const pid = this.selectedProfileId;
-        if (!pid) { this.showMessage('Select a profile first', 'warning'); return; }
+        if (!pid) { this.showMessage('Select a profile first', 'info'); return; }
+        const btn = ev.currentTarget as HTMLButtonElement;
+        const old = btn.textContent || '';
+        btn.disabled = true; btn.textContent = 'Rebinding…';
         const res = await (window as any).maintenanceAPI?.profilesRebindActive(pid);
         if (res?.ok) {
-          this.showMessage(res.complete ? 'Profile rebound to current best' : 'Profile rebound (partial)', 'success');
+          const msg = res.complete ? 'Profile rebound to current best' : 'Profile rebound (partial)';
+          this.showMessage(msg, 'success');
+          toast(msg, 'success');
         } else {
           this.showMessage('Rebind failed', 'error');
+          toast('Rebind failed', 'error');
         }
       } catch (e) {
         this.showMessage('Rebind failed', 'error');
+        toast('Rebind failed', 'error');
+      } finally {
+        const btn = document.getElementById('btn-profile-rebind') as HTMLButtonElement | null;
+        if (btn) { btn.disabled = false; btn.textContent = 'Rebind Selected to Current Best'; }
       }
     });
 
