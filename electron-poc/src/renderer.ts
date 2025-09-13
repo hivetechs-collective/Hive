@@ -2786,6 +2786,10 @@ async function updateGitStatusBar() {
                 if (branchNameElement) {
                     branchNameElement.textContent = status.branch || 'main';
                 }
+                // Add tooltip with repo root for transparency
+                if (branchElement && status.repoPath) {
+                    branchElement.title = `Git root: ${status.repoPath}`;
+                }
 
                 // Compute simple counts and ahead/behind
                 const files = status.files || [] as any[];
@@ -2820,6 +2824,12 @@ async function updateGitStatusBar() {
                       <span class="sb-count">${count}</span>
                     </span>`;
                 };
+                const mkAction = (icon: string, title: string, action: string, extra?: string) => {
+                  return `
+                    <span class="sb-badge sb-action" data-action="${action}" style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;cursor:pointer;opacity:1;${extra || ''}" title="${title}">
+                      <span class="codicon ${icon}"></span>
+                    </span>`;
+                };
                 const mkCount = (icon: string, label: string, count: number, group?: string, color?: string) => {
                   const clickable = !!group && count > 0;
                   const cursor = clickable ? 'pointer' : 'default';
@@ -2845,6 +2855,12 @@ async function updateGitStatusBar() {
                 html += mkCount('codicon-diff', 'Modified', modified, 'changes', '#d19a66');
                 html += mkCount('codicon-diff-added', 'Untracked', untracked, 'untracked');
 
+                // Root switch affordance (enterprise UX): if Git root differs from opened folder
+                const repoRoot = status.repoPath as string | undefined;
+                if (repoRoot && (window as any).currentOpenedFolder && repoRoot !== (window as any).currentOpenedFolder) {
+                  html += mkAction('codicon-repo', `Switch Git to root: ${repoRoot}`, 'switch-root');
+                }
+
                 countsSpan.innerHTML = html;
 
                 // Bind click handlers once per render
@@ -2869,6 +2885,14 @@ async function updateGitStatusBar() {
                         }, 150);
                       }
                     } catch {}
+                  } else if (action === 'switch-root' && status.repoPath) {
+                    try {
+                      await (window as any).gitAPI.setFolder(status.repoPath);
+                      // Keep the File Explorer at currentOpenedFolder; only SCM switches root
+                      await updateGitStatusBar();
+                    } catch (e) {
+                      console.error('Failed to switch Git root:', e);
+                    }
                   }
                 };
 

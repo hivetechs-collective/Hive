@@ -7,6 +7,7 @@ app.setName('Hive Consensus');
 
 import * as path from 'path';
 import * as fs from 'fs';
+import simpleGit from 'simple-git';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import { Database } from 'sqlite3';
@@ -296,6 +297,32 @@ const GIT_MANAGER_VERSION = 2; // Use EnhancedGitManager with authentication
 let gitManager: GitManager | GitManagerV2 | EnhancedGitManager | null = null;
 
 // Initialize Git manager - pass no path when no folder is open
+const findGitRoot = async (startPath: string): Promise<string | null> => {
+  try {
+    const git = simpleGit(startPath);
+    const isRepo = await git.checkIsRepo();
+    if (!isRepo) {
+      // Walk up to find a .git directory
+      let dir = startPath;
+      // Guard against empty/relative
+      try { dir = path.resolve(dir); } catch {}
+      while (true) {
+        const gitDir = path.join(dir, '.git');
+        if (fs.existsSync(gitDir)) return dir;
+        const parent = path.dirname(dir);
+        if (!parent || parent === dir) break;
+        dir = parent;
+      }
+      return null;
+    }
+    // Use rev-parse for canonical root
+    const root = await git.revparse(['--show-toplevel']).catch(() => startPath);
+    return root || startPath;
+  } catch {
+    return null;
+  }
+};
+
 const initGitManager = async (folderPath?: string) => {
   if (!folderPath) {
     logger.info('[Main] No folder path provided, GitManager will return null status');
@@ -303,17 +330,23 @@ const initGitManager = async (folderPath?: string) => {
     gitManager = null;
     return;
   }
+  // Auto-detect nearest Git root above the provided folder
+  const detectedRoot = await findGitRoot(folderPath);
+  const repoPathToUse = detectedRoot || folderPath;
+  if (detectedRoot && detectedRoot !== folderPath) {
+    logger.info(`[Main] Auto-detected Git root: ${detectedRoot} (from ${folderPath})`);
+  }
   
   if (GIT_MANAGER_VERSION === 2) {
-    logger.info('[Main] Using EnhancedGitManager with authentication support for:', folderPath);
-    gitManager = new EnhancedGitManager(folderPath);
+    logger.info('[Main] Using EnhancedGitManager with authentication support for:', repoPathToUse);
+    gitManager = new EnhancedGitManager(repoPathToUse);
     await (gitManager as EnhancedGitManager).initialize();
   } else if (GIT_MANAGER_VERSION === 1) {
     logger.info('[Main] Using GitManagerV2 with VS Code-style implementation');
-    gitManager = new GitManagerV2(folderPath);
+    gitManager = new GitManagerV2(repoPathToUse);
   } else {
     logger.info('[Main] Using old GitManager with simple-git');
-    gitManager = new GitManager(folderPath);
+    gitManager = new GitManager(repoPathToUse);
   }
 };
 
@@ -388,7 +421,19 @@ const registerGitHandlers = () => {
       logger.info('[Main] git-status: No folder open, returning null');
       return null;
     }
-    return await gitManager.getStatus();
+    const status = await gitManager.getStatus();
+    try {
+      // Attach repo root for UI transparency
+      let repoPath: string;
+      if ('getRepoPath' in gitManager && typeof (gitManager as any).getRepoPath === 'function') {
+        repoPath = (gitManager as any).getRepoPath();
+      } else {
+        repoPath = (gitManager as any).repoPath;
+      }
+      return { ...(status || {}), repoPath };
+    } catch {
+      return status;
+    }
   });
 
   ipcMain.handle('git-branches', async () => {

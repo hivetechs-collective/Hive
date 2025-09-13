@@ -16977,3 +16977,9 @@ Tables used by Welcome
 - `recent_folders` — structured recents with `folder_path`, `last_opened`, `tab_count`.
 - `sessions` — stores folder session tabs and active tab for restoration.
 - `welcome_analytics` — event logging for feature usage (e.g., `click_recent`, `clone_success`, `dismissed`).
+- Git Root Auto‑Detection (v1.8.379)
+  - Detects nearest Git root above the opened folder (`rev-parse --show-toplevel` fallback to `.git` walk-up).
+  - Status bar shows branch with a tooltip indicating the active Git root.
+  - If the Git root differs from the opened folder, a repo badge appears in the status bar; clicking it switches SCM to the root without changing the opened folder.
+  - IPC `git-set-folder` updates the active Git manager to the chosen root; File Explorer remains at the user’s opened folder.
+  - Result: enterprise‑class SCM behavior across monorepos and nested worktrees.
