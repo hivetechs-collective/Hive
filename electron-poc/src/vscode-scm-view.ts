@@ -169,12 +169,14 @@ export class VSCodeSCMView {
           flex-shrink: 0;
           border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #1e1e1e);
         ">
-          <div class="scm-status-branch" style="position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span class="codicon codicon-git-branch"></span>
-            <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView.showBranchSwitcher()">${this.gitStatus.branch}</span>
-            <span class="scm-badges">${this.buildHeaderBadgesHtml()}</span>
+          <div class="scm-status-branch" style="display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; overflow: hidden;">
+            <div class="scm-branch-title" style="display:flex; align-items:center; gap:6px; flex:0 0 auto;">
+              <span class="codicon codicon-git-branch"></span>
+              <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView.showBranchSwitcher()">${this.gitStatus.branch}</span>
+            </div>
+            <div class="scm-badges" style="display:flex; align-items:center; gap:10px; flex:0 0 auto; white-space:nowrap;">${this.buildHeaderBadgesHtml()}</div>
           </div>
-          <div class="scm-status-actions">
+          <div class="scm-status-actions" style="flex:0 0 auto;">
             <!-- Removed redundant sync and refresh buttons -->
           </div>
         </div>
