@@ -2379,9 +2379,9 @@ App Root (renderer.ts)
 │   ├── Progress Bars
 │   └── Chat Interface
 ├── Status Bar
-│   ├── Connection Status
-│   ├── Usage Counter
-│   └── Model Selection
+│   ├── Git Branch (if repository open)
+│   ├── Hive User + Plan (center)
+│   └── Usage Counter (used/remaining today)
 └── Modals
     ├── Settings Modal
     └── Analytics Modal
@@ -2464,6 +2464,9 @@ The application's DOM (Document Object Model) is a tree structure that defines t
 - **Activity Bar**: 48px width, never resizes
 - **Title Bar**: 30px height, spans full width
 - **Status Bar**: 22px height, spans full width
+  - Left: current Git branch when a repository is open
+  - Center: current Hive user (email), membership plan, and conversations used/remaining today
+  - Right: reserved (no backend or IPC indicators)
 
 **2. Collapsible Panels**
 - **Sidebar Panel**: 260px default width, can collapse to 0

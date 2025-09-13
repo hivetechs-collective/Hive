@@ -580,7 +580,7 @@ document.body.innerHTML = `
         <div class="terminal-content" id="terminal-content">
           <div id="terminal-output">
             <div class="terminal-line">[${new Date().toLocaleTimeString()}] Hive Consensus initialized</div>
-            <div class="terminal-line" id="backend-server-line">[${new Date().toLocaleTimeString()}] Backend server: discovering port...</div>
+            <div class="terminal-line" id="backend-server-line">[${new Date().toLocaleTimeString()}] System initializing...</div>
           </div>
         </div>
       </div>
@@ -742,14 +742,6 @@ document.body.innerHTML = `
         <span class="status-icon">🌿</span>
         <span id="branch-name">main</span>
       </div>
-      <div class="status-item" id="status-git-warnings" style="display: none;">
-        <span class="status-icon">⚠️</span>
-        <span id="warning-count">0</span>
-      </div>
-      <div class="status-item" id="status-git-errors" style="display: none;">
-        <span class="status-icon">🚫</span>
-        <span id="error-count">0</span>
-      </div>
     </div>
     <div class="status-bar-center">
       <div class="status-item">
@@ -764,16 +756,7 @@ document.body.innerHTML = `
         <span id="status-conversations">-- remaining</span>
       </div>
     </div>
-    <div class="status-bar-right">
-      <div class="status-item">
-        <span>Rust Backend: </span>
-        <span id="backend-status">Connecting...</span>
-      </div>
-      <div class="status-item">
-        <span class="status-icon">⚡</span>
-        <span>IPC</span>
-      </div>
-    </div>
+    <div class="status-bar-right"></div>
   </div>
 </div>
 
@@ -1057,7 +1040,6 @@ let conversationMessages: Array<{question: string, answer: string}> = [];
 
 // DOM elements - Updated for new layout
 const terminalOutput = document.getElementById('terminal-output')!;
-const backendStatus = document.getElementById('backend-status')!;
 const chatContent = document.getElementById('chat-content')!;
 
 // Utility functions
@@ -1215,14 +1197,12 @@ function updateStatus(text: string, className: string) {
 }
 
 function updateConnectionStatus(connected: boolean) {
+  // Maintain connection flag and log. Status bar indicator removed.
   isConnected = connected;
-  
   if (connected) {
-    backendStatus.textContent = 'Connected';
-    addLogEntry('✅ Backend connection established', 'info');
+    addLogEntry('✅ Connection established', 'info');
   } else {
-    backendStatus.textContent = 'Connecting...';
-    addLogEntry('🔄 Connecting to backend...', 'info');
+    addLogEntry('🔄 Connecting...', 'info');
   }
 }
 
@@ -2778,8 +2758,6 @@ function setupMenuEventListeners() {
 async function updateGitStatusBar() {
     const branchElement = document.getElementById('status-git-branch');
     const branchNameElement = document.getElementById('branch-name');
-    const warningsElement = document.getElementById('status-git-warnings');
-    const errorsElement = document.getElementById('status-git-errors');
     
     if (currentOpenedFolder && window.gitAPI) {
         try {
@@ -2788,8 +2766,6 @@ async function updateGitStatusBar() {
             if (status && status.isRepo) {
                 // Show Git info
                 if (branchElement) branchElement.style.display = 'flex';
-                if (warningsElement) warningsElement.style.display = 'flex';
-                if (errorsElement) errorsElement.style.display = 'flex';
                 
                 // Update branch name
                 if (branchNameElement) {
@@ -2798,21 +2774,15 @@ async function updateGitStatusBar() {
             } else {
                 // Not a Git repo, hide Git info
                 if (branchElement) branchElement.style.display = 'none';
-                if (warningsElement) warningsElement.style.display = 'none';
-                if (errorsElement) errorsElement.style.display = 'none';
             }
         } catch (error) {
             console.error('Failed to get Git status:', error);
             // Hide on error
             if (branchElement) branchElement.style.display = 'none';
-            if (warningsElement) warningsElement.style.display = 'none';
-            if (errorsElement) errorsElement.style.display = 'none';
         }
     } else {
         // No folder open, hide Git info
         if (branchElement) branchElement.style.display = 'none';
-        if (warningsElement) warningsElement.style.display = 'none';
-        if (errorsElement) errorsElement.style.display = 'none';
     }
 }
 
