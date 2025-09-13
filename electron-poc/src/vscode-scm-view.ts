@@ -177,6 +177,18 @@ export class VSCodeSCMView {
                     onclick=\"window.scmView?.pullAndPush()\"
                     title=\"Click to sync (pull then push)\">↓${this.gitStatus.behind}</span>
             ` : ''}
+            ${(() => { 
+                const files = (this.gitStatus?.files || []);
+                const working = (f:any) => (f.working_dir || f.working || ' ');
+                const s = files.filter((f:any) => f.index && f.index !== ' ' && f.index !== '?').length;
+                const m = files.filter((f:any) => { const w = working(f); return w !== ' ' && w !== '?' && (f.index === ' ' || f.index === undefined); }).length;
+                const u = files.filter((f:any) => working(f) === '?' || f.index === '?').length;
+                const parts:string[] = [];
+                if (s>0) parts.push(`<span class=\\"badge\\" style=\\"background:#3c873a;color:white;padding:2px 6px;border-radius:10px;margin-left:8px;font-size:11px;cursor:pointer;\\" onclick=\\"window.scmView?.scrollToGroup('staged')\\" title=\\"View Staged\\">S:${s}</span>`);
+                if (m>0) parts.push(`<span class=\\"badge\\" style=\\"background:#d19a66;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;font-size:11px;cursor:pointer;\\" onclick=\\"window.scmView?.scrollToGroup('changes')\\" title=\\"View Changes\\">M:${m}</span>`);
+                if (u>0) parts.push(`<span class=\\"badge\\" style=\\"background:#6a737d;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;font-size:11px;cursor:pointer;\\" onclick=\\"window.scmView?.scrollToGroup('untracked')\\" title=\\"View Untracked\\">U:${u}</span>`);
+                return parts.join(' ');
+            })()}
           </div>
           <div class="scm-status-actions">
             <!-- Removed redundant sync and refresh buttons -->
@@ -391,6 +403,16 @@ export class VSCodeSCMView {
         ` : ''}
       </div>
     `;
+  }
+
+  // Scroll to a specific group by id
+  public scrollToGroup(groupId: 'staged' | 'changes' | 'untracked') {
+    try {
+      const el = this.container.querySelector(`.scm-resource-group[data-group="${groupId}"]`) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      console.warn('scrollToGroup failed', e);
+    }
   }
 
   private renderResource(file: GitFileStatus, groupId: string): string {

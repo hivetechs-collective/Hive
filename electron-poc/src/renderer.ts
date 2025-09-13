@@ -2772,10 +2772,14 @@ async function updateGitStatusBar() {
                 }
 
                 // Compute simple counts and ahead/behind
-                const files = status.files || [];
-                const untracked = files.filter(f => (f.working === '?' || f.index === '?')).length;
+                const files = status.files || [] as any[];
+                const getWorking = (f: any) => (f.working_dir || f.working || ' ') as string;
+                const untracked = files.filter(f => (getWorking(f) === '?' || f.index === '?')).length;
                 const staged = files.filter(f => f.index && f.index !== ' ' && f.index !== '?').length;
-                const modified = files.filter(f => f.working && f.working !== ' ' && f.working !== '?').length;
+                const modified = files.filter(f => {
+                    const w = getWorking(f);
+                    return w !== ' ' && w !== '?';
+                }).length;
 
                 // Add or update compact counts span
                 const countsClass = 'git-counts';
@@ -6791,46 +6795,12 @@ window.closeFolder = () => {
 window.addEventListener('openFolderInExplorer', async (event: any) => {
     const path = event.detail?.path;
     if (!path) return;
-    
-    console.log('[Welcome] Opening folder in Explorer:', path);
-    
-    // Expand the path (handle ~)
     const homeDir = (window as any).electronAPI?.homeDir || '/Users/' + (window as any).electronAPI?.username || '';
     const expandedPath = path.replace(/^~/, homeDir);
-    
-    // Set the current opened folder
-    currentOpenedFolder = expandedPath;
-    (window as any).currentOpenedFolder = expandedPath;
-    
-    // Hide welcome page
-    hideWelcomePage();
-    
-    // Show and activate Explorer
-    const explorerBtn = document.querySelector('[data-view="explorer"]') as HTMLElement;
-    const explorerContainer = document.getElementById('explorer-content');
-    
-    if (explorerBtn && explorerContainer) {
-        // Activate Explorer button
-        explorerBtn.click();
-        
-        // Initialize Explorer with the folder
-        explorerContainer.innerHTML = '';
-        window.fileExplorer = new VSCodeExplorerExact(explorerContainer);
-        await window.fileExplorer.initialize(expandedPath);
-        
-        // Setup file selection handler
-        window.fileExplorer.onFileSelect((filePath: string) => {
-            console.log('File selected from Explorer:', filePath);
-            openFileAndFocusEditor(filePath);
-        });
-        
-        // Update window title
-        const folderName = expandedPath.split('/').pop() || expandedPath;
-        document.title = `${folderName} - Hive Consensus`;
-        
-        // Save to recent folders
-        await saveRecentFolder(expandedPath);
-    }
+    console.log('[Welcome] Delegating folder open to handleOpenFolder:', expandedPath);
+    await handleOpenFolder(expandedPath);
+    // Ensure SCM shows immediately for Git context
+    try { toggleSidebarPanel('git'); } catch {}
 });
 
 window.addEventListener('showExplorerWithDialog', async () => {
