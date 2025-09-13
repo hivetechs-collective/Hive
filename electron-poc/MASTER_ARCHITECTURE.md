@@ -3211,23 +3211,10 @@ toolsList: [
 - **Efficient integration**: Single source of truth with AI CLI Tools section
 - **Performance overhead**: ~9ms every 5 seconds (0.18% CPU)
 
-**Essential Actions (v1.8.239+):**
+**Essential Actions (v1.8.362+):**
 
-**Export Memory:**
-- **Native file dialog**: User chooses backup location and filename
-- **Timestamped defaults**: `hive-memory-export-2025-09-08.json`
-- **Complete backup**: All messages and conversations from unified database (~/.hive/hive-ai.db)
-- **Structured format**: JSON with metadata, version info, and export timestamp
-- **File system freedom**: Save to Desktop, cloud folders, external drives
-- **Data integrity**: Complete database export maintaining all relationships
-
-**Import Memory:**
-- **Native file dialog**: User browses and selects restore file
-- **Safe merge**: `INSERT OR IGNORE` prevents duplicates and overwrites  
-- **Smart counting**: Accurate feedback on new vs skipped records
-- **File validation**: Checks for proper export format before import
-- **Automatic refresh**: Dashboard updates after successful import
-- **Error handling**: Graceful handling of invalid files or import errors
+- Export/Import memory moved to Settings → Advanced (Backup & Restore).
+- Memory Service panel focuses on live stats, connected tools, and activity.
 
 **Live Activity Stream:**
 - **Real-time monitoring**: WebSocket-based activity updates
@@ -4257,32 +4244,60 @@ Renderer (displays in UI)
 
 ### 📊 Analytics Dashboard Integration
 
-#### Real-Time Metrics Update
-**Location**: `src/analytics.ts`
+#### Overview
+**Location**: `src/analytics.ts` (UI) and `src/index.ts` (`ipcMain.handle('get-analytics')`)
 
-The Analytics Dashboard automatically reflects all Memory-Context operations:
+The Analytics Dashboard reads persisted data from the unified SQLite DB and updates every 5 seconds. A period selector allows switching the window between `Last 24 Hours`, `Last 7 Days`, and `Last 30 Days`.
 
-```typescript
-// Data flow from consensus to analytics
+```
 Consensus Complete
-     ↓
-Store in `conversations` table
-     ↓
-Store in `conversation_usage` table
-     ↓
-Store in `messages` table
-     ↓
-Analytics queries aggregate data
-     ↓
-Dashboard updates every 5 seconds
+  → INSERT/UPDATE `conversations`
+  → INSERT `conversation_usage`
+  → INSERT `performance_metrics` (if duration is provided)
+  → INSERT `stage_outputs` (current profile’s models, cost/tokens apportioned)
+  → (Optionally) INSERT `knowledge_conversations` (question/answer)
+
+UI refresh (5s interval or manual Refresh button) → IPC `get-analytics(period)` → DB queries → Render
 ```
 
-#### Tracked Metrics
-- **Today's Queries**: Real-time count from conversation_usage
-- **Today's Cost**: Aggregated from consensus operations
-- **Memory Contributions**: Messages added to knowledge base
-- **Model Usage**: Distribution across consensus stages
-- **Response Times**: Average consensus processing duration
+#### Period Windows
+The dashboard passes one of (`'24h' | '7d' | '30d'`) to `get-analytics`. The IPC handler applies period filters with robust SQLite datetime windows against `conversation_usage.timestamp`:
+
+- `24h`: `datetime(cu.timestamp) >= datetime('now','-24 hours')`
+- `7d`:  `datetime(cu.timestamp) >= datetime('now','-7 days')`
+- `30d`: `datetime(cu.timestamp) >= datetime('now','-30 days')`
+
+These windows are used for:
+- Period Queries (count of `conversation_usage` in the window)
+- Period Cost/Tokens (sums from `conversations` joined to period-bounded `conversation_usage`)
+- Hourly stats (always last 24 hours, independent of selected period in the chart title)
+
+#### Data Sources
+- Period metrics (queries, cost, tokens, avg response):
+  - `conversation_usage` (period filter)
+  - `conversations.total_cost`, `conversations.total_tokens_input`, `conversations.total_tokens_output`
+  - `performance_metrics.total_duration` (AVG in seconds)
+- All-time metrics (total queries, total cost, avg response):
+  - Same tables as above without period filter
+- Recent activity (last 10):
+  - `conversation_usage` → `conversations` → `knowledge_conversations` → `performance_metrics`
+  - Ordered by `conversation_usage.timestamp` DESC (not period-filtered)
+- Model usage and cost-by-model:
+  - Primary: `stage_outputs` joined to `conversation_usage` (current user, not period-filtered)
+  - Fallback: `consensus_profiles` 25% allocation per stage if `stage_outputs` lookup errors
+
+#### UI Behavior
+- Metrics shown:
+  - Period Queries, Period Cost, All-Time Queries, Total Cost, Success Rate, Avg Response
+  - Token Usage (period): total / input / output
+- Query Volume title updates to include the selected period label, e.g., `Query Volume (24H)`.
+- Refresh button triggers a manual fetch and briefly animates; auto-refresh runs every 5 seconds.
+- Small costs (< $0.10) display with 4 decimals in Period Cost for clarity.
+
+#### Known Limits (current design)
+- Model Usage and Cost by Model aggregate across the user’s conversations without a period filter.
+- Recent activity is ordered by most recent usage and is not constrained to the selected period.
+- Period cost/tokens pull from `conversations` rollups; if an entry was never updated with totals, its contribution is zero for that period.
 
 ### 🔧 Implementation Details
 

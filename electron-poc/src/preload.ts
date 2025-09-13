@@ -108,8 +108,8 @@ contextBridge.exposeInMainWorld('settingsAPI', {
 
 // Analytics API
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Use the proven analytics IPC handler backed by the unified DB
-  getAnalytics: () => ipcRenderer.invoke('get-analytics'),
+  // Proven analytics IPC handler backed by the unified DB (period-aware)
+  getAnalytics: (period?: '24h' | '7d' | '30d') => ipcRenderer.invoke('get-analytics', period),
   saveConversation: (data: any) => ipcRenderer.invoke('save-conversation', data),
   getUsageCount: () => ipcRenderer.invoke('get-usage-count'),
   showInputDialog: (title: string, defaultValue?: string) => ipcRenderer.invoke('show-input-dialog', title, defaultValue),
@@ -129,8 +129,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMemoryStats: () => ipcRenderer.invoke('memory-service-stats'),
   getConnectedTools: () => ipcRenderer.invoke('memory-service-tools'),
   getMemoryActivity: (limit?: number) => ipcRenderer.invoke('memory-service-activity', limit),
-  exportMemory: () => ipcRenderer.invoke('memory-export'),
-  importMemory: () => ipcRenderer.invoke('memory-import'),
   
   // CLI Tool Management
   detectCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-detect', toolId),

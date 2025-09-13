@@ -241,15 +241,10 @@ export class MemoryDashboard {
         </div>
       </div>
       
-      <!-- Actions -->
-      <div class="dashboard-actions">
-        <button onclick="window.memoryDashboard.exportMemory()" class="btn btn-secondary">Export Memory</button>
-        <button onclick="window.memoryDashboard.importMemory()" class="btn btn-secondary">Import Memory</button>
-      </div>
+      <!-- Actions removed: Export/Import are managed in Settings → Advanced (backup/restore) -->
     `;
     
-    // Store instance globally for button handlers
-    (window as any).memoryDashboard = this;
+    // No global exposure required
     
     // Start periodic updates
     this.startUpdates();
@@ -283,45 +278,7 @@ export class MemoryDashboard {
     delete (window as any).memoryDashboard;
   }
   
-  public async exportMemory() {
-    try {
-      console.log('[MemoryDashboard] Exporting memory...');
-      const result = await (window as any).electronAPI.invoke('memory-export');
-      
-      if (result.success) {
-        alert(`✅ ${result.message}`);
-        console.log('[MemoryDashboard] Export successful:', result.filePath);
-      } else {
-        alert(`Export cancelled: ${result.message || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('[MemoryDashboard] Export error:', error);
-      alert(`❌ Export failed: ${error}`);
-    }
-  }
-  
-  public async importMemory() {
-    try {
-      console.log('[MemoryDashboard] Importing memory...');
-      const result = await (window as any).electronAPI.invoke('memory-import');
-      
-      if (result.success) {
-        alert(`✅ ${result.message}`);
-        console.log('[MemoryDashboard] Import successful:', result.importedCount, 'records');
-        
-        // Refresh dashboard after successful import
-        setTimeout(() => {
-          this.updateStats();
-          this.updateConnectedTools();
-        }, 1000);
-      } else {
-        alert(`Import cancelled: ${result.message || result.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('[MemoryDashboard] Import error:', error);
-      alert(`❌ Import failed: ${error}`);
-    }
-  }
+  // Export/Import functionality removed
   
   private applyStyles() {
     // Check if styles already exist
