@@ -2128,6 +2128,63 @@ The application features collapsible panels to maximize screen real estate and p
   toggleConsensusPanel.title = 'Expand Panel';
   ```
 
+### Center Panel Visibility & State (v1.8.378)
+Implementation: `src/renderer.ts`, `src/utils/panel-state.ts`, `src/utils/center-view.ts`, `src/index.css`
+
+Problem addressed
+- Users could not see the AI CLI Tools, Memory Service, or Settings panels when clicking their activity bar icons. The root causes were:
+  - Bottom-fixed sidebar section overlapping the activity stack on smaller windows (icons were present but not reachable).
+  - Inconsistent ad‑hoc show/hide paths across panels, making visibility dependent on prior DOM state.
+  - Overlays (Welcome/Help/Analytics) not being consistently hidden, or the center area remaining collapsed.
+  - Panels not yet created in the DOM at first invocation.
+
+Design updates
+- Activity Bar layout
+  - Added `.activity-bar-scroll` (scrollable middle) to ensure icons are always reachable.
+  - Kept `.sidebar-bottom-section` fixed and anchored; no overlap with scroll area.
+  - CSS updated to avoid any bottom overlay hiding icons on small screens.
+
+- Single source of truth for center panels
+  - All center panel transitions now flow through `setCenterView()` which uses the pure state machine `nextStateOnToggle()` via an integration wrapper `applyCenterView()`.
+  - Behavior:
+    - Idempotent clicks: clicking the same icon re‑focuses the panel (does not toggle back to Welcome).
+    - Exactly one visible center panel at a time.
+    - Close actions and tab closes fall back to the last panel, or Welcome.
+
+- Guaranteed panel creation on demand
+  - For `settings`, `memory`, and `cli-tools`, the renderer will create the content panel on first use if it does not exist:
+    - Settings → `#settings-panel` (with `#settings-container`)
+    - Memory → `#memory-panel` (with `#memory-container`)
+    - AI CLI Tools → `#cli-tools-panel` (with `#cli-tools-container`)
+
+- Editor/overlays coordination
+  - `ensureEditorAreaReady()` hides overlays (`#welcome-panel`, `#help-panel`, `#analytics-panel`), ensures `#editor-area` is visible, and expands `#center-area` if collapsed.
+  - When showing center panels, we also hide the `.editors-container` to give the panel full height; when opening a file, we explicitly show `.editors-container` and hide these panels.
+
+- Safety verification on click
+  - After `setCenterView()` executes, a short follow-up check verifies the intended panel is visible; if not, it force‑shows it. This protects against rare sequencing issues.
+
+Developer guidelines (to prevent regressions)
+- Do not introduce bottom overlays that cover the activity bar; keep the middle scrollable and the bottom section anchored.
+- Route all center panel visibility changes through `setCenterView()`; avoid one-off `style.display` toggles that bypass the state machine.
+- If adding a new center panel, implement a `showXPanel()` that:
+  1) calls `ensureEditorAreaReady()`;
+  2) creates the panel on demand if missing;
+  3) shows it, and hides others via `hideAllCenterPanels()`.
+- Keep idempotent icon behavior (clicking the same icon re‑focuses the current panel).
+
+Testing
+- Unit tests (pure): `tests/panel-state.test.ts` cover the state machine behavior.
+- Integration test (thin): `tests/center-view.test.ts` verifies idempotent focus, toggle‑off, and close(null) fallbacks.
+
+Key CSS hooks
+```
+.activity-bar-unified { position: relative; }
+.activity-bar-scroll  { overflow-y: auto; flex: 1; padding-bottom: 120px; }
+.sidebar-bottom-section { position: absolute; bottom: 0; left: 0; right: 0; }
+.content-panel { display: none; flex: 1; }
+```
+
 #### Consensus Toggle Icon (v1.8.324)
 **Revolutionary Sidebar Feature**: A unique hexagon icon that represents our 4-stage consensus system
 
@@ -13553,6 +13610,13 @@ electron-poc/
   - **Build Script Phase 13**: Added critical fix verification to ensure all fixes are applied
   - **Consensus Routing Fix**: Python subprocess now stays alive for routing decisions
 - **v1.8.0-1.8.3 (2025-08-27)**: Production Build System Enhancement & Memory Service Fixes
+ - **v1.8.378 (2025-09-13)**: Panel Visibility & State Hardening
+   - Always-visible activity icons: scrollable middle (`.activity-bar-scroll`) + anchored bottom (`.sidebar-bottom-section`).
+   - Centralized center panel state via `setCenterView()` + `applyCenterView()` wrapper over `nextStateOnToggle()`.
+   - Idempotent activity clicks (no toggle-to-Welcome); exactly one visible center panel.
+   - On-demand creation of `#settings-panel`, `#memory-panel`, `#cli-tools-panel` when first used.
+   - `ensureEditorAreaReady()` hides overlays, expands center area, shows `#editor-area`; editors container hidden when panels show.
+   - Added integration test `tests/center-view.test.ts` to complement `tests/panel-state.test.ts`.
   - **Automatic Version Incrementing**: Build script now auto-increments version for tracking builds
   - **Port Scanning Timeout**: Added 3-second timeout to prevent app hanging during port initialization
   - **Environment Variable Fix**: Fixed PORT env var not being passed to Memory Service in production

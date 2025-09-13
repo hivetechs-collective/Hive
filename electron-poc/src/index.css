@@ -586,16 +586,26 @@ body {
 .activity-bar-unified {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch; /* allow inner sections to size properly */
   justify-content: flex-start;
   height: 100%;
   width: 48px;
-  padding: 8px 0;
-  gap: 4px;
   background: var(--background-primary);
   border-right: 1px solid var(--border-color);
-  position: relative;
-  padding-bottom: 60px; /* Space for fixed settings button */
+  position: relative; /* anchor bottom section */
+}
+
+/* Scrollable middle section for activity buttons and AI quick-launch */
+.activity-bar-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  overflow-y: auto;          /* ensure buttons are reachable on small screens */
+  overscroll-behavior: contain;
+  flex: 1;                   /* take up remaining height */
+  padding-bottom: 120px;     /* leave room for bottom buttons */
 }
 
 /* AI CLI Icons Section */
@@ -694,9 +704,17 @@ body {
 
 /* Bottom Section for Settings */
 .sidebar-bottom-section {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: var(--background-primary);
   border-top: 1px solid var(--border-color);
-  padding: 4px 0;
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Sidebar Panel - VS Code style panel area */

@@ -80,6 +80,7 @@ import { StatusBar } from './status-bar';
 import { ttydTerminalPanel } from './components/TTYDTerminalPanel';
 import { helpViewer } from './components/help-viewer';
 import { WelcomePage } from './components/welcome-page';
+import { applyCenterView } from './utils/center-view';
 
 // Create welcome page instance
 let welcomePageInstance: WelcomePage | null = null;
@@ -379,6 +380,7 @@ document.body.innerHTML = `
     <div class="sidebar" id="left-sidebar">
       <!-- Activity buttons -->
       <div class="activity-bar-unified">
+        <div class="activity-bar-scroll">
         <!-- File & Git Section -->
         <button class="activity-btn" data-view="explorer" aria-label="Explorer">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -474,6 +476,7 @@ document.body.innerHTML = `
           </button>
         </div>
         
+        </div>
         <!-- Bottom section with fixed positioning -->
         <div class="sidebar-bottom-section" style="position: absolute; bottom: 0; width: 100%;">
           <div class="sidebar-divider"></div>
@@ -3242,19 +3245,10 @@ function showAnalyticsPanel(): void {
             // Add click handler for tab
             newTab.addEventListener('click', (e) => {
                 if ((e.target as HTMLElement).classList.contains('tab-close')) {
-                    // Close tab
+                    // Close tab via central state
                     newTab.remove();
                     hideAnalyticsPanel();
-                    // Show welcome panel
-                    const welcomePanel = document.getElementById('welcome-panel');
-                    if (welcomePanel) {
-                        welcomePanel.style.display = 'block';
-                    }
-                    // Make Day 0 tab active
-                    const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
-                    if (day0Tab) {
-                        day0Tab.classList.add('active');
-                    }
+                    setCenterView(null);
                 } else {
                     // Switch to this tab
                     tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -3304,12 +3298,18 @@ function hideAllCenterPanels(): void {
     document.querySelectorAll('.content-panel, .panel-content').forEach(el => {
         (el as HTMLElement).style.display = 'none';
     });
+
+    // Also hide editors container so center panels can occupy full height
+    const editors = document.querySelector('.editors-container') as HTMLElement | null;
+    if (editors) editors.style.display = 'none';
 }
 
 // Centralized center view state
 type CenterView = 'welcome' | 'help' | 'settings' | 'memory' | 'cli-tools' | 'analytics';
-let currentCenterView: CenterView | null = 'welcome';
-let lastCenterView: CenterView | null = null;
+let centerPanelState: { current: CenterView | null; last: CenterView | null } = {
+    current: 'welcome',
+    last: null,
+};
 
 function updateActivityBarActive(view: CenterView | null) {
     // Clear active from center panel buttons (keep Explorer/Git independent)
@@ -3326,8 +3326,19 @@ function updateActivityBarActive(view: CenterView | null) {
 }
 
 async function showSettingsPanel(): Promise<void> {
-    const settingsPanel = document.getElementById('settings-panel');
-    if (!settingsPanel) return;
+    ensureEditorAreaReady();
+    let settingsPanel = document.getElementById('settings-panel');
+    if (!settingsPanel) {
+        const editorArea = document.getElementById('editor-area');
+        if (!editorArea) return;
+        const panel = document.createElement('div');
+        panel.id = 'settings-panel';
+        panel.className = 'content-panel';
+        panel.innerHTML = '<div id="settings-container"></div>';
+        panel.style.display = 'none';
+        editorArea.appendChild(panel);
+        settingsPanel = panel;
+    }
     settingsPanel.style.display = 'block';
     const container = document.getElementById('settings-container');
     if (container && settingsModal) {
@@ -3344,25 +3355,45 @@ async function showSettingsPanel(): Promise<void> {
 }
 
 function showCliToolsPanel(): void {
-    const cliPanel = document.getElementById('cli-tools-panel');
-    if (cliPanel) {
-        cliPanel.style.display = 'block';
-        renderCliToolsPanel();
+    ensureEditorAreaReady();
+    let cliPanel = document.getElementById('cli-tools-panel');
+    if (!cliPanel) {
+        const editorArea = document.getElementById('editor-area');
+        if (!editorArea) return;
+        const panel = document.createElement('div');
+        panel.id = 'cli-tools-panel';
+        panel.className = 'content-panel';
+        panel.innerHTML = '<div id="cli-tools-container"></div>';
+        panel.style.display = 'none';
+        editorArea.appendChild(panel);
+        cliPanel = panel;
     }
+    cliPanel.style.display = 'block';
+    renderCliToolsPanel();
 }
 
 function showMemoryPanel(): void {
-    const memoryPanel = document.getElementById('memory-panel');
-    if (memoryPanel) {
-        memoryPanel.style.display = 'block';
-        openMemoryDashboard();
+    ensureEditorAreaReady();
+    let memoryPanel = document.getElementById('memory-panel');
+    if (!memoryPanel) {
+        const editorArea = document.getElementById('editor-area');
+        if (!editorArea) return;
+        const panel = document.createElement('div');
+        panel.id = 'memory-panel';
+        panel.className = 'content-panel';
+        panel.innerHTML = '<div id="memory-container"></div>';
+        panel.style.display = 'none';
+        editorArea.appendChild(panel);
+        memoryPanel = panel;
     }
+    memoryPanel.style.display = 'block';
+    openMemoryDashboard();
 }
 
 function setCenterView(view: CenterView | null, opts?: { section?: string }) {
-    // Idempotent behavior: clicking the same view again simply focuses it (no toggle to Welcome)
-    if (view !== null && currentCenterView === view) {
-        // Ensure the requested view is visible if it was accidentally hidden
+    // Idempotent activity clicks: clicking the same icon re-focuses the view
+    if (view !== null && centerPanelState.current === view) {
+        // Ensure it is visible
         switch (view) {
             case 'settings': void showSettingsPanel(); break;
             case 'memory': showMemoryPanel(); break;
@@ -3375,19 +3406,21 @@ function setCenterView(view: CenterView | null, opts?: { section?: string }) {
         return;
     }
 
-    if (view === null) {
-        const fallback: CenterView | null = (lastCenterView && lastCenterView !== currentCenterView) ? lastCenterView : (currentCenterView === 'welcome' ? null : 'welcome');
-        if (fallback && currentCenterView !== fallback) {
-            setCenterView(fallback, opts);
-        }
+    // Compute next state via integration wrapper
+    const next = applyCenterView(centerPanelState as any, view);
+    centerPanelState = { current: next.current, last: next.last };
+
+    // Apply target
+    hideAllCenterPanels();
+    const target = next.target;
+    if (target === null) {
+        // No target means close; default to Welcome if nothing is currently shown
+        showWelcomePage();
+        updateActivityBarActive('welcome');
         return;
     }
 
-    // Transition
-    hideAllCenterPanels();
-    const prev = currentCenterView;
-
-    switch (view) {
+    switch (target) {
         case 'welcome':
             showWelcomePage();
             break;
@@ -3408,9 +3441,32 @@ function setCenterView(view: CenterView | null, opts?: { section?: string }) {
             break;
     }
 
-    lastCenterView = prev;
-    currentCenterView = view;
-    updateActivityBarActive(view);
+    updateActivityBarActive(target);
+}
+
+// Ensure editor area and center layout are ready for showing content panels
+function ensureEditorAreaReady(): void {
+    // Hide overlays that live in the center area
+    const helpPanel = document.getElementById('help-panel');
+    const analyticsPanel = document.getElementById('analytics-panel');
+    const welcomePanel = document.getElementById('welcome-panel');
+    if (helpPanel) helpPanel.style.display = 'none';
+    if (analyticsPanel) analyticsPanel.style.display = 'none';
+    if (welcomePanel) welcomePanel.style.display = 'none';
+
+    // Ensure editor area is visible
+    const editorArea = document.getElementById('editor-area');
+    if (editorArea) editorArea.style.display = 'block';
+
+    // Hide editors container to avoid occupying layout space when showing center panels
+    const editors = document.querySelector('.editors-container') as HTMLElement | null;
+    if (editors) editors.style.display = 'none';
+
+    // Ensure center area is expanded
+    const centerArea = document.getElementById('center-area');
+    if (centerArea && centerArea.classList.contains('collapsed')) {
+        centerArea.classList.remove('collapsed');
+    }
 }
 
 function showWelcomePage(): void {
@@ -3510,19 +3566,10 @@ function showHelpPanel(section?: string): void {
             // Add click handler for tab
             newTab.addEventListener('click', (e) => {
                 if ((e.target as HTMLElement).classList.contains('tab-close')) {
-                    // Close tab
+                    // Close tab via central state (fallback to last or Welcome)
                     newTab.remove();
                     hideHelpPanel();
-                    // Show welcome panel
-                    const welcomePanel = document.getElementById('welcome-panel');
-                    if (welcomePanel) {
-                        welcomePanel.style.display = 'block';
-                    }
-                    // Make Day 0 tab active
-                    const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
-                    if (day0Tab) {
-                        day0Tab.classList.add('active');
-                    }
+                    setCenterView(null);
                 } else {
                     // Switch to this tab
                     tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -3659,19 +3706,10 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
             // Add click handler for tab
             newTab.addEventListener('click', (e) => {
                 if ((e.target as HTMLElement).classList.contains('tab-close')) {
-                    // Close tab
+                    // Close tab via central state
                     newTab.remove();
                     cliToolsPanel.style.display = 'none';
-                    // Show welcome panel
-                    const welcomePanel = document.getElementById('welcome-panel');
-                    if (welcomePanel) {
-                        welcomePanel.style.display = 'block';
-                    }
-                    // Make Day 0 tab active
-                    const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
-                    if (day0Tab) {
-                        day0Tab.classList.add('active');
-                    }
+                    setCenterView(null);
                 } else {
                     // Switch to this tab
                     tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -4971,19 +5009,10 @@ async function openMemoryDashboard(): Promise<void> {
             // Add click handler for tab
             newTab.addEventListener('click', (e) => {
                 if ((e.target as HTMLElement).classList.contains('tab-close')) {
-                    // Close tab
+                    // Close tab via central state
                     newTab.remove();
                     memoryPanel.style.display = 'none';
-                    // Show welcome panel
-                    const welcomePanel = document.getElementById('welcome-panel');
-                    if (welcomePanel) {
-                        welcomePanel.style.display = 'block';
-                    }
-                    // Make Day 0 tab active
-                    const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
-                    if (day0Tab) {
-                        day0Tab.classList.add('active');
-                    }
+                    setCenterView(null);
                 } else {
                     // Switch to this tab
                     tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -5599,6 +5628,26 @@ setTimeout(() => {
             // For documentation default to getting-started
             const opts = target === 'help' ? { section: 'getting-started' } : undefined;
             setCenterView(target, opts as any);
+
+            // Safety: verify panel became visible; if not, force-show
+            setTimeout(() => {
+                const ensureVisible = (id: string, force: () => void) => {
+                    const el = document.getElementById(id);
+                    const visible = !!el && getComputedStyle(el).display !== 'none';
+                    if (!visible) force();
+                };
+                switch (target) {
+                    case 'settings':
+                        ensureVisible('settings-panel', () => { void showSettingsPanel(); });
+                        break;
+                    case 'memory':
+                        ensureVisible('memory-panel', () => { showMemoryPanel(); });
+                        break;
+                    case 'cli-tools':
+                        ensureVisible('cli-tools-panel', () => { showCliToolsPanel(); });
+                        break;
+                }
+            }, 50);
         });
     });
     
@@ -6921,6 +6970,10 @@ function openFileAndFocusEditor(filePath: string) {
   if (cliToolsPanel) cliToolsPanel.style.display = 'none';
   // Ensure all panel-content are hidden
   document.querySelectorAll('.panel-content').forEach(el => (el as HTMLElement).style.display = 'none');
+
+  // Show editors container for file editing
+  const editors = document.querySelector('.editors-container') as HTMLElement | null;
+  if (editors) editors.style.display = 'block';
 
   // Make sure editor-area is visible
   const editorArea = document.getElementById('editor-area');
