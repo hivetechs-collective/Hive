@@ -306,6 +306,16 @@ Please provide the final, polished version of this response. Ensure perfect form
         };
       }
 
+      // Resolve models to current active OpenRouter IDs first
+      try {
+        const { resolveProfileStageModels } = await import('./model-resolver');
+        const resolved = await resolveProfileStageModels(this.db as any, profile);
+        profile.generator_model = resolved.generator_model;
+        profile.refiner_model = resolved.refiner_model;
+        profile.validator_model = resolved.validator_model;
+        profile.curator_model = resolved.curator_model;
+      } catch (e) { console.warn('[DirectConsensus] Model resolution failed, using raw profile models', e); }
+
       // COMPLEX MODE: Full iterative deliberation
       console.log('🔄 Starting iterative deliberation for complex query');
       
@@ -839,7 +849,24 @@ Please provide a clear, concise response to this query.
             if (err) {
               console.error('Failed to store knowledge:', err);
             }
-            resolve();
+            try {
+              // Record local usage and enqueue D1 sync (use configured user id or default)
+              this.db.get(`SELECT value FROM configurations WHERE key = 'hive_user_id'`, [], (e: any, row: any) => {
+                const userId = row?.value || 'default';
+                const insertUsage = `INSERT INTO conversation_usage (user_id, conversation_id, timestamp) VALUES (?, ?, ?)`;
+                this.db.run(insertUsage, [userId, conversationId, timestamp], (e2: any) => {
+                  if (e2) console.error('Failed to record conversation usage:', e2);
+                  const enqueue = `INSERT INTO d1_usage_queue (user_id, conversation_id, timestamp, status, attempts) VALUES (?, ?, ?, 'pending', 0)`;
+                  this.db.run(enqueue, [userId, conversationId, timestamp], (e3: any) => {
+                    if (e3) console.error('[D1UsageQueue] enqueue failed:', e3);
+                    resolve();
+                  });
+                });
+              });
+            } catch (e) {
+              console.warn('[DirectConsensus] usage enqueue error', e);
+              resolve();
+            }
           });
         });
       });

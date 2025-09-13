@@ -114,6 +114,18 @@ const initDatabase = () => {
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  // Queue for D1 usage sync
+  db.run(`CREATE TABLE IF NOT EXISTS d1_usage_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    attempts INTEGER DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Ensure OpenRouter schema exists (providers/models/aliases)
   ensureOpenRouterSchema(db);
   
@@ -489,6 +501,50 @@ ipcMain.handle('models-sync-now', async () => {
   await runOpenRouterSyncOnce();
   return { ok: true };
 });
+
+async function getHiveUserId(): Promise<string> {
+  return new Promise((resolve) => {
+    if (!db) return resolve('default');
+    db.get(`SELECT value FROM configurations WHERE key = 'hive_user_id' LIMIT 1`, [], (err: any, row: any) => {
+      resolve(row?.value || 'default');
+    });
+  });
+}
+
+async function getHiveLimits(): Promise<{ limit: number | 'unlimited' }>{
+  return new Promise((resolve) => {
+    if (!db) return resolve({ limit: 'unlimited' });
+    db.get(`SELECT value FROM configurations WHERE key = 'hive_remaining'`, [], (errR: any, rowR: any) => {
+      const remaining = rowR?.value;
+      if (remaining === 'unlimited') return resolve({ limit: 'unlimited' });
+      db.get(`SELECT value FROM configurations WHERE key = 'hive_daily_limit'`, [], (errL: any, rowL: any) => {
+        const limit = parseInt(rowL?.value || '999999', 10);
+        resolve({ limit: Number.isFinite(limit) ? limit : 999999 });
+      });
+    });
+  });
+}
+
+async function getTodaysUsageCount(userId: string): Promise<number> {
+  return new Promise((resolve) => {
+    if (!db) return resolve(0);
+    db.get(
+      `SELECT COUNT(*) as count FROM conversation_usage WHERE user_id = ? AND date(timestamp, 'localtime') = date('now','localtime')`,
+      [userId],
+      (err: any, row: any) => resolve(row?.count || 0)
+    );
+  });
+}
+
+async function enforceUsageLimitOrThrow(): Promise<void> {
+  const userId = await getHiveUserId();
+  const limits = await getHiveLimits();
+  if (limits.limit === 'unlimited') return;
+  const used = await getTodaysUsageCount(userId);
+  if (used >= (limits.limit as number)) {
+    throw new Error('Daily conversation limit reached. Please purchase credits or try again tomorrow.');
+  }
+}
 
 const registerGitHandlers = () => {
   // Git IPC handlers
@@ -4155,6 +4211,7 @@ const registerConsensusHandlers = () => {
   // First handler: backend-consensus
   ipcMain.handle('backend-consensus', async (_, query: string) => {
     try {
+      await enforceUsageLimitOrThrow();
       console.log('DirectConsensusEngine: backend-consensus called with query:', query);
       logger.error('🔴🔴🔴 backend-consensus CALLED with query:', query);
       
@@ -4202,6 +4259,7 @@ const registerConsensusHandlers = () => {
     logger.info(`🚀🚀🚀 backend-consensus-quick CALLED with query: ${data.query}, profile: ${data.profile}`);
     
     try {
+      await enforceUsageLimitOrThrow();
       // USE SIMPLECONSENSUSENGINE for basic API calls
       if (!consensusEngine) {
         console.log('🔥 Creating new SimpleConsensusEngine instance');

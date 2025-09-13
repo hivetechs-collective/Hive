@@ -246,6 +246,18 @@ export class SimpleConsensusEngine {
         throw new Error('No profile found');
       }
 
+      // Resolve models to current active OpenRouter IDs (handles internal_id and deprecations)
+      try {
+        const { resolveProfileStageModels } = await import('./model-resolver');
+        const resolved = await resolveProfileStageModels(this.db as any, profile);
+        profile.generator_model = resolved.generator_model;
+        profile.refiner_model = resolved.refiner_model;
+        profile.validator_model = resolved.validator_model;
+        profile.curator_model = resolved.curator_model;
+      } catch (e) {
+        console.warn('[SimpleConsensus] Model resolution failed, using raw profile models', e);
+      }
+
       // Set max consensus rounds from profile (defaults to 3 if not set)
       this.maxConsensusRounds = profile.max_consensus_rounds || 3;
 
@@ -1696,6 +1708,13 @@ Consider all responses and provide your final answer to the original question.`;
           resolve();
         } else {
           console.log(`✅ Conversation usage recorded for analytics`);
+          try {
+            // Enqueue D1 usage sync
+            const enqueueSql = `INSERT INTO d1_usage_queue (user_id, conversation_id, timestamp, status, attempts) VALUES (?, ?, ?, 'pending', 0)`;
+            (this as any).db?.run?.(enqueueSql, [userId, conversationId, timestamp], (e: any) => {
+              if (e) console.error('[D1UsageQueue] enqueue failed:', e);
+            });
+          } catch (e) { console.warn('[D1UsageQueue] enqueue error', e); }
           resolve();
         }
       });
