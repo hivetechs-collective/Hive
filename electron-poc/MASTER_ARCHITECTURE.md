@@ -2179,11 +2179,14 @@ Testing
 
 Key CSS hooks
 ```
-.activity-bar-unified { position: relative; }
-.activity-bar-scroll  { overflow-y: auto; flex: 1; padding-bottom: 120px; }
+.activity-bar-unified { position: relative; overflow: visible; }
+.activity-bar-scroll  { overflow: visible; flex: 1; padding-bottom: 120px; }
 .sidebar-bottom-section { position: absolute; bottom: 0; left: 0; right: 0; }
+.sidebar-panel { overflow: visible; /* Required for tooltip visibility */ }
 .content-panel { display: none; flex: 1; }
 ```
+
+**Important**: The `overflow: visible` property on activity bar containers and sidebar panel is critical for tooltip visibility. Without this, tooltips that extend beyond container boundaries will be clipped.
 
 ### Source Control Welcome Experience (v1.8.380)
 Implementation: `src/vscode-scm-view.ts`, `src/renderer.ts`, `src/index.ts`
@@ -13729,9 +13732,14 @@ electron-poc/
    - Added integration test `tests/center-view.test.ts` to complement `tests/panel-state.test.ts`.
  - **v1.8.380 (2025-09-13)**: Enterprise SCM root + unified clone
    - Auto‑detect nearest Git root for SCM (with .git walk‑up fallback) and show root in branch tooltip.
-   - New preference: “Prefer opened folder as Git root” — switch between repo‑root SCM and folder‑scoped SCM.
+   - New preference: "Prefer opened folder as Git root" — switch between repo‑root SCM and folder‑scoped SCM.
    - Status bar SCM context menu: Switch to Git Root, Use Opened Folder, Reveal Root in Finder.
-   - SCM Welcome “Clone Repository” uses the same multi‑provider dialog as Welcome (URL/GitHub/GitLab), with validation and auto‑open.
+   - SCM Welcome "Clone Repository" uses the same multi‑provider dialog as Welcome (URL/GitHub/GitLab), with validation and auto‑open.
+ - **v1.8.394 (2025-09-14)**: Activity Bar Tooltip Visibility Fix
+   - Fixed tooltip clipping issue by setting `overflow: visible` on `.activity-bar-scroll`, `.activity-bar-unified`, and `.sidebar-panel`
+   - Tooltips now properly display for all activity bar icons (Explorer, Git, CLI Tools, Memory, Analytics)
+   - Updated CSS architecture to ensure tooltips render outside container boundaries with z-index: 10000
+   - Fixed Grok CLI tool installation by pinning to v0.0.28 (v0.0.29 has ESM module resolution error)
   - **Automatic Version Incrementing**: Build script now auto-increments version for tracking builds
   - **Port Scanning Timeout**: Added 3-second timeout to prevent app hanging during port initialization
   - **Environment Variable Fix**: Fixed PORT env var not being passed to Memory Service in production
