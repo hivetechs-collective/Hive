@@ -4086,9 +4086,18 @@ Or try: npm install -g ${installCmd} --force --no-cache
         }
         
         // We'll pass the API key through environment variables in the terminal creation
-        // Use the correct command from the registry
+        // Use our wrapper that fixes VS Code API issues for Cline
         const clineConfig = CLI_TOOLS_REGISTRY['cline'];
-        command = clineConfig && clineConfig.command ? `${clineConfig.command} task` : 'cline-cli task';
+        // Use the wrapper script that provides VS Code API shims
+        const wrapperPath = path.join(__dirname, 'cli-tools', 'cline-wrapper.js');
+        if (fs.existsSync(wrapperPath)) {
+          command = `node "${wrapperPath}" task`;
+          logger.info(`[Main] Using Cline wrapper at: ${wrapperPath}`);
+        } else {
+          // Fallback to regular command if wrapper doesn't exist
+          command = clineConfig && clineConfig.command ? `${clineConfig.command} task` : 'cline-cli task';
+          logger.warn(`[Main] Cline wrapper not found at ${wrapperPath}, using regular command`);
+        }
       } else {
         // For other tools, use the command from the registry
         const toolConfig = CLI_TOOLS_REGISTRY[toolId];

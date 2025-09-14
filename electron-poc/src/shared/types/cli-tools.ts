@@ -146,16 +146,18 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
   },
   'cline': {
     id: 'cline',
-    name: 'Cline (VS Code Only)',
-    description: '⚠️ VS Code extension only - no terminal CLI. Community port @yaegaki/cline-cli has terminal output bugs',
+    name: 'Cline',
+    description: 'Task-based AI assistant with 47k+ GitHub stars (patched for terminal)',
     command: 'cline-cli',
-    installCommand: '# Cline is a VS Code extension - install from VS Code marketplace',
-    updateCommand: '# Updates through VS Code extension marketplace',
-    versionCommand: 'echo "VS Code extension only"',
-    versionRegex: /VS Code extension only/,
+    installCommand: 'npm install -g @yaegaki/cline-cli',
+    updateCommand: 'npm update -g @yaegaki/cline-cli',
+    versionCommand: 'cline-cli --version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
     docsUrl: 'https://cline.bot',
-    icon: '⚠️',
-    requiresNode: false
+    icon: '🤖',
+    requiresNode: true,
+    // Use our wrapper that fixes VS Code API issues
+    wrapperPath: 'src/cli-tools/cline-wrapper.js'
   },
   'grok': {
     id: 'grok',
