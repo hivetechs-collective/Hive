@@ -593,6 +593,7 @@ body {
   background: var(--background-primary);
   border-right: 1px solid var(--border-color);
   position: relative; /* anchor bottom section */
+  overflow: visible; /* allow tooltips to show outside the container */
 }
 
 /* Scrollable middle section for activity buttons and AI quick-launch */
@@ -602,10 +603,10 @@ body {
   align-items: center;
   gap: 4px;
   padding: 8px 0;
-  overflow-y: auto;          /* ensure buttons are reachable on small screens */
-  overscroll-behavior: contain;
-  flex: 1;                   /* take up remaining height */
-  padding-bottom: 120px;     /* leave room for bottom buttons */
+  overflow: visible !important;  /* CRITICAL: allow tooltips to show outside container */
+  position: relative;             /* establish positioning context */
+  flex: 1;                        /* take up remaining height */
+  padding-bottom: 120px;          /* leave room for bottom buttons */
 }
 
 /* AI CLI Icons Section */
@@ -693,6 +694,103 @@ body {
   z-index: 1;
 }
 
+/* CLI Tools Panel Fixes */
+.cli-tools-panel {
+  padding: 24px !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  background: linear-gradient(135deg, #0E1414 0%, #181E21 100%) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: calc(100vh - 100px) !important; /* Ensure scrollbar appears */
+}
+
+/* CLI Tools Grid - ensure proper scrolling */
+.cli-tools-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+  gap: 15px !important;
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding-bottom: 20px !important;
+}
+
+/* CLI Tools Panel Custom Scrollbar */
+.cli-tools-panel::-webkit-scrollbar,
+.cli-tools-grid::-webkit-scrollbar {
+  width: 12px;
+}
+
+.cli-tools-panel::-webkit-scrollbar-track,
+.cli-tools-grid::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.cli-tools-panel::-webkit-scrollbar-thumb,
+.cli-tools-grid::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #FFC107, #FF9800);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.cli-tools-panel::-webkit-scrollbar-thumb:hover,
+.cli-tools-grid::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #FFD54F, #FFB74D);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* CLI Tool Card Enhanced Tooltips */
+.cli-tool-card button[title] {
+  position: relative;
+  overflow: visible;
+}
+
+.cli-tool-card button[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 1000;
+  border: 1px solid #FFC107;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: tooltipFadeIn 0.2s ease-out;
+  pointer-events: none;
+}
+
+.cli-tool-card button[title]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: #FFC107;
+  z-index: 1001;
+  pointer-events: none;
+}
+
+@keyframes tooltipFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 .cli-quick-launch.not-installed {
   opacity: 0.7;
   position: relative;
@@ -724,7 +822,7 @@ body {
   border-right: 1px solid var(--border-color);
   display: none; /* Hidden by default */
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible; /* Allow tooltips to show outside panel */
 }
 
 .sidebar-panel.active {
@@ -875,9 +973,45 @@ body {
   filter: brightness(1.1); /* Slight brightness boost on hover */
 }
 
+/* Ensure tooltips show on hover for ALL activity buttons - CRITICAL FIX */
 .activity-btn:hover .activity-tooltip {
-  opacity: 1;
-  visibility: visible;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+/* Force show tooltips in unified activity bar */
+.activity-bar-unified .activity-btn:hover .activity-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+/* Force show tooltips in bottom section */
+.sidebar-bottom-section .activity-btn:hover .activity-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+/* Force show tooltips in scrollable activity bar */
+.activity-bar-scroll .activity-btn:hover .activity-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+  z-index: 10000 !important;
+}
+
+/* Force show tooltips for quick launch buttons */
+.cli-quick-launch:hover .activity-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+/* Ensure activity buttons are positioned relative for tooltip positioning */
+.activity-btn {
+  position: relative !important;
 }
 
 .activity-btn.active {
@@ -899,16 +1033,17 @@ body {
   transform: translateY(-50%);
   margin-left: 8px;
   padding: 4px 8px;
-  background: #333;
-  color: #fff;
+  background: rgba(60, 60, 60, 0.95);
+  color: #cccccc;
   font-size: 11px;
   white-space: nowrap;
   border-radius: 3px;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s;
-  z-index: 1000;
+  transition: opacity 0.2s, visibility 0.2s;
+  z-index: 10000;
   pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* Consensus Toggle Button - Special Revolutionary Styling */

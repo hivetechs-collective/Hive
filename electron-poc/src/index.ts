@@ -584,7 +584,13 @@ async function getHiveLicenseToken(): Promise<string | null> {
 async function processD1QueueOnceWrapper(): Promise<void> {
   if (!db) return;
   try {
-    await processD1UsageQueueOnce(db, getHiveLicenseToken as any);
+    const res = await processD1UsageQueueOnce(db, getHiveLicenseToken as any);
+    // Record last usage sync time
+    const ts = new Date().toISOString();
+    db!.run(`INSERT INTO configurations (key, value, updated_at) VALUES (?, ?, ?)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`,
+      ['usage_last_sync', ts, ts]
+    );
   } catch (e) {
     logger.warn('[D1UsageQueue] process error', { error: e });
   }
@@ -600,6 +606,27 @@ function scheduleD1UsageSync(): void {
 ipcMain.handle('usage-sync-now', async () => {
   await processD1QueueOnceWrapper();
   return { ok: true };
+});
+
+// Maintenance status summary for Settings UI
+ipcMain.handle('maintenance-status', async () => {
+  if (!db) return { ok: false };
+  const getCfg = (key: string) => new Promise<string | null>((resolve) => db!.get(
+    `SELECT value FROM configurations WHERE key = ?`, [key], (_: any, row: any) => resolve(row?.value || null)));
+  const getCount = (sql: string) => new Promise<number>((resolve) => db!.get(sql, [], (_: any, row: any) => resolve(row?.c || 0)));
+  const [modelsLast, usageLast, profilesLast, activeModels, pendingUsage] = await Promise.all([
+    getCfg('openrouter_last_sync'),
+    getCfg('usage_last_sync'),
+    getCfg('profiles_last_migration'),
+    getCount(`SELECT COUNT(*) as c FROM openrouter_models WHERE is_active = 1`),
+    getCount(`SELECT COUNT(*) as c FROM d1_usage_queue WHERE status IN ('pending','error')`)
+  ]);
+  return {
+    ok: true,
+    models: { last: modelsLast, activeModels },
+    usage: { last: usageLast, pending: pendingUsage },
+    profiles: { last: profilesLast }
+  };
 });
 
 // Migrate consensus_profiles → consensus_profiles_v2 with internal IDs
@@ -633,6 +660,13 @@ ipcMain.handle('profiles-migrate-v2', async () => {
     const complete = Object.values(stageIds).every(v => !!v);
     if (complete) summary.migrated++; else summary.partial++;
   }
+  try {
+    const ts = new Date().toISOString();
+    db!.run(`INSERT INTO configurations (key, value, updated_at) VALUES (?, ?, ?)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`,
+      ['profiles_last_migration', ts, ts]
+    );
+  } catch {}
   return { ok: true, summary };
 });
 
@@ -3278,19 +3312,25 @@ const registerSimpleCliToolHandlers = () => {
       
       // For NPM-based tools
       logger.info(`[Main] Updating ${toolId} via npm...`);
-      
+
       // Robust multi-strategy npm update
       const enhancedEnv = { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` };
-      
-      // Strategy 1: Standard npm update
+
+      // Special handling for Grok to avoid broken v0.0.29
+      const updatePackage = toolId === 'grok' ? `${packageName}@0.0.28` : packageName;
+
+      // Strategy 1: Standard npm update (or install for pinned versions like Grok)
       let updateSucceeded = false;
       let strategyUsed = '';
-      
+
       try {
         logger.info(`[Main] Strategy 1: Standard npm update for ${toolId}`);
-        const updateCommand = `npm update -g ${packageName}`;
+        // Use install instead of update for pinned versions
+        const updateCommand = toolId === 'grok'
+          ? `npm install -g ${updatePackage}`
+          : `npm update -g ${packageName}`;
         logger.info(`[Main] Running: ${updateCommand}`);
-        
+
         const { stdout, stderr } = await execAsync(updateCommand, { env: enhancedEnv });
         logger.info(`[Main] Strategy 1 SUCCESS: ${stdout}`);
         if (stderr && !stderr.includes('npm WARN')) {
@@ -3307,8 +3347,11 @@ const registerSimpleCliToolHandlers = () => {
           try {
             logger.info(`[Main] Strategy 2: Clear cache + force update for ${toolId}`);
             await execAsync('npm cache clean --force', { env: enhancedEnv });
-            
-            const forceCommand = `npm update -g ${packageName} --force`;
+
+            // Use install with pinned version for Grok
+            const forceCommand = toolId === 'grok'
+              ? `npm install -g ${updatePackage} --force`
+              : `npm update -g ${packageName} --force`;
             const { stdout } = await execAsync(forceCommand, { env: enhancedEnv });
             logger.info(`[Main] Strategy 2 SUCCESS: ${stdout}`);
             updateSucceeded = true;
@@ -3332,8 +3375,9 @@ const registerSimpleCliToolHandlers = () => {
               // Wait for cleanup
               await new Promise(resolve => setTimeout(resolve, 2000));
               
-              // Reinstall
-              const { stdout } = await execAsync(`npm install -g ${packageName}`, { env: enhancedEnv });
+              // Reinstall (with pinned version for Grok)
+              const reinstallPackage = toolId === 'grok' ? updatePackage : packageName;
+              const { stdout } = await execAsync(`npm install -g ${reinstallPackage}`, { env: enhancedEnv });
               logger.info(`[Main] Strategy 3 SUCCESS: ${stdout}`);
               updateSucceeded = true;
               strategyUsed = 'uninstall + reinstall';
@@ -3391,23 +3435,25 @@ const registerSimpleCliToolHandlers = () => {
                   // Wait longer for filesystem
                   await new Promise(resolve => setTimeout(resolve, 3000));
                   
-                  // Try reinstall again
-                  const { stdout } = await execAsync(`npm install -g ${packageName}`, { env: enhancedEnv });
+                  // Try reinstall again (with pinned version for Grok)
+                  const finalReinstallPackage = toolId === 'grok' ? updatePackage : packageName;
+                  const { stdout } = await execAsync(`npm install -g ${finalReinstallPackage}`, { env: enhancedEnv });
                   logger.info(`[Main] Strategy 4 SUCCESS: ${stdout}`);
                   updateSucceeded = true;
                   strategyUsed = 'manual cleanup + reinstall';
-                  
+
                 } catch (manualError: any) {
                   logger.error(`[Main] All 4 strategies failed for ${toolId}:`, manualError.message);
-                  
-                  // Provide helpful manual instructions
+
+                  // Provide helpful manual instructions (with specific Grok handling)
+                  const installCmd = toolId === 'grok' ? `${packageName}@0.0.28` : packageName;
                   const manualInstructions = `
 Manual update required for ${toolId}:
 1. Run: sudo rm -rf /opt/homebrew/lib/node_modules/@google/gemini-cli
-2. Run: npm cache clean --force  
-3. Run: npm install -g ${packageName}
+2. Run: npm cache clean --force
+3. Run: npm install -g ${installCmd}
 
-Or try: npm install -g ${packageName} --force --no-cache
+Or try: npm install -g ${installCmd} --force --no-cache
                   `.trim();
                   
                   throw new Error(`All automated strategies failed. ${manualInstructions}`);

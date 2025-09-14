@@ -1,7 +1,7 @@
 {
   "name": "hive-consensus",
   "productName": "Hive Consensus",
-  "version": "1.8.380",
+  "version": "1.8.394",
   "description": "Hive Consensus - AI-powered development environment",
   "main": ".webpack/main",
   "scripts": {
@@ -60,6 +60,7 @@
     "eslint-plugin-import": "^2.32.0",
     "fork-ts-checker-webpack-plugin": "^7.3.0",
     "fs-extra": "^11.3.1",
+    "mini-css-extract-plugin": "^2.9.4",
     "node-loader": "^2.1.0",
     "style-loader": "^3.3.4",
     "tar": "^7.4.3",

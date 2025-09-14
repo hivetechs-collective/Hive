@@ -3804,17 +3804,17 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
         
         // Show loading state first
         container.innerHTML = `
-            <div class="cli-tools-panel" style="padding: 24px; height: 100%; overflow-y: auto; background: linear-gradient(135deg, #0E1414 0%, #181E21 100%);">
+            <div class="cli-tools-panel">
                 <div style="margin-bottom: 24px;">
                     <h2 style="
-                        margin: 0 0 8px 0; 
-                        color: #FFC107; 
-                        font-size: 24px; 
+                        margin: 0 0 8px 0;
+                        color: #FFC107;
+                        font-size: 24px;
                         font-weight: 700;
                         text-shadow: 0 2px 4px rgba(255, 193, 7, 0.2);
                     ">AI CLI Tools Management</h2>
                     <p style="
-                        color: #9CA3AF; 
+                        color: #9CA3AF;
                         margin: 0;
                         font-size: 14px;
                         font-weight: 500;
@@ -3896,7 +3896,7 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                     "></div>
                 </div>
                 
-                <div class="cli-tools-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px;">
+                <div class="cli-tools-grid">
                     <div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: #888;">
                         Detecting installed CLI tools...
                     </div>
@@ -3991,7 +3991,7 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
             console.error('[CLI Tools] Error rendering panel:', error);
             // Show error state
             container.innerHTML = `
-                <div class="cli-tools-panel" style="padding: 20px; height: 100%; overflow-y: auto; background: var(--vscode-editor-background);">
+                <div class="cli-tools-panel">
                     <h2 style="margin: 0 0 10px 0; color: #fff;">AI CLI Tools Management</h2>
                     <p style="color: #f44336; margin-bottom: 20px;">Error loading CLI tools. Please try again.</p>
                 </div>
@@ -4032,11 +4032,28 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     const isInstalled = status?.installed || false;
     const version = status?.version;
     const memoryConnected = status?.memoryServiceConnected || false;
-    
+
     // Status badge
     let statusBadge = '';
     if (badgeText) {
         statusBadge = `<span style="background: ${badgeColor}; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">${badgeText}</span>`;
+    }
+
+    // Special handling for Grok CLI known issue
+    let knownIssueWarning = '';
+    if (id === 'grok' && isInstalled && version === '0.0.29') {
+        knownIssueWarning = `
+            <div style="background: #3D2B1F; border: 1px solid #8B4513; border-radius: 6px; padding: 8px; margin: 8px 0;">
+                <div style="color: #FFA500; font-weight: 600; font-size: 12px; margin-bottom: 4px;">
+                    ⚠️ Known Issue with v0.0.29
+                </div>
+                <div style="color: #FFD700; font-size: 11px; line-height: 1.4;">
+                    ESM module resolution error prevents launching. GitHub issue #79 is tracking this.
+                    <br>Workaround: Uninstall v0.0.29 and install v0.0.28 instead:
+                    <br><code style="background: #2A2A2A; padding: 2px 4px; border-radius: 3px;">npm uninstall -g @vibe-kit/grok-cli && npm install -g @vibe-kit/grok-cli@0.0.28</code>
+                </div>
+            </div>
+        `;
     }
     
     // Status details
@@ -4153,6 +4170,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
             ${name}${statusBadge}
         </h4>
         <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">${description}</div>
+        ${knownIssueWarning}
         <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
             <div class="tool-status" style="font-size: 11px; color: #888; line-height: 1.6;">
                 ${statusDetails}

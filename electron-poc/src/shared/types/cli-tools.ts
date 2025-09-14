@@ -159,15 +159,15 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
   },
   'grok': {
     id: 'grok',
-    name: 'Grok CLI',
-    description: 'xAI Grok-powered terminal agent with MCP support',
+    name: 'Grok CLI (Community)',
+    description: '⚠️ Known issue: Module resolution error in v0.0.29. Community-built terminal agent for xAI Grok',
     command: 'grok',
-    installCommand: 'npm install -g @vibe-kit/grok-cli',
-    updateCommand: 'npm update -g @vibe-kit/grok-cli',
+    installCommand: 'npm install -g @vibe-kit/grok-cli@0.0.28', // Pinned to v0.0.28 to avoid v0.0.29 ESM bug
+    updateCommand: 'npm install -g @vibe-kit/grok-cli@0.0.28', // Force v0.0.28 on update to avoid broken v0.0.29
     versionCommand: 'grok --version',
     versionRegex: /(\d+\.\d+\.\d+)/,
     docsUrl: 'https://github.com/superagent-ai/grok-cli',
-    icon: '🚀',
+    icon: '⚠️',
     requiresNode: true
   }
 };
