@@ -143,14 +143,28 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Now load the actual cline-cli
 try {
-  // Try to load the cline-cli module
-  const clinePath = '/opt/homebrew/lib/node_modules/@yaegaki/cline-cli/dist/main.js';
+  // Try multiple possible locations for the globally installed cline-cli
+  const possiblePaths = [
+    '/opt/homebrew/lib/node_modules/@yaegaki/cline-cli/dist/main.js',
+    '/usr/local/lib/node_modules/@yaegaki/cline-cli/dist/main.js',
+    '/usr/lib/node_modules/@yaegaki/cline-cli/dist/main.js',
+    `${process.env.HOME}/.npm-global/lib/node_modules/@yaegaki/cline-cli/dist/main.js`
+  ];
 
-  // Check if the module exists
   const fs = require('fs');
-  if (!fs.existsSync(clinePath)) {
+  let clinePath = null;
+
+  for (const path of possiblePaths) {
+    if (fs.existsSync(path)) {
+      clinePath = path;
+      break;
+    }
+  }
+
+  if (!clinePath) {
     console.error('❌ Cline CLI is not installed.');
     console.error('Please run: npm install -g @yaegaki/cline-cli');
+    console.error('Searched in:', possiblePaths);
     process.exit(1);
   }
 

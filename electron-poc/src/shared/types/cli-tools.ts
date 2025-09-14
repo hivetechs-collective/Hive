@@ -50,6 +50,7 @@ export interface CliToolConfig {
   icon?: string;
   requiresNode?: boolean;
   requiresPython?: boolean;
+  wrapperPath?: string;  // Optional path to wrapper script for terminal compatibility
 }
 
 /**

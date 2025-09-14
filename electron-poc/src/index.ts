@@ -4088,16 +4088,179 @@ Or try: npm install -g ${installCmd} --force --no-cache
         // We'll pass the API key through environment variables in the terminal creation
         // Use our wrapper that fixes VS Code API issues for Cline
         const clineConfig = CLI_TOOLS_REGISTRY['cline'];
-        // Use the wrapper script that provides VS Code API shims
-        const wrapperPath = path.join(__dirname, 'cli-tools', 'cline-wrapper.js');
-        if (fs.existsSync(wrapperPath)) {
-          command = `node "${wrapperPath}" task`;
-          logger.info(`[Main] Using Cline wrapper at: ${wrapperPath}`);
-        } else {
-          // Fallback to regular command if wrapper doesn't exist
-          command = clineConfig && clineConfig.command ? `${clineConfig.command} task` : 'cline-cli task';
-          logger.warn(`[Main] Cline wrapper not found at ${wrapperPath}, using regular command`);
-        }
+
+        // Create a temporary wrapper file with the VS Code API shims
+        const os = require('os');
+        const wrapperPath = path.join(os.tmpdir(), 'cline-wrapper-temp.js');
+
+        // Write the wrapper code to a temp file
+        const wrapperCode = `#!/usr/bin/env node
+
+// Cline CLI Wrapper - Fixes VS Code API compatibility issues
+// This wrapper provides shims for VS Code APIs that cline-cli expects
+
+// Create VS Code API shims before loading cline-cli
+global.vscode = {
+  window: {
+    outputChannel: {
+      appendLine: (text) => console.log(text),
+      append: (text) => process.stdout.write(text),
+      clear: () => console.clear(),
+      show: () => {},
+      hide: () => {},
+      dispose: () => {}
+    },
+    showErrorMessage: (message) => {
+      console.error('❌ Error: ' + message);
+      return Promise.resolve();
+    },
+    showWarningMessage: (message) => {
+      console.warn('⚠️ Warning: ' + message);
+      return Promise.resolve();
+    },
+    showInformationMessage: (message) => {
+      console.log('ℹ️ ' + message);
+      return Promise.resolve();
+    },
+    createOutputChannel: (name) => ({
+      appendLine: (text) => console.log('[' + name + '] ' + text),
+      append: (text) => process.stdout.write('[' + name + '] ' + text),
+      clear: () => console.clear(),
+      show: () => {},
+      hide: () => {},
+      dispose: () => {}
+    }),
+    activeTextEditor: undefined,
+    visibleTextEditors: []
+  },
+  workspace: {
+    workspaceFolders: [{
+      uri: {
+        fsPath: process.cwd(),
+        scheme: 'file',
+        path: process.cwd()
+      },
+      name: 'workspace',
+      index: 0
+    }],
+    getConfiguration: () => ({
+      get: (key, defaultValue) => defaultValue,
+      has: () => false,
+      inspect: () => undefined,
+      update: () => Promise.resolve()
+    }),
+    openTextDocument: () => Promise.resolve({
+      getText: () => '',
+      fileName: '',
+      isDirty: false,
+      save: () => Promise.resolve(true)
+    }),
+    fs: {
+      readFile: require('fs').promises.readFile,
+      writeFile: require('fs').promises.writeFile,
+      stat: require('fs').promises.stat,
+      readDirectory: require('fs').promises.readdir
+    }
+  },
+  Uri: {
+    file: (path) => ({
+      fsPath: path,
+      scheme: 'file',
+      path: path,
+      toString: () => 'file://' + path
+    }),
+    parse: (str) => {
+      const path = str.replace('file://', '');
+      return {
+        fsPath: path,
+        scheme: 'file',
+        path: path,
+        toString: () => str
+      };
+    }
+  },
+  commands: {
+    executeCommand: () => Promise.resolve(),
+    registerCommand: () => ({ dispose: () => {} })
+  },
+  env: {
+    openExternal: (uri) => {
+      console.log('🔗 Opening: ' + (typeof uri === 'string' ? uri : uri.toString()));
+      return Promise.resolve(true);
+    },
+    clipboard: {
+      readText: () => Promise.resolve(''),
+      writeText: (text) => {
+        console.log('📋 Copied to clipboard: ' + text);
+        return Promise.resolve();
+      }
+    }
+  },
+  extensions: {
+    all: [],
+    getExtension: () => undefined
+  }
+};
+
+// Set up process to handle terminal properly
+process.stdin.setRawMode = process.stdin.setRawMode || (() => {});
+process.stdout.isTTY = true;
+process.stdin.isTTY = true;
+
+// Handle uncaught exceptions gracefully
+process.on('uncaughtException', (error) => {
+  if (error.message && error.message.includes('appendLine')) {
+    return;
+  }
+  console.error('Uncaught exception:', error.message);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  if (reason && reason.toString().includes('appendLine')) {
+    return;
+  }
+  console.error('Unhandled rejection:', reason);
+});
+
+// Now load the actual cline-cli
+try {
+  const possiblePaths = [
+    '/opt/homebrew/lib/node_modules/@yaegaki/cline-cli/dist/main.js',
+    '/usr/local/lib/node_modules/@yaegaki/cline-cli/dist/main.js',
+    '/usr/lib/node_modules/@yaegaki/cline-cli/dist/main.js'
+  ];
+
+  const fs = require('fs');
+  let clinePath = null;
+  for (const path of possiblePaths) {
+    if (fs.existsSync(path)) {
+      clinePath = path;
+      break;
+    }
+  }
+
+  if (!clinePath) {
+    console.error('❌ Cline CLI is not installed.');
+    console.error('Please run: npm install -g @yaegaki/cline-cli');
+    process.exit(1);
+  }
+
+  require(clinePath);
+} catch (error) {
+  if (!error.message || !error.message.includes('appendLine')) {
+    console.error('Failed to load Cline CLI:', error.message);
+    console.error('Please ensure @yaegaki/cline-cli is installed globally');
+    process.exit(1);
+  }
+}
+`;
+
+        fs.writeFileSync(wrapperPath, wrapperCode, 'utf8');
+        fs.chmodSync(wrapperPath, '755'); // Make it executable
+
+        command = `node "${wrapperPath}" task`;
+        logger.info(`[Main] Created temporary Cline wrapper at: ${wrapperPath}`);
       } else {
         // For other tools, use the command from the registry
         const toolConfig = CLI_TOOLS_REGISTRY[toolId];
