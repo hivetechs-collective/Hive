@@ -64,7 +64,6 @@ import geminiIcon from '../resources/ai-cli-icons/gemini.svg';
 import grokIcon from '../resources/ai-cli-icons/grok.svg';
 import qwenIcon from '../resources/ai-cli-icons/qwen.svg';
 import openaiIcon from '../resources/ai-cli-icons/openai.svg';
-import clineIcon from '../resources/ai-cli-icons/cline.svg';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { MemoryDashboard } from './components/memory-dashboard';
 import { NeuralConsciousness } from './neural-consciousness';
@@ -449,11 +448,7 @@ document.body.innerHTML = `
             <img src="${openaiIcon}" width="24" height="24" alt="OpenAI" style="object-fit: contain;" />
             <span class="activity-tooltip">OpenAI Codex</span>
           </button>
-          <button class="activity-btn cli-quick-launch" data-tool="cline" aria-label="Cline">
-            <img src="${clineIcon}" width="24" height="24" alt="Cline" style="object-fit: contain;" />
-            <span class="activity-tooltip">Cline</span>
-          </button>
-          
+
           <!-- Consensus Panel Toggle - Our Revolutionary Feature -->
           <button class="activity-btn consensus-toggle" id="sidebar-consensus-toggle" aria-label="Consensus Panel">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));">
@@ -3970,19 +3965,7 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 badgeText: 'MCP',
                 badgeColor: '#ff6b6b'
             }));
-            
-            // Cline - now with full detection and functionality (moved to bottom)
-            const clineStatus = await electronAPI.detectCliTool('cline');
-            gridContainer.appendChild(createCliToolCard({
-                id: 'cline',
-                name: 'Cline',
-                description: 'Task-based AI assistant with 47k+ GitHub stars',
-                status: clineStatus,
-                docsUrl: 'https://cline.bot',
-                badgeText: '47K ⭐',
-                badgeColor: '#28a745'
-            }));
-            
+
             console.log('[CLI Tools] Panel rendered successfully');
             
             // Attach event listeners to all dynamically created buttons
@@ -4457,11 +4440,10 @@ async function installAllCliTools(): Promise<void> {
     // List of tools to install (in order)
     const toolsToInstall = [
         'claude-code',
-        'gemini-cli', 
+        'gemini-cli',
         'qwen-code',
         'openai-codex',
-        'grok',
-        'cline'  // Moved to last as least likely to be used
+        'grok'
     ];
     
     // Show status
@@ -4541,7 +4523,7 @@ async function installAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons
-            const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+            const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok'];
             for (const toolId of toolsToInstall) {
                 await refreshSidebarToolIcon(toolId);
             }
@@ -4568,8 +4550,7 @@ async function updateAllCliTools(): Promise<void> {
         'gemini-cli',
         'qwen-code', 
         'openai-codex',
-        'grok',
-        'cline'  // Moved to last as least likely to be used
+        'grok'
     ];
     
     // Show status
@@ -4657,7 +4638,7 @@ async function updateAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons
-            const toolsToUpdate = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+            const toolsToUpdate = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok'];
             for (const toolId of toolsToUpdate) {
                 await refreshSidebarToolIcon(toolId);
             }
@@ -4772,8 +4753,7 @@ async function uninstallAllCliTools(): Promise<void> {
         'gemini-cli',
         'qwen-code',
         'openai-codex',
-        'grok',
-        'cline'  // Moved to last as least likely to be used
+        'grok'
     ];
     
     // Show status
@@ -4850,7 +4830,7 @@ async function uninstallAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons to show uninstalled status
-            const toolsToUninstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+            const toolsToUninstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok'];
             for (const toolId of toolsToUninstall) {
                 await refreshSidebarToolIcon(toolId);
             }

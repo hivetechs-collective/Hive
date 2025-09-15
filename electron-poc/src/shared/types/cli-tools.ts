@@ -145,21 +145,6 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     icon: '🧠',
     requiresNode: true
   },
-  'cline': {
-    id: 'cline',
-    name: 'Cline',
-    description: 'Task-based AI assistant with 47k+ GitHub stars (patched for terminal)',
-    command: 'cline-cli',
-    installCommand: 'npm install -g @yaegaki/cline-cli',
-    updateCommand: 'npm update -g @yaegaki/cline-cli',
-    versionCommand: 'cline-cli --version',
-    versionRegex: /(\d+\.\d+\.\d+)/,
-    docsUrl: 'https://cline.bot',
-    icon: '🤖',
-    requiresNode: true,
-    // Use our wrapper that fixes VS Code API issues
-    wrapperPath: 'src/cli-tools/cline-wrapper.js'
-  },
   'grok': {
     id: 'grok',
     name: 'Grok CLI (Community)',
