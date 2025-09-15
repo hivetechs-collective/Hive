@@ -2617,7 +2617,7 @@ const registerMemoryServiceHandlers = () => {
         const stats = await response.json();
         
         // Override connectedTools count with accurate CLI Tools detector data
-        const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'cline', 'grok'];
+        const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'deepseek', 'grok'];
         let actualConnectedCount = 0;
         
         for (const toolId of supportedTools) {
@@ -2654,7 +2654,7 @@ const registerMemoryServiceHandlers = () => {
     try {
       // Use working CLI Tools detector instead of broken Memory Service tracking
       const connectedTools = [];
-      const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'cline', 'grok'];
+      const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'deepseek', 'grok'];
       
       for (const toolId of supportedTools) {
         try {
@@ -3002,6 +3002,10 @@ const registerSimpleCliToolHandlers = () => {
             } else if (toolId === 'openai-codex') {
               const match = versionResult.stdout.match(/codex-cli (\d+\.\d+\.\d+)/);
               version = match ? match[1] : 'Unknown';
+            } else if (toolId === 'deepseek') {
+              // DeepSeek CLI outputs version number
+              const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+              version = match ? match[1] : 'Unknown';
             } else if (toolId === 'grok') {
               // Grok CLI outputs version number like "0.0.23"
               const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
@@ -3208,7 +3212,7 @@ const registerSimpleCliToolHandlers = () => {
         'gemini-cli': '@google/gemini-cli',
         'qwen-code': '@qwen-code/qwen-code',
         'openai-codex': '@openai/codex',
-        'cline': '@yaegaki/cline-cli',
+        'deepseek': 'deepseek-cli',
         'grok': '@vibe-kit/grok-cli'
       };
       
@@ -3492,7 +3496,7 @@ Or try: npm install -g ${installCmd} --force --no-cache
         'gemini-cli': '@google/gemini-cli',
         'qwen-code': '@qwen-code/qwen-code',
         'openai-codex': '@openai/codex',
-        'cline': '@yaegaki/cline-cli',
+        'deepseek': 'deepseek-cli',
         'grok': '@vibe-kit/grok-cli'
       };
       

@@ -145,6 +145,19 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     icon: '🧠',
     requiresNode: true
   },
+  'deepseek': {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    description: 'AI coding assistant with advanced code comprehension for 100+ languages',
+    command: 'deepseek',
+    installCommand: 'npm install -g deepseek-cli',
+    updateCommand: 'npm update -g deepseek-cli',
+    versionCommand: 'deepseek --version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://github.com/holasoymalva/deepseek-cli',
+    icon: '🐋',
+    requiresNode: true
+  },
   'grok': {
     id: 'grok',
     name: 'Grok CLI (Community)',
