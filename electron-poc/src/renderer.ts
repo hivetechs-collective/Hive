@@ -64,7 +64,7 @@ import geminiIcon from '../resources/ai-cli-icons/gemini.svg';
 import grokIcon from '../resources/ai-cli-icons/grok.svg';
 import qwenIcon from '../resources/ai-cli-icons/qwen.svg';
 import openaiIcon from '../resources/ai-cli-icons/openai.svg';
-import deepseekIcon from '../resources/ai-cli-icons/deepseek.svg';
+import githubCopilotIcon from '../resources/ai-cli-icons/github-copilot.svg';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { MemoryDashboard } from './components/memory-dashboard';
 import { NeuralConsciousness } from './neural-consciousness';
@@ -449,9 +449,9 @@ document.body.innerHTML = `
             <img src="${openaiIcon}" width="24" height="24" alt="OpenAI" style="object-fit: contain;" />
             <span class="activity-tooltip">OpenAI Codex</span>
           </button>
-          <button class="activity-btn cli-quick-launch" data-tool="deepseek" aria-label="DeepSeek">
-            <img src="${deepseekIcon}" width="24" height="24" alt="DeepSeek" style="object-fit: contain;" />
-            <span class="activity-tooltip">DeepSeek</span>
+          <button class="activity-btn cli-quick-launch" data-tool="github-copilot" aria-label="GitHub Copilot">
+            <img src="${githubCopilotIcon}" width="24" height="24" alt="GitHub Copilot" style="object-fit: contain;" />
+            <span class="activity-tooltip">GitHub Copilot</span>
           </button>
 
           <!-- Consensus Panel Toggle - Our Revolutionary Feature -->
@@ -3959,16 +3959,16 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 badgeColor: '#007acc'
             }));
 
-            // DeepSeek - Advanced AI coding assistant
-            const deepseekStatus = await electronAPI.detectCliTool('deepseek');
+            // GitHub Copilot - Official AI pair programmer
+            const githubCopilotStatus = await electronAPI.detectCliTool('github-copilot');
             gridContainer.appendChild(createCliToolCard({
-                id: 'deepseek',
-                name: 'DeepSeek',
-                description: 'AI coding assistant with advanced code comprehension for 100+ languages',
-                status: deepseekStatus,
-                docsUrl: 'https://github.com/holasoymalva/deepseek-cli',
-                badgeText: '100+ LANGS',
-                badgeColor: '#5468FF'
+                id: 'github-copilot',
+                name: 'GitHub Copilot',
+                description: 'Official GitHub AI pair programmer - now FREE with limited usage',
+                status: githubCopilotStatus,
+                docsUrl: 'https://docs.github.com/copilot/using-github-copilot/using-github-copilot-in-the-command-line',
+                badgeText: 'FREE TIER',
+                badgeColor: '#24292E'
             }));
 
             // Grok CLI - xAI powered terminal agent with MCP support
@@ -4460,7 +4460,7 @@ async function installAllCliTools(): Promise<void> {
         'gemini-cli',
         'qwen-code',
         'openai-codex',
-        'deepseek',
+        'github-copilot',
         'grok'
     ];
     
@@ -4541,7 +4541,7 @@ async function installAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons
-            const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'deepseek', 'grok'];
+            const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'grok'];
             for (const toolId of toolsToInstall) {
                 await refreshSidebarToolIcon(toolId);
             }
@@ -4566,9 +4566,9 @@ async function updateAllCliTools(): Promise<void> {
     const toolsToUpdate = [
         'claude-code',
         'gemini-cli',
-        'qwen-code', 
+        'qwen-code',
         'openai-codex',
-        'deepseek',
+        'github-copilot',
         'grok'
     ];
     
@@ -4657,7 +4657,7 @@ async function updateAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons
-            const toolsToUpdate = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'deepseek', 'grok'];
+            const toolsToUpdate = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'grok'];
             for (const toolId of toolsToUpdate) {
                 await refreshSidebarToolIcon(toolId);
             }
@@ -4772,7 +4772,7 @@ async function uninstallAllCliTools(): Promise<void> {
         'gemini-cli',
         'qwen-code',
         'openai-codex',
-        'deepseek',
+        'github-copilot',
         'grok'
     ];
     
@@ -4850,7 +4850,7 @@ async function uninstallAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons to show uninstalled status
-            const toolsToUninstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'deepseek', 'grok'];
+            const toolsToUninstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'grok'];
             for (const toolId of toolsToUninstall) {
                 await refreshSidebarToolIcon(toolId);
             }

@@ -145,18 +145,18 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     icon: '🧠',
     requiresNode: true
   },
-  'deepseek': {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    description: 'AI coding assistant with advanced code comprehension for 100+ languages',
-    command: 'deepseek',
-    installCommand: 'npm install -g deepseek-cli',
-    updateCommand: 'npm update -g deepseek-cli',
-    versionCommand: 'deepseek --version',
-    versionRegex: /(\d+\.\d+\.\d+)/,
-    docsUrl: 'https://github.com/holasoymalva/deepseek-cli',
-    icon: '🐋',
-    requiresNode: true
+  'github-copilot': {
+    id: 'github-copilot',
+    name: 'GitHub Copilot',
+    description: 'Official GitHub AI pair programmer - now FREE with limited usage',
+    command: 'gh',  // Base command for detection
+    installCommand: 'gh extension install github/gh-copilot',
+    updateCommand: 'gh extension upgrade gh-copilot',
+    versionCommand: 'gh copilot --version',
+    versionRegex: /version (\d+\.\d+\.\d+)/,
+    docsUrl: 'https://docs.github.com/copilot/using-github-copilot/using-github-copilot-in-the-command-line',
+    icon: '🤖',
+    requiresNode: false
   },
   'grok': {
     id: 'grok',

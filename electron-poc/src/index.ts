@@ -2617,7 +2617,7 @@ const registerMemoryServiceHandlers = () => {
         const stats = await response.json();
         
         // Override connectedTools count with accurate CLI Tools detector data
-        const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'deepseek', 'grok'];
+        const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'grok'];
         let actualConnectedCount = 0;
         
         for (const toolId of supportedTools) {
@@ -3212,7 +3212,6 @@ const registerSimpleCliToolHandlers = () => {
         'gemini-cli': '@google/gemini-cli',
         'qwen-code': '@qwen-code/qwen-code',
         'openai-codex': '@openai/codex',
-        'deepseek': 'deepseek-cli',
         'grok': '@vibe-kit/grok-cli'
       };
       
@@ -3496,7 +3495,6 @@ Or try: npm install -g ${installCmd} --force --no-cache
         'gemini-cli': '@google/gemini-cli',
         'qwen-code': '@qwen-code/qwen-code',
         'openai-codex': '@openai/codex',
-        'deepseek': 'deepseek-cli',
         'grok': '@vibe-kit/grok-cli'
       };
       
@@ -3774,12 +3772,15 @@ Or try: npm install -g ${installCmd} --force --no-cache
         command = 'qwen';
       } else if (toolId === 'openai-codex') {
         command = 'codex';
+      } else if (toolId === 'github-copilot') {
+        // GitHub Copilot uses 'gh copilot' as the command
+        command = 'gh copilot';
       } else if (toolId === 'grok') {
         // SMART GROK LAUNCH: Check if API key is configured
         // Grok stores config in ~/.grok/user-settings.json
         const grokConfigPath = path.join(os.homedir(), '.grok', 'user-settings.json');
         let hasGrokApiKey = false;
-        
+
         if (fs.existsSync(grokConfigPath)) {
           try {
             const grokConfig = JSON.parse(fs.readFileSync(grokConfigPath, 'utf-8'));
@@ -3788,12 +3789,12 @@ Or try: npm install -g ${installCmd} --force --no-cache
             // Config exists but couldn't be parsed
           }
         }
-        
+
         // Check environment variable as fallback
         if (!hasGrokApiKey && process.env.GROK_API_KEY) {
           hasGrokApiKey = true;
         }
-        
+
         if (!hasGrokApiKey) {
           // First-time launch: We'll create a setup wizard in the terminal
           logger.info('[Main] Grok API key not configured, will launch setup wizard');

@@ -106,6 +106,32 @@ export class CliToolsDetector {
       }
       
       toolInfo.path = toolPath;
+
+      // Special handling for GitHub Copilot - check if extension is installed
+      if (toolId === 'github-copilot') {
+        try {
+          const { stdout: extensionList } = await execAsync(
+            'gh extension list',
+            { env }
+          );
+
+          if (!extensionList.includes('gh-copilot') && !extensionList.includes('github/gh-copilot')) {
+            logger.info(`[CliToolsDetector] GitHub CLI found but Copilot extension not installed`);
+            toolInfo.installed = false;
+            toolInfo.status = CliToolStatus.NOT_INSTALLED;
+            this.updateCache(toolId, toolInfo);
+            return toolInfo;
+          }
+          logger.info(`[CliToolsDetector] GitHub Copilot extension is installed`);
+        } catch (extError) {
+          logger.warn(`[CliToolsDetector] Could not check GitHub Copilot extension:`, extError);
+          toolInfo.installed = false;
+          toolInfo.status = CliToolStatus.NOT_INSTALLED;
+          this.updateCache(toolId, toolInfo);
+          return toolInfo;
+        }
+      }
+
       toolInfo.installed = true;
       toolInfo.status = CliToolStatus.INSTALLED;
       
@@ -129,7 +155,9 @@ export class CliToolsDetector {
       }
       
       // Check for memory service connection (for supported tools)
-      if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' || toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok') {
+      // Note: GitHub Copilot doesn't support Memory Service integration
+      if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' ||
+          toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok') {
         toolInfo.memoryServiceConnected = await this.checkMemoryServiceConnection(toolId);
       }
       

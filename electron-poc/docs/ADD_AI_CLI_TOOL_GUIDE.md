@@ -189,9 +189,22 @@ npm run dev
 ```
 
 #### 9.3: Full Production Build
+
+Run the comprehensive production build:
+
 ```bash
-./scripts/build-production-dmg.js
+cd electron-poc
+npm run build:complete
 ```
+
+**What the build does:**
+- Executes 17 phases including TypeScript compilation, webpack bundling, and DMG creation
+- Shows progress in the current terminal
+- Phase 11 (Application Build) is the longest, typically taking 2-5 minutes
+- Total build time: 5-10 minutes
+- Automatically opens the DMG when complete for testing
+
+**Note:** Always use `npm run build:complete` for production builds. This ensures all build phases are executed in the correct order with proper verification.
 
 #### 9.4: Verify Functionality
 After build completes and DMG opens:
@@ -272,6 +285,14 @@ git commit -m "feat(cli-tools): add [Tool Name] integration
 - Document any special requirements or configurations
 - The full build takes 5-10 minutes to complete
 - After DMG opens, drag to Applications if you want to install
+
+## Build Script Details
+The production build uses a comprehensive 17-phase build system:
+- **Command**: `npm run build:complete`
+- Executes `scripts/build-production-dmg.js` with all verification steps
+- Shows progress in the current terminal
+- Phase 11 (Application Build with webpack) is typically the longest phase
+- Always use this command for consistent, reliable builds
 
 ## Next Tools to Add
 - [ ] Aider - AI pair programming tool
