@@ -12314,13 +12314,57 @@ Around line 3005-3012, add version extraction logic if needed:
   version = match ? match[1] : 'Unknown';
 ```
 
-#### Step 8: Optional - Special Configuration
-If the tool needs special handling (API keys, wrappers, etc.):
+#### Step 8: Handle Special Cases (IMPORTANT)
 
-1. **For API key configuration:** Add logic in `cli-tool-configure` handler
-2. **For special launch commands:** Add conditions in `cli-tool-launch` handler around line 3840
-3. **For wrapper scripts:** Create wrapper file and reference it
-4. **For GitHub CLI extensions:** Use `gh extension` commands instead of npm
+##### 8.1: Multi-word Commands (e.g., `gh copilot`, `aws codewhisperer`)
+When a tool uses a command with spaces:
+
+**In cli-tools.ts:**
+```typescript
+command: 'gh',  // Use base command only (for detection)
+// NOT: command: 'gh copilot' (breaks detection)
+```
+
+**In detector.ts (after line 108):**
+```typescript
+if (toolId === 'your-tool-id') {
+  // Additional validation for extensions/subcommands
+  const { stdout } = await execAsync('gh extension list');
+  if (!stdout.includes('extension-name')) {
+    toolInfo.installed = false;
+    toolInfo.status = CliToolStatus.NOT_INSTALLED;
+    return toolInfo;
+  }
+}
+```
+
+**In index.ts (launch handler, around line 3775):**
+```typescript
+} else if (toolId === 'your-tool-id') {
+  command = 'full command with spaces';  // For launching
+```
+
+##### 8.2: GitHub CLI Extensions
+- Install command: `gh extension install org/extension`
+- Update command: `gh extension upgrade extension`
+- Detection: Check `gh` exists, then verify extension
+- No npm package mapping needed
+
+##### 8.3: API Key Configuration
+Add logic in `cli-tool-launch` handler for first-time setup:
+```typescript
+if (toolId === 'your-tool' && !hasApiKey()) {
+  command = 'your-tool:setup';  // Special setup mode
+}
+```
+
+##### 8.4: Python-based Tools
+- Use pip for installation commands
+- May need special PATH handling
+- Version detection might differ
+
+##### 8.5: Tools That Don't Support Memory Service
+Not all tools support MCP/Memory Service. Exclude them from the check in detector.ts (line 157-162)
 
 #### Step 9: Testing Checklist
 
@@ -12387,27 +12431,62 @@ git commit -m "feat(cli-tools): add [Tool Name] integration
 - Ensure SVG is valid (viewBox="0 0 24 24")
 - Verify import statement in renderer.ts
 
-#### Issue: Tool not detected
+#### Issue: Tool not detected (CRITICAL)
+- **Check command vs detection**: The `command` field is used for detection via `which`
+- **Multi-word commands**: Tools like GitHub Copilot (`gh copilot`) need special handling
+- **Extension-based tools**: GitHub CLI extensions require checking both base command AND extension
 - Check tool ID consistency across all files
 - Verify command name in registry matches actual CLI command
 - Check npm package name in index.ts mappings
+
+**Example Fix for Multi-word Commands:**
+```typescript
+// In cli-tools.ts
+'github-copilot': {
+  command: 'gh',  // Base command for detection (single word)
+  // NOT: command: 'gh copilot' (which command can't handle this)
+}
+
+// In detector.ts - add special handling after base detection
+if (toolId === 'github-copilot') {
+  // Check if extension is installed
+  const { stdout } = await execAsync('gh extension list');
+  if (!stdout.includes('gh-copilot')) {
+    toolInfo.installed = false;
+    return toolInfo;
+  }
+}
+
+// In index.ts - add launch command override
+} else if (toolId === 'github-copilot') {
+  command = 'gh copilot';  // Full command for launching
+```
 
 #### Issue: Version not showing
 - Test version command manually: `tool-command --version`
 - Adjust regex pattern for version extraction
 - Add specific version detection logic in index.ts
+- For extensions, version command may differ from base command
 
 #### Issue: Install/Update fails
 - Verify npm package name is correct
 - Check if package requires special installation flags
 - Ensure package is published to npm
 - For GitHub CLI extensions, use `gh extension` commands
+- Python tools may need pip instead of npm
+
+#### Issue: Tool shows installed but immediately shows not installed
+- This is usually a detection problem - see "Tool not detected" above
+- Check system logs for actual error messages
+- Verify the detection command works in terminal
+- For extensions, ensure both base tool AND extension are checked
 
 #### Issue: Memory Service not connecting
 - Ensure tool is added to all supportedTools arrays
 - Check MCP configuration is created properly
 - Verify authentication token is generated
 - Check dynamic port discovery is working
+- Note: Some tools (like GitHub Copilot) don't support Memory Service
 
 ### File Reference Summary
 
@@ -12474,6 +12553,47 @@ The production build uses a comprehensive 17-phase build system:
 - [ ] Continue - Open-source AI code assistant
 - [ ] Tabnine - AI code completion CLI
 
+### Detection Troubleshooting Guide
+
+#### Understanding the Detection Flow
+1. **Detector checks command existence**: Uses `which ${command}` to find executable
+2. **Command must be single word**: `which` doesn't handle spaces (e.g., `gh copilot` fails)
+3. **Additional validation**: May need extra checks for extensions/subcommands
+4. **Version extraction**: Uses `versionCommand` to get version info
+5. **Memory Service check**: Only for supported tools
+
+#### Common Detection Pitfalls
+1. **Multi-word commands**: Split into base command + launch override
+2. **Extension-based tools**: Need two-phase detection (base + extension)
+3. **PATH issues**: Tool installed but not in PATH
+4. **Permission issues**: Tool exists but not executable
+5. **Version command failures**: Some tools hang or error on version check
+
+#### Testing Detection Manually
+```bash
+# Test what detector sees
+which [command]  # Should return path
+
+# Test version command
+[version-command]  # Should return version info
+
+# For extensions
+gh extension list  # Should show installed extensions
+```
+
+### Critical Implementation Checklist
+
+Before adding any new tool, verify:
+- [ ] Command field contains single executable name (no spaces)
+- [ ] Multi-word commands have launch override in index.ts
+- [ ] Extension-based tools have additional detection logic
+- [ ] Tool ID is consistent across ALL files
+- [ ] Tool is added to ALL required arrays (install, update, uninstall)
+- [ ] Version regex matches actual output format
+- [ ] Memory Service support is correctly configured
+- [ ] Icon file exists and is properly imported
+- [ ] TypeScript compilation passes
+
 ### Notes
 - Always test TypeScript compilation before full build
 - Keep consistent naming across all files (tool ID)
@@ -12481,7 +12601,8 @@ The production build uses a comprehensive 17-phase build system:
 - Document any special requirements or configurations
 - The full build takes 5-10 minutes to complete
 - After DMG opens, drag to Applications if you want to install
-- Memory Service integration is automatic for all tools
+- Memory Service integration is automatic for supported tools
+- Test detection manually in terminal before building
 
 ---
 
