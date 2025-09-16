@@ -2196,7 +2196,7 @@ Implementation: `src/vscode-scm-view.ts`, `src/renderer.ts`, `src/index.ts`
 
 - Welcome states:
   - **No folder open** — shows the classic “Open Folder / Clone Repository” call-to-actions (identical handlers shared with the Welcome view).
-  - **Folder open, but not a Git repo (v1.8.440)** — renders an `Initialize Repository` card that explains the situation, offers a one-click `git init`, and provides a “Choose Different Folder” fallback. Successes and failures surface through the global notification system and the SCM view auto-refreshes after `gitAPI.setFolder()` rebinds the Git manager.
+  - **Folder open, but not a Git repo (v1.8.440+)** — renders an `Initialize Repository` card that explains the situation, offers a one-click `git init`, and provides a “Choose Different Folder” fallback. Successes and failures surface through the global notification system and the SCM view auto-refreshes after `gitAPI.setFolder()` rebinds the Git manager.
 - The Clone dialog drives `gitAPI.clone()` in the main process, then opens the cloned folder using the same `handleOpenFolder()` pipeline.
 
 ### SCM Root Behavior & Preference (v1.8.380)
