@@ -138,6 +138,14 @@ declare global {
       onMenuOpenAnalytics(callback: () => void): void;
       onMenuGoToFile(callback: () => void): void;
       onMenuGoToLine(callback: () => void): void;
+      onMenuFind(callback: () => void): void;
+      onMenuReplace(callback: () => void): void;
+      onMenuUndo(callback: () => void): void;
+      onMenuRedo(callback: () => void): void;
+      onMenuCut(callback: () => void): void;
+      onMenuCopy(callback: () => void): void;
+      onMenuPaste(callback: () => void): void;
+      onMenuSelectAll(callback: () => void): void;
       
       getVersion(): Promise<string>;
       openExternal?(url: string): Promise<void>;

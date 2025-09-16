@@ -2274,31 +2274,63 @@ const createApplicationMenu = async (): Promise<void> => {
     {
       label: "Edit",
       submenu: [
-        { label: "Undo", accelerator: "CmdOrCtrl+Z", role: "undo" },
-        { label: "Redo", accelerator: "CmdOrCtrl+Y", role: "redo" },
+        {
+          label: "Undo",
+          accelerator: "CmdOrCtrl+Z",
+          click: () => {
+            mainWindow?.webContents.send("menu-undo");
+          },
+        },
+        {
+          label: "Redo",
+          accelerator: "CmdOrCtrl+Y",
+          click: () => {
+            mainWindow?.webContents.send("menu-redo");
+          },
+        },
         { type: "separator" },
-        { label: "Cut", accelerator: "CmdOrCtrl+X", role: "cut" },
-        { label: "Copy", accelerator: "CmdOrCtrl+C", role: "copy" },
-        { label: "Paste", accelerator: "CmdOrCtrl+V", role: "paste" },
+        {
+          label: "Cut",
+          accelerator: "CmdOrCtrl+X",
+          click: () => {
+            mainWindow?.webContents.send("menu-cut");
+          },
+        },
+        {
+          label: "Copy",
+          accelerator: "CmdOrCtrl+C",
+          click: () => {
+            mainWindow?.webContents.send("menu-copy");
+          },
+        },
+        {
+          label: "Paste",
+          accelerator: "CmdOrCtrl+V",
+          click: () => {
+            mainWindow?.webContents.send("menu-paste");
+          },
+        },
         { type: "separator" },
-        { label: "Select All", accelerator: "CmdOrCtrl+A", role: "selectAll" },
+        {
+          label: "Select All",
+          accelerator: "CmdOrCtrl+A",
+          click: () => {
+            mainWindow?.webContents.send("menu-select-all");
+          },
+        },
         { type: "separator" },
         {
           label: "Find",
           accelerator: "CmdOrCtrl+F",
           click: () => {
-            if (mainWindow) {
-              mainWindow.webContents.send("menu-find");
-            }
+            mainWindow?.webContents.send("menu-find");
           },
         },
         {
           label: "Replace",
           accelerator: "CmdOrCtrl+H",
           click: () => {
-            if (mainWindow) {
-              mainWindow.webContents.send("menu-replace");
-            }
+            mainWindow?.webContents.send("menu-replace");
           },
         },
       ],

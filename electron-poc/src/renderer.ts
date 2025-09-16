@@ -1129,6 +1129,26 @@ function toggleTerminalPanel(): void {
   }
 }
 
+function getActiveEditor() {
+  return window.editorTabs?.getActiveEditor() ?? null;
+}
+
+function triggerEditorCommand(commandId: string, payload: any = null): boolean {
+  const editor = getActiveEditor();
+  if (!editor) return false;
+  editor.trigger("menu", commandId, payload);
+  editor.focus();
+  return true;
+}
+
+function fallbackExec(command: string): void {
+  const active = document.activeElement as HTMLElement | null;
+  if (active && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) {
+    active.focus();
+    document.execCommand(command);
+  }
+}
+
 async function initializeAutoSavePreference(): Promise<void> {
   if (!window.editorTabs || autoSaveInitialized) return;
   if (!window.databaseAPI?.getSetting) return;
@@ -7673,6 +7693,50 @@ addHelpModalStyles();
 
   window.electronAPI.onMenuGoToFile(() => {
     void promptGoToFile();
+  });
+
+  window.electronAPI.onMenuUndo(() => {
+    if (!triggerEditorCommand('undo')) {
+      fallbackExec('undo');
+    }
+  });
+
+  window.electronAPI.onMenuRedo(() => {
+    if (!triggerEditorCommand('redo')) {
+      fallbackExec('redo');
+    }
+  });
+
+  window.electronAPI.onMenuCut(() => {
+    if (!triggerEditorCommand('editor.action.clipboardCutAction')) {
+      fallbackExec('cut');
+    }
+  });
+
+  window.electronAPI.onMenuCopy(() => {
+    if (!triggerEditorCommand('editor.action.clipboardCopyAction')) {
+      fallbackExec('copy');
+    }
+  });
+
+  window.electronAPI.onMenuPaste(() => {
+    if (!triggerEditorCommand('editor.action.clipboardPasteAction')) {
+      fallbackExec('paste');
+    }
+  });
+
+  window.electronAPI.onMenuSelectAll(() => {
+    if (!triggerEditorCommand('editor.action.selectAll')) {
+      fallbackExec('selectAll');
+    }
+  });
+
+  window.electronAPI.onMenuFind(() => {
+    triggerEditorCommand('actions.find');
+  });
+
+  window.electronAPI.onMenuReplace(() => {
+    triggerEditorCommand('editor.action.startFindReplaceAction');
   });
 
   // Getting Started
