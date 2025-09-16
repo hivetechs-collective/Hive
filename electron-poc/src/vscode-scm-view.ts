@@ -96,43 +96,48 @@ export class VSCodeSCMView {
     console.log('[SCM] Rendering with status - ahead:', this.gitStatus?.ahead, 'behind:', this.gitStatus?.behind, 'branch:', this.gitStatus?.branch);
     
     if (!this.gitStatus || !this.gitStatus.isRepo) {
-      // VS Code-style welcome message for Source Control
-      this.container.innerHTML = `
-        <div class="scm-view">
-          <div class="scm-view-header">
-            <div class="scm-provider-container">
-              <div class="scm-provider">
-                <span class="codicon codicon-source-control"></span>
-                <span class="scm-provider-label">Source Control</span>
+      const currentFolder = (window as any).currentOpenedFolder as string | undefined;
+
+      if (!currentFolder) {
+        // VS Code-style welcome message for Source Control when nothing is open
+        this.container.innerHTML = `
+          <div class="scm-view">
+            <div class="scm-view-header">
+              <div class="scm-provider-container">
+                <div class="scm-provider">
+                  <span class="codicon codicon-source-control"></span>
+                  <span class="scm-provider-label">Source Control</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="scm-welcome-view">
+              <div class="scm-welcome-content">
+                <div class="scm-welcome-icon">
+                  <span class="codicon codicon-source-control" style="font-size: 48px; opacity: 0.5;"></span>
+                </div>
+                <p class="scm-welcome-message">
+                  In order to use Git features, you can open a folder containing a Git repository or clone from a URL.
+                </p>
+                <button class="scm-welcome-button primary" onclick="window.openFolder()">
+                  Open Folder
+                </button>
+                <button class="scm-welcome-button" onclick="window.cloneRepository()">
+                  Clone Repository
+                </button>
+                <p class="scm-welcome-docs">
+                  To learn more about how to use Git and source control 
+                  <a href="https://code.visualstudio.com/docs/editor/versioncontrol" target="_blank" class="scm-welcome-link">read our docs</a>.
+                </p>
               </div>
             </div>
           </div>
-          
-          <div class="scm-welcome-view">
-            <div class="scm-welcome-content">
-              <div class="scm-welcome-icon">
-                <span class="codicon codicon-source-control" style="font-size: 48px; opacity: 0.5;"></span>
-              </div>
-              <p class="scm-welcome-message">
-                In order to use Git features, you can open a folder containing a Git repository or clone from a URL.
-              </p>
-              <button class="scm-welcome-button primary" onclick="window.openFolder()">
-                Open Folder
-              </button>
-              <button class="scm-welcome-button" onclick="window.cloneRepository()">
-                Clone Repository
-              </button>
-              <p class="scm-welcome-docs">
-                To learn more about how to use Git and source control 
-                <a href="https://code.visualstudio.com/docs/editor/versioncontrol" target="_blank" class="scm-welcome-link">read our docs</a>.
-              </p>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      // Add styles for the welcome view
-      this.attachWelcomeStyles();
+        `;
+        this.attachWelcomeStyles();
+        return;
+      }
+
+      this.renderInitializeRepoView(currentFolder);
       return;
     }
 
@@ -283,6 +288,154 @@ export class VSCodeSCMView {
         this.gitGraphView.refresh();
       }
     }, 1000); // Increased delay to ensure Git is fully ready
+  }
+
+  private renderInitializeRepoView(folderPath: string) {
+    const folderName = this.getFolderDisplayName(folderPath);
+    const safePath = this.escapeHtml(folderPath);
+    const safeName = this.escapeHtml(folderName);
+
+    this.container.innerHTML = `
+      <div class="scm-view">
+        <div class="scm-view-header">
+          <div class="scm-provider-container">
+            <div class="scm-provider">
+              <span class="codicon codicon-source-control"></span>
+              <span class="scm-provider-label">Source Control</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="scm-welcome-view">
+          <div class="scm-welcome-content scm-init-card">
+            <div class="scm-welcome-icon">
+              <span class="codicon codicon-git-commit" style="font-size: 48px; opacity: 0.5;"></span>
+            </div>
+            <h3 class="scm-init-heading">Initialize Git in <span class="scm-init-repo">${safeName}</span></h3>
+            <p class="scm-init-path">${safePath}</p>
+            <p class="scm-welcome-message">
+              This folder isn’t a Git repository yet. Initialize it to create a <code>.git</code> directory and start tracking changes, or choose a different folder that already contains version history.
+            </p>
+            <div class="scm-init-actions">
+              <button class="scm-welcome-button primary scm-init-button">
+                Initialize Repository
+              </button>
+              <button class="scm-welcome-button scm-change-folder-button">
+                Choose Different Folder
+              </button>
+            </div>
+            <p class="scm-welcome-docs">
+              Prefer to review first? <a href="https://git-scm.com/docs/git-init" target="_blank" class="scm-welcome-link">Read about <code>git init</code></a>.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.attachWelcomeStyles();
+    this.attachInitializeRepoHandlers();
+  }
+
+  private attachInitializeRepoHandlers(): void {
+    const initButton = this.container.querySelector('.scm-init-button') as HTMLButtonElement | null;
+    const changeFolderBtn = this.container.querySelector('.scm-change-folder-button') as HTMLButtonElement | null;
+
+    if (initButton) {
+      initButton.addEventListener('click', () => {
+        void this.initializeRepository(initButton);
+      });
+    }
+
+    if (changeFolderBtn) {
+      changeFolderBtn.addEventListener('click', () => {
+        if (typeof (window as any).openFolder === 'function') {
+          (window as any).openFolder();
+        }
+      });
+    }
+  }
+
+  public async initializeRepository(triggerButton?: HTMLButtonElement): Promise<void> {
+    const folderPath = (window as any).currentOpenedFolder as string | undefined;
+    if (!folderPath) return;
+
+    if (this.pendingOperations.has('init-repo')) return;
+    this.pendingOperations.add('init-repo');
+
+    const originalLabel = triggerButton?.textContent;
+    if (triggerButton) {
+      triggerButton.disabled = true;
+      triggerButton.textContent = 'Initializing…';
+    }
+
+    let notificationId: string | null = null;
+    let dismissAfterSuccess = false;
+
+    try {
+      notificationId = notifications.show({
+        type: 'loading',
+        title: 'Initializing Git repository',
+        message: `Running git init in ${folderPath}`,
+        duration: 0,
+        closeable: false,
+      });
+
+      await window.gitAPI.initRepo(folderPath);
+      await window.gitAPI.setFolder(folderPath);
+
+      if (notificationId) {
+        notifications.update(notificationId, {
+          type: 'success',
+          title: 'Repository initialized',
+          message: 'Git repository created successfully.',
+        });
+      } else {
+        notifications.show({
+          type: 'success',
+          title: 'Repository initialized',
+          message: 'Git repository created successfully.',
+        });
+      }
+
+      dismissAfterSuccess = true;
+      await this.refresh();
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      console.error('[SCM] Failed to initialize repository:', error);
+      if (notificationId) {
+        notifications.update(notificationId, {
+          type: 'error',
+          title: 'Initialization failed',
+          message,
+          duration: 5000,
+        });
+      } else {
+        notifications.show({
+          type: 'error',
+          title: 'Initialization failed',
+          message,
+          duration: 5000,
+        });
+      }
+    } finally {
+      if (triggerButton) {
+        triggerButton.disabled = false;
+        triggerButton.textContent = originalLabel || 'Initialize Repository';
+      }
+
+      if (notificationId && dismissAfterSuccess) {
+        setTimeout(() => notifications.hide(notificationId!), 2000);
+      }
+
+      this.pendingOperations.delete('init-repo');
+    }
+  }
+
+  private getFolderDisplayName(folderPath: string): string {
+    if (!folderPath) return '';
+    const normalized = folderPath.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/+$/, '');
+    const segments = normalized.split('/').filter(Boolean);
+    return segments.length > 0 ? segments[segments.length - 1] : folderPath;
   }
 
   private buildHeaderBadgesHtml(): string {
@@ -2162,6 +2315,43 @@ export class VSCodeSCMView {
       
       .scm-welcome-link:hover {
         text-decoration: underline;
+      }
+
+      .scm-init-card {
+        background: var(--vscode-editorWidget-background, rgba(0, 0, 0, 0.4));
+        padding: 24px;
+        border-radius: 6px;
+        border: 1px solid var(--vscode-editorWidget-border, rgba(255, 255, 255, 0.08));
+      }
+
+      .scm-init-heading {
+        font-size: 18px;
+        margin-bottom: 6px;
+        color: var(--vscode-foreground);
+      }
+
+      .scm-init-repo {
+        color: var(--vscode-textLink-foreground, #4fc1ff);
+      }
+
+      .scm-init-path {
+        font-family: var(--monaco-monospace-font, 'SF Mono', monospace);
+        font-size: 12px;
+        color: var(--vscode-descriptionForeground, #999);
+        margin-bottom: 16px;
+        word-break: break-all;
+      }
+
+      .scm-init-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin: 16px 0;
+      }
+
+      .scm-welcome-button:disabled {
+        opacity: 0.6;
+        cursor: progress;
       }
     `;
     document.head.appendChild(style);
