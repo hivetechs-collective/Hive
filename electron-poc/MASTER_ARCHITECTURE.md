@@ -2194,9 +2194,9 @@ Key CSS hooks
 ### Source Control Welcome Experience (v1.8.380)
 Implementation: `src/vscode-scm-view.ts`, `src/renderer.ts`, `src/index.ts`
 
-- When no folder is open or the current folder has no Git repository, clicking the Source Control icon presents two actions:
-  - Open Folder — identical to Welcome → Open Folder (native dialog, unified handler).
-  - Clone Repository — uses the same multi‑provider clone dialog as the Welcome page (URL/GitHub/GitLab tabs), with URL validation and post‑clone open.
+- Welcome states:
+  - **No folder open** — shows the classic “Open Folder / Clone Repository” call-to-actions (identical handlers shared with the Welcome view).
+  - **Folder open, but not a Git repo (v1.8.440)** — renders an `Initialize Repository` card that explains the situation, offers a one-click `git init`, and provides a “Choose Different Folder” fallback. Successes and failures surface through the global notification system and the SCM view auto-refreshes after `gitAPI.setFolder()` rebinds the Git manager.
 - The Clone dialog drives `gitAPI.clone()` in the main process, then opens the cloned folder using the same `handleOpenFolder()` pipeline.
 
 ### SCM Root Behavior & Preference (v1.8.380)
