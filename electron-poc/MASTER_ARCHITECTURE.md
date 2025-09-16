@@ -7643,15 +7643,16 @@ This section documents the complete architectural pattern for integrating AI CLI
 - **Simple helper commands** - Universal interface across all 6 CLI tools
 
 ```bash
-# Universal commands available for all CLI tools
-hive-memory context "What have we worked on?"
-hive-memory query "Show me Python examples"
-hive-memory contribute solution python "Fixed import issue"
+# Direct SQLite access used by CLI tooling
+sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 1"
 
-# Tool-specific shortcuts
-hive-memory-claude-code context "test query"
-hive-memory-gemini-cli context "test query"
-hive-memory-grok context "test query"
+# Targeted query (wrap SQL in single quotes when piping)
+printf "SELECT content FROM messages WHERE content LIKE '%%React%%' \\n+        ORDER BY timestamp DESC LIMIT 3;" | sqlite3 ~/.hive-ai.db
+
+# Helper scripts remain available for interactive shells
+hive-memory-claude-code "recent authentication work"
+hive-memory-gemini-cli "show latest Python fixes"
+hive-memory-grok "audit performance debugging"
 ```
 
 **Architecture Flow**:
@@ -8977,8 +8978,8 @@ class CliToolsManager extends EventEmitter {
    - Auto-configuration support
 
 4. **Qwen Code** (`@qwen-code/qwen-code`)
-   - Memory Service integration
-   - Token-based authentication
+ - Memory Service integration
+  - Token-based authentication
 
 5. **OpenAI Codex** (`openai-codex`)
    - Python-based installation
@@ -8987,6 +8988,12 @@ class CliToolsManager extends EventEmitter {
 6. **Cline** (`cline`)
    - OpenRouter API key configuration
    - Memory Service integration
+
+7. **Cursor CLI** (`cursor-agent`)
+   - MCP bridge backed by Hive memory service
+   - `/register` endpoint returns dynamic `redirect_uris` & token metadata
+   - Maintains `~/.cursor/mcp.json` with live port and auth headers
+   - Launches in Hive TTYD terminals with automatic MCP approval flow
 
 ### Installation Flow
 ```
@@ -9077,24 +9084,18 @@ Simplified Memory Service access with unified, user-friendly commands across all
      - Direct HTTP calls to Memory Service endpoints
      - Uses existing Memory+Context pipeline
 
-3. **Unified Command System (v3.0)**:
-   - **Universal Commands** (work identically across all 6 tools):
-     - `hive-memory context "<question>"` - Enhanced Memory+Context query (recommended)
-     - `hive-memory query "<question>"` - Basic memory query  
-     - `hive-memory contribute <type> <category> "<content>"` - Share learning
-   - **Tool-Specific Shortcuts**:
-     - `hive-memory-claude-code context "What have we worked on?"`
-     - `hive-memory-gemini-cli context "Show me Python examples"`
-     - "What did we..." - Auto-triggers memory query
-     - "Show me our..." - Auto-triggers memory query
-     - "Remind me about..." - Auto-triggers memory query
-   - **Smart Pattern Matching**:
-     - Regex-based trigger detection
-     - Automatic prefix removal for cleaner queries
-     - Context enhancement based on trigger type
-   - **Discovery Prompts**:
-     - `/memory_help` - Shows all available commands
-     - `/current_work` - Quick access to project status
+3. **Unified Command System (v3.1)**:
+   - **Direct SQLite Access (production usage)**:
+     - `sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 1"`
+     - `printf "SELECT content FROM messages WHERE content LIKE '%%OAuth%%' LIMIT 5;" | sqlite3 ~/.hive-ai.db`
+     - Pattern adopted across CLI tools (e.g., `cursor-agent`) for deterministic results
+   - **Interactive Helper Scripts (optional)**:
+     - `hive-memory-claude-code "recent React debugging"`
+     - `hive-memory-gemini-cli "show latest API fixes"`
+     - `hive-memory query "show last 3 system notes"`
+   - **Gateway Behaviour**:
+     - CLI tools can choose the direct SQLite path or call Memory Service HTTP APIs
+     - Helper scripts reuse ProcessManager dynamic port discovery and stored tokens
 
 4. **Authentication System**:
    - Bearer token authentication for all API calls

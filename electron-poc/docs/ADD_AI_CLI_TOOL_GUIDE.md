@@ -295,6 +295,7 @@ The production build uses a comprehensive 17-phase build system:
 - Always use this command for consistent, reliable builds
 
 ## Next Tools to Add
+- [x] Cursor CLI - Interactive terminal AI coding assistant
 - [ ] Aider - AI pair programming tool
 - [ ] v0 - Vercel's AI development tool
 - [ ] Additional tools as needed

@@ -65,6 +65,7 @@ import grokIcon from '../resources/ai-cli-icons/grok.svg';
 import qwenIcon from '../resources/ai-cli-icons/qwen.svg';
 import openaiIcon from '../resources/ai-cli-icons/openai.svg';
 import githubCopilotIcon from '../resources/ai-cli-icons/github-copilot.svg';
+import cursorIcon from '../resources/ai-cli-icons/cdnlogo.com_cursor.svg';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { MemoryDashboard } from './components/memory-dashboard';
 import { NeuralConsciousness } from './neural-consciousness';
@@ -452,6 +453,10 @@ document.body.innerHTML = `
           <button class="activity-btn cli-quick-launch" data-tool="github-copilot" aria-label="GitHub Copilot">
             <img src="${githubCopilotIcon}" width="24" height="24" alt="GitHub Copilot" style="object-fit: contain;" />
             <span class="activity-tooltip">GitHub Copilot</span>
+          </button>
+          <button class="activity-btn cli-quick-launch" data-tool="cursor-cli" aria-label="Cursor CLI">
+            <img src="${cursorIcon}" width="24" height="24" alt="Cursor CLI" style="object-fit: contain;" />
+            <span class="activity-tooltip">Cursor CLI</span>
           </button>
 
           <!-- Consensus Panel Toggle - Our Revolutionary Feature -->
@@ -3971,6 +3976,18 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 badgeColor: '#24292E'
             }));
 
+            // Cursor CLI - Interactive terminal AI coding assistant
+            const cursorStatus = await electronAPI.detectCliTool('cursor-cli');
+            gridContainer.appendChild(createCliToolCard({
+                id: 'cursor-cli',
+                name: 'Cursor CLI',
+                description: 'Interactive terminal AI coding assistant',
+                status: cursorStatus,
+                docsUrl: 'https://docs.cursor.com/en/cli/overview',
+                badgeText: cursorStatus?.installed ? 'INSTALLED' : null,
+                badgeColor: '#007acc'
+            }));
+
             // Grok CLI - xAI powered terminal agent with MCP support
             const grokStatus = await electronAPI.detectCliTool('grok');
             gridContainer.appendChild(createCliToolCard({
@@ -4009,24 +4026,22 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     card.className = 'cli-tool-card';
     card.setAttribute('data-tool-id', id);  // Add data attribute for button handlers
     card.style.cssText = `
-        background: linear-gradient(135deg, #1E2427 0%, #181E21 100%); 
-        border: 1px solid #2D3336; 
-        border-radius: 12px; 
-        padding: 20px; 
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        background: #252526;
+        border: 1px solid #3c3c3c;
+        border-radius: 6px;
+        padding: 16px;
+        transition: all 0.15s ease;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     `;
     
-    // Add hover effect to card
+    // Add subtle hover effect
     card.onmouseover = () => {
-        card.style.transform = 'translateY(-2px)';
-        card.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
-        card.style.borderColor = '#3e444a';
+        card.style.background = '#2d2d30';
+        card.style.borderColor = '#464647';
     };
     card.onmouseout = () => {
-        card.style.transform = 'translateY(0)';
-        card.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
-        card.style.borderColor = '#2D3336';
+        card.style.background = '#252526';
+        card.style.borderColor = '#3c3c3c';
     };
     
     const isInstalled = status?.installed || false;
@@ -4036,7 +4051,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     // Status badge
     let statusBadge = '';
     if (badgeText) {
-        statusBadge = `<span style="background: ${badgeColor}; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">${badgeText}</span>`;
+        statusBadge = `<span style="background: ${badgeColor}; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">${badgeText}</span>`;
     }
 
     // Special handling for Grok CLI known issue
@@ -4056,18 +4071,26 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
         `;
     }
     
-    // Status details
+    // Status details with proper Memory status for non-MCP tools
     let statusDetails = '';
     if (isInstalled) {
+        // Special handling for GitHub Copilot (only tool without MCP support)
+        const memoryStatusText = (id === 'github-copilot')
+            ? 'N/A (No MCP support)'
+            : (memoryConnected ? 'Connected' : 'Not connected');
+        const memoryStatusColor = (id === 'github-copilot')
+            ? '#8b8b8b'
+            : (memoryConnected ? '#89d185' : '#f48771');
+
         statusDetails = `
-            <div><span style="color: #aaa;">Version:</span> <span data-version="${id}">${version || 'Unknown'}</span></div>
-            <div><span style="color: #aaa;">Memory:</span> <span data-memory="${id}" style="color: ${memoryConnected ? '#4caf50' : '#f44336'};">${memoryConnected ? 'Connected ✓' : 'Not connected'}</span></div>
-            <div><span style="color: #aaa;">Path:</span> ${status.path || 'Unknown'}</div>
+            <div style="font-size: 12px;"><span style="color: #8b8b8b;">Version:</span> <span data-version="${id}" style="color: #cccccc;">${version || 'Unknown'}</span></div>
+            <div style="font-size: 12px;"><span style="color: #8b8b8b;">Memory:</span> <span data-memory="${id}" style="color: ${memoryStatusColor};">${memoryStatusText}</span></div>
+            <div style="font-size: 12px;"><span style="color: #8b8b8b;">Path:</span> <span style="color: #cccccc; font-family: 'SF Mono', Monaco, monospace; font-size: 11px;">${status.path || 'Unknown'}</span></div>
         `;
     } else {
         statusDetails = `
-            <div><span style="color: #aaa;">Status:</span> Not Installed</div>
-            <div><span style="color: #aaa;">Installation:</span> npm install -g ${id}</div>
+            <div style="font-size: 12px;"><span style="color: #8b8b8b;">Status:</span> <span style="color: #cccccc;">Not Installed</span></div>
+            <div style="font-size: 12px;"><span style="color: #8b8b8b;">Installation:</span> <span style="color: #cccccc; font-family: 'SF Mono', Monaco, monospace; font-size: 11px;">npm install -g ${id}</span></div>
         `;
     }
     
@@ -4076,103 +4099,108 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     if (isInstalled) {
         buttons = `
             <button data-action="launch" data-tool-id="${id}" style="
-                flex: 1; 
-                padding: 8px 12px; 
-                background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); 
-                color: #fff; 
-                border: none; 
-                border-radius: 8px; 
-                font-size: 11px; 
-                font-weight: 600;
-                cursor: pointer; 
-                transition: all 0.2s ease;
-                box-shadow: 0 4px 6px rgba(255, 193, 7, 0.25);
-            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(255, 193, 7, 0.35)'" 
-               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(255, 193, 7, 0.25)'" 
+                flex: 1;
+                padding: 6px 12px;
+                background: #0e639c;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.1s ease;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            " onmouseover="this.style.background='#1177bb'"
+               onmouseout="this.style.background='#0e639c'"
                title="Launch in current project">Launch</button>
             <button data-action="refresh" data-tool-id="${id}" style="
-                flex: 1; 
-                padding: 8px 12px; 
-                background: #1E2427; 
-                color: #FFD54F; 
-                border: 1px solid #2D3336; 
-                border-radius: 8px; 
-                font-size: 11px; 
-                font-weight: 500;
-                cursor: pointer; 
-                transition: all 0.2s ease;
-            " onmouseover="this.style.background='#2D3336'; this.style.borderColor='#FFC107'; this.style.transform='translateY(-1px)'" 
-               onmouseout="this.style.background='#1E2427'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
+                flex: 1;
+                padding: 6px 12px;
+                background: transparent;
+                color: #cccccc;
+                border: 1px solid #3c3c3c;
+                border-radius: 3px;
+                font-size: 12px;
+                font-weight: 400;
+                cursor: pointer;
+                transition: all 0.1s ease;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            " onmouseover="this.style.background='#2d2d30'; this.style.borderColor='#464647'"
+               onmouseout="this.style.background='transparent'; this.style.borderColor='#3c3c3c'"
                title="Refresh tool details">Details</button>
             <button data-action="update" data-tool-id="${id}" style="
-                flex: 1; 
-                padding: 8px 12px; 
-                background: linear-gradient(135deg, #8A2BE2 0%, #007BFF 100%); 
-                color: #fff; 
-                border: none; 
-                border-radius: 8px; 
-                font-size: 11px; 
-                font-weight: 600;
-                cursor: pointer; 
-                transition: all 0.2s ease;
-                box-shadow: 0 4px 6px rgba(138, 43, 226, 0.25);
-            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(138, 43, 226, 0.35)'" 
-               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(138, 43, 226, 0.25)'">Update</button>
-            <button data-action="uninstall" data-tool-id="${id}" style="
-                flex: 1; 
-                padding: 8px 12px; 
-                background: #1E2427; 
-                color: #FF6B6B; 
-                border: 1px solid #2D3336; 
-                border-radius: 8px; 
-                font-size: 11px; 
+                flex: 1;
+                padding: 6px 12px;
+                background: #0e639c;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                font-size: 12px;
                 font-weight: 500;
-                cursor: pointer; 
-                transition: all 0.2s ease;
-            " onmouseover="this.style.background='#CC3D3D'; this.style.color='white'; this.style.borderColor='#CC3D3D'; this.style.transform='translateY(-1px)'" 
-               onmouseout="this.style.background='#1E2427'; this.style.color='#FF6B6B'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
+                cursor: pointer;
+                transition: background 0.1s ease;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            " onmouseover="this.style.background='#1177bb'"
+               onmouseout="this.style.background='#0e639c'"
+               title="Check for updates">Update</button>
+            <button data-action="uninstall" data-tool-id="${id}" style="
+                flex: 1;
+                padding: 6px 12px;
+                background: transparent;
+                color: #f48771;
+                border: 1px solid #3c3c3c;
+                border-radius: 3px;
+                font-size: 12px;
+                font-weight: 400;
+                cursor: pointer;
+                transition: all 0.1s ease;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            " onmouseover="this.style.background='#5a1d1d'; this.style.borderColor='#f48771'"
+               onmouseout="this.style.background='transparent'; this.style.borderColor='#3c3c3c'"
                title="Uninstall this tool">Uninstall</button>
         `;
     } else {
         buttons = `
             <button data-action="install" data-tool-id="${id}" style="
-                flex: 1; 
-                padding: 8px 12px; 
-                background: linear-gradient(135deg, #28A745 0%, #20C997 100%); 
-                color: #fff; 
-                border: none; 
-                border-radius: 8px; 
-                font-size: 11px; 
-                font-weight: 600;
-                cursor: pointer; 
-                transition: all 0.2s ease;
-                box-shadow: 0 4px 6px rgba(40, 167, 69, 0.25);
-            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(40, 167, 69, 0.35)'" 
-               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(40, 167, 69, 0.25)'">Install</button>
+                flex: 1;
+                padding: 6px 12px;
+                background: #0e639c;
+                color: #ffffff;
+                border: none;
+                border-radius: 3px;
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.1s ease;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            " onmouseover="this.style.background='#1177bb'"
+               onmouseout="this.style.background='#0e639c'"
+               title="Install this tool">Install</button>
         `;
     }
     buttons += `<button data-action="docs" data-url="${docsUrl}" style="
-        padding: 8px 12px; 
-        background: #1E2427; 
-        color: #FFD54F; 
-        border: 1px solid #2D3336; 
-        border-radius: 8px; 
-        font-size: 11px; 
-        font-weight: 500;
-        cursor: pointer; 
-        transition: all 0.2s ease;
-    " onmouseover="this.style.background='#2D3336'; this.style.borderColor='#FFC107'; this.style.transform='translateY(-1px)'" 
-       onmouseout="this.style.background='#1E2427'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
+        padding: 6px 12px;
+        background: transparent;
+        color: #cccccc;
+        border: 1px solid #3c3c3c;
+        border-radius: 3px;
+        font-size: 12px;
+        font-weight: 400;
+        cursor: pointer;
+        transition: all 0.1s ease;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    " onmouseover="this.style.background='#2d2d30'; this.style.borderColor='#464647'"
+       onmouseout="this.style.background='transparent'; this.style.borderColor='#3c3c3c'"
        title="View official documentation">Docs</button>`;
     
     card.innerHTML = `
-        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+        <h4 style="margin: 0 0 8px 0; color: #e1e1e1; font-size: 14px; font-weight: 600;">
             ${name}${statusBadge}
         </h4>
-        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">${description}</div>
+        <div style="color: #8b8b8b; font-size: 12px; margin-bottom: 12px; line-height: 1.4;">${description}</div>
         ${knownIssueWarning}
-        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-            <div class="tool-status" style="font-size: 11px; color: #888; line-height: 1.6;">
+        <div style="border-top: 1px solid #3c3c3c; padding-top: 10px; margin-top: 10px;">
+            <div class="tool-status" style="font-size: 11px; color: #8b8b8b; line-height: 1.6;">
                 ${statusDetails}
             </div>
         </div>
@@ -4189,24 +4217,22 @@ function createStaticToolCard(id: string, name: string, description: string, bad
     const card = document.createElement('div');
     card.className = 'cli-tool-card';
     card.style.cssText = `
-        background: linear-gradient(135deg, #1E2427 0%, #181E21 100%); 
-        border: 1px solid #2D3336; 
-        border-radius: 12px; 
-        padding: 20px; 
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        background: #252526;
+        border: 1px solid #3c3c3c;
+        border-radius: 6px;
+        padding: 16px;
+        transition: all 0.15s ease;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     `;
     
-    // Add hover effect to card
+    // Add subtle hover effect
     card.onmouseover = () => {
-        card.style.transform = 'translateY(-2px)';
-        card.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
-        card.style.borderColor = '#3e444a';
+        card.style.background = '#2d2d30';
+        card.style.borderColor = '#464647';
     };
     card.onmouseout = () => {
-        card.style.transform = 'translateY(0)';
-        card.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
-        card.style.borderColor = '#2D3336';
+        card.style.background = '#252526';
+        card.style.borderColor = '#3c3c3c';
     };
     
     const statusBadge = badgeText ? `<span style="background: ${badgeColor}; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">${badgeText}</span>` : '';
@@ -4461,6 +4487,7 @@ async function installAllCliTools(): Promise<void> {
         'qwen-code',
         'openai-codex',
         'github-copilot',
+        'cursor-cli',
         'grok'
     ];
     
@@ -4541,7 +4568,7 @@ async function installAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons
-            const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'grok'];
+            const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'cursor-cli', 'grok'];
             for (const toolId of toolsToInstall) {
                 await refreshSidebarToolIcon(toolId);
             }
@@ -4569,6 +4596,7 @@ async function updateAllCliTools(): Promise<void> {
         'qwen-code',
         'openai-codex',
         'github-copilot',
+        'cursor-cli',
         'grok'
     ];
     
@@ -4657,7 +4685,7 @@ async function updateAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons
-            const toolsToUpdate = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'grok'];
+            const toolsToUpdate = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'cursor-cli', 'grok'];
             for (const toolId of toolsToUpdate) {
                 await refreshSidebarToolIcon(toolId);
             }
@@ -4773,6 +4801,7 @@ async function uninstallAllCliTools(): Promise<void> {
         'qwen-code',
         'openai-codex',
         'github-copilot',
+        'cursor-cli',
         'grok'
     ];
     
@@ -4850,7 +4879,7 @@ async function uninstallAllCliTools(): Promise<void> {
         setTimeout(async () => {
             await renderCliToolsPanel(true);
             // Refresh all sidebar icons to show uninstalled status
-            const toolsToUninstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'grok'];
+            const toolsToUninstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'cursor-cli', 'grok'];
             for (const toolId of toolsToUninstall) {
                 await refreshSidebarToolIcon(toolId);
             }
@@ -5007,11 +5036,19 @@ async function refreshCliToolDetails(toolId: string): Promise<void> {
         const status = await electronAPI.detectCliTool(toolId);
         
         if (status && status.installed) {
+            // Special handling for GitHub Copilot (no MCP support)
+            const memoryStatusText = (toolId === 'github-copilot')
+                ? 'N/A (No MCP support)'
+                : (status.memoryServiceConnected ? 'Connected' : 'Not connected');
+            const memoryStatusColor = (toolId === 'github-copilot')
+                ? '#8b8b8b'
+                : (status.memoryServiceConnected ? '#89d185' : '#f48771');
+
             // Rebuild the status details section
             const statusDetailsHtml = `
-                <div><span style="color: #aaa;">Version:</span> <span data-version="${toolId}">${status.version || 'Unknown'}</span></div>
-                <div><span style="color: #aaa;">Memory:</span> <span data-memory="${toolId}" style="color: ${status.memoryServiceConnected ? '#4caf50' : '#f44336'};">${status.memoryServiceConnected ? 'Connected ✓' : 'Not connected'}</span></div>
-                <div><span style="color: #aaa;">Path:</span> ${status.path || 'Unknown'}</div>
+                <div style="font-size: 12px;"><span style="color: #8b8b8b;">Version:</span> <span data-version="${toolId}" style="color: #cccccc;">${status.version || 'Unknown'}</span></div>
+                <div style="font-size: 12px;"><span style="color: #8b8b8b;">Memory:</span> <span data-memory="${toolId}" style="color: ${memoryStatusColor};">${memoryStatusText}</span></div>
+                <div style="font-size: 12px;"><span style="color: #8b8b8b;">Path:</span> <span style="color: #cccccc; font-family: 'SF Mono', Monaco, monospace; font-size: 11px;">${status.path || 'Unknown'}</span></div>
             `;
             
             // Update the status div with the full details

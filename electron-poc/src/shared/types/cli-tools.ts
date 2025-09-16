@@ -158,6 +158,19 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     icon: '🤖',
     requiresNode: false
   },
+  'cursor-cli': {
+    id: 'cursor-cli',
+    name: 'Cursor CLI',
+    description: 'Interactive terminal AI coding assistant (Beta)',
+    command: 'cursor-agent',
+    installCommand: 'curl https://cursor.com/install -fsS | bash',
+    updateCommand: 'curl https://cursor.com/install -fsS | bash', // Re-run install to update
+    versionCommand: 'cursor-agent --version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://docs.cursor.com/en/cli/overview',
+    icon: '🖱️',
+    requiresNode: false
+  },
   'grok': {
     id: 'grok',
     name: 'Grok CLI (Community)',

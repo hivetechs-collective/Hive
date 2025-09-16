@@ -22,6 +22,9 @@ const execAsync = promisify(exec);
 // ProcessManager for dynamic port discovery
 let processManagerRef: any = null;
 
+const CURSOR_MCP_SERVER_ID = 'hive-memory-service';
+const CURSOR_MCP_CONFIG_PATH = path.join(os.homedir(), '.cursor', 'mcp.json');
+
 /**
  * Set ProcessManager reference for dynamic port discovery
  */
@@ -158,7 +161,7 @@ export class CliToolsDetector {
       // Note: GitHub Copilot, Cursor, Continue, Cody, and AWS Q don't support Memory Service integration
       // Only npm-based AI CLI tools with MCP or direct API support can connect to Memory Service
       if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' ||
-          toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok') {
+          toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok' || toolId === 'cursor-cli') {
         toolInfo.memoryServiceConnected = await this.checkMemoryServiceConnection(toolId);
       }
       
@@ -261,6 +264,22 @@ export class CliToolsDetector {
         }
       }
       
+      if (!token && toolId === 'cursor-cli') {
+        // Fallback to Cursor MCP config
+        try {
+          if (fs.existsSync(CURSOR_MCP_CONFIG_PATH)) {
+            const cursorConfig = JSON.parse(fs.readFileSync(CURSOR_MCP_CONFIG_PATH, 'utf-8'));
+            const cursorServer = cursorConfig?.mcpServers?.[CURSOR_MCP_SERVER_ID];
+            const authHeader = cursorServer?.headers?.Authorization;
+            if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+              token = authHeader.substring('Bearer '.length);
+            }
+          }
+        } catch (cursorConfigError) {
+          logger.debug('[CliToolsDetector] Failed to read Cursor MCP config:', cursorConfigError);
+        }
+      }
+
       if (!token) {
         logger.debug(`[CliToolsDetector] No memory service token found for ${toolId}`);
         return false;

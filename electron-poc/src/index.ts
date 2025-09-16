@@ -52,6 +52,11 @@ const processManager = new ProcessManager();
 // Inject ProcessManager into CLI tools detector for dynamic port discovery
 setProcessManagerReference(processManager);
 
+const CURSOR_MCP_SERVER_ID = 'hive-memory-service';
+const CURSOR_GLOBAL_DIR = path.join(os.homedir(), '.cursor');
+const CURSOR_MCP_CONFIG_PATH = path.join(CURSOR_GLOBAL_DIR, 'mcp.json');
+const CLI_TOOLS_CONFIG_PATH = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+
 let db: Database | null = null;
 let dbFilePath: string | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -2869,8 +2874,9 @@ const registerCliToolsHandlers = () => {
   if (!command) return null;
   
   try {
-    // Add common paths to PATH for detection
-    const pathAdditions = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+    // Add common paths to PATH for detection (including ~/.local/bin for cursor-agent)
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+    const pathAdditions = [`${homeDir}/.local/bin`, '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
     const enhancedPath = [...new Set([...pathAdditions, ...(process.env.PATH || '').split(':')])].join(':');
     
     // Try to detect the tool with enhanced PATH
@@ -2915,6 +2921,109 @@ const registerCliToolsHandlers = () => {
 }; */
 
 // Register simple CLI tool detection handlers (without the complex CliToolsManager)
+function loadJsonFileSafely(filePath: string): any {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return {};
+    }
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    if (!raw.trim()) {
+      return {};
+    }
+    return JSON.parse(raw);
+  } catch (error) {
+    logger.warn(`[Main] Failed to parse JSON file: ${filePath}`, error);
+    try {
+      const backupPath = `${filePath}.corrupted-${Date.now()}`;
+      fs.renameSync(filePath, backupPath);
+      logger.info(`[Main] Moved corrupted JSON to ${backupPath}`);
+    } catch (renameError) {
+      logger.warn(`[Main] Could not backup corrupted file ${filePath}:`, renameError);
+    }
+    return {};
+  }
+}
+
+function writeJsonFileSafely(filePath: string, data: any) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+function getToolTokenFromConfig(toolId: string): string | undefined {
+  const config = loadJsonFileSafely(CLI_TOOLS_CONFIG_PATH);
+  const entry = config?.[toolId];
+  return entry?.memoryService?.token;
+}
+
+function updateCursorMcpConfiguration(toolId: string, token?: string) {
+  const memoryStatus = processManager.getProcessStatus('memory-service');
+  if (!memoryStatus || !memoryStatus.port) {
+    logger.debug('[Main] Skipping Cursor MCP update - Memory Service not running');
+    return;
+  }
+
+  const port = memoryStatus.port;
+  const config = loadJsonFileSafely(CURSOR_MCP_CONFIG_PATH);
+  if (!config.mcpServers || typeof config.mcpServers !== 'object') {
+    config.mcpServers = {};
+  }
+
+  const existingToken = token || getToolTokenFromConfig(toolId);
+  const headers: Record<string, string> = {
+    'X-Hive-Tool': toolId,
+  };
+
+  const previous = config.mcpServers[CURSOR_MCP_SERVER_ID] || {};
+  if (previous.headers && typeof previous.headers === 'object') {
+    Object.assign(headers, previous.headers);
+  }
+  if (existingToken) {
+    headers.Authorization = `Bearer ${existingToken}`;
+  }
+
+  config.mcpServers[CURSOR_MCP_SERVER_ID] = {
+    url: `http://127.0.0.1:${port}/mcp`,
+    transport: 'http',
+    description: 'Hive Memory Service (MCP)',
+    headers,
+    autoInvoke: ['query_memory_with_context'],
+    triggerPatterns: ['@memory', '@context', '@recall', 'what have we', 'what did we'],
+    toolAliases: {
+      '@memory': 'query_memory_with_context',
+      '@context': 'query_memory_with_context',
+      '@recall': 'query_memory_with_context',
+      memory: 'query_memory_with_context'
+    },
+    metadata: {
+      provider: 'Hive Consensus Memory Service',
+      lastUpdated: new Date().toISOString()
+    }
+  };
+
+  writeJsonFileSafely(CURSOR_MCP_CONFIG_PATH, config);
+  logger.info(`[Main] Updated Cursor MCP configuration for Hive memory service on port ${port}`);
+}
+
+function getEnhancedPath(): string {
+  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+  const pathAdditions = [
+    `${homeDir}/.local/bin`,
+    `${homeDir}/bin`,
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
+  ];
+  return [...new Set([...pathAdditions, ...(process.env.PATH || '').split(':')])]
+    .filter(Boolean)
+    .join(':');
+}
+
 const registerSimpleCliToolHandlers = () => {
   logger.info('[Main] Registering simple CLI tool detection handlers');
   
@@ -2963,8 +3072,8 @@ const registerSimpleCliToolHandlers = () => {
         return { success: false, error: `Installation not available for ${toolConfig.name}` };
       }
       
-      // Enhanced PATH for finding package managers
-      const enhancedPath = `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`;
+      // Enhanced PATH for finding package managers (including ~/.local/bin for cursor-agent)
+      const enhancedPath = getEnhancedPath();
       
       logger.info(`[Main] Running installation command: ${toolConfig.installCommand}`);
       
@@ -3030,7 +3139,8 @@ const registerSimpleCliToolHandlers = () => {
         
         // 2. Register with Memory Service for all tools (except those that don't need it)
         const toolsWithoutMemoryService = ['cursor', 'continue', 'codewhisperer', 'cody'];
-        
+        let memoryServiceToken: string | undefined;
+
         if (!toolsWithoutMemoryService.includes(toolId)) {
           logger.info(`[Main] Registering ${toolId} with Memory Service`);
           
@@ -3070,6 +3180,7 @@ const registerSimpleCliToolHandlers = () => {
             };
             
             fs.writeFileSync(configPath, JSON.stringify(cliConfig, null, 2));
+            memoryServiceToken = token;
             
             logger.info(`[Main] Successfully registered ${toolId} with Memory Service`);
           } catch (configError) {
@@ -3079,7 +3190,14 @@ const registerSimpleCliToolHandlers = () => {
         }
         
         // Note: Direct API integration configured - no MCP setup needed
-        
+        if (toolId === 'cursor-cli') {
+          try {
+            updateCursorMcpConfiguration(toolId, memoryServiceToken);
+          } catch (cursorConfigError) {
+            logger.warn('[Main] Failed to configure Cursor MCP integration:', cursorConfigError);
+          }
+        }
+
         // Create symlinks for database and memory guide access
         try {
           // 1. Database symlink
@@ -3206,6 +3324,73 @@ const registerSimpleCliToolHandlers = () => {
       const { promisify } = require('util');
       const execAsync = promisify(exec);
       
+      // Special handling for GitHub Copilot
+      if (toolId === 'github-copilot') {
+        logger.info(`[Main] Updating GitHub Copilot via gh extension...`);
+        const command = 'gh extension upgrade github/gh-copilot';
+
+        try {
+          const { stdout, stderr } = await execAsync(command, {
+            env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+          });
+
+          logger.info(`[Main] GitHub Copilot update output: ${stdout}`);
+          if (stderr && !stderr.includes('WARN')) {
+            logger.warn(`[Main] GitHub Copilot update stderr: ${stderr}`);
+          }
+
+          // Get updated version
+          const versionResult = await execAsync('gh copilot --version', {
+            env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+          });
+
+          const version = versionResult.stdout.trim().match(/version (\d+\.\d+\.\d+)/)?.[1] || 'Unknown';
+
+          logger.info(`[Main] GitHub Copilot updated successfully to version ${version}`);
+          return { success: true, version, message: `Updated to version ${version}` };
+        } catch (error: any) {
+          logger.error(`[Main] Failed to update GitHub Copilot:`, error);
+          return { success: false, error: error.message || 'Update failed' };
+        }
+      }
+
+      // Special handling for Cursor CLI
+      if (toolId === 'cursor-cli') {
+        logger.info(`[Main] Updating Cursor CLI via curl reinstall...`);
+        const command = 'curl https://cursor.com/install -fsS | bash';
+        const enhancedPath = getEnhancedPath();
+
+        try {
+          const { stdout, stderr } = await execAsync(command, {
+            env: { ...process.env, PATH: enhancedPath }
+          });
+
+          logger.info(`[Main] Cursor CLI update output: ${stdout}`);
+          if (stderr && !stderr.includes('WARN')) {
+            logger.warn(`[Main] Cursor CLI update stderr: ${stderr}`);
+          }
+
+          // Get updated version
+          const versionResult = await execAsync('cursor-agent --version', {
+            env: { ...process.env, PATH: enhancedPath }
+          });
+
+          const version = versionResult.stdout.trim().match(/(\d+\.\d+\.\d+)/)?.[0] || 'Unknown';
+
+          try {
+            updateCursorMcpConfiguration(toolId);
+          } catch (cursorConfigError) {
+            logger.warn('[Main] Failed to refresh Cursor MCP configuration after update:', cursorConfigError);
+          }
+
+          logger.info(`[Main] Cursor CLI updated successfully to version ${version}`);
+          return { success: true, version, message: `Updated to version ${version}` };
+        } catch (error: any) {
+          logger.error(`[Main] Failed to update Cursor CLI:`, error);
+          return { success: false, error: error.message || 'Update failed' };
+        }
+      }
+
       // Map tool IDs to their NPM packages
       const npmPackages: Record<string, string> = {
         'claude-code': '@anthropic-ai/claude-code',
@@ -3214,7 +3399,7 @@ const registerSimpleCliToolHandlers = () => {
         'openai-codex': '@openai/codex',
         'grok': '@vibe-kit/grok-cli'
       };
-      
+
       const packageName = npmPackages[toolId];
       if (!packageName) {
         logger.error(`[Main] Unknown tool ID for update: ${toolId}`);
@@ -3238,7 +3423,7 @@ const registerSimpleCliToolHandlers = () => {
           
           // Get updated version
           const versionResult = await execAsync('aider --version', {
-            env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+            env: { ...process.env, PATH: getEnhancedPath() }
           });
           
           const version = versionResult.stdout.trim().match(/\d+\.\d+\.\d+/)?.[0] || 'Unknown';
@@ -3255,7 +3440,7 @@ const registerSimpleCliToolHandlers = () => {
       logger.info(`[Main] Updating ${toolId} via npm...`);
 
       // Robust multi-strategy npm update
-      const enhancedEnv = { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` };
+      const enhancedEnv = { ...process.env, PATH: getEnhancedPath() };
 
       // Special handling for Grok to avoid broken v0.0.29
       const updatePackage = toolId === 'grok' ? `${packageName}@0.0.28` : packageName;
@@ -3489,30 +3674,44 @@ Or try: npm install -g ${installCmd} --force --no-cache
         return { success: false, error: `Unknown tool: ${toolId}` };
       }
       
-      // Map tool IDs to npm package names
-      const npmPackages: Record<string, string> = {
-        'claude-code': '@anthropic-ai/claude-code',
-        'gemini-cli': '@google/gemini-cli',
-        'qwen-code': '@qwen-code/qwen-code',
-        'openai-codex': '@openai/codex',
-        'grok': '@vibe-kit/grok-cli'
-      };
-      
-      const packageName = npmPackages[toolId];
-      
-      if (!packageName) {
-        logger.error(`[Main] No package mapping for tool: ${toolId}`);
-        return { success: false, error: `Cannot uninstall ${toolConfig.name}: package mapping not found` };
+      // Enhanced PATH for finding npm and gh (including ~/.local/bin for cursor-agent)
+      const enhancedPath = getEnhancedPath();
+
+      let uninstallCommand: string;
+
+      // Special handling for GitHub Copilot (uses gh extension)
+      if (toolId === 'github-copilot') {
+        uninstallCommand = 'gh extension remove github/gh-copilot';
+        logger.info(`[Main] Running GitHub Copilot uninstall: ${uninstallCommand}`);
+      } else if (toolId === 'cursor-cli') {
+        // Special handling for Cursor CLI (installed via curl)
+        // Remove cursor-agent from common installation paths (including ~/.local/bin where it's typically installed)
+        uninstallCommand = 'rm -f ~/.local/bin/cursor-agent /usr/local/bin/cursor-agent /opt/homebrew/bin/cursor-agent ~/bin/cursor-agent && rm -rf ~/.cursor-agent';
+        logger.info(`[Main] Running Cursor CLI uninstall: ${uninstallCommand}`);
+      } else {
+        // Map tool IDs to npm package names
+        const npmPackages: Record<string, string> = {
+          'claude-code': '@anthropic-ai/claude-code',
+          'gemini-cli': '@google/gemini-cli',
+          'qwen-code': '@qwen-code/qwen-code',
+          'openai-codex': '@openai/codex',
+          'grok': '@vibe-kit/grok-cli'
+        };
+
+        const packageName = npmPackages[toolId];
+
+        if (!packageName) {
+          logger.error(`[Main] No package mapping for tool: ${toolId}`);
+          return { success: false, error: `Cannot uninstall ${toolConfig.name}: package mapping not found` };
+        }
+
+        uninstallCommand = `npm uninstall -g ${packageName}`;
+        logger.info(`[Main] Running npm uninstall: ${uninstallCommand}`);
       }
-      
-      // Enhanced PATH for finding npm
-      const enhancedPath = `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`;
-      
-      logger.info(`[Main] Running uninstall command: npm uninstall -g ${packageName}`);
       
       try {
         // Run the uninstall command
-        const { stdout, stderr } = await execAsync(`npm uninstall -g ${packageName}`, {
+        const { stdout, stderr } = await execAsync(uninstallCommand, {
           env: { ...process.env, PATH: enhancedPath },
           timeout: 60000 // 1 minute timeout for uninstall
         });
@@ -3521,7 +3720,13 @@ Or try: npm install -g ${installCmd} --force --no-cache
         if (stderr && !stderr.includes('WARN') && !stderr.includes('warning')) {
           logger.warn(`[Main] Uninstall stderr: ${stderr}`);
         }
-        
+
+        if (toolId === 'github-copilot') {
+          logger.info('[Main] GitHub Copilot extension removed successfully');
+          cliToolsDetector.clearCache(toolId);
+          return { success: true, message: 'GitHub Copilot extension has been removed' };
+        }
+
         // Verify uninstallation by checking if command still exists
         try {
           await execAsync(`which ${toolConfig.command}`, {
@@ -3567,9 +3772,9 @@ Or try: npm install -g ${installCmd} --force --no-cache
         
         // Check for specific error conditions
         if (error.message?.includes('EACCES') || error.message?.includes('permission')) {
-          return { 
-            success: false, 
-            error: 'Permission denied. Try running the app with elevated permissions or uninstall manually with: npm uninstall -g ' + packageName 
+          return {
+            success: false,
+            error: `Permission denied. Try running the app with elevated permissions or uninstall manually with: ${uninstallCommand}`
           };
         }
         
@@ -3679,6 +3884,14 @@ Or try: npm install -g ${installCmd} --force --no-cache
       // Note: Token already saved to cli-tools-config.json above
       // Tools will use direct HTTP API calls instead of MCP wrapper
       logger.info(`[Main] Configured ${toolId} for direct API access with endpoint: ${memoryServiceEndpoint}`);
+
+      if (toolId === 'cursor-cli') {
+        try {
+          updateCursorMcpConfiguration(toolId, token);
+        } catch (cursorConfigError) {
+          logger.warn('[Main] Failed to update Cursor MCP configuration during configure:', cursorConfigError);
+        }
+      }
       
       
       logger.info(`[Main] Successfully configured ${toolId} with Memory Service`);
@@ -3818,6 +4031,14 @@ Or try: npm install -g ${installCmd} --force --no-cache
       
       logger.info(`[Main] Using command: ${command} (previously launched: ${hasBeenLaunched})`);
       
+      if (toolId === 'cursor-cli') {
+        try {
+          updateCursorMcpConfiguration(toolId);
+        } catch (cursorConfigError) {
+          logger.warn('[Main] Failed to refresh Cursor MCP configuration before launch:', cursorConfigError);
+        }
+      }
+
       // Record this launch in the database
       if (aiToolsDb) {
         aiToolsDb.recordLaunch(toolId, selectedPath, {
@@ -3848,6 +4069,7 @@ Or try: npm install -g ${installCmd} --force --no-cache
           
           // Add npm global bin directories to PATH for CLI tools
           const npmGlobalPaths = [
+            process.env.HOME + '/.local/bin',  // User-specific tools (cursor-agent, etc.)
             '/opt/homebrew/bin',  // Homebrew on Apple Silicon
             '/usr/local/bin',     // Standard location
             '/Users/' + process.env.USER + '/.npm-global/bin',  // User npm global

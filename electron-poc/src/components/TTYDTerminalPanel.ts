@@ -506,6 +506,28 @@ export class TTYDTerminalPanel {
         // Handle webview load errors
         webview.addEventListener('did-fail-load', (event: any) => {
             console.error('[TTYDTerminalPanel] Webview failed to load:', event);
+
+            const attempts = parseInt(webview.dataset.reloadAttempts || '0', 10);
+            if (attempts < 5) {
+                const delay = 300 * (attempts + 1);
+                console.log(`[TTYDTerminalPanel] Retry loading ttyd webview in ${delay}ms (attempt ${attempts + 1})`);
+                webview.dataset.reloadAttempts = String(attempts + 1);
+                setTimeout(() => {
+                    try {
+                        const currentUrl = terminalInfo.url;
+                        if (currentUrl) {
+                            webview.src = 'about:blank';
+                            setTimeout(() => {
+                                webview.src = currentUrl;
+                            }, 50);
+                        }
+                    } catch (reloadError) {
+                        console.error('[TTYDTerminalPanel] Failed to retry ttyd load:', reloadError);
+                    }
+                }, delay);
+            } else {
+                console.error('[TTYDTerminalPanel] Max ttyd reload attempts reached');
+            }
         });
         
         // Switch to the new tab

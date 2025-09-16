@@ -179,6 +179,33 @@ export class MemoryServiceServer {
       });
     });
 
+    // MCP JSON-RPC endpoint
+    this.app.get(['/mcp', '/mcp/v1'], (req, res) => {
+      res.json({
+        status: 'ready',
+        protocol: 'MCP-JSONRPC',
+        version: '2024-11-05',
+        message: 'Hive Memory MCP bridge is running',
+        endpoints: {
+          rpc: '/mcp/v1',
+          health: '/health'
+        }
+      });
+    });
+
+    this.app.post('/register', (req, res) => {
+      res.json({
+        client_id: 'hive-memory-service',
+        client_secret: '',
+        redirect_uris: [`http://127.0.0.1:${this.port}/oauth/callback`],
+        scopes: ['memory.read', 'memory.write'],
+        status: 'ok',
+        message: 'Hive memory service ready for OAuth/MCP integration'
+      });
+    });
+
+    this.app.post(['/mcp', '/mcp/:method(*)', '/mcp/v1', '/mcp/v1/:method(*)'], this.authenticate, this.handleMcpRpc.bind(this));
+
     // Query memories
     this.app.post('/api/v1/memory/query', this.authenticate, this.handleQuery.bind(this));
     
@@ -264,6 +291,139 @@ export class MemoryServiceServer {
     
     req.tool = this.connectedTools.get(token);
     next();
+  };
+
+  private handleMcpRpc = async (req: any, res: any) => {
+    const rpcRequest = req.body || {};
+    const rpcId = rpcRequest.id ?? null;
+    let method: string | undefined = rpcRequest.method;
+    const pathMethod = req.params?.method;
+    if (!method && pathMethod) {
+      method = pathMethod;
+    }
+
+    const sendResult = (result: any) => {
+      res.json({ jsonrpc: '2.0', id: rpcId, result });
+    };
+
+    const sendError = (code: number, message: string, data?: any) => {
+      res.json({ jsonrpc: '2.0', id: rpcId, error: { code, message, data } });
+    };
+
+    try {
+      if (!method) {
+        return sendError(-32600, 'Invalid request: missing method');
+      }
+
+      switch (method) {
+        case 'initialize': {
+          return sendResult({
+            protocolVersion: '2024-11-05',
+            capabilities: {
+              logging: {},
+              prompts: {},
+              resources: {},
+              tools: {}
+            },
+            serverInfo: {
+              name: 'Hive Memory MCP Bridge',
+              version: '1.0.0'
+            }
+          });
+        }
+        case 'initialized': {
+          return sendResult(null);
+        }
+        case 'tools/list': {
+          return sendResult({
+            tools: [
+              {
+                name: 'query_memory_with_context',
+                description: 'Retrieve Hive consensus memory and context for a query',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    query: {
+                      type: 'string',
+                      description: 'Natural language question or request'
+                    },
+                    limit: {
+                      type: 'number',
+                      minimum: 1,
+                      maximum: 50,
+                      default: 5,
+                      description: 'Maximum results to include'
+                    }
+                  },
+                  required: ['query']
+                }
+              }
+            ]
+          });
+        }
+        case 'resources/list': {
+          return sendResult({ resources: [] });
+        }
+        case 'resources/read': {
+          return sendResult({ contents: [] });
+        }
+        case 'tools/call': {
+          const params = rpcRequest.params || {};
+          const toolName = params.name;
+          const args = params.arguments || {};
+          if (toolName !== 'query_memory_with_context') {
+            return sendError(-32601, `Tool not found: ${toolName}`);
+          }
+
+          const query = args.query || args.prompt || '';
+          const limit = args.limit || 5;
+
+          if (!query || typeof query !== 'string') {
+            return sendError(-32602, 'Invalid params: query is required');
+          }
+
+          const tool = req.tool as ConnectedTool;
+          try {
+            const enhancedResult = await this.requestMemoryContext(query, tool?.name || 'cursor-cli');
+
+            if (tool) {
+              tool.queryCount++;
+              tool.lastActivity = new Date();
+            }
+
+            this.logActivity({
+              type: 'mcp_tool_call',
+              tool: tool?.name || 'cursor-cli',
+              query: query.substring(0, 50),
+              resultCount: enhancedResult.relevantMemories?.length || 0,
+              responseTime: enhancedResult.metadata?.processingTimeMs || 0
+            });
+
+            return sendResult({
+              content: [
+                {
+                  type: 'text',
+                  text: enhancedResult.memoryContext || 'No memory context available.'
+                },
+                {
+                  type: 'json',
+                  data: enhancedResult
+                }
+              ],
+              isError: false
+            });
+          } catch (error) {
+            logger.error('[MemoryService] MCP tool call failed:', error);
+            return sendError(-32603, 'Tool execution failed', { message: String(error) });
+          }
+        }
+        default:
+          return sendError(-32601, `Method not found: ${method}`);
+      }
+    } catch (error) {
+      logger.error('[MemoryService] MCP handler error:', error);
+      return sendError(-32603, 'Internal error', { message: String(error) });
+    }
   };
 
   private handleQuery = async (req: any, res: any) => {

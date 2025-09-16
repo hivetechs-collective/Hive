@@ -612,11 +612,25 @@ body {
 /* AI CLI Icons Section */
 .ai-cli-icons-section {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  padding: 8px 0;
+  padding: 6px 0 4px 0;
+}
+
+.ai-cli-icons-section .activity-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-cli-icons-section .activity-btn img {
+  max-width: 26px;
+  max-height: 26px;
 }
 
 /* AI CLI Quick Launch Buttons */
@@ -696,49 +710,50 @@ body {
 
 /* CLI Tools Panel Fixes */
 .cli-tools-panel {
-  padding: 24px !important;
+  padding: 20px !important;
   height: 100% !important;
   overflow-y: auto !important;
-  background: linear-gradient(135deg, #0E1414 0%, #181E21 100%) !important;
+  background: #1e1e1e !important;
   display: flex !important;
   flex-direction: column !important;
   max-height: calc(100vh - 100px) !important; /* Ensure scrollbar appears */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 /* CLI Tools Grid - ensure proper scrolling */
 .cli-tools-grid {
   display: grid !important;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
-  gap: 15px !important;
+  gap: 12px !important;
   flex: 1 !important;
   overflow-y: auto !important;
   padding-bottom: 20px !important;
+  margin-top: 20px;
 }
 
 /* CLI Tools Panel Custom Scrollbar */
 .cli-tools-panel::-webkit-scrollbar,
 .cli-tools-grid::-webkit-scrollbar {
-  width: 12px;
+  width: 10px;
 }
 
 .cli-tools-panel::-webkit-scrollbar-track,
 .cli-tools-grid::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
+  background: transparent;
 }
 
 .cli-tools-panel::-webkit-scrollbar-thumb,
 .cli-tools-grid::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #FFC107, #FF9800);
-  border-radius: 6px;
+  background: #424242;
+  border-radius: 5px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
 .cli-tools-panel::-webkit-scrollbar-thumb:hover,
 .cli-tools-grid::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #FFD54F, #FFB74D);
-  border-radius: 6px;
+  background: #4f4f4f;
+  border-radius: 5px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
