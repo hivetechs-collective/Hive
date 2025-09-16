@@ -383,7 +383,6 @@ export class MemoryDashboard {
         height: 100%;
         display: flex;
         flex-direction: column;
-        overflow-y: auto;
         background: #1e1e1e;
         color: #cccccc;
       }
@@ -469,6 +468,7 @@ export class MemoryDashboard {
         min-height: 0;
         overflow-y: auto;
         padding-right: 6px;
+        padding-bottom: 80px;
         display: flex;
         flex-direction: column;
         gap: 20px;
