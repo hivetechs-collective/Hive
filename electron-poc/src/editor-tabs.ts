@@ -522,6 +522,11 @@ export class EditorTabs {
     console.log('[EditorTabs] saveTab called for:', tabId, 'tab:', tab?.name, 'isDirty:', tab?.isDirty);
     if (!tab || !tab.isDirty) return;
 
+    if (!tab.path) {
+      alert('Use "Save As" to choose a file location before saving.');
+      return;
+    }
+
     const editor = this.editors.get(tabId);
     if (!editor) return;
 
@@ -535,8 +540,6 @@ export class EditorTabs {
       tab.content = content;
       this.renderTabs();
       
-      // Immediately refresh Git status after save
-      // This ensures the file shows as modified in Git
       if (window.scmView) {
         window.scmView.refresh();
       }
@@ -544,13 +547,75 @@ export class EditorTabs {
         window.fileExplorer.refreshGitStatus();
       }
       
-      // Notify callbacks
       this.saveCallbacks.forEach(cb => cb(tab.path, content));
     } catch (error) {
       console.error('Failed to save file:', error);
       alert(`Failed to save ${tab.name}`);
     }
   }
+
+  private async saveTabAs(tabId: string, targetPath: string): Promise<void> {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+
+    const editor = this.editors.get(tabId);
+    if (!editor) return;
+
+    const content = editor.getValue();
+    const previousPath = tab.path;
+
+    try {
+      await window.fileAPI.writeFile(targetPath, content);
+
+      if (previousPath && previousPath !== targetPath) {
+        try {
+          await window.fileAPI.unwatchFile(previousPath);
+        } catch (error) {
+          console.warn('[EditorTabs] Failed to unwatch previous file:', error);
+        }
+      }
+
+      tab.path = targetPath;
+      tab.name = targetPath.split('/').pop() || targetPath;
+      tab.content = content;
+      tab.isDirty = false;
+      tab.language = this.detectLanguage(tab.name);
+
+      const model = editor.getModel();
+      if (model) {
+        monaco.editor.setModelLanguage(model, tab.language);
+      }
+
+      if (previousPath && previousPath !== targetPath) {
+        const existingModel = this.models.get(previousPath);
+        if (existingModel) {
+          this.models.delete(previousPath);
+          this.models.set(targetPath, existingModel);
+        }
+      }
+
+      try {
+        await window.fileAPI.watchFile(targetPath);
+      } catch (error) {
+        console.warn('[EditorTabs] Failed to watch new file:', error);
+      }
+
+      this.renderTabs();
+
+      if (window.scmView) {
+        window.scmView.refresh();
+      }
+      if (window.fileExplorer?.refreshGitStatus) {
+        window.fileExplorer.refreshGitStatus();
+      }
+
+      this.saveCallbacks.forEach(cb => cb(targetPath, content));
+    } catch (error) {
+      console.error('Failed to save file:', error);
+      alert(`Failed to save ${tab.name}`);
+    }
+  }
+
 
   /**
    * Render tabs UI
@@ -1075,6 +1140,11 @@ export class EditorTabs {
     if (this.activeTabId) {
       await this.saveTab(this.activeTabId);
     }
+  }
+
+  public async saveActiveTabAs(targetPath: string): Promise<void> {
+    if (!this.activeTabId) return;
+    await this.saveTabAs(this.activeTabId, targetPath);
   }
   
   /**

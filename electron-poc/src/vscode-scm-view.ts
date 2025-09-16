@@ -51,8 +51,8 @@ export class VSCodeSCMView {
   public async refresh() {
     console.log('[SCM] Refresh button clicked!');
     try {
+      const currentFolder = (window as any).currentOpenedFolder as string | undefined;
       // Check if a folder is open first
-      const currentFolder = (window as any).currentOpenedFolder;
       if (!currentFolder) {
         console.log('[SCM] No folder open, showing welcome view');
         this.gitStatus = null;
@@ -72,6 +72,14 @@ export class VSCodeSCMView {
       
       console.log('[SCM] Getting git status for:', currentFolder);
       this.gitStatus = await window.gitAPI.getStatus();
+      try {
+        await window.electronAPI.updateMenuContext({
+          hasFolder: !!currentFolder,
+          isRepo: this.gitStatus?.isRepo ?? false,
+        });
+      } catch (error) {
+        console.warn('[Menu] Failed to update menu context with git status:', error);
+      }
       console.log('[SCM] Got git status with', this.gitStatus?.files?.length || 0, 'files');
       console.log('[SCM] Branch:', this.gitStatus?.branch, 'Ahead:', this.gitStatus?.ahead, 'Behind:', this.gitStatus?.behind);
       
@@ -82,6 +90,15 @@ export class VSCodeSCMView {
       console.error('[SCM] Failed to refresh:', error);
       // Set gitStatus to null to show welcome message
       this.gitStatus = null;
+      try {
+        const currentFolder = (window as any).currentOpenedFolder as string | undefined;
+        await window.electronAPI.updateMenuContext({
+          hasFolder: !!currentFolder,
+          isRepo: false,
+        });
+      } catch (error) {
+        console.warn('[Menu] Failed to update menu context after git error:', error);
+      }
     }
     // Always render, even if there was an error
     this.render();

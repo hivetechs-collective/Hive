@@ -521,7 +521,7 @@ const createWindow = (show: boolean = true): BrowserWindow => {
   registerTerminalHandlers(mainWindow, processManager);
 
   // Create application menu
-  createApplicationMenu();
+void createApplicationMenu();
 
   // Show window if requested
   if (show && mainWindow) {
@@ -2029,7 +2029,99 @@ const registerFileSystemHandlers = () => {
   });
 };
 
-const createApplicationMenu = () => {
+interface MenuContextState {
+  autoSaveEnabled: boolean;
+  hasFolder: boolean;
+  isRepo: boolean;
+}
+
+let menuContext: MenuContextState = {
+  autoSaveEnabled: false,
+  hasFolder: false,
+  isRepo: false,
+};
+
+const getAutoSavePreference = async (): Promise<boolean> => {
+  if (!db) return false;
+  try {
+    const value = await new Promise<string | null>((resolve, reject) => {
+      db.get(
+        "SELECT value FROM settings WHERE key = ?",
+        ["editor.autoSave"],
+        (err, row: any) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(row ? (row.value as string) : null);
+          }
+        },
+      );
+    });
+    return value === "1";
+  } catch (error) {
+    logger.warn("[Menu] Failed to load auto-save preference:", error);
+    return false;
+  }
+};
+
+const getRecentFoldersForMenu = async () => {
+  if (!db) return [] as Array<{ folder_path: string; last_opened: string }>;
+  try {
+    const rows = await new Promise<Array<{ folder_path: string; last_opened: string }>>((resolve, reject) => {
+      db.all(
+        `SELECT folder_path, last_opened
+         FROM recent_folders
+         ORDER BY last_opened DESC
+         LIMIT 10`,
+        [],
+        (err, result) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve((result as Array<{ folder_path: string; last_opened: string }>) || []);
+          }
+        },
+      );
+    });
+    return rows;
+  } catch (error) {
+    logger.error("[Menu] Failed to load recent folders:", error);
+    return [] as Array<{ folder_path: string; last_opened: string }>;
+  }
+};
+
+const createApplicationMenu = async (): Promise<void> => {
+  const recentFolders = await getRecentFoldersForMenu();
+  if (!menuContext.autoSaveEnabled) {
+    menuContext.autoSaveEnabled = await getAutoSavePreference();
+  }
+
+  const recentItems: any[] = recentFolders.map((row) => ({
+    label: row.folder_path,
+    click: () => {
+      mainWindow?.webContents.send("menu-open-folder", row.folder_path);
+    },
+  }));
+
+  if (recentItems.length > 0) {
+    recentItems.push(
+      { type: "separator" },
+      {
+        label: "Clear Recent Folders",
+        click: () => {
+          if (!db) return;
+          db.run("DELETE FROM recent_folders", [], (err) => {
+            if (err) {
+              logger.error("[Menu] Failed to clear recent folders:", err);
+            } else {
+              void createApplicationMenu();
+            }
+          });
+        },
+      },
+    );
+  }
+
   const template: any[] = [
     {
       label: "File",
@@ -2089,6 +2181,27 @@ const createApplicationMenu = () => {
           },
         },
         {
+          label: "Clone Repository...",
+          accelerator: "Shift+CmdOrCtrl+G",
+          click: () => {
+            mainWindow?.webContents.send("menu-clone-repo");
+          },
+        },
+        {
+          label: "Open Recent",
+          submenu:
+            recentItems.length > 0
+              ? recentItems
+              : [{ label: "No Recent Folders", enabled: false }],
+        },
+        {
+          label: "Initialize Repository...",
+          enabled: menuContext.hasFolder && !menuContext.isRepo,
+          click: () => {
+            mainWindow?.webContents.send("menu-init-repo");
+          },
+        },
+        {
           label: "Close Folder",
           accelerator: "CmdOrCtrl+K F",
           click: () => {
@@ -2120,7 +2233,7 @@ const createApplicationMenu = () => {
         {
           label: "Auto Save",
           type: "checkbox",
-          checked: false,
+          checked: menuContext.autoSaveEnabled,
           click: (menuItem: any) => {
             if (mainWindow) {
               mainWindow.webContents.send(
@@ -2206,18 +2319,43 @@ const createApplicationMenu = () => {
           label: "Toggle Source Control",
           accelerator: "CmdOrCtrl+Shift+G",
           click: () => {
-            if (mainWindow) {
-              mainWindow.webContents.send("menu-toggle-git");
-            }
+            mainWindow?.webContents.send("menu-toggle-git");
           },
         },
         {
           label: "Toggle Terminal",
           accelerator: "CmdOrCtrl+`",
           click: () => {
-            if (mainWindow) {
-              mainWindow.webContents.send("menu-toggle-terminal");
-            }
+            mainWindow?.webContents.send("menu-toggle-terminal");
+          },
+        },
+        { type: "separator" },
+        {
+          label: "Memory Service Dashboard",
+          accelerator: "CmdOrCtrl+Shift+M",
+          click: () => {
+            mainWindow?.webContents.send("menu-open-memory");
+          },
+        },
+        {
+          label: "AI CLI Tools",
+          accelerator: "CmdOrCtrl+Alt+T",
+          click: () => {
+            mainWindow?.webContents.send("menu-open-cli-tools");
+          },
+        },
+        {
+          label: "Analytics Dashboard",
+          accelerator: "CmdOrCtrl+Shift+A",
+          click: () => {
+            mainWindow?.webContents.send("menu-open-analytics");
+          },
+        },
+        {
+          label: "Show Welcome",
+          accelerator: "CmdOrCtrl+Shift+W",
+          click: () => {
+            mainWindow?.webContents.send("menu-show-welcome");
           },
         },
         { type: "separator" },
@@ -2292,10 +2430,15 @@ const createApplicationMenu = () => {
       label: "Help",
       submenu: [
         {
-          label: "Show Welcome",
-          accelerator: "CmdOrCtrl+Shift+W",
+          label: "Getting Started",
           click: () => {
-            mainWindow?.webContents.send("menu-show-welcome");
+            mainWindow?.webContents.send("menu-getting-started");
+          },
+        },
+        {
+          label: "Memory Guide",
+          click: () => {
+            mainWindow?.webContents.send("menu-memory-guide");
           },
         },
         { type: "separator" },
@@ -2348,6 +2491,23 @@ const createApplicationMenu = () => {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 };
+
+ipcMain.handle("menu-refresh", async () => {
+  await createApplicationMenu();
+  return { success: true };
+});
+
+ipcMain.handle(
+  "menu-update-context",
+  async (
+    _,
+    context: Partial<MenuContextState>,
+  ) => {
+    menuContext = { ...menuContext, ...context };
+    await createApplicationMenu();
+    return { success: true };
+  },
+);
 
 // ===== Auto Backup Logic =====
 function getBackupDir(): string {

@@ -840,6 +840,7 @@ let isConnected = false;
 let isProcessing = false;
 let conversationStartTime = 0;
 let settingsModal: SettingsModal | null = null;
+let autoSaveInitialized = false;
 
 // Sidebar Panel Management
 function toggleSidebarPanel(panelType: "explorer" | "git") {
@@ -886,6 +887,7 @@ function toggleSidebarPanel(panelType: "explorer" | "git") {
             const editorArea = document.getElementById("editor-area");
             if (editorArea) {
               window.editorTabs = new EditorTabs(editorArea);
+              void initializeAutoSavePreference();
               console.log("Created editorTabs instance");
             }
           }
@@ -1117,6 +1119,83 @@ function toggleSidebarPanel(panelType: "explorer" | "git") {
         }
       }
     }
+  }
+}
+
+function toggleTerminalPanel(): void {
+  const toggleButton = document.getElementById("toggle-isolated-terminal");
+  if (toggleButton) {
+    toggleButton.dispatchEvent(new MouseEvent("click"));
+  }
+}
+
+async function initializeAutoSavePreference(): Promise<void> {
+  if (!window.editorTabs || autoSaveInitialized) return;
+  if (!window.databaseAPI?.getSetting) return;
+  try {
+    const saved = await window.databaseAPI.getSetting("editor.autoSave");
+    const enabled = saved === "1";
+    window.editorTabs.setAutoSave(enabled, 1000);
+    await window.electronAPI.updateMenuContext({ autoSaveEnabled: enabled });
+  } catch (error) {
+    console.warn("[Menu] Failed to initialize auto-save preference:", error);
+  } finally {
+    autoSaveInitialized = true;
+  }
+}
+
+async function promptGoToLine(): Promise<void> {
+  const editor = window.editorTabs?.getActiveEditor();
+  if (!editor) {
+    alert('Open a file to go to a specific line.');
+    return;
+  }
+  const input = await window.electronAPI.showInputDialog('Go to Line', '');
+  if (!input) return;
+  const line = parseInt(input, 10);
+  if (!Number.isFinite(line) || line < 1) {
+    alert('Enter a valid line number.');
+    return;
+  }
+  const model = editor.getModel();
+  if (!model) return;
+  const maxLine = model.getLineCount();
+  const targetLine = Math.min(line, maxLine);
+  const column = model.getLineFirstNonWhitespaceColumn(targetLine) || 1;
+  editor.revealLineInCenter(targetLine);
+  editor.setPosition({ lineNumber: targetLine, column });
+  editor.focus();
+}
+
+async function promptGoToFile(): Promise<void> {
+  if (!window.currentOpenedFolder) {
+    alert('Open a folder to use Go to File.');
+    return;
+  }
+
+  const input = await window.electronAPI.showInputDialog(
+    'Go to File',
+    'src/index.ts',
+  );
+  if (!input) return;
+
+  const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(input);
+  const isAbsolute = input.startsWith('/') || isWindowsPath;
+  const normalizedBase = window.currentOpenedFolder.replace(/\\$/, '');
+  const targetPath = isAbsolute
+    ? input
+    : `${normalizedBase}/${input}`.replace(/\\\\/g, '/');
+
+  try {
+    const exists = await window.fileAPI.fileExists(targetPath);
+    if (!exists) {
+      alert(`File not found: ${targetPath}`);
+      return;
+    }
+    await handleOpenFile(targetPath);
+  } catch (error) {
+    console.error('[GoToFile] Failed to open file:', error);
+    alert('Unable to open the requested file.');
   }
 }
 
@@ -5986,6 +6065,7 @@ setTimeout(() => {
     const editorArea = document.getElementById("editor-area");
     if (editorArea) {
       window.editorTabs = new EditorTabs(editorArea);
+      void initializeAutoSavePreference();
       console.log("✅ Editor tabs initialized on startup");
     }
   }
@@ -6600,8 +6680,18 @@ async function handleOpenFolder(folderPath: string) {
     await saveRecentFolder(folderPath);
 
     // Initialize Git manager with the new folder
+    let latestStatus: any = null;
     if (window.gitAPI) {
       await window.gitAPI.setFolder(folderPath);
+      try {
+        latestStatus = await window.gitAPI.getStatus();
+      } catch (error) {
+        console.warn("[Menu] Failed to read git status for menu context:", error);
+      }
+      void window.electronAPI.updateMenuContext({
+        hasFolder: true,
+        isRepo: latestStatus?.isRepo ?? false,
+      });
     }
 
     // Update Git branch display in status bar
@@ -7450,33 +7540,51 @@ addHelpModalStyles();
 // Listen for menu events from the main process
 (function setupMenuHandlers() {
   // Auto-save toggle
-  window.electronAPI.onMenuToggleAutoSave((enabled: boolean) => {
+  window.electronAPI.onMenuToggleAutoSave(async (enabled: boolean) => {
     if (window.editorTabs) {
       window.editorTabs.setAutoSave(enabled, 1000); // 1 second delay
       console.log("[Menu] Auto-save:", enabled ? "enabled" : "disabled");
+      try {
+        await window.databaseAPI?.setSetting?.(
+          "editor.autoSave",
+          enabled ? "1" : "0",
+        );
+      } catch (error) {
+        console.warn("[Menu] Failed to persist auto-save preference:", error);
+      }
+      await window.electronAPI.updateMenuContext({ autoSaveEnabled: enabled });
     }
   });
 
   // Save current file
   window.electronAPI.onMenuSave(() => {
     if (window.editorTabs) {
-      // Save the active tab
-      const activeTab = window.editorTabs.getActiveTab();
-      if (activeTab) {
-        window.editorTabs.saveActiveTab();
-      }
+      void window.editorTabs.saveActiveTab();
     }
   });
 
   // Save As
   window.electronAPI.onMenuSaveAs(async () => {
-    if (window.editorTabs) {
-      const activeTab = window.editorTabs.getActiveTab();
-      if (activeTab) {
-        // TODO: Implement save as dialog
-        console.log("[Menu] Save As not yet implemented");
-      }
+    if (!window.editorTabs) return;
+    const activeTab = window.editorTabs.getActiveTab();
+    if (!activeTab) return;
+
+    const defaultName = activeTab.name || "Untitled";
+    const baseFolder = window.currentOpenedFolder || "";
+    const defaultPath = activeTab.path
+      ? activeTab.path
+      : baseFolder
+        ? `${baseFolder.replace(/\\$/, '')}/${defaultName}`
+        : defaultName;
+
+    const result = await window.electronAPI.showSaveDialog({
+      defaultPath,
+    });
+
+    if (result?.canceled || !result?.filePath) {
+      return;
     }
+    await window.editorTabs.saveActiveTabAs(result.filePath);
   });
 
   // Open file
@@ -7521,6 +7629,50 @@ addHelpModalStyles();
   // Close folder
   window.electronAPI.onMenuCloseFolder(() => {
     window.closeFolder();
+  });
+
+  window.electronAPI.onMenuCloneRepo(() => {
+    void window.cloneRepository?.();
+  });
+
+  window.electronAPI.onMenuInitRepo(() => {
+    if (window.scmView?.initializeRepository) {
+      void window.scmView.initializeRepository();
+    } else {
+      alert("Open Source Control to initialize a repository.");
+    }
+  });
+
+  window.electronAPI.onMenuToggleExplorer(() => {
+    toggleSidebarPanel("explorer");
+  });
+
+  window.electronAPI.onMenuToggleGit(() => {
+    toggleSidebarPanel("git");
+  });
+
+  window.electronAPI.onMenuToggleTerminal(() => {
+    toggleTerminalPanel();
+  });
+
+  window.electronAPI.onMenuOpenMemory(() => {
+    setCenterView("memory", { forceFocus: true });
+  });
+
+  window.electronAPI.onMenuOpenCliTools(() => {
+    setCenterView("cli-tools", { forceFocus: true });
+  });
+
+  window.electronAPI.onMenuOpenAnalytics(() => {
+    setCenterView("analytics", { forceFocus: true });
+  });
+
+  window.electronAPI.onMenuGoToLine(() => {
+    void promptGoToLine();
+  });
+
+  window.electronAPI.onMenuGoToFile(() => {
+    void promptGoToFile();
   });
 
   // Getting Started
@@ -7677,6 +7829,7 @@ async function saveRecentFolder(folderPath: string) {
     } catch {}
 
     console.log("[Recent] Saved folder to recent:", folderPath);
+    void window.electronAPI.refreshMenu?.();
   } catch (error) {
     console.error("[Recent] Failed to save recent folder:", error);
   }
@@ -7686,6 +7839,7 @@ async function saveRecentFolder(folderPath: string) {
 window.closeFolder = () => {
   // Clear current folder
   window.currentOpenedFolder = null;
+  void window.electronAPI.updateMenuContext({ hasFolder: false, isRepo: false });
 
   // Clear file explorer
   if (window.fileExplorer) {
@@ -7713,6 +7867,7 @@ window.closeFolder = () => {
   }
 
   console.log("[CloseFolder] Folder closed");
+  void window.electronAPI.refreshMenu?.();
 };
 
 // Listen for custom events from Welcome page

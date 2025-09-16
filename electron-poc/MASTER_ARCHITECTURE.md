@@ -2385,13 +2385,15 @@ Purpose: Track per‑user daily usage (one conversation equals one consensus pip
 ### File Menu System
 **Implementation**: `src/index.ts` (main process)
 
-#### Menu Structure (v1.8.289)
+#### Menu Structure (v1.8.441)
 ```typescript
 File Menu
 ├── New File (Ctrl/Cmd+N)
 ├── Open File (Ctrl/Cmd+O)
 ├── Open Folder (Ctrl/Cmd+K Ctrl/Cmd+O)
-├── ─────────────
+├── Clone Repository… (Shift+Ctrl/Cmd+G)
+├── Open Recent ▸ (dynamic, DB-backed MRU + Clear Recent)
+├── Initialize Repository… (shown when workspace has no .git)
 ├── Save (Ctrl/Cmd+S)
 ├── Save As (Ctrl/Cmd+Shift+S)
 ├── ─────────────
@@ -2402,11 +2404,24 @@ File Menu
 ├── Close Folder
 └── Exit (Ctrl/Cmd+Q)
 
-Help Menu (Simplified v1.8.289)
+View Menu
+├── Toggle File Explorer (Ctrl/Cmd+B)
+├── Toggle Source Control (Ctrl/Cmd+Shift+G)
+├── Toggle Terminal (Ctrl/Cmd+`)
+├── ─────────────
+├── Memory Service Dashboard (Ctrl/Cmd+Shift+M)
+├── AI CLI Tools (Ctrl/Cmd+Alt+T)
+├── Analytics Dashboard (Ctrl/Cmd+Shift+A)
 ├── Show Welcome (Ctrl/Cmd+Shift+W)
-├── ─────────────
+
+Go Menu
+├── Go to File… (Ctrl/Cmd+P, resolves relative paths)
+├── Go to Line… (Ctrl/Cmd+G)
+
+Help Menu (v1.8.441)
+├── Getting Started
+├── Memory Guide
 ├── Documentation (Ctrl/Cmd+/)
-├── ─────────────
 └── About
 ```
 
@@ -2417,17 +2432,17 @@ Help Menu (Simplified v1.8.289)
 - About shows application version and info
 
 #### Auto-Save Feature
-- **Toggle Option**: Checkbox in File menu (checked state persists)
+- **Toggle Option**: Checkbox in File menu (state persisted in `settings` table under `editor.autoSave` and reflected in menu context)
 - **Default Delay**: 1000ms after last change
 - **Implementation**: Debounced save on content changes via `autoSaveTimeout`
 - **Visual Feedback**: Dirty indicator (orange dot #FFA500) on unsaved tabs
-- **Persistence**: Saves editor state before closing
-- **IPC Event**: `menu-toggle-auto-save` toggles the feature
+- **Persistence**: Editor rehydrates preference at startup via `initializeAutoSavePreference()` and rebuilds the application menu through `menu-update-context`
+- **IPC Event**: `menu-toggle-auto-save` toggles the feature, updates DB, and re-renders menu
 
 #### IPC Communication
-- Main process sends menu events via IPC
-- Renderer listens via `electronAPI.onMenu*` handlers
-- Bidirectional communication for dialogs
+- Main process sends menu events via IPC (e.g., `menu-open-folder`, `menu-toggle-explorer`, `menu-open-memory`)
+- Renderer listens via `electronAPI.onMenu*` handlers and routes to shared helpers (`toggleSidebarPanel`, `setCenterView`, `promptGoToLine`, etc.)
+- Bidirectional calls for dialogs (`showOpenDialog`, `showSaveDialog`) and menu context updates (`menu-update-context`, `menu-refresh`)
 - Type-safe interfaces in `window.d.ts`
 
 ### Editor Tabs Component

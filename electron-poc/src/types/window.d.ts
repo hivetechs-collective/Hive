@@ -123,14 +123,26 @@ declare global {
       onMenuResetState(callback: () => void): void;
       onMenuGettingStarted(callback: () => void): void;
       onMenuMemoryGuide(callback: () => void): void;
+      onMenuCloneRepo(callback: () => void): void;
+      onMenuInitRepo(callback: () => void): void;
       onMenuAbout(callback: () => void): void;
       
       // Help menu handlers
       onMenuHelpDocumentation(callback: () => void): void;
       onMenuShowWelcome(callback: () => void): void;
+      onMenuToggleExplorer(callback: () => void): void;
+      onMenuToggleGit(callback: () => void): void;
+      onMenuToggleTerminal(callback: () => void): void;
+      onMenuOpenMemory(callback: () => void): void;
+      onMenuOpenCliTools(callback: () => void): void;
+      onMenuOpenAnalytics(callback: () => void): void;
+      onMenuGoToFile(callback: () => void): void;
+      onMenuGoToLine(callback: () => void): void;
       
       getVersion(): Promise<string>;
       openExternal?(url: string): Promise<void>;
+      refreshMenu(): Promise<any>;
+      updateMenuContext(context: { autoSaveEnabled?: boolean; hasFolder?: boolean; isRepo?: boolean }): Promise<any>;
       
       // Memory Service API
       startMemoryService(): Promise<boolean>;

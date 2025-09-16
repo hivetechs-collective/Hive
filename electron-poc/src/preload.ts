@@ -188,6 +188,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuMemoryGuide: (callback: () => void) => {
     ipcRenderer.on('menu-memory-guide', callback);
   },
+  onMenuCloneRepo: (callback: () => void) => {
+    ipcRenderer.on('menu-clone-repo', callback);
+  },
+  onMenuInitRepo: (callback: () => void) => {
+    ipcRenderer.on('menu-init-repo', callback);
+  },
   onMenuHelpDocumentation: (callback: () => void) => {
     ipcRenderer.on('menu-help-documentation', callback);
   },
@@ -197,7 +203,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuShowWelcome: (callback: () => void) => {
     ipcRenderer.on('menu-show-welcome', callback);
   },
+  onMenuToggleExplorer: (callback: () => void) => {
+    ipcRenderer.on('menu-toggle-explorer', callback);
+  },
+  onMenuToggleGit: (callback: () => void) => {
+    ipcRenderer.on('menu-toggle-git', callback);
+  },
+  onMenuToggleTerminal: (callback: () => void) => {
+    ipcRenderer.on('menu-toggle-terminal', callback);
+  },
+  onMenuOpenMemory: (callback: () => void) => {
+    ipcRenderer.on('menu-open-memory', callback);
+  },
+  onMenuOpenCliTools: (callback: () => void) => {
+    ipcRenderer.on('menu-open-cli-tools', callback);
+  },
+  onMenuOpenAnalytics: (callback: () => void) => {
+    ipcRenderer.on('menu-open-analytics', callback);
+  },
+  onMenuGoToFile: (callback: () => void) => {
+    ipcRenderer.on('menu-go-to-file', callback);
+  },
+  onMenuGoToLine: (callback: () => void) => {
+    ipcRenderer.on('menu-go-to-line', callback);
+  },
   getVersion: () => ipcRenderer.invoke('get-app-version'),
+  refreshMenu: () => ipcRenderer.invoke('menu-refresh'),
+  updateMenuContext: (context: { autoSaveEnabled?: boolean; hasFolder?: boolean; isRepo?: boolean }) =>
+    ipcRenderer.invoke('menu-update-context', context),
   // Backup helpers
   listBackups: () => ipcRenderer.invoke('list-backups'),
   deleteBackup: (filePath: string) => ipcRenderer.invoke('delete-backup', filePath),
