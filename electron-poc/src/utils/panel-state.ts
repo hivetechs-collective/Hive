@@ -14,19 +14,28 @@ export function nextStateOnToggle(
 ): PanelState & { target: CenterView | null } {
   const { current, last } = state;
 
-  // Toggle off current or explicit close
-  if (actionView === null || actionView === current) {
-    // Prefer returning to last if it's different; otherwise fallback to Welcome
+  // Explicit close request - return to last / welcome fallback
+  if (actionView === null) {
     const fallback: CenterView | null = last && last !== current
       ? last
-      : (current && current !== 'welcome')
+      : current && current !== 'welcome'
         ? 'welcome'
-        : null; // Already at Welcome; nothing else to show
+        : null;
 
     return {
       current: fallback,
-      last: current || null,
+      last: current || last || null,
       target: fallback,
+    };
+  }
+
+  // Toggle off the current view
+  if (actionView === current) {
+    const updatedLast = current ?? last ?? null;
+    return {
+      current: null,
+      last: updatedLast,
+      target: null,
     };
   }
 
@@ -37,4 +46,3 @@ export function nextStateOnToggle(
     target: actionView,
   };
 }
-

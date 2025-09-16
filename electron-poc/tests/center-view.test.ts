@@ -14,16 +14,24 @@ test('idempotent focus keeps current and targets same view', () => {
   assert.deepStrictEqual({ current: r.current, last: r.last, target: r.target }, { current: 'settings', last: 'welcome', target: 'settings' });
 });
 
-test('toggle off returns to last when different', () => {
+test('toggle off returns to last when forced to focus (idempotent)', () => {
   const r = applyCenterView(S('memory', 'welcome'), 'memory');
-  assert.deepStrictEqual({ current: r.current, last: r.last, target: r.target }, { current: 'welcome', last: 'memory', target: 'welcome' });
+  assert.deepStrictEqual({ current: r.current, last: r.last, target: r.target }, { current: 'memory', last: 'welcome', target: 'memory' });
 });
 
-test('toggle off help falls back to welcome', () => {
-  const r1 = applyCenterView(S('welcome', null), 'help');
+test('toggle off help closes panel when idempotent focus disabled', () => {
+  const r1 = applyCenterView(S('welcome', null), 'help', { idempotentFocus: false });
   assert.strictEqual(r1.current, 'help');
-  const r2 = applyCenterView(S(r1.current, r1.last), 'help');
-  assert.strictEqual(r2.current, 'welcome');
+  const r2 = applyCenterView(S(r1.current, r1.last), 'help', { idempotentFocus: false });
+  assert.strictEqual(r2.current, null);
+  assert.strictEqual(r2.last, 'help');
+});
+
+test('toggle off returns to last when idempotentFocus true (legacy focus)', () => {
+  const r1 = applyCenterView(S('welcome', null), 'help', { idempotentFocus: true });
+  assert.strictEqual(r1.current, 'help');
+  const r2 = applyCenterView(S(r1.current, r1.last), 'help', { idempotentFocus: true });
+  assert.strictEqual(r2.current, 'help');
 });
 
 test('close (null) respects last or welcome', () => {
@@ -41,4 +49,3 @@ test('close from welcome yields null target', () => {
 });
 
 console.log('All center-view tests passed');
-

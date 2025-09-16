@@ -3855,7 +3855,8 @@ function hideAnalyticsPanel(): void {
 /**
  * Show the welcome page
  */
-function hideAllCenterPanels(): void {
+function hideAllCenterPanels(options: { hideEditors?: boolean } = {}): void {
+  const { hideEditors = true } = options;
   const welcomePanel = document.getElementById("welcome-panel");
   const helpPanel = document.getElementById("help-panel");
   const analyticsPanel = document.getElementById("analytics-panel");
@@ -3879,7 +3880,25 @@ function hideAllCenterPanels(): void {
   const editors = document.querySelector(
     ".editors-container",
   ) as HTMLElement | null;
-  if (editors) editors.style.display = "none";
+  if (editors) {
+    if (hideEditors) {
+      editors.style.display = "none";
+    } else {
+      editors.style.display = "block";
+    }
+  }
+}
+
+function showEditorWorkspace(): void {
+  hideAllCenterPanels({ hideEditors: false });
+
+  const editorArea = document.getElementById("editor-area");
+  if (editorArea) editorArea.style.display = "block";
+
+  const centerArea = document.getElementById("center-area");
+  if (centerArea && centerArea.classList.contains("collapsed")) {
+    centerArea.classList.remove("collapsed");
+  }
 }
 
 // Centralized center view state
@@ -3983,11 +4002,33 @@ function showMemoryPanel(): void {
   openMemoryDashboard();
 }
 
-function setCenterView(view: CenterView | null, opts?: { section?: string }) {
-  // Idempotent activity clicks: clicking the same icon re-focuses the view
-  if (view !== null && centerPanelState.current === view) {
-    // Ensure it is visible
-    switch (view) {
+function setCenterView(
+  view: CenterView | null,
+  opts?: { section?: string; forceFocus?: boolean },
+): CenterView | null {
+  const forceFocus = opts?.forceFocus ?? false;
+
+  const next = applyCenterView(centerPanelState as any, view, {
+    idempotentFocus: forceFocus,
+  });
+  centerPanelState = { current: next.current, last: next.last };
+
+  const target = next.target;
+
+  if (target === null) {
+    showEditorWorkspace();
+    updateActivityBarActive(null);
+    return null;
+  }
+
+  if (target === "welcome") {
+    showWelcomePage();
+  } else {
+    hideAllCenterPanels();
+    switch (target) {
+      case "help":
+        showHelpPanel(opts?.section || "getting-started");
+        break;
       case "settings":
         void showSettingsPanel();
         break;
@@ -4000,53 +4041,11 @@ function setCenterView(view: CenterView | null, opts?: { section?: string }) {
       case "analytics":
         showAnalyticsPanel();
         break;
-      case "help":
-        showHelpPanel(opts?.section || "getting-started");
-        break;
-      case "welcome":
-        showWelcomePage();
-        break;
     }
-    updateActivityBarActive(view);
-    return;
-  }
-
-  // Compute next state via integration wrapper
-  const next = applyCenterView(centerPanelState as any, view);
-  centerPanelState = { current: next.current, last: next.last };
-
-  // Apply target
-  hideAllCenterPanels();
-  const target = next.target;
-  if (target === null) {
-    // No target means close; default to Welcome if nothing is currently shown
-    showWelcomePage();
-    updateActivityBarActive("welcome");
-    return;
-  }
-
-  switch (target) {
-    case "welcome":
-      showWelcomePage();
-      break;
-    case "help":
-      showHelpPanel(opts?.section || "getting-started");
-      break;
-    case "settings":
-      void showSettingsPanel();
-      break;
-    case "memory":
-      showMemoryPanel();
-      break;
-    case "cli-tools":
-      showCliToolsPanel();
-      break;
-    case "analytics":
-      showAnalyticsPanel();
-      break;
   }
 
   updateActivityBarActive(target);
+  return target;
 }
 
 // Ensure editor area and center layout are ready for showing content panels
@@ -6299,33 +6298,35 @@ setTimeout(() => {
       // For documentation default to getting-started
       const opts =
         target === "help" ? { section: "getting-started" } : undefined;
-      setCenterView(target, opts as any);
+      const resolved = setCenterView(target, opts as any);
 
       // Safety: verify panel became visible; if not, force-show
-      setTimeout(() => {
-        const ensureVisible = (id: string, force: () => void) => {
-          const el = document.getElementById(id);
-          const visible = !!el && getComputedStyle(el).display !== "none";
-          if (!visible) force();
-        };
-        switch (target) {
-          case "settings":
-            ensureVisible("settings-panel", () => {
-              void showSettingsPanel();
-            });
-            break;
-          case "memory":
-            ensureVisible("memory-panel", () => {
-              showMemoryPanel();
-            });
-            break;
-          case "cli-tools":
-            ensureVisible("cli-tools-panel", () => {
-              showCliToolsPanel();
-            });
-            break;
-        }
-      }, 50);
+      if (resolved === target) {
+        setTimeout(() => {
+          const ensureVisible = (id: string, force: () => void) => {
+            const el = document.getElementById(id);
+            const visible = !!el && getComputedStyle(el).display !== "none";
+            if (!visible) force();
+          };
+          switch (target) {
+            case "settings":
+              ensureVisible("settings-panel", () => {
+                void showSettingsPanel();
+              });
+              break;
+            case "memory":
+              ensureVisible("memory-panel", () => {
+                showMemoryPanel();
+              });
+              break;
+            case "cli-tools":
+              ensureVisible("cli-tools-panel", () => {
+                showCliToolsPanel();
+              });
+              break;
+          }
+        }, 50);
+      }
     });
   });
 
@@ -7758,7 +7759,7 @@ window.addEventListener("showExplorerWithDialog", async () => {
 window.addEventListener("showDocumentation", (event: any) => {
   const section = event.detail?.section || "getting-started";
   console.log(`[Welcome] Opening documentation section: ${section}`);
-  setCenterView("help", { section });
+  setCenterView("help", { section, forceFocus: true });
 });
 // Ensure editor view is visible and overlays are hidden before opening a file
 function openFileAndFocusEditor(filePath: string) {
