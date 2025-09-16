@@ -1066,24 +1066,25 @@ export class WelcomePage {
 
   private showGettingStarted() {
     console.log('Showing getting started guide...');
-    // Show internal documentation
+    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
     const event = new CustomEvent('showDocumentation', { detail: { section: 'getting-started' } });
     window.dispatchEvent(event);
   }
 
   private async openFolder() {
     console.log('Open folder...');
+    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
     if (typeof (window as any).openFolder === 'function') {
       await (window as any).openFolder();
       return;
     }
-    // Fallback: dispatch event for legacy listeners
     const event = new CustomEvent('showExplorerWithDialog');
     window.dispatchEvent(event);
   }
 
   private openRecentFolder(path: string) {
     console.log(`Opening folder: ${path}`);
+    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
     if (typeof (window as any).openFolder === 'function') {
       (window as any).openFolder(path);
       return;
