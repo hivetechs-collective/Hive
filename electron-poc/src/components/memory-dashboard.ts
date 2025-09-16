@@ -251,86 +251,84 @@ export class MemoryDashboard {
         </div>
       </div>
       
-      <!-- Statistics Grid -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-label">Total Memories</div>
-          <div class="stat-value" id="stat-total-memories">${stats.totalMemories.toLocaleString()}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Queries Today</div>
-          <div class="stat-value" id="stat-queries-today">${stats.queriesToday.toLocaleString()}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Contributions</div>
-          <div class="stat-value" id="stat-contributions">${stats.contributionsToday.toLocaleString()}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Hit Rate</div>
-          <div class="stat-value" id="stat-hit-rate">${stats.hitRate}%</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Avg Response</div>
-          <div class="stat-value" id="stat-response-time">${Math.round(stats.avgResponseTime)}ms</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Connected Tools</div>
-          <div class="stat-value" id="stat-connected-tools">${stats.connectedTools}</div>
-        </div>
-      </div>
-      
-      <!-- Main Content Grid -->
-      <div class="dashboard-content">
-        <!-- Connected Tools -->
-        <div class="dashboard-section">
-          <h3>Connected Tools</h3>
-          <div id="connected-tools-list" class="tools-list"></div>
-        </div>
-        
-        <!-- Live Activity Stream -->
-        <div class="dashboard-section">
-          <h3>Live Activity Stream</h3>
-          <div id="memory-activity-stream" class="activity-stream">
-            ${activity
-              .map(
-                (item: any) => `
-              <div class="activity-item">
-                <span class="activity-time">${new Date(item.timestamp).toLocaleTimeString()}</span>
-                <span class="activity-icon">${
-                  item.type === "query"
-                    ? "🔍"
-                    : item.type === "contribution"
-                      ? "📝"
-                      : "📊"
-                }</span>
-                <span class="activity-text">${this.formatActivity(item)}</span>
-              </div>
-            `,
-              )
-              .join("")}
+      <div class="dashboard-scroll-container">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total Memories</div>
+            <div class="stat-value" id="stat-total-memories">${stats.totalMemories.toLocaleString()}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Queries Today</div>
+            <div class="stat-value" id="stat-queries-today">${stats.queriesToday.toLocaleString()}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Contributions</div>
+            <div class="stat-value" id="stat-contributions">${stats.contributionsToday.toLocaleString()}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Hit Rate</div>
+            <div class="stat-value" id="stat-hit-rate">${stats.hitRate}%</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Avg Response</div>
+            <div class="stat-value" id="stat-response-time">${Math.round(stats.avgResponseTime)}ms</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Connected Tools</div>
+            <div class="stat-value" id="stat-connected-tools">${stats.connectedTools}</div>
           </div>
         </div>
-      </div>
-      
-      <div class="integration-guide">
-        <h3>Using the Memory Service</h3>
-        <div class="integration-step">
-          <strong>Direct SQLite snapshot</strong>
-          <code>sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 1"</code>
+
+        <div class="dashboard-content">
+          <div class="dashboard-section">
+            <h3>Connected Tools</h3>
+            <div id="connected-tools-list" class="tools-list"></div>
+          </div>
+
+          <div class="dashboard-section">
+            <h3>Live Activity Stream</h3>
+            <div id="memory-activity-stream" class="activity-stream">
+              ${activity
+                .map(
+                  (item: any) => `
+                <div class="activity-item">
+                  <span class="activity-time">${new Date(item.timestamp).toLocaleTimeString()}</span>
+                  <span class="activity-icon">${
+                    item.type === "query"
+                      ? "🔍"
+                      : item.type === "contribution"
+                        ? "📝"
+                        : "📊"
+                  }</span>
+                  <span class="activity-text">${this.formatActivity(item)}</span>
+                </div>
+              `,
+                )
+                .join("")}
+            </div>
+          </div>
         </div>
-        <div class="integration-step">
-          <strong>Targeted search</strong>
-          <code>printf "SELECT content FROM messages WHERE content LIKE '%%refactor%%' ORDER BY timestamp DESC LIMIT 5;" | sqlite3 ~/.hive-ai.db</code>
-        </div>
-        <div class="integration-step">
-          <strong>Helper scripts</strong>
-          <code>~/.hive/bin/hive-memory-claude-code "recent authentication fixes"</code>
-          <code>~/.hive/bin/hive-memory-gemini-cli "show latest API regressions"</code>
-        </div>
-        <div class="integration-step">
-          <strong>Cursor CLI MCP</strong>
-          <code>/mcp list</code>
-          <code>!tools query_memory_with_context "summarize recent auth issues"</code>
+
+        <div class="integration-guide">
+          <h3>Using the Memory Service</h3>
+          <div class="integration-step">
+            <strong>Direct SQLite snapshot</strong>
+            <code>sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 1"</code>
+          </div>
+          <div class="integration-step">
+            <strong>Targeted search</strong>
+            <code>printf "SELECT content FROM messages WHERE content LIKE '%%refactor%%' ORDER BY timestamp DESC LIMIT 5;" | sqlite3 ~/.hive-ai.db</code>
+          </div>
+          <div class="integration-step">
+            <strong>Helper scripts</strong>
+            <code>~/.hive/bin/hive-memory-claude-code "recent authentication fixes"</code>
+            <code>~/.hive/bin/hive-memory-gemini-cli "show latest API regressions"</code>
+          </div>
+          <div class="integration-step">
+            <strong>Cursor CLI MCP</strong>
+            <code>/mcp list</code>
+            <code>!tools query_memory_with_context "summarize recent auth issues"</code>
+          </div>
         </div>
       </div>
     `;
@@ -383,7 +381,8 @@ export class MemoryDashboard {
       .memory-dashboard {
         padding: 20px;
         height: 100%;
-        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
         background: #1e1e1e;
         color: #cccccc;
       }
@@ -464,11 +463,19 @@ export class MemoryDashboard {
         color: #4ec9b0;
       }
       
+      .dashboard-scroll-container {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
       .dashboard-content {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 20px;
-        margin-bottom: 20px;
       }
       
       .dashboard-section {
