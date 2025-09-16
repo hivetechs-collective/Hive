@@ -3971,7 +3971,15 @@ function showMemoryPanel(): void {
     editorArea.appendChild(panel);
     memoryPanel = panel;
   }
-  memoryPanel.style.display = "block";
+  const memoryContainer = document.getElementById(
+    "memory-container",
+  ) as HTMLElement | null;
+  if (memoryContainer) {
+    configureMemoryPanelLayout(memoryPanel, memoryContainer);
+  } else {
+    console.error("[Memory] Memory container missing when showing panel");
+    memoryPanel.style.display = "flex";
+  }
   openMemoryDashboard();
 }
 
@@ -5548,6 +5556,20 @@ async function refreshCliToolDetails(toolId: string): Promise<void> {
 // Memory Dashboard Management
 let memoryDashboardInstance: MemoryDashboard | null = null;
 
+function configureMemoryPanelLayout(
+  memoryPanel: HTMLElement,
+  container: HTMLElement,
+): void {
+  // Force flex layout so the dashboard manages scrolling correctly
+  memoryPanel.style.display = "flex";
+  memoryPanel.style.flexDirection = "column";
+
+  container.style.display = "flex";
+  container.style.flex = "1 1 auto";
+  container.style.flexDirection = "column";
+  container.style.minHeight = "0";
+}
+
 async function openMemoryDashboard(): Promise<void> {
   console.log("[Memory] Opening Memory Dashboard...");
 
@@ -5557,6 +5579,8 @@ async function openMemoryDashboard(): Promise<void> {
     console.error("[Memory] Memory container or panel not found");
     return;
   }
+
+  configureMemoryPanelLayout(memoryPanel, container);
 
   // Hide other center panels (documentation, analytics, welcome, cli-tools)
   const helpPanel = document.getElementById("help-panel");
@@ -5568,8 +5592,7 @@ async function openMemoryDashboard(): Promise<void> {
   if (welcomePanel) welcomePanel.style.display = "none";
   if (cliToolsPanel) cliToolsPanel.style.display = "none";
 
-  // Show the memory panel
-  memoryPanel.style.display = "block";
+  // Panel is now visible with a flex layout; other center views remain hidden
 
   // Add Memory tab if it doesn't exist
   const tabsContainer = document.querySelector(".editor-tabs");
@@ -5613,7 +5636,14 @@ async function openMemoryDashboard(): Promise<void> {
           if (helpPanel) helpPanel.style.display = "none";
           if (analyticsPanel) analyticsPanel.style.display = "none";
           if (cliToolsPanel) cliToolsPanel.style.display = "none";
-          memoryPanel.style.display = "block";
+          const containerEl = document.getElementById(
+            "memory-container",
+          ) as HTMLElement | null;
+          if (containerEl) {
+            configureMemoryPanelLayout(memoryPanel, containerEl);
+          } else {
+            memoryPanel.style.display = "flex";
+          }
         }
       });
 

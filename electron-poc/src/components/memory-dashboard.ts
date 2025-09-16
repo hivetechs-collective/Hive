@@ -378,6 +378,17 @@ export class MemoryDashboard {
     const style = document.createElement("style");
     style.id = "memory-dashboard-styles";
     style.textContent = `
+      #memory-panel {
+        height: 100%;
+      }
+
+      #memory-container {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
       .memory-dashboard {
         padding: 20px;
         height: 100%;
