@@ -2936,6 +2936,12 @@ Pure state machine: `src/utils/panel-state.ts` (`nextStateOnToggle`) with tests 
 - `showCliToolsPanel()` — renders AI CLI Tools panel.
 - `showAnalyticsPanel()` — mounts Analytics dashboard.
 
+###### True Toggle Behaviour (v1.8.440)
+- Activity bar icons are now strict toggles: clicking the active view closes it and returns focus to the editor workspace.
+- `setCenterView()` returns the resolved view so callers only retry "force show" logic when a panel remains open.
+- `showEditorWorkspace()` centralises restoring the editor layout (`hideAllCenterPanels({ hideEditors: false })`, re‑display editors, expand center column).
+- Existing integrations (welcome deep links, documentation events) can opt into legacy idempotent focus via `forceFocus` to keep panels pinned when needed.
+
 ###### Memory Panel Layout Guard (v1.8.436)
 - `configureMemoryPanelLayout(memoryPanel, container)` now runs whenever the Memory view opens or re-activates.
 - Forces the panel/container into a flex column stack (`display: flex`, `flex: 1 1 auto`, `min-height: 0`) so the dashboard owns the full viewport height.
