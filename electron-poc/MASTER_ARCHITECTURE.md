@@ -2445,6 +2445,15 @@ Help Menu (v1.8.441)
 - Bidirectional calls for dialogs (`showOpenDialog`, `showSaveDialog`) and menu context updates (`menu-update-context`, `menu-refresh`)
 - Type-safe interfaces in `window.d.ts`
 
+#### Edit Menu Behaviour (v1.8.442)
+- Undo/Redo/Cut/Copy/Paste/Select All trigger Monaco commands via `triggerEditorCommand`; when no editor is focused, the renderer falls back to `document.execCommand` so dialogs and inputs still respond to menu shortcuts.
+- Find/Replace commands surface Monaco’s native search widgets (`actions.find`, `editor.action.startFindReplaceAction`).
+- `EditorTabs.saveActiveTabAs()` backs the File → Save As flow: prompts with a native dialog, rewires Monaco models/watchers for the new path, and refreshes Git decorations instantly.
+
+#### Navigation Commands (Go Menu)
+- “Go to File…” accepts absolute or workspace-relative paths, validates them with `fileAPI.fileExists`, and reuses `handleOpenFile` so Git/recents/status updates stay in sync.
+- “Go to Line…” prompts for a line, clamps it to the document bounds, moves the caret, and centers the line.
+
 ### Editor Tabs Component
 **Implementation**: `src/editor-tabs.ts`
 
