@@ -1133,20 +1133,37 @@ function getActiveEditor() {
   return window.editorTabs?.getActiveEditor() ?? null;
 }
 
-function triggerEditorCommand(commandId: string, payload: any = null): boolean {
+function triggerEditorCommand(
+  commandId: string | null,
+  payload: any = null,
+  fallbackCommand?: string,
+): boolean {
   const editor = getActiveEditor();
-  if (!editor) return false;
-  editor.trigger("menu", commandId, payload);
-  editor.focus();
-  return true;
-}
-
-function fallbackExec(command: string): void {
-  const active = document.activeElement as HTMLElement | null;
-  if (active && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) {
-    active.focus();
-    document.execCommand(command);
+  if (editor) {
+    editor.focus();
+    if (commandId) {
+      editor.trigger("menu", commandId, payload);
+    }
+    if (fallbackCommand) {
+      try {
+        document.execCommand(fallbackCommand);
+      } catch (error) {
+        console.warn('[Menu] execCommand failed:', fallbackCommand, error);
+      }
+    }
+    return true;
   }
+
+  if (fallbackCommand) {
+    try {
+      document.execCommand(fallbackCommand);
+      return true;
+    } catch (error) {
+      console.warn('[Menu] execCommand failed without editor:', fallbackCommand, error);
+    }
+  }
+
+  return false;
 }
 
 async function initializeAutoSavePreference(): Promise<void> {
@@ -7695,40 +7712,49 @@ addHelpModalStyles();
     void promptGoToFile();
   });
 
+  window.electronAPI.onMenuTerminalNewTab(() => {
+    void (window as any).isolatedTerminal?.createTerminalTab();
+  });
+
+  window.electronAPI.onMenuTerminalCloseTab(() => {
+    void (window as any).isolatedTerminal?.closeActiveTab();
+  });
+
+  window.electronAPI.onMenuTerminalShowLog(() => {
+    (window as any).isolatedTerminal?.showSystemLogTab();
+    try { (window as any).expandTTYDTerminal?.(); } catch {}
+  });
+
+  window.electronAPI.onMenuTerminalHideLog(() => {
+    (window as any).isolatedTerminal?.hideSystemLogTab();
+  });
+
+  window.electronAPI.onMenuTerminalClearLog(() => {
+    (window as any).isolatedTerminal?.clearSystemLog();
+  });
+
   window.electronAPI.onMenuUndo(() => {
-    if (!triggerEditorCommand('undo')) {
-      fallbackExec('undo');
-    }
+    triggerEditorCommand('undo', null, 'undo');
   });
 
   window.electronAPI.onMenuRedo(() => {
-    if (!triggerEditorCommand('redo')) {
-      fallbackExec('redo');
-    }
+    triggerEditorCommand('redo', null, 'redo');
   });
 
   window.electronAPI.onMenuCut(() => {
-    if (!triggerEditorCommand('editor.action.clipboardCutAction')) {
-      fallbackExec('cut');
-    }
+    triggerEditorCommand('editor.action.clipboardCutAction', null, 'cut');
   });
 
   window.electronAPI.onMenuCopy(() => {
-    if (!triggerEditorCommand('editor.action.clipboardCopyAction')) {
-      fallbackExec('copy');
-    }
+    triggerEditorCommand('editor.action.clipboardCopyAction', null, 'copy');
   });
 
   window.electronAPI.onMenuPaste(() => {
-    if (!triggerEditorCommand('editor.action.clipboardPasteAction')) {
-      fallbackExec('paste');
-    }
+    triggerEditorCommand('editor.action.clipboardPasteAction', null, 'paste');
   });
 
   window.electronAPI.onMenuSelectAll(() => {
-    if (!triggerEditorCommand('editor.action.selectAll')) {
-      fallbackExec('selectAll');
-    }
+    triggerEditorCommand('editor.action.selectAll');
   });
 
   window.electronAPI.onMenuFind(() => {

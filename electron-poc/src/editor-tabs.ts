@@ -1167,5 +1167,10 @@ export class EditorTabs {
     this.createEditor(tab);
     this.activateTab(tab.id);
   }
+
+  public async closeCurrentTab(): Promise<void> {
+    if (!this.activeTabId) return;
+    await this.closeTab(this.activeTabId);
+  }
   
 }

@@ -221,6 +221,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuOpenAnalytics: (callback: () => void) => {
     ipcRenderer.on('menu-open-analytics', callback);
   },
+  onMenuTerminalNewTab: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-new-tab', callback);
+  },
+  onMenuTerminalCloseTab: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-close-tab', callback);
+  },
+  onMenuTerminalShowLog: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-show-log', callback);
+  },
+  onMenuTerminalHideLog: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-hide-log', callback);
+  },
+  onMenuTerminalClearLog: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-clear-log', callback);
+  },
   onMenuUndo: (callback: () => void) => {
     ipcRenderer.on('menu-undo', callback);
   },

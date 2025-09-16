@@ -1073,14 +1073,21 @@ export class WelcomePage {
 
   private async openFolder() {
     console.log('Open folder...');
-    // Show Explorer pane with folder dialog
+    if (typeof (window as any).openFolder === 'function') {
+      await (window as any).openFolder();
+      return;
+    }
+    // Fallback: dispatch event for legacy listeners
     const event = new CustomEvent('showExplorerWithDialog');
     window.dispatchEvent(event);
   }
 
   private openRecentFolder(path: string) {
     console.log(`Opening folder: ${path}`);
-    // Dispatch event to open the folder in Explorer pane
+    if (typeof (window as any).openFolder === 'function') {
+      (window as any).openFolder(path);
+      return;
+    }
     const event = new CustomEvent('openFolderInExplorer', { detail: { path } });
     window.dispatchEvent(event);
   }

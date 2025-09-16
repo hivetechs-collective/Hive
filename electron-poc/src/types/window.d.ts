@@ -146,6 +146,11 @@ declare global {
       onMenuCopy(callback: () => void): void;
       onMenuPaste(callback: () => void): void;
       onMenuSelectAll(callback: () => void): void;
+      onMenuTerminalNewTab(callback: () => void): void;
+      onMenuTerminalCloseTab(callback: () => void): void;
+      onMenuTerminalShowLog(callback: () => void): void;
+      onMenuTerminalHideLog(callback: () => void): void;
+      onMenuTerminalClearLog(callback: () => void): void;
       
       getVersion(): Promise<string>;
       openExternal?(url: string): Promise<void>;

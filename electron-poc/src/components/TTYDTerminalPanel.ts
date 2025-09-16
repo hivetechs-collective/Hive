@@ -23,6 +23,7 @@ export class TTYDTerminalPanel {
     private activeTabId: string | null = null;
     private terminalCounter: number = 1;
     private tabScrollOffset: number = 0;
+    private systemLogContainer: HTMLElement | null = null;
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -174,6 +175,7 @@ export class TTYDTerminalPanel {
         
         tab.element = content;
         this.tabs.set(tab.id, tab);
+        this.systemLogContainer = logContainer;
         // Don't set activeTabId here - let the first terminal or AI tool take focus
         
         // Set up console capture for system log - pass the actual log container
@@ -678,6 +680,26 @@ export class TTYDTerminalPanel {
     public getActiveTerminalId(): string | null {
         return this.activeTabId;
     }
+
+    public async closeActiveTab(): Promise<void> {
+        if (!this.activeTabId) return;
+        await this.closeTab(this.activeTabId);
+    }
+
+    public showSystemLogTab(): void {
+        this.toggleSystemLog('show');
+        this.switchToTab('system-log');
+    }
+
+    public hideSystemLogTab(): void {
+        this.toggleSystemLog('hide');
+    }
+
+    public clearSystemLog(): void {
+        if (this.systemLogContainer) {
+            this.systemLogContainer.innerHTML = '<div style="color:#569cd6;">[System log cleared]</div>';
+        }
+    }
     
     // Set up tab navigation arrows
     private setupTabNavigation(): void {
@@ -834,7 +856,7 @@ export class TTYDTerminalPanel {
         }
     }
     
-    private toggleSystemLog(): void {
+    public toggleSystemLog(force?: 'show' | 'hide'): void {
         const systemLogTab = this.tabs.get('system-log');
         const systemLogTabBtn = document.getElementById('tab-btn-system-log');
         const systemLogToggle = document.getElementById('isolated-terminal-system-log-toggle');
@@ -844,8 +866,11 @@ export class TTYDTerminalPanel {
             return;
         }
         
-        // Toggle visibility
-        if (systemLogTabBtn.style.display === 'none') {
+        const currentlyHidden = systemLogTabBtn.style.display === 'none' || systemLogTabBtn.style.display === '';
+        const shouldShow = force === 'show' || (force === undefined && currentlyHidden);
+        const shouldHide = force === 'hide' || (force === undefined && !currentlyHidden);
+
+        if (shouldShow) {
             // Show System Log tab
             systemLogTabBtn.style.display = 'flex';
             systemLogToggle.style.opacity = '1';  // Full brightness when visible
@@ -855,7 +880,7 @@ export class TTYDTerminalPanel {
             if (!this.activeTabId || this.activeTabId === 'system-log') {
                 this.switchToTab('system-log');
             }
-        } else {
+        } else if (shouldHide) {
             // Hide System Log tab
             systemLogTabBtn.style.display = 'none';
             systemLogToggle.style.opacity = '0.7';  // Still fairly bright when hidden

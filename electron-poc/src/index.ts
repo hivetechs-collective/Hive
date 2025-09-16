@@ -2429,6 +2429,43 @@ const createApplicationMenu = async (): Promise<void> => {
       ],
     },
     {
+      label: "Terminal",
+      submenu: [
+        {
+          label: "New Terminal Tab",
+          accelerator: "CmdOrCtrl+Shift+`",
+          click: () => {
+            mainWindow?.webContents.send("menu-terminal-new-tab");
+          },
+        },
+        {
+          label: "Close Terminal Tab",
+          click: () => {
+            mainWindow?.webContents.send("menu-terminal-close-tab");
+          },
+        },
+        { type: "separator" },
+        {
+          label: "Show System Log",
+          click: () => {
+            mainWindow?.webContents.send("menu-terminal-show-log");
+          },
+        },
+        {
+          label: "Hide System Log",
+          click: () => {
+            mainWindow?.webContents.send("menu-terminal-hide-log");
+          },
+        },
+        {
+          label: "Clear System Log",
+          click: () => {
+            mainWindow?.webContents.send("menu-terminal-clear-log");
+          },
+        },
+      ],
+    },
+    {
       label: "Go",
       submenu: [
         {
