@@ -3,157 +3,233 @@
  * Shows real-time memory activity, connected tools, and statistics
  */
 
+import { CLI_TOOLS_REGISTRY } from "../shared/types/cli-tools";
+
+const MEMORY_ENABLED_TOOLS = [
+  "claude-code",
+  "gemini-cli",
+  "qwen-code",
+  "openai-codex",
+  "github-copilot",
+  "cursor-cli",
+  "grok",
+];
+
 export class MemoryDashboard {
   private container: HTMLElement | null = null;
   private ws: WebSocket | null = null;
   private updateInterval: NodeJS.Timeout | null = null;
   private activityBuffer: any[] = [];
   private memoryServicePort: number | null = null;
-  
+
   constructor() {
     this.initializePort();
   }
-  
+
   private async initializePort() {
     try {
       // Get dynamic port from main process via IPC
-      this.memoryServicePort = await (window as any).api.invoke('memory-service-port');
-      console.log('[MemoryDashboard] Got memory service port:', this.memoryServicePort);
+      this.memoryServicePort = await (window as any).api.invoke(
+        "memory-service-port",
+      );
+      console.log(
+        "[MemoryDashboard] Got memory service port:",
+        this.memoryServicePort,
+      );
       this.setupWebSocket();
     } catch (error) {
-      console.error('[MemoryDashboard] Failed to get memory service port:', error);
+      console.error(
+        "[MemoryDashboard] Failed to get memory service port:",
+        error,
+      );
       // Retry in 2 seconds
       setTimeout(() => this.initializePort(), 2000);
     }
   }
-  
+
   private setupWebSocket() {
     if (!this.memoryServicePort) {
-      console.error('[MemoryDashboard] No port available, waiting...');
+      console.error("[MemoryDashboard] No port available, waiting...");
       return;
     }
-    
+
     try {
       this.ws = new WebSocket(`ws://localhost:${this.memoryServicePort}`);
-      console.log('[MemoryDashboard] Connecting to WebSocket on port', this.memoryServicePort);
-      
+      console.log(
+        "[MemoryDashboard] Connecting to WebSocket on port",
+        this.memoryServicePort,
+      );
+
       this.ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         this.handleWebSocketMessage(data);
       };
-      
+
       this.ws.onerror = (error) => {
-        console.error('[MemoryDashboard] WebSocket error:', error);
+        console.error("[MemoryDashboard] WebSocket error:", error);
       };
-      
+
       this.ws.onclose = () => {
-        console.log('[MemoryDashboard] WebSocket closed, reconnecting in 5s...');
+        console.log(
+          "[MemoryDashboard] WebSocket closed, reconnecting in 5s...",
+        );
         setTimeout(() => this.setupWebSocket(), 5000);
       };
     } catch (error) {
-      console.error('[MemoryDashboard] Failed to connect WebSocket:', error);
+      console.error("[MemoryDashboard] Failed to connect WebSocket:", error);
     }
   }
-  
+
   private handleWebSocketMessage(message: any) {
-    if (message.type === 'activity') {
+    if (message.type === "activity") {
       this.addActivityItem(message.data);
-    } else if (message.type === 'stats') {
+    } else if (message.type === "stats") {
       this.updateStats(message.data);
     }
   }
-  
+
   private addActivityItem(activity: any) {
     this.activityBuffer.push(activity);
     if (this.activityBuffer.length > 100) {
       this.activityBuffer.shift();
     }
-    
-    const activityStream = document.getElementById('memory-activity-stream');
+
+    const activityStream = document.getElementById("memory-activity-stream");
     if (activityStream) {
       const activityItem = this.createActivityItem(activity);
       activityStream.insertBefore(activityItem, activityStream.firstChild);
-      
+
       // Keep only last 50 items in DOM
       while (activityStream.children.length > 50) {
         activityStream.removeChild(activityStream.lastChild!);
       }
     }
   }
-  
+
   private createActivityItem(activity: any): HTMLElement {
-    const item = document.createElement('div');
-    item.className = 'activity-item';
-    
+    const item = document.createElement("div");
+    item.className = "activity-item";
+
     const time = new Date(activity.timestamp).toLocaleTimeString();
-    const icon = activity.type === 'query' ? '🔍' : 
-                 activity.type === 'contribution' ? '📝' : '📊';
-    
+    const icon =
+      activity.type === "query"
+        ? "🔍"
+        : activity.type === "contribution"
+          ? "📝"
+          : "📊";
+
     item.innerHTML = `
       <span class="activity-time">${time}</span>
       <span class="activity-icon">${icon}</span>
       <span class="activity-text">${this.formatActivity(activity)}</span>
     `;
-    
+
     return item;
   }
-  
+
   private formatActivity(activity: any): string {
     switch (activity.type) {
-      case 'query':
-        return `${activity.tool || 'Unknown'} queried: "${activity.query || 'N/A'}"`;
-      case 'contribution':
-        return `${activity.tool || 'Unknown'} contributed ${activity.category || 'knowledge'}`;
-      case 'request':
-        return `${activity.client || 'Unknown'} ${activity.method} ${activity.path}`;
+      case "query":
+        return `${activity.tool || "Unknown"} queried: "${activity.query || "N/A"}"`;
+      case "contribution":
+        return `${activity.tool || "Unknown"} contributed ${activity.category || "knowledge"}`;
+      case "request":
+        return `${activity.client || "Unknown"} ${activity.method} ${activity.path}`;
       default:
         return JSON.stringify(activity).substring(0, 100);
     }
   }
-  
+
   private async updateStats(stats?: any) {
     if (!stats) {
       stats = await window.electronAPI.getMemoryStats();
     }
-    
+
     // Update stat cards
-    document.getElementById('stat-total-memories')!.textContent = stats.totalMemories.toLocaleString();
-    document.getElementById('stat-queries-today')!.textContent = stats.queriesToday.toLocaleString();
-    document.getElementById('stat-contributions')!.textContent = stats.contributionsToday.toLocaleString();
-    document.getElementById('stat-hit-rate')!.textContent = `${stats.hitRate}%`;
-    document.getElementById('stat-response-time')!.textContent = `${Math.round(stats.avgResponseTime)}ms`;
-    document.getElementById('stat-connected-tools')!.textContent = stats.connectedTools.toString();
+    document.getElementById("stat-total-memories")!.textContent =
+      stats.totalMemories.toLocaleString();
+    document.getElementById("stat-queries-today")!.textContent =
+      stats.queriesToday.toLocaleString();
+    document.getElementById("stat-contributions")!.textContent =
+      stats.contributionsToday.toLocaleString();
+    document.getElementById("stat-hit-rate")!.textContent = `${stats.hitRate}%`;
+    document.getElementById("stat-response-time")!.textContent =
+      `${Math.round(stats.avgResponseTime)}ms`;
+    document.getElementById("stat-connected-tools")!.textContent =
+      stats.connectedTools.toString();
   }
-  
+
   private async updateConnectedTools() {
-    const tools = await window.electronAPI.getConnectedTools();
-    const toolsList = document.getElementById('connected-tools-list');
-    
+    const toolsList = document.getElementById("connected-tools-list");
     if (!toolsList) return;
-    
-    toolsList.innerHTML = tools.map((tool: any) => `
-      <div class="tool-item">
-        <div class="tool-header">
-          <span class="tool-name">${tool.name}</span>
-          <span class="tool-status active">Active</span>
-        </div>
-        <div class="tool-stats">
-          <span>Last Active: ${new Date(tool.lastActivity).toLocaleTimeString()}</span>
-        </div>
-      </div>
-    `).join('') || '<div class="no-tools">No tools connected yet</div>';
+
+    const electronAPI = (window as any).electronAPI;
+    const entries = await Promise.all(
+      MEMORY_ENABLED_TOOLS.map(async (toolId) => {
+        const config = CLI_TOOLS_REGISTRY[toolId];
+        try {
+          const status = await electronAPI.detectCliTool(toolId);
+          return { id: toolId, name: config?.name ?? toolId, status };
+        } catch (error) {
+          console.error(`[MemoryDashboard] Failed to detect ${toolId}:`, error);
+          return { id: toolId, name: config?.name ?? toolId, status: null };
+        }
+      }),
+    );
+
+    const markup = entries
+      .map((entry) => {
+        const status = entry.status;
+        const installed = status?.installed ?? false;
+        const version = installed ? status?.version || "Unknown" : "—";
+        const path = installed ? status?.path || "—" : "—";
+
+        const isCopilot = entry.id === "github-copilot";
+        const memoryConnected = status?.memoryServiceConnected || false;
+
+        const statusLabel = installed ? "Installed" : "Not installed";
+        const statusClass = installed ? "active" : "pending";
+
+        let memoryLabel = "—";
+        let memoryClass = "neutral";
+        if (isCopilot) {
+          memoryLabel = "N/A";
+          memoryClass = "neutral";
+        } else if (installed) {
+          memoryLabel = memoryConnected ? "Connected" : "Not connected";
+          memoryClass = memoryConnected ? "connected" : "warning";
+        }
+
+        return `
+          <div class="tool-item">
+            <div class="tool-header">
+              <span class="tool-name">${entry.name}</span>
+              <span class="tool-status ${statusClass}">${statusLabel}</span>
+            </div>
+            <div class="tool-stats">
+              <span>Version: ${version}</span>
+              <span>Memory: <span class="memory-status ${memoryClass}">${memoryLabel}</span></span>
+              <span>Path: <code>${path}</code></span>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    toolsList.innerHTML =
+      markup ||
+      '<div class="no-tools">No CLI tools detected on this system</div>';
   }
-  
+
   public async create(): Promise<HTMLElement> {
-    const container = document.createElement('div');
-    container.className = 'memory-dashboard';
+    const container = document.createElement("div");
+    container.className = "memory-dashboard";
     this.container = container;
-    
+
     // Get initial data
     const stats = await window.electronAPI.getMemoryStats();
-    const tools = await window.electronAPI.getConnectedTools();
     const activity = await window.electronAPI.getMemoryActivity(20);
-    
+
     container.innerHTML = `
       <div class="dashboard-header">
         <h2>Universal Memory Infrastructure</h2>
@@ -164,11 +240,11 @@ export class MemoryDashboard {
       
       <div class="dashboard-status">
         <div class="status-item">
-          <span class="status-indicator ${stats.totalMemories > 0 ? 'active' : 'inactive'}"></span>
-          <span>Memory Service: ${stats.totalMemories > 0 ? 'Active' : 'Starting...'}</span>
+          <span class="status-indicator ${stats.totalMemories > 0 ? "active" : "inactive"}"></span>
+          <span>Memory Service: ${stats.totalMemories > 0 ? "Active" : "Starting..."}</span>
         </div>
         <div class="status-item">
-          <span>Port: ${this.memoryServicePort || 'Loading...'}</span>
+          <span>Port: ${this.memoryServicePort || "Loading..."}</span>
         </div>
         <div class="status-item">
           <span>Database: ~/.hive/hive-ai.db</span>
@@ -208,53 +284,70 @@ export class MemoryDashboard {
         <!-- Connected Tools -->
         <div class="dashboard-section">
           <h3>Connected Tools</h3>
-          <div id="connected-tools-list" class="tools-list">
-            ${tools.length > 0 ? tools.map((tool: any) => `
-              <div class="tool-item">
-                <div class="tool-header">
-                  <span class="tool-name">${tool.name}</span>
-                  <span class="tool-status active">Active</span>
-                </div>
-                <div class="tool-stats">
-                  <span>Last Active: ${new Date(tool.lastActivity).toLocaleTimeString()}</span>
-                </div>
-              </div>
-            `).join('') : '<div class="no-tools">No tools connected yet</div>'}
-          </div>
+          <div id="connected-tools-list" class="tools-list"></div>
         </div>
         
         <!-- Live Activity Stream -->
         <div class="dashboard-section">
           <h3>Live Activity Stream</h3>
           <div id="memory-activity-stream" class="activity-stream">
-            ${activity.map((item: any) => `
+            ${activity
+              .map(
+                (item: any) => `
               <div class="activity-item">
                 <span class="activity-time">${new Date(item.timestamp).toLocaleTimeString()}</span>
                 <span class="activity-icon">${
-                  item.type === 'query' ? '🔍' : 
-                  item.type === 'contribution' ? '📝' : '📊'
+                  item.type === "query"
+                    ? "🔍"
+                    : item.type === "contribution"
+                      ? "📝"
+                      : "📊"
                 }</span>
                 <span class="activity-text">${this.formatActivity(item)}</span>
               </div>
-            `).join('')}
+            `,
+              )
+              .join("")}
           </div>
         </div>
       </div>
       
-      <!-- Actions removed: Export/Import are managed in Settings → Advanced (backup/restore) -->
+      <div class="integration-guide">
+        <h3>Using the Memory Service</h3>
+        <div class="integration-step">
+          <strong>Direct SQLite snapshot</strong>
+          <code>sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 1"</code>
+        </div>
+        <div class="integration-step">
+          <strong>Targeted search</strong>
+          <code>printf "SELECT content FROM messages WHERE content LIKE '%%refactor%%' ORDER BY timestamp DESC LIMIT 5;" | sqlite3 ~/.hive-ai.db</code>
+        </div>
+        <div class="integration-step">
+          <strong>Helper scripts</strong>
+          <code>~/.hive/bin/hive-memory-claude-code "recent authentication fixes"</code>
+          <code>~/.hive/bin/hive-memory-gemini-cli "show latest API regressions"</code>
+        </div>
+        <div class="integration-step">
+          <strong>Cursor CLI MCP</strong>
+          <code>/mcp list</code>
+          <code>!tools query_memory_with_context "summarize recent auth issues"</code>
+        </div>
+      </div>
     `;
-    
+
     // No global exposure required
-    
+
+    await this.updateConnectedTools();
+
     // Start periodic updates
     this.startUpdates();
-    
+
     // Apply styles
     this.applyStyles();
-    
+
     return container;
   }
-  
+
   private startUpdates() {
     // Update every 5 seconds
     this.updateInterval = setInterval(async () => {
@@ -262,30 +355,30 @@ export class MemoryDashboard {
       await this.updateConnectedTools();
     }, 5000);
   }
-  
+
   public destroy() {
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
     }
-    
+
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
-    
+
     this.container = null;
     delete (window as any).memoryDashboard;
   }
-  
+
   // Export/Import functionality removed
-  
+
   private applyStyles() {
     // Check if styles already exist
-    if (document.getElementById('memory-dashboard-styles')) return;
-    
-    const style = document.createElement('style');
-    style.id = 'memory-dashboard-styles';
+    if (document.getElementById("memory-dashboard-styles")) return;
+
+    const style = document.createElement("style");
+    style.id = "memory-dashboard-styles";
     style.textContent = `
       .memory-dashboard {
         padding: 20px;
@@ -434,12 +527,54 @@ export class MemoryDashboard {
         background: #2d5a2d;
         color: #4ec9b0;
       }
+
+      .tool-status.pending {
+        background: rgba(110, 118, 129, 0.18);
+        color: #a6adb8;
+      }
       
       .tool-stats {
         font-size: 11px;
         color: #8b8b8b;
+        display: grid;
+        gap: 4px;
       }
       
+      .tool-stats code {
+        background: #1a1b1f;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-family: 'SF Mono', Monaco, Consolas, monospace;
+        color: #d4d7dd;
+      }
+
+      .memory-status {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px 6px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(110, 118, 129, 0.18);
+        color: #a6adb8;
+      }
+
+      .memory-status.connected {
+        background: rgba(46, 160, 67, 0.18);
+        color: #6cc96f;
+      }
+
+      .memory-status.warning {
+        background: rgba(202, 89, 42, 0.18);
+        color: #f77669;
+      }
+
+      .memory-status.neutral {
+        background: rgba(110, 118, 129, 0.18);
+        color: #a6adb8;
+      }
+
       .activity-stream {
         max-height: 300px;
         overflow-y: auto;
@@ -538,7 +673,7 @@ export class MemoryDashboard {
         color: #666;
       }
     `;
-    
+
     document.head.appendChild(style);
   }
 }
