@@ -151,7 +151,7 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     description: 'Official GitHub AI pair programmer - now FREE with limited usage',
     command: 'gh',  // Base command for detection
     installCommand: 'gh extension install github/gh-copilot',
-    updateCommand: 'gh extension upgrade gh-copilot',
+    updateCommand: 'gh extension upgrade github/gh-copilot',
     versionCommand: 'gh copilot --version',
     versionRegex: /version (\d+\.\d+\.\d+)/,
     docsUrl: 'https://docs.github.com/copilot/using-github-copilot/using-github-copilot-in-the-command-line',

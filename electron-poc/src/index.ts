@@ -3773,7 +3773,8 @@ Or try: npm install -g ${installCmd} --force --no-cache
       } else if (toolId === 'openai-codex') {
         command = 'codex';
       } else if (toolId === 'github-copilot') {
-        // GitHub Copilot uses 'gh copilot' as the command
+        // GitHub Copilot doesn't have an interactive mode like Claude
+        // Just launch with the base command to show help
         command = 'gh copilot';
       } else if (toolId === 'grok') {
         // SMART GROK LAUNCH: Check if API key is configured

@@ -107,11 +107,17 @@ export class TTYDManager extends EventEmitter {
     
     // If we have a command to auto-execute (like 'claude'), prepare it
     if (config.command) {
-      // Start an interactive shell that will execute the command after initialization
-      // We use a small sleep to ensure the shell is ready, then execute the command
-      // The command will appear in the terminal and execute properly
-      const initCommand = `sleep 0.5 && ${config.command}`;
-      ttydArgs.push('--', shell, '-c', `${initCommand}; exec ${shell} -i`);
+      // For commands with spaces like 'gh copilot', we need to handle them carefully
+      // Check if the command contains spaces that need special handling
+      if (config.command.includes(' ') && !config.command.startsWith('cd ')) {
+        // For multi-word commands, execute directly then drop to interactive shell
+        // This avoids shell quoting issues
+        ttydArgs.push('--', shell, '-c', `${config.command}; exec ${shell} -i`);
+      } else {
+        // For single-word commands, use the sleep wrapper for better UX
+        const initCommand = `sleep 0.5 && ${config.command}`;
+        ttydArgs.push('--', shell, '-c', `${initCommand}; exec ${shell} -i`);
+      }
     } else {
       // Just start the shell normally
       ttydArgs.push('--', shell);
