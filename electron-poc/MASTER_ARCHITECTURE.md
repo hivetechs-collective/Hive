@@ -2936,6 +2936,12 @@ Pure state machine: `src/utils/panel-state.ts` (`nextStateOnToggle`) with tests 
 - `showCliToolsPanel()` — renders AI CLI Tools panel.
 - `showAnalyticsPanel()` — mounts Analytics dashboard.
 
+###### Memory Panel Layout Guard (v1.8.436)
+- `configureMemoryPanelLayout(memoryPanel, container)` now runs whenever the Memory view opens or re-activates.
+- Forces the panel/container into a flex column stack (`display: flex`, `flex: 1 1 auto`, `min-height: 0`) so the dashboard owns the full viewport height.
+- Prevents the previous regression where the bottom integration guide became inaccessible due to the panel shrinking with no scrollbar.
+- Fallback: if the container can't be located, the panel still forces `display: flex` and logs a console error for diagnostics.
+
 Buttons map to views via `data-view` → `setCenterView(...)`. Explorer/Git still use `toggleSidebarPanel(...)` and are independent.
 
 ##### Activity Bar Icons (v1.8.289)
@@ -3413,6 +3419,11 @@ toolsList: [
 - **WebSocket real-time**: Instant activity updates when available
 - **Efficient integration**: Single source of truth with AI CLI Tools section
 - **Performance overhead**: ~9ms every 5 seconds (0.18% CPU)
+
+**Layout Reliability (v1.8.436):**
+- Injected styles pin `#memory-panel` to full height and force `#memory-container` into a flex column with `min-height: 0`.
+- Guarantees the dashboard's internal scroll container can reach the bottom integration guide on all viewport sizes.
+- Works in tandem with the runtime `configureMemoryPanelLayout` helper documented above.
 
 **Essential Actions (v1.8.362+):**
 
