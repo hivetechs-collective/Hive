@@ -22,6 +22,7 @@
 19. [AI Tools Launch Tracking & Database](#ai-tools-launch-tracking--database)
 20. [Future Enhancements](#future-enhancements)
 21. [Architecture Diagrams](#architecture-diagrams)
+22. [Automated UI Regression Framework](#automated-ui-regression-framework)
 
 ---
 
@@ -17614,3 +17615,55 @@ Tables used by Welcome
   - If the Git root differs from the opened folder, a repo badge appears in the status bar; clicking it switches SCM to the root without changing the opened folder.
   - IPC `git-set-folder` updates the active Git manager to the chosen root; File Explorer remains at the user’s opened folder.
   - Result: enterprise‑class SCM behavior across monorepos and nested worktrees.
+
+---
+
+## Automated UI Regression Framework
+
+### Purpose
+- Deliver a quick smoke suite that validates the **shipping desktop build** via Playwright.
+- Keep automation in lock-step with the centralized `window.commandAPI.executeCommand` registry so UI navigation bugs surface once.
+- Allow humans or AI agents to launch/attach without re-triggering the 17-phase build workflow for every spec run.
+
+### Components
+- **`scripts/run-ui-tests.js`** – Orchestrates the suite, ensuring a packaged binary exists, selecting a remote debugging port, and invoking Playwright.
+  - Prefers `/Applications/Hive Consensus.app` (post-build install) but respects `ELECTRON_APP_PATH` for custom artifacts.
+  - Supports `--attach` to reuse an already running app started with remote debugging.
+- **`playwright.config.ts`** – Single-worker configuration with generous timeouts; keeps execution deterministic for Electron.
+- **`tests/ui/welcome-documentation.spec.ts`** – Chromium CDP harness that launches or attaches to the packaged binary, waits for `commandAPI`, and drives Welcome/Documentation flows with DOM assertions (no screenshots).
+- **`scripts/build-production-dmg.js` integration** – When the build runs with `PLAYWRIGHT_E2E=1` and `PLAYWRIGHT_REMOTE_DEBUG_PORT`, it auto-launches the `/Applications` app using those flags so tests can attach immediately.
+
+### Running the Suite
+1. **Build once:**
+   ```bash
+   PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 npm run build:complete
+   ```
+   Produces the DMG, installs to `/Applications`, and launches Hive with remote debugging enabled.
+2. **Default (launch per run):**
+   ```bash
+   npm run test:ui
+   ```
+   Finds/launches the packaged app, allocates a port, runs the suite, and shuts the app down afterwards.
+3. **Attach mode:**
+   ```bash
+   PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 \
+     /Applications/Hive\ Consensus.app/Contents/MacOS/Hive\ Consensus &
+   PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 npm run test:ui -- --attach
+   ```
+   Use when Hive is already running and you want to avoid spawning a second instance.
+
+### Current Coverage
+- Verifies we can boot the packaged binary, clear Gatekeeper quarantine, and expose `window.commandAPI`.
+- Confirms Welcome → Documentation buttons trigger the right `view.*` commands and help content.
+- Streams renderer logs during tests so missing IPC handlers or menu bindings surface in CI output.
+
+### Gaps & Next Steps
+- Add specs for Help menu commands, activity bar toggles, CLI tool launches, and TTYD sizing once commandAPI exposes the necessary metrics.
+- Silence or address renderer warnings (`window.electronAPI.onMenuFind`, missing backend IPC) to remove noise and tighten pass/fail criteria.
+- Consider delegating remote debugging port allocation to `ProcessManager`/`PortManager` for tighter integration.
+- Wire the suite into CI after the 17-phase build so releases are blocked on smoke regressions.
+
+### Guidance for AI Agents
+- Always run the full build first with `PLAYWRIGHT_E2E=1` and a known `PLAYWRIGHT_REMOTE_DEBUG_PORT` so the packaged binary is fresh.
+- Use `npm run test:ui` (or `--attach`) to validate flows; watch the Playwright output for renderer warnings that may require fixes.
+- When adding scenarios, stay within the command registry—no direct DOM hacks or screenshots. Extend the shared harness helpers instead.

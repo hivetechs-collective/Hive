@@ -78,6 +78,25 @@ const CLI_TOOLS_CONFIG_PATH = path.join(
   "cli-tools-config.json",
 );
 
+const PLAYWRIGHT_E2E = process.env.PLAYWRIGHT_E2E === "1";
+const PLAYWRIGHT_REMOTE_DEBUG_PORT = process.env.PLAYWRIGHT_REMOTE_DEBUG_PORT;
+
+if (PLAYWRIGHT_E2E) {
+  if (PLAYWRIGHT_REMOTE_DEBUG_PORT) {
+    app.commandLine.appendSwitch(
+      "remote-debugging-port",
+      PLAYWRIGHT_REMOTE_DEBUG_PORT,
+    );
+    logger.info(
+      `[Main] Playwright E2E mode enabled (remote debugging port ${PLAYWRIGHT_REMOTE_DEBUG_PORT})`,
+    );
+  } else {
+    logger.warn(
+      "[Main] PLAYWRIGHT_E2E enabled without PLAYWRIGHT_REMOTE_DEBUG_PORT. Remote debugging not configured.",
+    );
+  }
+}
+
 let db: Database | null = null;
 let dbFilePath: string | null = null;
 let mainWindow: BrowserWindow | null = null;

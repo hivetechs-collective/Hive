@@ -19,6 +19,60 @@ const CYAN = '\x1b[36m';
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 
+const INSTALLED_APP_BINARY = path.join(
+  '/Applications',
+  'Hive Consensus.app',
+  'Contents',
+  'MacOS',
+  'Hive Consensus',
+);
+
+function launchInstalledApp() {
+  if (process.env.HIVE_SKIP_AUTO_LAUNCH === '1') {
+    console.log(`${YELLOW}Skipping automatic launch (HIVE_SKIP_AUTO_LAUNCH=1)${RESET}`);
+    return;
+  }
+
+  if (!fs.existsSync(INSTALLED_APP_BINARY)) {
+    console.log(`${YELLOW}Installed app not found at ${INSTALLED_APP_BINARY}, skipping auto launch${RESET}`);
+    return;
+  }
+
+  const env = { ...process.env };
+  const automationRequested = env.PLAYWRIGHT_E2E === '1' || env.PLAYWRIGHT_REMOTE_DEBUG_PORT;
+
+  if (automationRequested) {
+    if (!env.PLAYWRIGHT_REMOTE_DEBUG_PORT) {
+      console.log(
+        `${YELLOW}PLAYWRIGHT_E2E=1 but PLAYWRIGHT_REMOTE_DEBUG_PORT missing; tests should set both${RESET}`,
+      );
+    } else {
+      console.log(
+        `${CYAN}Launching Hive Consensus with remote debugging on port ${env.PLAYWRIGHT_REMOTE_DEBUG_PORT}${RESET}`,
+      );
+    }
+  } else {
+    console.log(`${CYAN}Launching Hive Consensus for post-build verification${RESET}`);
+  }
+
+  try {
+    const child = spawn(INSTALLED_APP_BINARY, [], {
+      env,
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    console.log(`${GREEN}✓ Hive Consensus launched from Applications${RESET}`);
+    if (automationRequested && env.PLAYWRIGHT_REMOTE_DEBUG_PORT) {
+      console.log(
+        `${CYAN}  Playwright attach URL: ws://127.0.0.1:${env.PLAYWRIGHT_REMOTE_DEBUG_PORT}${RESET}`,
+      );
+    }
+  } catch (error) {
+    console.log(`${YELLOW}⚠ Failed to launch Hive Consensus automatically: ${error.message}${RESET}`);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // PATH CONFIGURATION AND VERIFICATION
 // ═══════════════════════════════════════════════════════════════
@@ -1858,6 +1912,7 @@ try {
   
   console.log(`${GREEN}✅ Auto-installation complete!${RESET}`);
   console.log(`${GREEN}  App installed to: /Applications/Hive Consensus.app${RESET}\n`);
+  launchInstalledApp();
   
 } catch (error) {
   console.log(`${YELLOW}⚠ Auto-install failed: ${error.message}${RESET}`);
