@@ -17655,12 +17655,15 @@ Tables used by Welcome
 ### Current Coverage
 - Verifies we can boot the packaged binary, clear Gatekeeper quarantine, and expose `window.commandAPI`.
 - Confirms Welcome → Documentation buttons trigger the right `view.*` commands and help content.
+- Exercises Help menu commands (`help.showGettingStarted`, `help.showMemoryGuide`, `help.showAbout`) with modal/dialog assertions.
+- Toggles Explorer/Git sidebars plus Settings/Memory/CLI Tools/Analytics panels through the command registry.
+- Validates TTYD terminal collapse/expand behaviour via the toggle button and `expandTTYDTerminal` helper.
 - Streams renderer logs during tests so missing IPC handlers or menu bindings surface in CI output.
 
 ### Gaps & Next Steps
-- Add specs for Help menu commands, activity bar toggles, CLI tool launches, and TTYD sizing once commandAPI exposes the necessary metrics.
-- Silence or address renderer warnings (`window.electronAPI.onMenuFind`, missing backend IPC) to remove noise and tighten pass/fail criteria.
-- Consider delegating remote debugging port allocation to `ProcessManager`/`PortManager` for tighter integration.
+- Add specs for CLI tool launch telemetry, consensus console logging, and memory dashboard widgets.
+- Silence or address renderer warnings (`window.electronAPI.onMenuFind`, backend IPC stubs) to remove noise and tighten pass/fail criteria.
+- Leverage the new PortManager integration in the test harness for additional orchestration scenarios (parallel suites, CI agents).
 - Wire the suite into CI after the 17-phase build so releases are blocked on smoke regressions.
 
 ### Guidance for AI Agents

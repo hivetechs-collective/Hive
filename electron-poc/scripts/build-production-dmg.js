@@ -27,6 +27,8 @@ const INSTALLED_APP_BINARY = path.join(
   'Hive Consensus',
 );
 
+const SHOULD_RUN_UI_SMOKE = process.env.PLAYWRIGHT_RUN_TESTS === '1';
+
 function launchInstalledApp() {
   if (process.env.HIVE_SKIP_AUTO_LAUNCH === '1') {
     console.log(`${YELLOW}Skipping automatic launch (HIVE_SKIP_AUTO_LAUNCH=1)${RESET}`);
@@ -1851,6 +1853,9 @@ console.log(`${GREEN}${BOLD}✅ BUILD SUCCESSFUL!${RESET}\n`);
 // Auto-install the DMG for immediate testing
 console.log(`${CYAN}${BOLD}Auto-installing DMG for testing...${RESET}`);
 try {
+  if (SHOULD_RUN_UI_SMOKE) {
+    process.env.HIVE_SKIP_AUTO_LAUNCH = '1';
+  }
   // First, kill any running app
   console.log(`${YELLOW}➤ Stopping any running Hive Consensus${RESET}`);
   try {
@@ -1912,7 +1917,9 @@ try {
   
   console.log(`${GREEN}✅ Auto-installation complete!${RESET}`);
   console.log(`${GREEN}  App installed to: /Applications/Hive Consensus.app${RESET}\n`);
-  launchInstalledApp();
+  if (!SHOULD_RUN_UI_SMOKE) {
+    launchInstalledApp();
+  }
   
 } catch (error) {
   console.log(`${YELLOW}⚠ Auto-install failed: ${error.message}${RESET}`);
@@ -1922,6 +1929,23 @@ try {
   console.log(`  ${BOLD}2.${RESET} Drag "Hive Consensus" to Applications folder`);
   console.log(`     ${RED}⚠️  IMPORTANT: Do NOT launch from the DMG!${RESET}\n`);
   console.log(`  ${BOLD}3.${RESET} Eject the DMG after copying\n`);
+}
+
+if (SHOULD_RUN_UI_SMOKE) {
+  console.log(`${CYAN}${BOLD}Running UI smoke tests (npm run test:ui)...${RESET}`);
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const testEnv = {
+    ...process.env,
+    PLAYWRIGHT_ATTACH: '0',
+  };
+  const result = spawnSync(npmCmd, ['run', 'test:ui'], {
+    cwd: ELECTRON_ROOT,
+    env: testEnv,
+    stdio: 'inherit',
+  });
+  if (result.status !== 0) {
+    throw new Error('UI smoke suite failed');
+  }
 }
 
 console.log(`${CYAN}${BOLD}Ready for testing:${RESET}`);

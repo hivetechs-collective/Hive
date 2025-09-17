@@ -5369,7 +5369,20 @@ process.on("unhandledRejection", async (reason) => {
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
 
-// REMOVED: backend-health handler - no longer needed with DirectConsensusEngine
+// Provide no-op handlers for legacy backend requests so renderer logs stay quiet
+ipcMain.handle("websocket-backend-port", async () => {
+  logger.debug("[Main] websocket-backend-port requested (DirectConsensusEngine mode)");
+  return null;
+});
+
+ipcMain.handle("backend-health", async () => {
+  return {
+    status: "offline",
+    engine: "DirectConsensusEngine",
+    message:
+      "No external backend process in DirectConsensusEngine mode; renderer should use in-process APIs.",
+  };
+});
 
 ipcMain.handle("backend-test", async () => {
   try {

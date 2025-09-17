@@ -4393,6 +4393,27 @@ function registerRendererCommands(): void {
         setCenterView("help", { section, forceFocus: false });
       },
     },
+    {
+      id: "help.showGettingStarted",
+      handler: () => {
+        showGettingStartedModal();
+      },
+    },
+    {
+      id: "help.showMemoryGuide",
+      handler: () => {
+        showMemoryGuideModal();
+      },
+    },
+    {
+      id: "help.showAbout",
+      handler: async () => {
+        const version = await window.electronAPI.getVersion();
+        alert(
+          `Hive Consensus\nVersion: ${version}\n\nAdvanced AI-powered development environment\nwith Multi-Stage Consensus Processing\n\nCopyright © 2025 HiveTechs`,
+        );
+      },
+    },
   ]);
 
   const secondaryViews: CenterView[] = [
@@ -6477,6 +6498,9 @@ setTimeout(() => {
   (window as any).commandAPI = Object.freeze({
     executeCommand,
   });
+  try {
+    console.log('[commandAPI] ready');
+  } catch {}
 
   const viewCommandMapping: Record<string, { id: string; payload?: any }> = {
     welcome: { id: "view.welcome.toggle" },
@@ -7824,19 +7848,23 @@ addHelpModalStyles();
     triggerEditorCommand('editor.action.selectAll');
   });
 
-  window.electronAPI.onMenuFind(() => {
-    triggerEditorCommand('actions.find');
-  });
+  if (window.electronAPI.onMenuFind) {
+    window.electronAPI.onMenuFind(() => {
+      triggerEditorCommand('actions.find');
+    });
+  }
 
-  window.electronAPI.onMenuReplace(() => {
-    triggerEditorCommand('editor.action.startFindReplaceAction');
-  });
+  if (window.electronAPI.onMenuReplace) {
+    window.electronAPI.onMenuReplace(() => {
+      triggerEditorCommand('editor.action.startFindReplaceAction');
+    });
+  }
 
   // Getting Started
   if (window.electronAPI.onMenuGettingStarted) {
     window.electronAPI.onMenuGettingStarted(() => {
       console.log("[Menu] Getting Started requested");
-      showGettingStartedModal();
+      void executeCommand("help.showGettingStarted");
     });
   }
 
@@ -7844,17 +7872,14 @@ addHelpModalStyles();
   if (window.electronAPI.onMenuMemoryGuide) {
     window.electronAPI.onMenuMemoryGuide(() => {
       console.log("[Menu] Memory Guide requested");
-      showMemoryGuideModal();
+      void executeCommand("help.showMemoryGuide");
     });
   }
 
   // About dialog
   window.electronAPI.onMenuAbout(async () => {
     console.log("[Menu] About dialog requested");
-    const version = await window.electronAPI.getVersion();
-    alert(
-      `Hive Consensus\nVersion: ${version}\n\nAdvanced AI-powered development environment\nwith Multi-Stage Consensus Processing\n\nCopyright © 2025 HiveTechs`,
-    );
+    void executeCommand("help.showAbout");
   });
 
   // Add help menu handler for integrated documentation

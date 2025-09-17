@@ -10,7 +10,7 @@
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const APP_NAME = 'Hive Consensus';
@@ -114,6 +114,45 @@ function findAvailablePort() {
   });
 }
 
+function allocatePortWithPortManager() {
+  try {
+    const tsNodeRegister = require.resolve('ts-node/register/transpile-only');
+    const inlineScript = [
+      "const path = require('path');",
+      "const { PortManager } = require(path.resolve(process.cwd(), 'src/utils/PortManager'));",
+      '(async () => {',
+      '  try {',
+      '    await PortManager.initialize();',
+      "    const port = await PortManager.allocatePortForService('playwright-remote-debug');",
+      '    if (!port) throw new Error("PortManager returned invalid port");',
+      '    process.stdout.write(String(port));',
+      '    process.exit(0);',
+      '  } catch (error) {',
+      '    console.error(error && error.stack ? error.stack : String(error));',
+      '    process.exit(1);',
+      '  }',
+      '})();',
+    ].join('\n');
+
+    const result = spawnSync(process.execPath, ['-r', tsNodeRegister, '-e', inlineScript], {
+      cwd: PROJECT_ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    if (result.status === 0) {
+      const candidate = parseInt(result.stdout.trim(), 10);
+      if (Number.isInteger(candidate) && candidate > 0) {
+        return candidate;
+      }
+    }
+  } catch (error) {
+    // ts-node may not be available or PortManager import failed – fallback below.
+  }
+
+  return null;
+}
+
 async function main() {
   const cliArgs = process.argv.slice(2);
   const attachFlagIndex = cliArgs.indexOf('--attach');
@@ -138,8 +177,13 @@ async function main() {
     }
   } else {
     if (!env.PLAYWRIGHT_REMOTE_DEBUG_PORT) {
-      const port = await findAvailablePort();
-      env.PLAYWRIGHT_REMOTE_DEBUG_PORT = String(port);
+      const portFromManager = allocatePortWithPortManager();
+      if (portFromManager) {
+        env.PLAYWRIGHT_REMOTE_DEBUG_PORT = String(portFromManager);
+      } else {
+        const port = await findAvailablePort();
+        env.PLAYWRIGHT_REMOTE_DEBUG_PORT = String(port);
+      }
     }
   }
 

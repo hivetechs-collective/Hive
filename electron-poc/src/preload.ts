@@ -257,6 +257,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuGoToFile: (callback: () => void) => {
     ipcRenderer.on('menu-go-to-file', callback);
   },
+  onMenuFind: (callback: () => void) => {
+    ipcRenderer.on('menu-find', callback);
+  },
   onMenuGoToLine: (callback: () => void) => {
     ipcRenderer.on('menu-go-to-line', callback);
   },
