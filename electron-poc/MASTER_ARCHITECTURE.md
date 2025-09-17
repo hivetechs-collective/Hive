@@ -17639,11 +17639,12 @@ Tables used by Welcome
    PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 npm run build:complete
    ```
    Produces the DMG, installs to `/Applications`, and launches Hive with remote debugging enabled.
+   Set `PLAYWRIGHT_RUN_TESTS=1` alongside those variables and the build script will automatically run `npm run test:ui` after installation (skipping the auto-launch so Playwright can attach immediately).
 2. **Default (launch per run):**
    ```bash
    npm run test:ui
    ```
-   Finds/launches the packaged app, allocates a port, runs the suite, and shuts the app down afterwards.
+   Finds/launches the packaged app, allocates a port via `PortManager` when available (falling back to an ephemeral OS port otherwise), runs the suite, and shuts the app down afterwards.
 3. **Attach mode:**
    ```bash
    PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 \
