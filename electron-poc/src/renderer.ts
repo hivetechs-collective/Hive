@@ -4244,6 +4244,11 @@ function showHelpPanel(section?: string): void {
   const helpPanel = document.getElementById("help-panel");
   const welcomePanel = document.getElementById("welcome-panel");
   const analyticsPanel = document.getElementById("analytics-panel");
+  const centerArea = document.getElementById("center-area");
+  const editorArea = document.getElementById("editor-area");
+  const editors = document.querySelector(
+    ".editors-container",
+  ) as HTMLElement | null;
 
   if (!helpPanel) {
     console.error("Help panel not found in DOM");
@@ -4253,8 +4258,23 @@ function showHelpPanel(section?: string): void {
   // Hide all other panels first
   hideAllCenterPanels();
 
+  // Ensure the center area is expanded and editor surface hidden so documentation can take over
+  if (centerArea && centerArea.classList.contains("collapsed")) {
+    centerArea.classList.remove("collapsed");
+  }
+  if (editorArea) {
+    editorArea.style.display = "none";
+  }
+  if (editors) {
+    editors.style.display = "none";
+  }
+
   // Show help panel
-  helpPanel.style.display = "block";
+  helpPanel.style.display = "flex";
+  helpPanel.style.flexDirection = "column";
+  helpPanel.style.flex = "1 1 auto";
+  helpPanel.style.height = "100%";
+  helpPanel.style.minHeight = "0";
 
   // Mount the help viewer
   helpViewer.mount(helpPanel);
@@ -4263,6 +4283,18 @@ function showHelpPanel(section?: string): void {
   if (section) {
     helpViewer.navigateToSection(section);
   }
+
+  try {
+    const displayState = getComputedStyle(helpPanel).display;
+    console.log(
+      "[Docs] showHelpPanel",
+      section,
+      "display:",
+      displayState,
+      "length:",
+      helpPanel.innerHTML.length,
+    );
+  } catch {}
 
   // Add Help tab if it doesn't exist
   const tabsContainer = document.querySelector(".editor-tabs");
@@ -6700,6 +6732,13 @@ async function handleOpenFolder(folderPath: string) {
 
     // Hide welcome page when opening a folder
     hideWelcomePage();
+
+    // Make sure the Explorer sidebar is visible so the workspace appears immediately
+    try {
+      showSidebarPanel("explorer");
+    } catch (err) {
+      console.warn("[handleOpenFolder] Failed to show explorer panel:", err);
+    }
 
     // Update the current opened folder state
     currentOpenedFolder = folderPath;

@@ -1136,12 +1136,14 @@ export class WelcomePage {
 
   private showWorkflows() {
     // Open Help panel to the AI Workflows section
+    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
     const event = new CustomEvent('showDocumentation', { detail: { section: 'ai-workflows' } });
     window.dispatchEvent(event);
   }
 
   private showWhatsNew() {
     // Open Help panel to the What's New section
+    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
     const event = new CustomEvent('showDocumentation', { detail: { section: 'whats-new' } });
     window.dispatchEvent(event);
   }
