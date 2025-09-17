@@ -90,6 +90,7 @@ import { ttydTerminalPanel } from "./components/TTYDTerminalPanel";
 import { helpViewer } from "./components/help-viewer";
 import { WelcomePage } from "./components/welcome-page";
 import { applyCenterView } from "./utils/center-view";
+import { executeCommand, registerCommand, registerCommands } from "./commands";
 
 // Create welcome page instance
 let welcomePageInstance: WelcomePage | null = null;
@@ -4245,10 +4246,6 @@ function showHelpPanel(section?: string): void {
   const welcomePanel = document.getElementById("welcome-panel");
   const analyticsPanel = document.getElementById("analytics-panel");
   const centerArea = document.getElementById("center-area");
-  const editorArea = document.getElementById("editor-area");
-  const editors = document.querySelector(
-    ".editors-container",
-  ) as HTMLElement | null;
 
   if (!helpPanel) {
     console.error("Help panel not found in DOM");
@@ -4258,15 +4255,9 @@ function showHelpPanel(section?: string): void {
   // Hide all other panels first
   hideAllCenterPanels();
 
-  // Ensure the center area is expanded and editor surface hidden so documentation can take over
+  // Ensure the center area is expanded so documentation can take over
   if (centerArea && centerArea.classList.contains("collapsed")) {
     centerArea.classList.remove("collapsed");
-  }
-  if (editorArea) {
-    editorArea.style.display = "none";
-  }
-  if (editors) {
-    editors.style.display = "none";
   }
 
   // Show help panel
@@ -4359,6 +4350,65 @@ function hideHelpPanel(): void {
   if (helpPanel) {
     helpViewer.unmount();
     helpPanel.style.display = "none";
+  }
+}
+
+type ViewCommandPayload = {
+  section?: string;
+  forceFocus?: boolean;
+};
+
+function registerRendererCommands(): void {
+  registerCommands([
+    {
+      id: "view.editor.show",
+      handler: () => {
+        showEditorWorkspace();
+      },
+    },
+    {
+      id: "view.welcome.open",
+      handler: () => {
+        setCenterView("welcome", { forceFocus: true });
+      },
+    },
+    {
+      id: "view.welcome.toggle",
+      handler: () => {
+        setCenterView("welcome");
+      },
+    },
+    {
+      id: "view.help.open",
+      handler: (payload?: ViewCommandPayload) => {
+        const section = payload?.section ?? "getting-started";
+        const forceFocus = payload?.forceFocus ?? false;
+        setCenterView("help", { section, forceFocus });
+      },
+    },
+    {
+      id: "view.help.toggle",
+      handler: (payload?: ViewCommandPayload) => {
+        const section = payload?.section ?? "getting-started";
+        setCenterView("help", { section, forceFocus: false });
+      },
+    },
+  ]);
+
+  const secondaryViews: CenterView[] = [
+    "settings",
+    "memory",
+    "cli-tools",
+    "analytics",
+  ];
+
+  for (const view of secondaryViews) {
+    registerCommand(`view.${view}.open`, () => {
+      setCenterView(view, { forceFocus: true });
+    });
+    registerCommand(`view.${view}.toggle`, () => {
+      setCenterView(view);
+    });
   }
 }
 
@@ -6422,6 +6472,24 @@ setTimeout(() => {
     }
   }
 
+  registerRendererCommands();
+
+  (window as any).commandAPI = Object.freeze({
+    executeCommand,
+  });
+
+  const viewCommandMapping: Record<string, { id: string; payload?: any }> = {
+    welcome: { id: "view.welcome.toggle" },
+    documentation: {
+      id: "view.help.toggle",
+      payload: { section: "getting-started" },
+    },
+    settings: { id: "view.settings.toggle" },
+    memory: { id: "view.memory.toggle" },
+    "cli-tools": { id: "view.cli-tools.toggle" },
+    analytics: { id: "view.analytics.toggle" },
+  };
+
   activityButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const view = btn.getAttribute("data-view");
@@ -6432,50 +6500,10 @@ setTimeout(() => {
         return;
       }
 
-      // Map data-view values to center views
-      const mapping: { [k: string]: CenterView } = {
-        welcome: "welcome",
-        documentation: "help",
-        settings: "settings",
-        memory: "memory",
-        "cli-tools": "cli-tools",
-        analytics: "analytics",
-      };
-      const target = mapping[view];
-      if (!target) return;
+      const commandEntry = viewCommandMapping[view];
+      if (!commandEntry) return;
 
-      // For documentation default to getting-started
-      const opts =
-        target === "help" ? { section: "getting-started" } : undefined;
-      const resolved = setCenterView(target, opts as any);
-
-      // Safety: verify panel became visible; if not, force-show
-      if (resolved === target) {
-        setTimeout(() => {
-          const ensureVisible = (id: string, force: () => void) => {
-            const el = document.getElementById(id);
-            const visible = !!el && getComputedStyle(el).display !== "none";
-            if (!visible) force();
-          };
-          switch (target) {
-            case "settings":
-              ensureVisible("settings-panel", () => {
-                void showSettingsPanel();
-              });
-              break;
-            case "memory":
-              ensureVisible("memory-panel", () => {
-                showMemoryPanel();
-              });
-              break;
-            case "cli-tools":
-              ensureVisible("cli-tools-panel", () => {
-                showCliToolsPanel();
-              });
-              break;
-          }
-        }, 50);
-      }
+      void executeCommand(commandEntry.id, commandEntry.payload);
     });
   });
 
@@ -7732,15 +7760,15 @@ addHelpModalStyles();
   });
 
   window.electronAPI.onMenuOpenMemory(() => {
-    setCenterView("memory", { forceFocus: true });
+    void executeCommand("view.memory.open");
   });
 
   window.electronAPI.onMenuOpenCliTools(() => {
-    setCenterView("cli-tools", { forceFocus: true });
+    void executeCommand("view.cli-tools.open");
   });
 
   window.electronAPI.onMenuOpenAnalytics(() => {
-    setCenterView("analytics", { forceFocus: true });
+    void executeCommand("view.analytics.open");
   });
 
   window.electronAPI.onMenuGoToLine(() => {
@@ -7833,7 +7861,10 @@ addHelpModalStyles();
   if (window.electronAPI.onMenuHelpDocumentation) {
     window.electronAPI.onMenuHelpDocumentation(() => {
       console.log("[Menu] Documentation requested");
-      showHelpPanel("getting-started");
+      void executeCommand("view.help.open", {
+        section: "getting-started",
+        forceFocus: true,
+      });
     });
   }
 
@@ -7841,7 +7872,7 @@ addHelpModalStyles();
   if (window.electronAPI.onMenuShowWelcome) {
     window.electronAPI.onMenuShowWelcome(() => {
       console.log("[Menu] Show Welcome requested");
-      showWelcomePage();
+      void executeCommand("view.welcome.open");
     });
   }
 
@@ -8043,7 +8074,7 @@ window.addEventListener("showExplorerWithDialog", async () => {
 window.addEventListener("showDocumentation", (event: any) => {
   const section = event.detail?.section || "getting-started";
   console.log(`[Welcome] Opening documentation section: ${section}`);
-  setCenterView("help", { section, forceFocus: true });
+  void executeCommand("view.help.open", { section, forceFocus: true });
 });
 // Ensure editor view is visible and overlays are hidden before opening a file
 function openFileAndFocusEditor(filePath: string) {

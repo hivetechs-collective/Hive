@@ -1,5 +1,6 @@
 import { computeLayout, LayoutMode } from '../utils/welcome-layout';
 import { shouldShowOnStartup } from '../utils/welcome-prefs';
+import { executeCommand } from '../commands';
 
 export class WelcomePage {
   private container: HTMLElement;
@@ -1066,9 +1067,10 @@ export class WelcomePage {
 
   private showGettingStarted() {
     console.log('Showing getting started guide...');
-    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
-    const event = new CustomEvent('showDocumentation', { detail: { section: 'getting-started' } });
-    window.dispatchEvent(event);
+    void executeCommand('view.help.open', {
+      section: 'getting-started',
+      forceFocus: true,
+    });
   }
 
   private async openFolder() {
@@ -1136,16 +1138,18 @@ export class WelcomePage {
 
   private showWorkflows() {
     // Open Help panel to the AI Workflows section
-    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
-    const event = new CustomEvent('showDocumentation', { detail: { section: 'ai-workflows' } });
-    window.dispatchEvent(event);
+    void executeCommand('view.help.open', {
+      section: 'ai-workflows',
+      forceFocus: true,
+    });
   }
 
   private showWhatsNew() {
     // Open Help panel to the What's New section
-    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
-    const event = new CustomEvent('showDocumentation', { detail: { section: 'whats-new' } });
-    window.dispatchEvent(event);
+    void executeCommand('view.help.open', {
+      section: 'whats-new',
+      forceFocus: true,
+    });
   }
   
   private async showCloneDialog() {
