@@ -1,10 +1,10 @@
 //! Git branch management
-//! 
+//!
 //! Types and operations for git branches
 
-use git2::{Branch, BranchType as Git2BranchType};
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use anyhow::{Result, Context};
+use git2::{Branch, BranchType as Git2BranchType};
 
 /// Information about a git branch
 #[derive(Debug, Clone, PartialEq)]
@@ -99,34 +99,36 @@ impl BranchInfo {
             BranchType::Remote => filter.show_remote,
             BranchType::Tag => filter.show_tags,
         };
-        
+
         if !type_match {
             return false;
         }
-        
+
         // Check search term
         if !filter.search_term.is_empty() {
             let search_lower = filter.search_term.to_lowercase();
             let name_lower = self.name.to_lowercase();
-            
+
             // Search in branch name and upstream name
             let name_match = name_lower.contains(&search_lower);
-            let upstream_match = self.upstream
+            let upstream_match = self
+                .upstream
                 .as_ref()
                 .map(|u| u.to_lowercase().contains(&search_lower))
                 .unwrap_or(false);
-            
+
             // Search in commit message
-            let commit_match = self.last_commit
+            let commit_match = self
+                .last_commit
                 .as_ref()
                 .map(|c| c.message.to_lowercase().contains(&search_lower))
                 .unwrap_or(false);
-                
+
             if !(name_match || upstream_match || commit_match) {
                 return false;
             }
         }
-        
+
         true
     }
 }
@@ -141,17 +143,15 @@ pub fn sort_branches(branches: &mut Vec<BranchInfo>, sort_by: &BranchSort) {
         if !a.is_current && b.is_current {
             return std::cmp::Ordering::Greater;
         }
-        
+
         match sort_by {
             BranchSort::Name => a.name.cmp(&b.name),
-            BranchSort::LastCommit => {
-                match (&a.last_commit, &b.last_commit) {
-                    (Some(commit_a), Some(commit_b)) => commit_b.date.cmp(&commit_a.date),
-                    (Some(_), None) => std::cmp::Ordering::Less,
-                    (None, Some(_)) => std::cmp::Ordering::Greater,
-                    (None, None) => a.name.cmp(&b.name),
-                }
-            }
+            BranchSort::LastCommit => match (&a.last_commit, &b.last_commit) {
+                (Some(commit_a), Some(commit_b)) => commit_b.date.cmp(&commit_a.date),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => a.name.cmp(&b.name),
+            },
             BranchSort::Ahead => b.ahead.cmp(&a.ahead),
             BranchSort::Behind => b.behind.cmp(&a.behind),
         }
@@ -163,22 +163,22 @@ pub fn validate_branch_name(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(anyhow::anyhow!("Branch name cannot be empty"));
     }
-    
+
     // Check for forbidden characters
     if name.contains("..") || name.contains("~") || name.contains("^") || name.contains(":") {
         return Err(anyhow::anyhow!("Branch name contains forbidden characters"));
     }
-    
+
     // Check for leading/trailing special characters
     if name.starts_with('-') || name.ends_with('.') || name.ends_with(".lock") {
         return Err(anyhow::anyhow!("Branch name has invalid format"));
     }
-    
+
     // Check for reserved names
     let reserved = ["HEAD", "FETCH_HEAD", "ORIG_HEAD", "MERGE_HEAD"];
     if reserved.contains(&name) {
         return Err(anyhow::anyhow!("Branch name '{}' is reserved", name));
     }
-    
+
     Ok(())
 }

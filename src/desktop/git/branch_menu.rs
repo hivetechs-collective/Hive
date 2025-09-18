@@ -1,13 +1,16 @@
 //! Enhanced git branch menu with full branch management features
-//! 
+//!
 //! Provides a comprehensive branch management UI with search, filtering,
 //! creation, checkout, and deletion capabilities
 
+use super::{
+    get_optimized_git_manager, sort_branches, validate_branch_name, BranchFilter, BranchInfo,
+    BranchSort, BranchType, GitRepository,
+};
+use anyhow::Result;
 use dioxus::prelude::*;
 use std::path::PathBuf;
-use super::{GitRepository, BranchInfo, BranchType, BranchFilter, BranchSort, sort_branches, validate_branch_name, get_optimized_git_manager};
-use tracing::{info, error};
-use anyhow::Result;
+use tracing::{error, info};
 
 /// Props for the enhanced branch menu component
 #[derive(Props, Clone, PartialEq)]
@@ -54,7 +57,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
     let repo_path_for_switch = props.repo_path.clone();
     let repo_path_for_create = props.repo_path.clone();
     let repo_path_for_delete = props.repo_path.clone();
-    
+
     // State management
     let mut branches = use_signal(|| Vec::<BranchInfo>::new());
     let mut filtered_branches = use_signal(|| Vec::<BranchInfo>::new());
@@ -64,13 +67,13 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
     let mut show_create_dialog = use_signal(|| false);
     let mut show_delete_confirmation = use_signal(|| None::<String>);
     let mut selected_branch = use_signal(|| None::<String>);
-    
+
     // Load branches when menu becomes visible
     use_effect(move || {
         if *props.visible.read() {
             loading.set(true);
             error.set(None);
-            
+
             if let Some(repo_path) = props.repo_path.clone() {
                 spawn(async move {
                     match load_branches_with_details(&repo_path).await {
@@ -91,21 +94,21 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
             }
         }
     });
-    
+
     // Apply filter when it changes
     use_effect(move || {
         let current_filter = filter.read();
         let current_branches = branches.read();
         apply_filter(&current_branches, &current_filter, &mut filtered_branches);
     });
-    
+
     if !*props.visible.read() {
         return rsx! { div {} };
     }
-    
+
     let current_branch = props.branch_info.as_ref().map(|b| &b.name);
     let (x, y) = props.position;
-    
+
     rsx! {
         // Backdrop to capture clicks outside
         div {
@@ -118,7 +121,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                 }
             }
         }
-        
+
         // Main menu container
         div {
             class: "branch-menu",
@@ -132,23 +135,23 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
             onclick: move |evt| {
                 evt.stop_propagation();
             },
-            
+
             // Menu header with search
             div {
                 class: "menu-header",
                 style: "padding: 12px; border-bottom: 1px solid #3e3e42;",
-                
+
                 // Title
                 div {
                     style: "font-weight: 600; color: #cccccc; margin-bottom: 10px;",
                     "Git Branches"
                 }
-                
+
                 // Search box
                 div {
                     class: "search-container",
                     style: "position: relative;",
-                    
+
                     input {
                         r#type: "text",
                         placeholder: "Search branches...",
@@ -160,7 +163,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                             filter.write().search_term = evt.value();
                         }
                     }
-                    
+
                     // Search icon
                     span {
                         style: "position: absolute; right: 10px; top: 50%; transform: translateY(-50%); \
@@ -168,12 +171,12 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                         "🔍"
                     }
                 }
-                
+
                 // Filter options
                 div {
                     class: "filter-options",
                     style: "display: flex; gap: 12px; margin-top: 8px; font-size: 12px;",
-                    
+
                     FilterCheckbox {
                         label: "Local",
                         checked: filter.read().show_local,
@@ -181,7 +184,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                             filter.write().show_local = checked;
                         }
                     }
-                    
+
                     FilterCheckbox {
                         label: "Remote",
                         checked: filter.read().show_remote,
@@ -189,7 +192,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                             filter.write().show_remote = checked;
                         }
                     }
-                    
+
                     FilterCheckbox {
                         label: "Tags",
                         checked: filter.read().show_tags,
@@ -197,7 +200,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                             filter.write().show_tags = checked;
                         }
                     }
-                    
+
                     // Sort dropdown
                     div {
                         style: "margin-left: auto;",
@@ -222,12 +225,12 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                     }
                 }
             }
-            
+
             // Branch list
             div {
                 class: "branch-list",
                 style: "flex: 1; overflow-y: auto; padding: 8px 0;",
-                
+
                 if *loading.read() {
                     div {
                         style: "padding: 40px; text-align: center; color: #808080;",
@@ -280,12 +283,12 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                     }
                 }
             }
-            
+
             // Actions toolbar
             div {
                 class: "actions-toolbar",
                 style: "border-top: 1px solid #3e3e42; padding: 12px; display: flex; gap: 8px;",
-                
+
                 // Create branch button
                 button {
                     class: "action-button primary",
@@ -300,7 +303,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                     },
                     "✚ Create Branch"
                 }
-                
+
                 // Checkout button
                 if let Some(selected) = selected_branch.read().as_ref() {
                     if Some(selected) != current_branch {
@@ -322,7 +325,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                         }
                     }
                 }
-                
+
                 // Fetch button
                 button {
                     class: "action-button",
@@ -342,7 +345,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                 }
             }
         }
-        
+
         // Create branch dialog
         if *show_create_dialog.read() {
             CreateBranchDialog {
@@ -358,7 +361,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                             success: true,
                             message: format!("Created branch '{}'", branch_name),
                         });
-                        
+
                         // Reload branches
                         if let Some(path) = repo_path.as_ref() {
                             let path = path.clone();
@@ -372,7 +375,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                 }
             }
         }
-        
+
         // Delete confirmation dialog
         if let Some(branch_to_delete) = show_delete_confirmation.read().as_ref() {
             DeleteConfirmationDialog {
@@ -426,7 +429,7 @@ fn BranchListItem(
     is_selected: bool,
     on_click: EventHandler<()>,
     on_double_click: EventHandler<()>,
-    on_delete: EventHandler<()>
+    on_delete: EventHandler<()>,
 ) -> Element {
     rsx! {
         div {
@@ -448,7 +451,7 @@ fn BranchListItem(
             ondblclick: move |_| {
                 on_double_click.call(());
             },
-            
+
             // Branch icon
             span {
                 style: "font-size: 14px; width: 20px; text-align: center;",
@@ -458,31 +461,31 @@ fn BranchListItem(
                     BranchType::Tag => "🏷️",
                 }
             }
-            
+
             // Branch info
             div {
                 style: "flex: 1; display: flex; flex-direction: column; gap: 2px;",
-                
+
                 // Branch name and indicators
                 div {
                     style: "display: flex; align-items: center; gap: 8px;",
-                    
+
                     span {
-                        style: if is_current { 
-                            "color: white; font-weight: 600;" 
-                        } else { 
-                            "color: #cccccc;" 
+                        style: if is_current {
+                            "color: white; font-weight: 600;"
+                        } else {
+                            "color: #cccccc;"
                         },
                         "{branch.name}"
                     }
-                    
+
                     if is_current {
                         span {
                             style: "color: #4ec9b0; font-size: 11px;",
                             "✓ current"
                         }
                     }
-                    
+
                     if branch.ahead > 0 || branch.behind > 0 {
                         span {
                             style: "font-size: 11px; color: #808080;",
@@ -498,23 +501,23 @@ fn BranchListItem(
                         }
                     }
                 }
-                
+
                 // Last commit info
                 if let Some(commit) = &branch.last_commit {
                     div {
                         style: "font-size: 11px; color: #808080; display: flex; gap: 8px;",
-                        
+
                         span {
                             style: "font-family: monospace;",
                             "{commit.hash_short}"
                         }
-                        
+
                         span {
                             style: "flex: 1; overflow: hidden; text-overflow: ellipsis; \
                                     white-space: nowrap;",
                             "{commit.message}"
                         }
-                        
+
                         span {
                             title: "{commit.date}",
                             {format_relative_time(&commit.date)}
@@ -522,7 +525,7 @@ fn BranchListItem(
                     }
                 }
             }
-            
+
             // Delete button (for non-current local branches)
             if branch.branch_type == BranchType::Local && !is_current {
                 button {
@@ -546,13 +549,13 @@ fn BranchListItem(
 fn CreateBranchDialog(
     repo_path: Option<PathBuf>,
     visible: Signal<bool>,
-    on_create: EventHandler<String>
+    on_create: EventHandler<String>,
 ) -> Element {
     let mut branch_name = use_signal(|| String::new());
     let mut from_branch = use_signal(|| String::from("HEAD"));
     let mut error = use_signal(|| None::<String>);
     let mut creating = use_signal(|| false);
-    
+
     rsx! {
         // Dialog backdrop
         div {
@@ -563,7 +566,7 @@ fn CreateBranchDialog(
             onclick: move |_| {
                 visible.set(false);
             },
-            
+
             // Dialog content
             div {
                 class: "dialog-content",
@@ -573,12 +576,12 @@ fn CreateBranchDialog(
                 onclick: move |evt| {
                     evt.stop_propagation();
                 },
-                
+
                 h3 {
                     style: "margin: 0 0 16px 0; color: #cccccc; font-size: 16px;",
                     "Create New Branch"
                 }
-                
+
                 // Branch name input
                 div {
                     style: "margin-bottom: 12px;",
@@ -604,7 +607,7 @@ fn CreateBranchDialog(
                         }
                     }
                 }
-                
+
                 // From branch selector
                 div {
                     style: "margin-bottom: 16px;",
@@ -625,7 +628,7 @@ fn CreateBranchDialog(
                         // TODO: Load and display available branches
                     }
                 }
-                
+
                 // Error message
                 if let Some(err) = error.read().as_ref() {
                     div {
@@ -635,11 +638,11 @@ fn CreateBranchDialog(
                         "{err}"
                     }
                 }
-                
+
                 // Action buttons
                 div {
                     style: "display: flex; gap: 8px; justify-content: flex-end;",
-                    
+
                     button {
                         style: "padding: 8px 16px; background: #3c3c3c; color: #cccccc; \
                                 border: 1px solid #464647; border-radius: 3px; \
@@ -649,7 +652,7 @@ fn CreateBranchDialog(
                         },
                         "Cancel"
                     }
-                    
+
                     button {
                         style: "padding: 8px 16px; background: #0e639c; color: white; \
                                 border: none; border-radius: 3px; cursor: pointer; \
@@ -658,7 +661,7 @@ fn CreateBranchDialog(
                         onclick: move |_| {
                             let name = branch_name.read().clone();
                             let from = from_branch.read().clone();
-                            
+
                             if let Some(path) = repo_path.as_ref() {
                                 creating.set(true);
                                 let path = path.clone();
@@ -666,7 +669,7 @@ fn CreateBranchDialog(
                                 let mut visible_signal = visible.clone();
                                 let mut error_signal = error.clone();
                                 let mut creating_signal = creating.clone();
-                                
+
                                 spawn(async move {
                                     match create_branch(&path, &name, &from).await {
                                         Ok(_) => {
@@ -694,7 +697,7 @@ fn CreateBranchDialog(
 fn DeleteConfirmationDialog(
     branch_name: String,
     visible: Signal<Option<String>>,
-    on_confirm: EventHandler<()>
+    on_confirm: EventHandler<()>,
 ) -> Element {
     rsx! {
         // Dialog backdrop
@@ -706,7 +709,7 @@ fn DeleteConfirmationDialog(
             onclick: move |_| {
                 visible.set(None);
             },
-            
+
             // Dialog content
             div {
                 class: "dialog-content",
@@ -716,23 +719,23 @@ fn DeleteConfirmationDialog(
                 onclick: move |evt| {
                     evt.stop_propagation();
                 },
-                
+
                 h3 {
                     style: "margin: 0 0 16px 0; color: #cccccc; font-size: 16px;",
                     "Delete Branch"
                 }
-                
+
                 p {
                     style: "margin-bottom: 20px; color: #cccccc; font-size: 13px;",
                     "Are you sure you want to delete the branch '",
                     strong { "{branch_name}" },
                     "'? This action cannot be undone."
                 }
-                
+
                 // Action buttons
                 div {
                     style: "display: flex; gap: 8px; justify-content: flex-end;",
-                    
+
                     button {
                         style: "padding: 8px 16px; background: #3c3c3c; color: #cccccc; \
                                 border: 1px solid #464647; border-radius: 3px; \
@@ -742,7 +745,7 @@ fn DeleteConfirmationDialog(
                         },
                         "Cancel"
                     }
-                    
+
                     button {
                         style: "padding: 8px 16px; background: #f14c4c; color: white; \
                                 border: none; border-radius: 3px; cursor: pointer; \
@@ -768,30 +771,32 @@ async fn load_branches_with_details(repo_path: &PathBuf) -> Result<Vec<BranchInf
     match manager.get_branches_paginated(repo_path, 0).await {
         Ok(paginated_result) => {
             let mut branches = paginated_result.items;
-            
+
             // Load last commit info for each branch using blocking task
             let path = repo_path.clone();
             let branch_names: Vec<String> = branches.iter().map(|b| b.name.clone()).collect();
-            
-            let commit_infos = tokio::task::spawn_blocking(move || -> Result<Vec<Option<super::CommitInfo>>> {
-                let repo = GitRepository::open(&path)?;
-                let mut results = Vec::new();
-                
-                for branch_name in &branch_names {
-                    match repo.get_branch_commit(branch_name) {
-                        Ok(commit_info) => results.push(Some(commit_info)),
-                        Err(_) => results.push(None),
+
+            let commit_infos =
+                tokio::task::spawn_blocking(move || -> Result<Vec<Option<super::CommitInfo>>> {
+                    let repo = GitRepository::open(&path)?;
+                    let mut results = Vec::new();
+
+                    for branch_name in &branch_names {
+                        match repo.get_branch_commit(branch_name) {
+                            Ok(commit_info) => results.push(Some(commit_info)),
+                            Err(_) => results.push(None),
+                        }
                     }
-                }
-                
-                Ok(results)
-            }).await??;
-            
+
+                    Ok(results)
+                })
+                .await??;
+
             // Apply commit info to branches
             for (branch, commit_info) in branches.iter_mut().zip(commit_infos.iter()) {
                 branch.last_commit = commit_info.clone();
             }
-            
+
             info!("Loaded {} branches using optimized manager", branches.len());
             Ok(branches)
         }
@@ -802,28 +807,33 @@ async fn load_branches_with_details(repo_path: &PathBuf) -> Result<Vec<BranchInf
             tokio::task::spawn_blocking(move || {
                 let repo = GitRepository::open(&path)?;
                 let mut branches = repo.list_branches()?;
-                
+
                 // Load last commit info for each branch
                 for branch in &mut branches {
                     if let Ok(commit_info) = repo.get_branch_commit(&branch.name) {
                         branch.last_commit = Some(commit_info);
                     }
                 }
-                
+
                 Ok(branches)
-            }).await?
+            })
+            .await?
         }
     }
 }
 
 /// Apply filter and sort branches
-fn apply_filter(branches: &[BranchInfo], filter: &BranchFilter, output: &mut Signal<Vec<BranchInfo>>) {
+fn apply_filter(
+    branches: &[BranchInfo],
+    filter: &BranchFilter,
+    output: &mut Signal<Vec<BranchInfo>>,
+) {
     let mut filtered: Vec<BranchInfo> = branches
         .iter()
         .filter(|b| b.matches_filter(filter))
         .cloned()
         .collect();
-    
+
     sort_branches(&mut filtered, &filter.sort_by);
     output.set(filtered);
 }
@@ -832,7 +842,7 @@ fn apply_filter(branches: &[BranchInfo], filter: &BranchFilter, output: &mut Sig
 fn format_relative_time(date: &chrono::DateTime<chrono::Utc>) -> String {
     let now = chrono::Utc::now();
     let duration = now.signed_duration_since(*date);
-    
+
     if duration.num_days() > 365 {
         format!("{} years ago", duration.num_days() / 365)
     } else if duration.num_days() > 30 {
@@ -853,12 +863,13 @@ async fn create_branch(repo_path: &PathBuf, branch_name: &str, from: &str) -> Re
     let path = repo_path.clone();
     let name = branch_name.to_string();
     let from_ref = from.to_string();
-    
+
     tokio::task::spawn_blocking(move || {
         let repo = GitRepository::open(&path)?;
         repo.create_branch(&name, &from_ref)?;
         Ok(())
-    }).await?
+    })
+    .await?
 }
 
 /// Perform git fetch
@@ -890,7 +901,8 @@ async fn fetch_all(repo_path: &PathBuf) -> Result<()> {
         let repo = GitRepository::open(&path)?;
         repo.fetch_all()?;
         Ok(())
-    }).await?
+    })
+    .await?
 }
 
 /// Delete a branch
@@ -898,7 +910,7 @@ fn perform_delete_branch(
     repo_path: PathBuf,
     branch_name: String,
     on_complete: EventHandler<BranchOperationResult>,
-    mut branches: Signal<Vec<BranchInfo>>
+    mut branches: Signal<Vec<BranchInfo>>,
 ) {
     spawn(async move {
         match delete_branch(&repo_path, &branch_name).await {
@@ -908,7 +920,7 @@ fn perform_delete_branch(
                     success: true,
                     message: format!("Deleted branch '{}'", branch_name),
                 });
-                
+
                 // Reload branches
                 if let Ok(branch_list) = load_branches_with_details(&repo_path).await {
                     branches.set(branch_list);
@@ -929,10 +941,11 @@ fn perform_delete_branch(
 async fn delete_branch(repo_path: &PathBuf, branch_name: &str) -> Result<()> {
     let path = repo_path.clone();
     let name = branch_name.to_string();
-    
+
     tokio::task::spawn_blocking(move || {
         let repo = GitRepository::open(&path)?;
         repo.delete_branch(&name)?;
         Ok(())
-    }).await?
+    })
+    .await?
 }

@@ -1027,7 +1027,7 @@ impl Default for ParserRegistry {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

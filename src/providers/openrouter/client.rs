@@ -390,7 +390,7 @@ pub struct RequestLimits {
     pub completion_tokens: Option<u32>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

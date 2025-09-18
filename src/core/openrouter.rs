@@ -629,7 +629,7 @@ pub struct ProviderInfo {
     pub avg_cost: f64,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

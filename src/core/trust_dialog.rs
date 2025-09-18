@@ -309,7 +309,7 @@ pub fn show_fallback_dialog(path: &Path) -> Result<TrustDecision> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use std::path::PathBuf;

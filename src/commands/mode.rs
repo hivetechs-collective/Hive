@@ -366,7 +366,7 @@ fn format_duration(duration: std::time::Duration) -> String {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

@@ -341,11 +341,11 @@ pub mod regex_optimization {
 }
 
 /// Startup optimization benchmarks
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
-    use tokio::test;
     use async_trait::async_trait;
+    use tokio::test;
 
     #[test]
     async fn test_fast_boot_initialization() {

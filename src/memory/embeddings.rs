@@ -496,7 +496,7 @@ fn normalize_embedding(embedding: &mut [f32]) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

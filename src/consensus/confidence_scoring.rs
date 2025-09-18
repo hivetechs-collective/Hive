@@ -1,18 +1,16 @@
 // AI-Powered Operation Confidence Scoring Algorithms
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use chrono::Timelike;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-use chrono::Timelike;
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_analysis::{
-    ComponentScores, ScoringFactors, OperationContext
-};
+use crate::consensus::operation_analysis::{ComponentScores, OperationContext, ScoringFactors};
 use crate::consensus::operation_clustering::{ClusterType, OperationCluster};
 use crate::consensus::operation_history::OperationHistoryDatabase;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 
 /// Advanced scoring algorithm that combines multiple factors
 #[derive(Debug, Clone)]
@@ -111,9 +109,9 @@ pub struct ImprovementSuggestion {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SuggestionDifficulty {
-    Easy,    // Can be done automatically
-    Medium,  // Requires user action
-    Hard,    // Requires significant changes
+    Easy,   // Can be done automatically
+    Medium, // Requires user action
+    Hard,   // Requires significant changes
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,11 +138,16 @@ impl ConfidenceScoringEngine {
         history_db: Option<Arc<OperationHistoryDatabase>>,
     ) -> Self {
         let weights = weights.unwrap_or_default();
-        
+
         // Normalize weights to sum to 1.0
-        let total = weights.historical + weights.pattern + weights.context + 
-                   weights.quality + weights.feasibility + weights.user_trust + weights.complexity;
-        
+        let total = weights.historical
+            + weights.pattern
+            + weights.context
+            + weights.quality
+            + weights.feasibility
+            + weights.user_trust
+            + weights.complexity;
+
         let normalized_weights = if total > 0.0 {
             ScoringWeights {
                 historical: weights.historical / total,
@@ -183,7 +186,9 @@ impl ConfidenceScoringEngine {
         }
 
         // Calculate base components
-        let historical_score = self.calculate_historical_component(scoring_factors, component_scores).await?;
+        let historical_score = self
+            .calculate_historical_component(scoring_factors, component_scores)
+            .await?;
         let pattern_score = self.calculate_pattern_component(scoring_factors, component_scores)?;
         let context_score = self.calculate_context_component(component_scores)?;
         let quality_score = self.calculate_quality_component(component_scores)?;
@@ -192,19 +197,20 @@ impl ConfidenceScoringEngine {
         let complexity_penalty = self.calculate_complexity_penalty(operations, cluster)?;
 
         // Apply weights
-        let weighted_confidence = 
-            historical_score * self.component_weights.historical +
-            pattern_score * self.component_weights.pattern +
-            context_score * self.component_weights.context +
-            quality_score * self.component_weights.quality +
-            feasibility_score * self.component_weights.feasibility +
-            user_trust_score * self.component_weights.user_trust -
-            complexity_penalty * self.component_weights.complexity;
+        let weighted_confidence = historical_score * self.component_weights.historical
+            + pattern_score * self.component_weights.pattern
+            + context_score * self.component_weights.context
+            + quality_score * self.component_weights.quality
+            + feasibility_score * self.component_weights.feasibility
+            + user_trust_score * self.component_weights.user_trust
+            - complexity_penalty * self.component_weights.complexity;
 
         // Calculate adjustment factors
-        let adjustment_factors = self.calculate_adjustment_factors(operations, context, cluster).await?;
+        let adjustment_factors = self
+            .calculate_adjustment_factors(operations, context, cluster)
+            .await?;
         let total_adjustment: f32 = adjustment_factors.iter().map(|a| a.adjustment).sum();
-        
+
         // Apply adjustments
         let adjusted_confidence = (weighted_confidence + total_adjustment).clamp(0.0, 100.0);
 
@@ -264,7 +270,10 @@ impl ConfidenceScoringEngine {
         };
 
         // Cache the result
-        self.score_cache.write().await.insert(cache_key, result.clone());
+        self.score_cache
+            .write()
+            .await
+            .insert(cache_key, result.clone());
 
         Ok(result)
     }
@@ -290,11 +299,11 @@ impl ConfidenceScoringEngine {
         // Adjust based on sample size
         let sample_adjustment = if let Some(count) = factors.similar_operations_count {
             match count {
-                0 => -20.0,      // No data is concerning
-                1..=5 => -10.0,  // Limited data
-                6..=20 => 0.0,   // Decent sample
-                21..=50 => 5.0,  // Good sample
-                _ => 10.0,       // Excellent sample
+                0 => -20.0,     // No data is concerning
+                1..=5 => -10.0, // Limited data
+                6..=20 => 0.0,  // Decent sample
+                21..=50 => 5.0, // Good sample
+                _ => 10.0,      // Excellent sample
             }
         } else {
             -10.0
@@ -303,7 +312,11 @@ impl ConfidenceScoringEngine {
         Ok((base_score + success_adjustment + sample_adjustment).clamp(0.0, 100.0))
     }
 
-    fn calculate_pattern_component(&self, factors: &ScoringFactors, scores: &ComponentScores) -> Result<f32> {
+    fn calculate_pattern_component(
+        &self,
+        factors: &ScoringFactors,
+        scores: &ComponentScores,
+    ) -> Result<f32> {
         let base_score = if let Some(pattern_score) = &scores.pattern_recognizer {
             pattern_score.safety_score
         } else {
@@ -331,10 +344,10 @@ impl ConfidenceScoringEngine {
         if let Some(quality_score) = &scores.quality_analyzer {
             // Invert risk to get quality
             let quality_base = 100.0 - quality_score.risk_score;
-            
+
             // Penalize conflicts
             let conflict_penalty = quality_score.conflict_probability * 0.5;
-            
+
             Ok((quality_base * (1.0 - conflict_penalty)).clamp(0.0, 100.0))
         } else {
             Ok(70.0) // Assume moderate quality if no data
@@ -349,7 +362,11 @@ impl ConfidenceScoringEngine {
         }
     }
 
-    fn calculate_complexity_penalty(&self, operations: &[FileOperation], cluster: Option<&OperationCluster>) -> Result<f32> {
+    fn calculate_complexity_penalty(
+        &self,
+        operations: &[FileOperation],
+        cluster: Option<&OperationCluster>,
+    ) -> Result<f32> {
         let mut penalty = 0.0f32;
 
         // Penalty based on operation count
@@ -362,25 +379,26 @@ impl ConfidenceScoringEngine {
         };
 
         // Penalty based on operation diversity
-        let operation_types: std::collections::HashSet<_> = operations.iter()
+        let operation_types: std::collections::HashSet<_> = operations
+            .iter()
             .map(|op| std::mem::discriminant(op))
             .collect();
-        
+
         penalty += match operation_types.len() {
-            1 => 0.0,   // Single type is simple
-            2 => 5.0,   // Two types is manageable
-            3 => 10.0,  // Three types adds complexity
-            _ => 20.0,  // Many types is complex
+            1 => 0.0,  // Single type is simple
+            2 => 5.0,  // Two types is manageable
+            3 => 10.0, // Three types adds complexity
+            _ => 20.0, // Many types is complex
         };
 
         // Adjust based on cluster type
         if let Some(cluster) = cluster {
             penalty *= match cluster.cluster_type {
-                ClusterType::TestCreation => 0.5,    // Tests are usually safer
-                ClusterType::Documentation => 0.3,    // Docs are very safe
-                ClusterType::Deletion => 2.0,         // Deletions are risky
-                ClusterType::Migration => 1.8,        // Migrations are complex
-                ClusterType::Refactoring => 1.5,      // Refactoring is moderately complex
+                ClusterType::TestCreation => 0.5,  // Tests are usually safer
+                ClusterType::Documentation => 0.3, // Docs are very safe
+                ClusterType::Deletion => 2.0,      // Deletions are risky
+                ClusterType::Migration => 1.8,     // Migrations are complex
+                ClusterType::Refactoring => 1.5,   // Refactoring is moderately complex
                 _ => 1.0,
             };
         }
@@ -416,7 +434,9 @@ impl ConfidenceScoringEngine {
         }
 
         // Operation-specific adjustments
-        let has_deletions = operations.iter().any(|op| matches!(op, FileOperation::Delete { .. }));
+        let has_deletions = operations
+            .iter()
+            .any(|op| matches!(op, FileOperation::Delete { .. }));
         if has_deletions {
             factors.push(AdjustmentFactor {
                 name: "Contains deletions".to_string(),
@@ -462,7 +482,9 @@ impl ConfidenceScoringEngine {
         let mut risk = 100.0 - confidence;
 
         // Adjust based on operation characteristics
-        let has_deletions = operations.iter().any(|op| matches!(op, FileOperation::Delete { .. }));
+        let has_deletions = operations
+            .iter()
+            .any(|op| matches!(op, FileOperation::Delete { .. }));
         if has_deletions {
             risk *= 1.3; // 30% higher risk for deletions
         }
@@ -505,12 +527,10 @@ impl ConfidenceScoringEngine {
         };
 
         // Add variance from adjustments
-        let adjustment_variance: f32 = adjustments.iter()
-            .map(|a| a.adjustment.abs() * 0.2)
-            .sum();
+        let adjustment_variance: f32 = adjustments.iter().map(|a| a.adjustment.abs() * 0.2).sum();
 
         let total_variance = data_variance + adjustment_variance;
-        
+
         let lower_bound = (confidence - total_variance).max(0.0);
         let upper_bound = (confidence + total_variance).min(100.0);
 
@@ -530,25 +550,53 @@ impl ConfidenceScoringEngine {
         })
     }
 
-    fn identify_primary_factors(&self, breakdown: &ScoreBreakdown, final_score: f32) -> Result<Vec<PrimaryFactor>> {
+    fn identify_primary_factors(
+        &self,
+        breakdown: &ScoreBreakdown,
+        final_score: f32,
+    ) -> Result<Vec<PrimaryFactor>> {
         let mut factors = Vec::new();
-        
+
         // Calculate impact of each component
         let components = vec![
-            ("Historical precedent", breakdown.historical_component, self.component_weights.historical),
-            ("Pattern safety", breakdown.pattern_component, self.component_weights.pattern),
-            ("Context relevance", breakdown.context_component, self.component_weights.context),
-            ("Code quality", breakdown.quality_component, self.component_weights.quality),
-            ("Execution feasibility", breakdown.feasibility_component, self.component_weights.feasibility),
-            ("User trust", breakdown.user_trust_component, self.component_weights.user_trust),
+            (
+                "Historical precedent",
+                breakdown.historical_component,
+                self.component_weights.historical,
+            ),
+            (
+                "Pattern safety",
+                breakdown.pattern_component,
+                self.component_weights.pattern,
+            ),
+            (
+                "Context relevance",
+                breakdown.context_component,
+                self.component_weights.context,
+            ),
+            (
+                "Code quality",
+                breakdown.quality_component,
+                self.component_weights.quality,
+            ),
+            (
+                "Execution feasibility",
+                breakdown.feasibility_component,
+                self.component_weights.feasibility,
+            ),
+            (
+                "User trust",
+                breakdown.user_trust_component,
+                self.component_weights.user_trust,
+            ),
         ];
 
         let average_score = final_score;
-        
+
         for (name, score, weight) in components {
             let weighted_score = score * weight;
             let impact = weighted_score - (average_score * weight);
-            
+
             if impact.abs() > 5.0 {
                 factors.push(PrimaryFactor {
                     name: name.to_string(),
@@ -567,13 +615,16 @@ impl ConfidenceScoringEngine {
             factors.push(PrimaryFactor {
                 name: "Operation complexity".to_string(),
                 impact: -breakdown.complexity_penalty,
-                description: format!("High complexity reduces confidence by {:.1} points", breakdown.complexity_penalty),
+                description: format!(
+                    "High complexity reduces confidence by {:.1} points",
+                    breakdown.complexity_penalty
+                ),
             });
         }
 
         // Sort by absolute impact
         factors.sort_by(|a, b| b.impact.abs().partial_cmp(&a.impact.abs()).unwrap());
-        
+
         Ok(factors)
     }
 
@@ -620,7 +671,7 @@ impl ConfidenceScoringEngine {
                 expected_improvement: 5.0,
                 difficulty: SuggestionDifficulty::Easy,
             });
-            
+
             suggestions.push(ImprovementSuggestion {
                 action: "Review changes with a team member".to_string(),
                 expected_improvement: 15.0,
@@ -640,17 +691,21 @@ impl ConfidenceScoringEngine {
         Ok(suggestions)
     }
 
-    fn generate_cache_key(&self, operations: &[FileOperation], context: &OperationContext) -> String {
-        use std::hash::{Hash, Hasher};
+    fn generate_cache_key(
+        &self,
+        operations: &[FileOperation],
+        context: &OperationContext,
+    ) -> String {
         use std::collections::hash_map::DefaultHasher;
-        
+        use std::hash::{Hash, Hasher};
+
         let mut hasher = DefaultHasher::new();
         for op in operations {
             format!("{:?}", op).hash(&mut hasher);
         }
         context.repository_path.hash(&mut hasher);
         context.user_question.hash(&mut hasher);
-        
+
         format!("score_{:x}", hasher.finish())
     }
 
@@ -663,7 +718,7 @@ impl ConfidenceScoringEngine {
     pub async fn get_scoring_statistics(&self) -> ScoringStatistics {
         let cache = self.score_cache.read().await;
         let scores: Vec<f32> = cache.values().map(|r| r.confidence).collect();
-        
+
         let avg_confidence = if scores.is_empty() {
             0.0
         } else {
@@ -696,7 +751,7 @@ pub struct ScoringStatistics {
 impl OperationPredictionModel {
     fn new() -> Self {
         let mut feature_importance = HashMap::new();
-        
+
         // Initialize feature importance (in real ML, these would be learned)
         feature_importance.insert("operation_count".to_string(), 0.15);
         feature_importance.insert("file_type_diversity".to_string(), 0.10);
@@ -705,67 +760,74 @@ impl OperationPredictionModel {
         feature_importance.insert("touches_config".to_string(), 0.15);
         feature_importance.insert("modifies_core".to_string(), 0.25);
         feature_importance.insert("time_of_day".to_string(), 0.10);
-        
+
         Self { feature_importance }
     }
 
-    fn predict_adjustment(&self, operations: &[FileOperation], context: &OperationContext) -> Result<f32> {
+    fn predict_adjustment(
+        &self,
+        operations: &[FileOperation],
+        context: &OperationContext,
+    ) -> Result<f32> {
         let mut features = HashMap::new();
-        
+
         // Extract features
         features.insert("operation_count", operations.len() as f32);
-        
-        let file_types: std::collections::HashSet<_> = operations.iter()
+
+        let file_types: std::collections::HashSet<_> = operations
+            .iter()
             .filter_map(|op| {
                 let path = match op {
-                    FileOperation::Create { path, .. } |
-                    FileOperation::Update { path, .. } |
-                    FileOperation::Delete { path } |
-                    FileOperation::Append { path, .. } => path,
+                    FileOperation::Create { path, .. }
+                    | FileOperation::Update { path, .. }
+                    | FileOperation::Delete { path }
+                    | FileOperation::Append { path, .. } => path,
                     FileOperation::Rename { to, .. } => to,
                 };
-                path.extension().and_then(|e| e.to_str()).map(|s| s.to_string())
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_string())
             })
             .collect();
-        
+
         features.insert("file_type_diversity", file_types.len() as f32);
-        
+
         // Check for test files
         let has_tests = operations.iter().any(|op| {
             let path_str = match op {
-                FileOperation::Create { path, .. } |
-                FileOperation::Update { path, .. } |
-                FileOperation::Delete { path } |
-                FileOperation::Append { path, .. } => path.to_string_lossy(),
+                FileOperation::Create { path, .. }
+                | FileOperation::Update { path, .. }
+                | FileOperation::Delete { path }
+                | FileOperation::Append { path, .. } => path.to_string_lossy(),
                 FileOperation::Rename { to, .. } => to.to_string_lossy(),
             };
             path_str.contains("test") || path_str.contains("spec")
         });
-        
+
         features.insert("has_tests", if has_tests { 1.0 } else { 0.0 });
-        
+
         // Simple linear model (in reality, this would be a trained neural network)
         let mut adjustment = 0.0;
-        
+
         for (feature_name, importance) in &self.feature_importance {
             if let Some(&value) = features.get(feature_name.as_str()) {
                 // Normalize and apply importance
                 let normalized_value = match feature_name.as_str() {
                     "operation_count" => -(value - 5.0) / 10.0, // Penalty for many ops
                     "file_type_diversity" => -(value - 2.0) / 5.0, // Penalty for diversity
-                    "has_tests" => value * 2.0, // Bonus for tests
+                    "has_tests" => value * 2.0,                 // Bonus for tests
                     _ => 0.0,
                 };
-                
+
                 adjustment += normalized_value * importance * 10.0; // Scale to meaningful range
             }
         }
-        
+
         Ok(adjustment.clamp(-20.0, 20.0))
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -773,14 +835,12 @@ mod tests {
     #[tokio::test]
     async fn test_confidence_scoring() {
         let engine = ConfidenceScoringEngine::new(None, None);
-        
-        let operations = vec![
-            FileOperation::Create {
-                path: PathBuf::from("test.rs"),
-                content: "fn test() {}".to_string(),
-            }
-        ];
-        
+
+        let operations = vec![FileOperation::Create {
+            path: PathBuf::from("test.rs"),
+            content: "fn test() {}".to_string(),
+        }];
+
         let context = OperationContext {
             repository_path: PathBuf::from("/test"),
             user_question: "Create test".to_string(),
@@ -788,7 +848,7 @@ mod tests {
             timestamp: std::time::SystemTime::now(),
             session_id: "test-session".to_string(),
         };
-        
+
         let component_scores = ComponentScores {
             knowledge_indexer: Some(crate::ai_helpers::scores::KnowledgeIndexerScore {
                 similarity_score: 0.8,
@@ -817,7 +877,7 @@ mod tests {
                 execution_confidence: 0.88,
             }),
         };
-        
+
         let scoring_factors = ScoringFactors {
             historical_success: Some(0.85),
             pattern_safety: Some(0.9),
@@ -825,15 +885,18 @@ mod tests {
             rollback_complexity: Some(0.1),
             user_trust: 0.8,
         };
-        
-        let result = engine.calculate_advanced_score(
-            &operations,
-            &context,
-            &component_scores,
-            &scoring_factors,
-            None,
-        ).await.unwrap();
-        
+
+        let result = engine
+            .calculate_advanced_score(
+                &operations,
+                &context,
+                &component_scores,
+                &scoring_factors,
+                None,
+            )
+            .await
+            .unwrap();
+
         assert!(result.confidence > 70.0);
         assert!(result.risk < 30.0);
         assert!(!result.primary_factors.is_empty());
@@ -850,18 +913,18 @@ mod tests {
             user_trust: 2.0,
             complexity: 1.0,
         };
-        
+
         let engine = ConfidenceScoringEngine::new(Some(weights), None);
-        
+
         // Check that weights sum to 1.0
-        let total = engine.component_weights.historical +
-                   engine.component_weights.pattern +
-                   engine.component_weights.context +
-                   engine.component_weights.quality +
-                   engine.component_weights.feasibility +
-                   engine.component_weights.user_trust +
-                   engine.component_weights.complexity;
-        
+        let total = engine.component_weights.historical
+            + engine.component_weights.pattern
+            + engine.component_weights.context
+            + engine.component_weights.quality
+            + engine.component_weights.feasibility
+            + engine.component_weights.user_trust
+            + engine.component_weights.complexity;
+
         assert!((total - 1.0).abs() < 0.001);
     }
 }

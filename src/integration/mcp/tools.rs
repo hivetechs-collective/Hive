@@ -39,8 +39,15 @@ struct ToolDefinition {
 }
 
 /// Tool handler type - Returns a Send future for hyper compatibility
-type ToolHandler =
-    Box<dyn Fn(&ToolRegistry, Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ToolResult>> + Send>> + Send + Sync>;
+type ToolHandler = Box<
+    dyn Fn(
+            &ToolRegistry,
+            Value,
+        )
+            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ToolResult>> + Send>>
+        + Send
+        + Sync,
+>;
 
 impl ToolRegistry {
     /// Create new tool registry
@@ -424,9 +431,9 @@ impl ToolRegistry {
                 Box::new(move |registry, args| {
                     let name_clone = name_for_closure.clone();
                     let registry_clone = registry.clone_for_handler();
-                    Box::pin(async move {
-                        registry_clone.handle_advanced_tool(&name_clone, args).await
-                    })
+                    Box::pin(
+                        async move { registry_clone.handle_advanced_tool(&name_clone, args).await },
+                    )
                 }),
             );
         }
@@ -471,7 +478,7 @@ impl ToolRegistry {
         // Execute tool directly without performance optimization for now
         // (Performance optimization requires Send futures which conflict with database access)
         info!("Executing tool: {} (direct execution)", name);
-        
+
         let handle = (tool_def.handler)(self, arguments);
         let tool_result = handle
             .await

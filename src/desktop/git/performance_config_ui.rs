@@ -1,5 +1,5 @@
 //! Performance configuration UI component
-//! 
+//!
 //! Provides a user interface for configuring git performance optimizations
 
 use dioxus::prelude::*;
@@ -108,19 +108,19 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
     rsx! {
         div {
             style: "{container_style}",
-            
+
             div {
                 style: "{panel_style}",
-                
+
                 // Header
                 div {
                     style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #464647; padding-bottom: 12px;",
-                    
+
                     h3 {
                         style: "color: #cccccc; margin: 0; font-size: 18px; font-weight: 600;",
                         "🚀 Git Performance Configuration"
                     }
-                    
+
                     if props.modal_mode {
                         if let Some(on_close) = props.on_close.clone() {
                             button {
@@ -136,15 +136,15 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                 if let Some(stats) = &props.stats {
                     div {
                         style: "margin-bottom: 20px; padding: 12px; background: #1a1a1a; border-radius: 4px; border-left: 3px solid #0078d4;",
-                        
+
                         h4 {
                             style: "color: #cccccc; margin: 0 0 12px 0; font-size: 14px; font-weight: 600;",
                             "📊 Performance Statistics"
                         }
-                        
+
                         div {
                             style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; font-size: 13px;",
-                            
+
                             div {
                                 div {
                                     style: "color: #888888;",
@@ -155,7 +155,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                     "{(stats.cache_hit_rate() * 100.0):.1}%"
                                 }
                             }
-                            
+
                             div {
                                 div {
                                     style: "color: #888888;",
@@ -166,7 +166,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                     "{stats.total_operations}"
                                 }
                             }
-                            
+
                             div {
                                 div {
                                     style: "color: #888888;",
@@ -177,7 +177,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                     "{stats.average_operation_time_ms:.1}ms"
                                 }
                             }
-                            
+
                             div {
                                 div {
                                     style: "color: #888888;",
@@ -189,7 +189,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                 }
                             }
                         }
-                        
+
                         if stats.operations_timed_out > 0 {
                             div {
                                 style: "margin-top: 8px; color: #f44747; font-size: 12px;",
@@ -202,19 +202,19 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                 // Configuration Form
                 div {
                     style: "display: grid; gap: 16px;",
-                    
+
                     // General Performance Settings
                     div {
                         style: "border: 1px solid #464647; border-radius: 4px; padding: 16px;",
-                        
+
                         h4 {
                             style: "color: #cccccc; margin: 0 0 12px 0; font-size: 14px; font-weight: 600;",
                             "⚡ General Performance"
                         }
-                        
+
                         div {
                             style: "display: grid; gap: 12px;",
-                            
+
                             // Background Processing
                             label {
                                 style: "display: flex; align-items: center; gap: 8px; cursor: pointer;",
@@ -231,7 +231,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                     "Enable background processing"
                                 }
                             }
-                            
+
                             // Memory Optimization
                             label {
                                 style: "display: flex; align-items: center; gap: 8px; cursor: pointer;",
@@ -248,7 +248,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                     "Enable memory optimization"
                                 }
                             }
-                            
+
                             // Lazy Loading
                             label {
                                 style: "display: flex; align-items: center; gap: 8px; cursor: pointer;",
@@ -271,15 +271,15 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                     // Caching Settings
                     div {
                         style: "border: 1px solid #464647; border-radius: 4px; padding: 16px;",
-                        
+
                         h4 {
                             style: "color: #cccccc; margin: 0 0 12px 0; font-size: 14px; font-weight: 600;",
                             "💾 Caching Configuration"
                         }
-                        
+
                         div {
                             style: "display: grid; gap: 12px;",
-                            
+
                             // Enable Caching
                             label {
                                 style: "display: flex; align-items: center; gap: 8px; cursor: pointer;",
@@ -296,7 +296,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                     "Enable caching of git operations"
                                 }
                             }
-                            
+
                             // Cache TTL
                             if current_config.caching_enabled {
                                 div {
@@ -325,15 +325,15 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                     // Concurrency Settings
                     div {
                         style: "border: 1px solid #464647; border-radius: 4px; padding: 16px;",
-                        
+
                         h4 {
                             style: "color: #cccccc; margin: 0 0 12px 0; font-size: 14px; font-weight: 600;",
                             "⚡ Concurrency & Batching"
                         }
-                        
+
                         div {
                             style: "display: grid; gap: 12px;",
-                            
+
                             // Max Concurrent Operations
                             div {
                                 label {
@@ -353,7 +353,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                     },
                                 }
                             }
-                            
+
                             // Max Batch Size
                             div {
                                 label {
@@ -374,7 +374,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                     },
                                 }
                             }
-                            
+
                             // Page Size
                             div {
                                 label {
@@ -397,16 +397,16 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                             }
                         }
                     }
-                    
+
                     // Timeout Settings
                     div {
                         style: "border: 1px solid #464647; border-radius: 4px; padding: 16px;",
-                        
+
                         h4 {
                             style: "color: #cccccc; margin: 0 0 12px 0; font-size: 14px; font-weight: 600;",
                             "⏱️ Timeout Configuration"
                         }
-                        
+
                         div {
                             label {
                                 style: "display: block; color: #cccccc; font-size: 13px; margin-bottom: 4px;",
@@ -432,7 +432,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                 // Action Buttons
                 div {
                     style: "display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid #464647;",
-                    
+
                     // Clear Caches Button
                     if let Some(_) = &props.on_clear_caches {
                         button {
@@ -441,10 +441,10 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                             "🗑️ Clear Caches"
                         }
                     }
-                    
+
                     div {
                         style: "display: flex; gap: 8px;",
-                        
+
                         // Reset Button
                         if has_changes {
                             button {
@@ -453,7 +453,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                                 "Reset"
                             }
                         }
-                        
+
                         // Save Button
                         button {
                             style: if has_changes {
@@ -491,7 +491,7 @@ impl PerformancePresets {
             max_memory_mb: 128,
         }
     }
-    
+
     /// Configuration optimized for medium projects (1K-10K files)
     pub fn medium_project() -> PerformanceConfig {
         PerformanceConfig {
@@ -507,7 +507,7 @@ impl PerformancePresets {
             max_memory_mb: 256,
         }
     }
-    
+
     /// Configuration optimized for large projects (10K+ files)
     pub fn large_project() -> PerformanceConfig {
         PerformanceConfig {
@@ -523,7 +523,7 @@ impl PerformancePresets {
             max_memory_mb: 512,
         }
     }
-    
+
     /// High-performance configuration for enterprise use
     pub fn enterprise() -> PerformanceConfig {
         PerformanceConfig {

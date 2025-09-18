@@ -115,7 +115,7 @@ impl DatabaseManager {
 
         // Create minimal schema
         manager.create_schema().await?;
-        
+
         // Check and fix schema mismatches
         manager.check_and_fix_schema().await?;
 
@@ -341,17 +341,17 @@ impl DatabaseManager {
             idle_connections: pool_state.idle_connections,
         })
     }
-    
+
     /// Check and fix schema mismatches
     async fn check_and_fix_schema(&self) -> Result<()> {
         use crate::core::db_migration::{fix_schema_mismatches, needs_migration};
         use std::ops::DerefMut;
-        
+
         let mut conn = self.get_connection()?;
-        
+
         // Convert from pooled connection to regular connection for migration
         let raw_conn = conn.deref_mut();
-        
+
         // Check if migration is needed
         if needs_migration(raw_conn)? {
             info!("Database schema migration needed, applying fixes...");
@@ -360,7 +360,7 @@ impl DatabaseManager {
         } else {
             info!("Database schema is up to date");
         }
-        
+
         Ok(())
     }
 }

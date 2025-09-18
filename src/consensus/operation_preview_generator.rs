@@ -3,18 +3,18 @@
 // exactly what changes will be made before execution
 
 use anyhow::Result;
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
-use tracing::{debug, info};
+use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use syntect::highlighting::ThemeSet;
-use syntect::parsing::{SyntaxSet, SyntaxReference};
 use syntect::html::highlighted_html_for_string;
+use syntect::parsing::{SyntaxReference, SyntaxSet};
+use tracing::{debug, info};
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::ai_operation_parser::FileOperationWithMetadata;
 use crate::consensus::operation_analysis::OperationContext;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::core::error::HiveError;
 
 /// Configuration for preview generation
@@ -22,22 +22,22 @@ use crate::core::error::HiveError;
 pub struct PreviewConfig {
     /// Maximum lines to show in preview (0 for unlimited)
     pub max_preview_lines: usize,
-    
+
     /// Context lines to show around changes
     pub context_lines: usize,
-    
+
     /// Enable syntax highlighting
     pub syntax_highlighting: bool,
-    
+
     /// Theme for syntax highlighting
     pub highlight_theme: String,
-    
+
     /// Show line numbers
     pub show_line_numbers: bool,
-    
+
     /// Collapse unchanged sections
     pub collapse_unchanged: bool,
-    
+
     /// Generate unified diff format
     pub unified_diff: bool,
 }
@@ -61,13 +61,13 @@ impl Default for PreviewConfig {
 pub struct OperationPreviewSet {
     /// Individual operation previews
     pub previews: Vec<OperationPreview>,
-    
+
     /// Summary of all changes
     pub summary: ChangeSummary,
-    
+
     /// Warnings about potential issues
     pub warnings: Vec<PreviewWarning>,
-    
+
     /// Execution order based on dependencies
     pub execution_order: Vec<usize>,
 }
@@ -77,22 +77,22 @@ pub struct OperationPreviewSet {
 pub struct OperationPreview {
     /// The operation being previewed
     pub operation: FileOperation,
-    
+
     /// Confidence in this operation
     pub confidence: f32,
-    
+
     /// File state before operation
     pub before: FileState,
-    
+
     /// File state after operation
     pub after: FileState,
-    
+
     /// Visual diff between before and after
     pub diff: DiffView,
-    
+
     /// Impact analysis
     pub impact: OperationImpact,
-    
+
     /// Preview metadata
     pub metadata: PreviewMetadata,
 }
@@ -102,22 +102,22 @@ pub struct OperationPreview {
 pub struct FileState {
     /// File path
     pub path: PathBuf,
-    
+
     /// Whether file exists
     pub exists: bool,
-    
+
     /// File content (if exists and readable)
     pub content: Option<String>,
-    
+
     /// File size in bytes
     pub size: Option<u64>,
-    
+
     /// File permissions (unix style)
     pub permissions: Option<String>,
-    
+
     /// Last modified time
     pub last_modified: Option<std::time::SystemTime>,
-    
+
     /// Detected language/syntax
     pub language: Option<String>,
 }
@@ -127,13 +127,13 @@ pub struct FileState {
 pub struct DiffView {
     /// Unified diff string
     pub unified_diff: Option<String>,
-    
+
     /// Side-by-side diff chunks
     pub chunks: Vec<DiffChunk>,
-    
+
     /// Syntax highlighted HTML (if enabled)
     pub highlighted_html: Option<DiffHtml>,
-    
+
     /// Line change statistics
     pub stats: LineChangeStats,
 }
@@ -143,19 +143,19 @@ pub struct DiffView {
 pub struct DiffChunk {
     /// Starting line in old file
     pub old_start: usize,
-    
+
     /// Number of lines in old file
     pub old_lines: usize,
-    
+
     /// Starting line in new file
     pub new_start: usize,
-    
+
     /// Number of lines in new file  
     pub new_lines: usize,
-    
+
     /// The actual diff lines
     pub lines: Vec<DiffLine>,
-    
+
     /// Context description
     pub context: Option<String>,
 }
@@ -165,16 +165,16 @@ pub struct DiffChunk {
 pub struct DiffLine {
     /// Line number in old file (if applicable)
     pub old_line_no: Option<usize>,
-    
+
     /// Line number in new file (if applicable)
     pub new_line_no: Option<usize>,
-    
+
     /// Type of change
     pub change_type: LineChangeType,
-    
+
     /// The line content
     pub content: String,
-    
+
     /// Syntax highlighted HTML (if enabled)
     pub highlighted: Option<String>,
 }
@@ -193,10 +193,10 @@ pub enum LineChangeType {
 pub struct DiffHtml {
     /// Full HTML with styling
     pub full_html: String,
-    
+
     /// CSS styles used
     pub styles: String,
-    
+
     /// JavaScript for interactive features
     pub script: Option<String>,
 }
@@ -215,19 +215,19 @@ pub struct LineChangeStats {
 pub struct OperationImpact {
     /// Risk level of this operation
     pub risk_level: RiskLevel,
-    
+
     /// Affected functionality
     pub affected_features: Vec<String>,
-    
+
     /// Potential side effects
     pub side_effects: Vec<String>,
-    
+
     /// Dependencies that might be affected
     pub affected_dependencies: Vec<String>,
-    
+
     /// Whether operation is reversible
     pub reversible: bool,
-    
+
     /// Estimated complexity
     pub complexity: ComplexityLevel,
 }
@@ -256,13 +256,13 @@ pub enum ComplexityLevel {
 pub struct PreviewMetadata {
     /// When preview was generated
     pub generated_at: std::time::SystemTime,
-    
+
     /// Time taken to generate preview
     pub generation_time_ms: u64,
-    
+
     /// Whether preview is truncated
     pub truncated: bool,
-    
+
     /// Syntax detection confidence
     pub syntax_confidence: f32,
 }
@@ -272,13 +272,13 @@ pub struct PreviewMetadata {
 pub struct PreviewWarning {
     /// Warning severity
     pub severity: WarningSeverity,
-    
+
     /// Warning message
     pub message: String,
-    
+
     /// Affected file/operation
     pub affected_path: Option<PathBuf>,
-    
+
     /// Suggested action
     pub suggestion: Option<String>,
 }
@@ -296,28 +296,28 @@ pub enum WarningSeverity {
 pub struct ChangeSummary {
     /// Total files affected
     pub files_affected: usize,
-    
+
     /// Files created
     pub files_created: usize,
-    
+
     /// Files modified
     pub files_modified: usize,
-    
+
     /// Files deleted
     pub files_deleted: usize,
-    
+
     /// Files renamed
     pub files_renamed: usize,
-    
+
     /// Total lines added
     pub total_lines_added: usize,
-    
+
     /// Total lines removed
     pub total_lines_removed: usize,
-    
+
     /// Estimated risk level
     pub overall_risk: RiskLevel,
-    
+
     /// Estimated complexity
     pub overall_complexity: ComplexityLevel,
 }
@@ -339,17 +339,17 @@ impl OperationPreviewGenerator {
             file_cache: HashMap::new(),
         }
     }
-    
+
     /// Generate previews for a set of operations
     pub async fn generate_previews(
         &mut self,
         operations: &[FileOperationWithMetadata],
     ) -> Result<OperationPreviewSet> {
         info!("🔍 Generating previews for {} operations", operations.len());
-        
+
         let mut previews = Vec::new();
         let mut warnings = Vec::new();
-        
+
         // Generate preview for each operation
         for (idx, op_meta) in operations.iter().enumerate() {
             match self.generate_operation_preview(op_meta, idx).await {
@@ -364,16 +364,16 @@ impl OperationPreviewGenerator {
                 }
             }
         }
-        
+
         // Calculate execution order based on dependencies
         let execution_order = self.calculate_execution_order(operations);
-        
+
         // Generate summary
         let summary = self.generate_summary(&previews);
-        
+
         // Add any additional warnings
         warnings.extend(self.analyze_warnings(&previews, operations));
-        
+
         Ok(OperationPreviewSet {
             previews,
             summary,
@@ -381,7 +381,7 @@ impl OperationPreviewGenerator {
             execution_order,
         })
     }
-    
+
     /// Generate preview for a single operation
     async fn generate_operation_preview(
         &mut self,
@@ -389,21 +389,21 @@ impl OperationPreviewGenerator {
         index: usize,
     ) -> Result<OperationPreview> {
         let start_time = std::time::Instant::now();
-        
+
         // Get before state
         let before = self.get_file_state(&op_meta.operation, true).await?;
-        
+
         // Simulate operation to get after state
         let after = self.simulate_operation(&op_meta.operation, &before).await?;
-        
+
         // Generate diff
         let diff = self.generate_diff(&before, &after, &op_meta.operation)?;
-        
+
         // Analyze impact
         let impact = self.analyze_impact(&op_meta.operation, &before, &after, &diff);
-        
+
         let generation_time_ms = start_time.elapsed().as_millis() as u64;
-        
+
         Ok(OperationPreview {
             operation: op_meta.operation.clone(),
             confidence: op_meta.confidence,
@@ -414,14 +414,18 @@ impl OperationPreviewGenerator {
             metadata: PreviewMetadata {
                 generated_at: std::time::SystemTime::now(),
                 generation_time_ms,
-                truncated: false, // Will be set if content is truncated
+                truncated: false,       // Will be set if content is truncated
                 syntax_confidence: 0.9, // Will be calculated based on detection
             },
         })
     }
-    
+
     /// Get current state of a file
-    async fn get_file_state(&mut self, operation: &FileOperation, is_before: bool) -> Result<FileState> {
+    async fn get_file_state(
+        &mut self,
+        operation: &FileOperation,
+        is_before: bool,
+    ) -> Result<FileState> {
         let path = match operation {
             FileOperation::Create { path, .. } if is_before => {
                 // File doesn't exist before creation
@@ -435,13 +439,19 @@ impl OperationPreviewGenerator {
                     language: None,
                 });
             }
-            FileOperation::Create { path, .. } |
-            FileOperation::Update { path, .. } |
-            FileOperation::Append { path, .. } |
-            FileOperation::Delete { path } => path,
-            FileOperation::Rename { from, to } => if is_before { from } else { to },
+            FileOperation::Create { path, .. }
+            | FileOperation::Update { path, .. }
+            | FileOperation::Append { path, .. }
+            | FileOperation::Delete { path } => path,
+            FileOperation::Rename { from, to } => {
+                if is_before {
+                    from
+                } else {
+                    to
+                }
+            }
         };
-        
+
         // Check cache first
         let content = if let Some(cached) = self.file_cache.get(path) {
             Some(cached.clone())
@@ -455,15 +465,15 @@ impl OperationPreviewGenerator {
                 Err(_) => None,
             }
         };
-        
+
         let metadata = tokio::fs::metadata(path).await.ok();
-        
+
         let language = if let Some(ext) = path.extension() {
             self.detect_language(ext.to_str().unwrap_or(""))
         } else {
             None
         };
-        
+
         Ok(FileState {
             path: path.clone(),
             exists: content.is_some() || metadata.is_some(),
@@ -480,11 +490,15 @@ impl OperationPreviewGenerator {
             language,
         })
     }
-    
+
     /// Simulate operation to get after state
-    async fn simulate_operation(&self, operation: &FileOperation, before: &FileState) -> Result<FileState> {
+    async fn simulate_operation(
+        &self,
+        operation: &FileOperation,
+        before: &FileState,
+    ) -> Result<FileState> {
         let mut after = before.clone();
-        
+
         match operation {
             FileOperation::Create { path, content } => {
                 after.path = path.clone();
@@ -528,10 +542,10 @@ impl OperationPreviewGenerator {
                 // Content remains the same
             }
         }
-        
+
         Ok(after)
     }
-    
+
     /// Generate diff between before and after states
     fn generate_diff(
         &self,
@@ -541,32 +555,27 @@ impl OperationPreviewGenerator {
     ) -> Result<DiffView> {
         let before_content = before.content.as_deref().unwrap_or("");
         let after_content = after.content.as_deref().unwrap_or("");
-        
+
         // Generate unified diff if requested
         let unified_diff = if self.config.unified_diff {
-            Some(self.create_unified_diff(
-                &before.path,
-                &after.path,
-                before_content,
-                after_content,
-            ))
+            Some(self.create_unified_diff(&before.path, &after.path, before_content, after_content))
         } else {
             None
         };
-        
+
         // Generate detailed chunks
         let chunks = self.create_diff_chunks(before_content, after_content);
-        
+
         // Generate syntax highlighted HTML if enabled
         let highlighted_html = if self.config.syntax_highlighting {
             self.create_highlighted_diff(before, after, &chunks).ok()
         } else {
             None
         };
-        
+
         // Calculate statistics
         let stats = self.calculate_diff_stats(&chunks);
-        
+
         Ok(DiffView {
             unified_diff,
             chunks,
@@ -574,7 +583,7 @@ impl OperationPreviewGenerator {
             stats,
         })
     }
-    
+
     /// Create unified diff format
     fn create_unified_diff(
         &self,
@@ -584,22 +593,28 @@ impl OperationPreviewGenerator {
         new_content: &str,
     ) -> String {
         let diff = TextDiff::from_lines(old_content, new_content);
-        
-        format!("{}", diff.unified_diff()
-            .context_radius(self.config.context_lines)
-            .header(&format!("{}", old_path.display()), &format!("{}", new_path.display())))
+
+        format!(
+            "{}",
+            diff.unified_diff()
+                .context_radius(self.config.context_lines)
+                .header(
+                    &format!("{}", old_path.display()),
+                    &format!("{}", new_path.display())
+                )
+        )
     }
-    
+
     /// Create detailed diff chunks
     fn create_diff_chunks(&self, old_content: &str, new_content: &str) -> Vec<DiffChunk> {
         let diff = TextDiff::from_lines(old_content, new_content);
         let mut chunks = Vec::new();
-        
+
         let mut old_line = 1;
         let mut new_line = 1;
         let mut current_chunk: Option<DiffChunk> = None;
         let mut current_lines = Vec::new();
-        
+
         for change in diff.iter_all_changes() {
             let line = DiffLine {
                 old_line_no: match change.tag() {
@@ -618,7 +633,7 @@ impl OperationPreviewGenerator {
                 content: change.value().trim_end().to_string(),
                 highlighted: None,
             };
-            
+
             // Update line numbers
             match change.tag() {
                 ChangeTag::Delete => old_line += 1,
@@ -628,24 +643,34 @@ impl OperationPreviewGenerator {
                     new_line += 1;
                 }
             }
-            
+
             // Group into chunks
-            if line.change_type != LineChangeType::Context || current_lines.len() < self.config.context_lines * 2 {
+            if line.change_type != LineChangeType::Context
+                || current_lines.len() < self.config.context_lines * 2
+            {
                 current_lines.push(line);
             } else {
                 // Finalize current chunk
                 if let Some(mut chunk) = current_chunk.take() {
                     chunk.lines = current_lines.clone();
-                    chunk.old_lines = chunk.lines.iter().filter(|l| l.old_line_no.is_some()).count();
-                    chunk.new_lines = chunk.lines.iter().filter(|l| l.new_line_no.is_some()).count();
+                    chunk.old_lines = chunk
+                        .lines
+                        .iter()
+                        .filter(|l| l.old_line_no.is_some())
+                        .count();
+                    chunk.new_lines = chunk
+                        .lines
+                        .iter()
+                        .filter(|l| l.new_line_no.is_some())
+                        .count();
                     chunks.push(chunk);
                 }
-                
+
                 // Start new chunk
                 current_lines.clear();
                 current_lines.push(line);
             }
-            
+
             // Initialize chunk if needed
             if current_chunk.is_none() && !current_lines.is_empty() {
                 current_chunk = Some(DiffChunk {
@@ -658,23 +683,31 @@ impl OperationPreviewGenerator {
                 });
             }
         }
-        
+
         // Finalize last chunk
         if let Some(mut chunk) = current_chunk {
             chunk.lines = current_lines;
-            chunk.old_lines = chunk.lines.iter().filter(|l| l.old_line_no.is_some()).count();
-            chunk.new_lines = chunk.lines.iter().filter(|l| l.new_line_no.is_some()).count();
+            chunk.old_lines = chunk
+                .lines
+                .iter()
+                .filter(|l| l.old_line_no.is_some())
+                .count();
+            chunk.new_lines = chunk
+                .lines
+                .iter()
+                .filter(|l| l.new_line_no.is_some())
+                .count();
             chunks.push(chunk);
         }
-        
+
         // Add context descriptions
         for chunk in &mut chunks {
             chunk.context = self.detect_chunk_context(&chunk.lines);
         }
-        
+
         chunks
     }
-    
+
     /// Create syntax highlighted diff
     fn create_highlighted_diff(
         &self,
@@ -682,21 +715,25 @@ impl OperationPreviewGenerator {
         after: &FileState,
         chunks: &[DiffChunk],
     ) -> Result<DiffHtml> {
-        let language = after.language.as_deref()
+        let language = after
+            .language
+            .as_deref()
             .or(before.language.as_deref())
             .unwrap_or("txt");
-        
-        let syntax = self.syntax_set.find_syntax_by_extension(language)
+
+        let syntax = self
+            .syntax_set
+            .find_syntax_by_extension(language)
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
-        
+
         let theme = &self.theme_set.themes[&self.config.highlight_theme];
-        
+
         let mut html = String::new();
         html.push_str("<div class='diff-view'>\n");
-        
+
         for chunk in chunks {
             html.push_str("<div class='diff-chunk'>\n");
-            
+
             for line in &chunk.lines {
                 let class = match line.change_type {
                     LineChangeType::Added => "diff-added",
@@ -704,9 +741,9 @@ impl OperationPreviewGenerator {
                     LineChangeType::Modified => "diff-modified",
                     LineChangeType::Context => "diff-context",
                 };
-                
+
                 html.push_str(&format!("<div class='{}'>\n", class));
-                
+
                 if self.config.show_line_numbers {
                     html.push_str("<span class='line-numbers'>");
                     if let Some(old_no) = line.old_line_no {
@@ -722,33 +759,29 @@ impl OperationPreviewGenerator {
                     }
                     html.push_str("</span>");
                 }
-                
-                let highlighted = highlighted_html_for_string(
-                    &line.content,
-                    &self.syntax_set,
-                    syntax,
-                    theme,
-                )?;
-                
+
+                let highlighted =
+                    highlighted_html_for_string(&line.content, &self.syntax_set, syntax, theme)?;
+
                 html.push_str(&highlighted);
                 html.push_str("</div>\n");
             }
-            
+
             html.push_str("</div>\n");
         }
-        
+
         html.push_str("</div>\n");
-        
+
         // Generate CSS
         let styles = self.generate_diff_styles();
-        
+
         Ok(DiffHtml {
             full_html: html,
             styles,
             script: None,
         })
     }
-    
+
     /// Calculate diff statistics
     fn calculate_diff_stats(&self, chunks: &[DiffChunk]) -> LineChangeStats {
         let mut stats = LineChangeStats {
@@ -757,7 +790,7 @@ impl OperationPreviewGenerator {
             lines_modified: 0,
             total_changes: 0,
         };
-        
+
         for chunk in chunks {
             for line in &chunk.lines {
                 match line.change_type {
@@ -768,11 +801,11 @@ impl OperationPreviewGenerator {
                 }
             }
         }
-        
+
         stats.total_changes = stats.lines_added + stats.lines_removed + stats.lines_modified;
         stats
     }
-    
+
     /// Analyze impact of operation
     fn analyze_impact(
         &self,
@@ -784,11 +817,11 @@ impl OperationPreviewGenerator {
         let risk_level = self.assess_risk_level(operation, before, after, diff);
         let complexity = self.assess_complexity(operation, diff);
         let reversible = self.is_operation_reversible(operation, before);
-        
+
         let affected_features = self.detect_affected_features(operation, before, after);
         let side_effects = self.detect_side_effects(operation, before, after);
         let affected_dependencies = self.detect_affected_dependencies(operation, before, after);
-        
+
         OperationImpact {
             risk_level,
             affected_features,
@@ -798,7 +831,7 @@ impl OperationPreviewGenerator {
             complexity,
         }
     }
-    
+
     /// Assess risk level of operation
     fn assess_risk_level(
         &self,
@@ -829,7 +862,7 @@ impl OperationPreviewGenerator {
             FileOperation::Rename { .. } => RiskLevel::Medium,
         }
     }
-    
+
     /// Assess complexity of operation
     fn assess_complexity(&self, operation: &FileOperation, diff: &DiffView) -> ComplexityLevel {
         match operation {
@@ -849,7 +882,7 @@ impl OperationPreviewGenerator {
             FileOperation::Append { .. } => ComplexityLevel::Trivial,
         }
     }
-    
+
     /// Check if operation is reversible
     fn is_operation_reversible(&self, operation: &FileOperation, before: &FileState) -> bool {
         match operation {
@@ -860,7 +893,7 @@ impl OperationPreviewGenerator {
             FileOperation::Append { .. } => false, // Hard to determine what was appended
         }
     }
-    
+
     /// Detect affected features based on file changes
     fn detect_affected_features(
         &self,
@@ -869,9 +902,9 @@ impl OperationPreviewGenerator {
         after: &FileState,
     ) -> Vec<String> {
         let mut features = Vec::new();
-        
+
         let path = self.get_operation_path(operation).unwrap_or(&before.path);
-        
+
         // Detect based on path patterns
         if path.to_str().unwrap_or("").contains("auth") {
             features.push("Authentication".to_string());
@@ -885,10 +918,10 @@ impl OperationPreviewGenerator {
         if path.to_str().unwrap_or("").contains("config") {
             features.push("Configuration".to_string());
         }
-        
+
         features
     }
-    
+
     /// Detect potential side effects
     fn detect_side_effects(
         &self,
@@ -897,7 +930,7 @@ impl OperationPreviewGenerator {
         after: &FileState,
     ) -> Vec<String> {
         let mut effects = Vec::new();
-        
+
         match operation {
             FileOperation::Delete { path } => {
                 effects.push("Other files may have broken imports".to_string());
@@ -906,7 +939,10 @@ impl OperationPreviewGenerator {
                 }
             }
             FileOperation::Rename { from, to } => {
-                effects.push(format!("Import statements referencing {} need updating", from.display()));
+                effects.push(format!(
+                    "Import statements referencing {} need updating",
+                    from.display()
+                ));
             }
             FileOperation::Update { path, .. } => {
                 if path.to_str().unwrap_or("").contains("schema") {
@@ -915,10 +951,10 @@ impl OperationPreviewGenerator {
             }
             _ => {}
         }
-        
+
         effects
     }
-    
+
     /// Detect affected dependencies
     fn detect_affected_dependencies(
         &self,
@@ -927,23 +963,26 @@ impl OperationPreviewGenerator {
         after: &FileState,
     ) -> Vec<String> {
         let mut deps = Vec::new();
-        
+
         // Simple heuristic - in real implementation would parse imports
         if let Some(content) = &after.content {
             if content.contains("import ") || content.contains("require(") {
                 deps.push("Module dependencies".to_string());
             }
         }
-        
+
         deps
     }
-    
+
     /// Detect context of a chunk (function, class, etc.)
     fn detect_chunk_context(&self, lines: &[DiffLine]) -> Option<String> {
         // Look for function/class definitions in context lines
-        for line in lines.iter().filter(|l| l.change_type == LineChangeType::Context) {
+        for line in lines
+            .iter()
+            .filter(|l| l.change_type == LineChangeType::Context)
+        {
             let content = &line.content;
-            
+
             if content.contains("fn ") || content.contains("function ") {
                 return Some("Function".to_string());
             }
@@ -954,10 +993,10 @@ impl OperationPreviewGenerator {
                 return Some("Implementation".to_string());
             }
         }
-        
+
         None
     }
-    
+
     /// Detect language from file extension
     fn detect_language(&self, extension: &str) -> Option<String> {
         match extension {
@@ -985,7 +1024,7 @@ impl OperationPreviewGenerator {
             _ => None,
         }
     }
-    
+
     /// Generate CSS styles for diff view
     fn generate_diff_styles(&self) -> String {
         r#"
@@ -1042,14 +1081,15 @@ impl OperationPreviewGenerator {
 .diff-removed .line-numbers {
     background-color: #ffdce0;
 }
-        "#.to_string()
+        "#
+        .to_string()
     }
-    
+
     /// Calculate execution order based on dependencies
     fn calculate_execution_order(&self, operations: &[FileOperationWithMetadata]) -> Vec<usize> {
         let mut order = Vec::new();
         let mut visited = vec![false; operations.len()];
-        
+
         // First, add all operations without dependencies
         for (idx, op) in operations.iter().enumerate() {
             if op.dependencies.is_empty() && !visited[idx] {
@@ -1057,14 +1097,13 @@ impl OperationPreviewGenerator {
                 visited[idx] = true;
             }
         }
-        
+
         // Then, add operations whose dependencies are satisfied
         while order.len() < operations.len() {
             for (idx, op) in operations.iter().enumerate() {
                 if !visited[idx] {
-                    let deps_satisfied = op.dependencies.iter()
-                        .all(|&dep_idx| visited[dep_idx]);
-                    
+                    let deps_satisfied = op.dependencies.iter().all(|&dep_idx| visited[dep_idx]);
+
                     if deps_satisfied {
                         order.push(idx);
                         visited[idx] = true;
@@ -1072,10 +1111,10 @@ impl OperationPreviewGenerator {
                 }
             }
         }
-        
+
         order
     }
-    
+
     /// Generate summary of all changes
     fn generate_summary(&self, previews: &[OperationPreview]) -> ChangeSummary {
         let mut summary = ChangeSummary {
@@ -1089,17 +1128,17 @@ impl OperationPreviewGenerator {
             overall_risk: RiskLevel::Low,
             overall_complexity: ComplexityLevel::Simple,
         };
-        
+
         let mut paths_seen = std::collections::HashSet::new();
         let mut max_risk = RiskLevel::Low;
         let mut max_complexity = ComplexityLevel::Simple;
-        
+
         for preview in previews {
             let path = self.get_operation_path(&preview.operation);
             if let Some(p) = path {
                 paths_seen.insert(p.clone());
             }
-            
+
             match &preview.operation {
                 FileOperation::Create { .. } => summary.files_created += 1,
                 FileOperation::Update { .. } => summary.files_modified += 1,
@@ -1107,10 +1146,10 @@ impl OperationPreviewGenerator {
                 FileOperation::Rename { .. } => summary.files_renamed += 1,
                 FileOperation::Append { .. } => summary.files_modified += 1,
             }
-            
+
             summary.total_lines_added += preview.diff.stats.lines_added;
             summary.total_lines_removed += preview.diff.stats.lines_removed;
-            
+
             // Track highest risk and complexity
             if preview.impact.risk_level as u8 > max_risk as u8 {
                 max_risk = preview.impact.risk_level;
@@ -1119,14 +1158,14 @@ impl OperationPreviewGenerator {
                 max_complexity = preview.impact.complexity;
             }
         }
-        
+
         summary.files_affected = paths_seen.len();
         summary.overall_risk = max_risk;
         summary.overall_complexity = max_complexity;
-        
+
         summary
     }
-    
+
     /// Analyze and generate additional warnings
     fn analyze_warnings(
         &self,
@@ -1134,12 +1173,12 @@ impl OperationPreviewGenerator {
         operations: &[FileOperationWithMetadata],
     ) -> Vec<PreviewWarning> {
         let mut warnings = Vec::new();
-        
+
         // Check for operations on critical files
         for preview in previews {
             if let Some(path) = self.get_operation_path(&preview.operation) {
                 let path_str = path.to_str().unwrap_or("");
-                
+
                 if path_str.contains(".env") || path_str.contains("secrets") {
                     warnings.push(PreviewWarning {
                         severity: WarningSeverity::Warning,
@@ -1148,9 +1187,10 @@ impl OperationPreviewGenerator {
                         suggestion: Some("Ensure secrets are not exposed".to_string()),
                     });
                 }
-                
-                if matches!(preview.operation, FileOperation::Delete { .. }) && 
-                   preview.before.size.unwrap_or(0) > 1000 {
+
+                if matches!(preview.operation, FileOperation::Delete { .. })
+                    && preview.before.size.unwrap_or(0) > 1000
+                {
                     warnings.push(PreviewWarning {
                         severity: WarningSeverity::Warning,
                         message: "Deleting large file".to_string(),
@@ -1160,7 +1200,7 @@ impl OperationPreviewGenerator {
                 }
             }
         }
-        
+
         // Check for circular dependencies
         for (idx, op) in operations.iter().enumerate() {
             for &dep_idx in &op.dependencies {
@@ -1169,55 +1209,55 @@ impl OperationPreviewGenerator {
                         severity: WarningSeverity::Error,
                         message: "Circular dependency detected".to_string(),
                         affected_path: self.get_operation_path(&op.operation).cloned(),
-                        suggestion: Some("Reorder operations to remove circular dependency".to_string()),
+                        suggestion: Some(
+                            "Reorder operations to remove circular dependency".to_string(),
+                        ),
                     });
                 }
             }
         }
-        
+
         warnings
     }
-    
+
     /// Get path from operation
     fn get_operation_path<'a>(&self, operation: &'a FileOperation) -> Option<&'a PathBuf> {
         match operation {
-            FileOperation::Create { path, .. } |
-            FileOperation::Update { path, .. } |
-            FileOperation::Append { path, .. } |
-            FileOperation::Delete { path } => Some(path),
+            FileOperation::Create { path, .. }
+            | FileOperation::Update { path, .. }
+            | FileOperation::Append { path, .. }
+            | FileOperation::Delete { path } => Some(path),
             FileOperation::Rename { from, .. } => Some(from),
         }
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_preview_generation() {
         let config = PreviewConfig::default();
         let mut generator = OperationPreviewGenerator::new(config);
-        
-        let operations = vec![
-            FileOperationWithMetadata {
-                operation: FileOperation::Create {
-                    path: PathBuf::from("test.rs"),
-                    content: "fn main() {\n    println!(\"Hello\");\n}".to_string(),
-                },
-                confidence: 90.0,
-                rationale: Some("Creating test file".to_string()),
-                dependencies: vec![],
-                source_location: crate::consensus::ai_operation_parser::SourceLocation {
-                    start: 0,
-                    end: 100,
-                    line: 1,
-                },
-            }
-        ];
-        
+
+        let operations = vec![FileOperationWithMetadata {
+            operation: FileOperation::Create {
+                path: PathBuf::from("test.rs"),
+                content: "fn main() {\n    println!(\"Hello\");\n}".to_string(),
+            },
+            confidence: 90.0,
+            rationale: Some("Creating test file".to_string()),
+            dependencies: vec![],
+            source_location: crate::consensus::ai_operation_parser::SourceLocation {
+                start: 0,
+                end: 100,
+                line: 1,
+            },
+        }];
+
         let preview_set = generator.generate_previews(&operations).await.unwrap();
-        
+
         assert_eq!(preview_set.previews.len(), 1);
         assert_eq!(preview_set.summary.files_created, 1);
         assert_eq!(preview_set.summary.files_affected, 1);

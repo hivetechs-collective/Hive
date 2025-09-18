@@ -1,15 +1,15 @@
 //! LazyGit Data Provider
-//! 
+//!
 //! Extracts structured data from LazyGit for use in our GUI.
 //! This allows us to use LazyGit as a backend while maintaining our custom UI.
 
-use anyhow::{Result, Context};
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
-use tokio::process::Command;
+use crate::desktop::git::{DiffHunk, DiffLine, DiffLineType, DiffResult, FileStatus, StatusType};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{info, debug, warn};
-use crate::desktop::git::{FileStatus, StatusType, DiffResult, DiffHunk, DiffLine, DiffLineType};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use tokio::process::Command;
+use tracing::{debug, info, warn};
 
 /// LazyGit data provider for extracting git information
 pub struct LazyGitDataProvider {
@@ -34,7 +34,7 @@ impl LazyGitDataProvider {
     /// Get file statuses using git status command (same data LazyGit uses)
     pub async fn get_file_statuses(&self) -> Result<HashMap<PathBuf, FileStatus>> {
         info!("📊 Getting file statuses from git for LazyGit data");
-        
+
         // Use git status --porcelain=v1 for machine-readable output
         let output = Command::new("git")
             .args(&["status", "--porcelain=v1"])
@@ -73,7 +73,8 @@ impl LazyGitDataProvider {
             };
 
             let path = PathBuf::from(file_path);
-            let (status_type, is_staged, has_staged, has_unstaged) = self.parse_status_code(status_code);
+            let (status_type, is_staged, has_staged, has_unstaged) =
+                self.parse_status_code(status_code);
 
             let file_status = FileStatus {
                 path: path.clone(),
@@ -128,7 +129,8 @@ impl LazyGitDataProvider {
 
         // Determine staging status
         let has_staged = index_status != ' ' && index_status != '?' && index_status != '!';
-        let has_unstaged = worktree_status != ' ' && worktree_status != '?' && worktree_status != '!';
+        let has_unstaged =
+            worktree_status != ' ' && worktree_status != '?' && worktree_status != '!';
         let is_staged = has_staged && !has_unstaged;
 
         (status_type, is_staged, has_staged, has_unstaged)
@@ -139,12 +141,17 @@ impl LazyGitDataProvider {
         info!("📄 Getting diff for file: {}", file_path.display());
 
         // Get the relative path from repo root
-        let relative_path = file_path.strip_prefix(&self.repo_path)
-            .unwrap_or(file_path);
+        let relative_path = file_path.strip_prefix(&self.repo_path).unwrap_or(file_path);
 
         // Get staged diff (HEAD vs index)
         let staged_output = Command::new("git")
-            .args(&["diff", "--cached", "--no-color", "--", relative_path.to_str().unwrap()])
+            .args(&[
+                "diff",
+                "--cached",
+                "--no-color",
+                "--",
+                relative_path.to_str().unwrap(),
+            ])
             .current_dir(&self.repo_path)
             .output()
             .await
@@ -169,7 +176,12 @@ impl LazyGitDataProvider {
         } else {
             // Check if untracked
             let status_output = Command::new("git")
-                .args(&["status", "--porcelain", "--", relative_path.to_str().unwrap()])
+                .args(&[
+                    "status",
+                    "--porcelain",
+                    "--",
+                    relative_path.to_str().unwrap(),
+                ])
                 .current_dir(&self.repo_path)
                 .output()
                 .await?;
@@ -199,11 +211,14 @@ impl LazyGitDataProvider {
             .context("Failed to read untracked file")?;
 
         // Format as a git diff
-        let relative_path = file_path.strip_prefix(&self.repo_path)
-            .unwrap_or(file_path);
+        let relative_path = file_path.strip_prefix(&self.repo_path).unwrap_or(file_path);
 
         let mut diff = String::new();
-        diff.push_str(&format!("diff --git a/{} b/{}\n", relative_path.display(), relative_path.display()));
+        diff.push_str(&format!(
+            "diff --git a/{} b/{}\n",
+            relative_path.display(),
+            relative_path.display()
+        ));
         diff.push_str("new file mode 100644\n");
         diff.push_str("--- /dev/null\n");
         diff.push_str(&format!("+++ b/{}\n", relative_path.display()));
@@ -282,12 +297,18 @@ impl LazyGitDataProvider {
 
                 let diff_line = DiffLine {
                     line_type: line_type.clone(),
-                    original_line_number: if matches!(line_type, DiffLineType::Deleted | DiffLineType::Unchanged) {
+                    original_line_number: if matches!(
+                        line_type,
+                        DiffLineType::Deleted | DiffLineType::Unchanged
+                    ) {
                         Some(line_num_old)
                     } else {
                         None
                     },
-                    modified_line_number: if matches!(line_type, DiffLineType::Added | DiffLineType::Unchanged) {
+                    modified_line_number: if matches!(
+                        line_type,
+                        DiffLineType::Added | DiffLineType::Unchanged
+                    ) {
                         Some(line_num_new)
                     } else {
                         None

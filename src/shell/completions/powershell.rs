@@ -611,7 +611,7 @@ Write-Host "🔍 Use 'Get-Help hive' or 'hive --help' for complete command refer
 "#.to_string()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

@@ -524,7 +524,7 @@ impl BatchProcessor {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tokio::test;

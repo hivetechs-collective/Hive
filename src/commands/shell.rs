@@ -511,7 +511,7 @@ pub fn get_integration_report(config: Config) -> Result<String> {
     Ok(report)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

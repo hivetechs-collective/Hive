@@ -1,5 +1,5 @@
 //! Resizable panel system for the Hive Consensus UI
-//! 
+//!
 //! Provides draggable dividers to resize panels in the application layout
 
 use dioxus::prelude::*;
@@ -48,17 +48,17 @@ pub fn ResizableDivider(
     };
 
     let mut is_hovering = use_signal(|| false);
-    
+
     let divider_style = match direction {
         ResizeDirection::Horizontal => format!(
             "position: relative; width: 8px; height: 100%; \
             cursor: col-resize; z-index: 999; \
             background: {}; flex-shrink: 0; \
             transition: background 0.2s ease;",
-            if *is_hovering.read() || *is_dragging.read() { 
-                "rgba(255, 193, 7, 0.2)" 
-            } else { 
-                "transparent" 
+            if *is_hovering.read() || *is_dragging.read() {
+                "rgba(255, 193, 7, 0.2)"
+            } else {
+                "transparent"
             }
         ),
         ResizeDirection::Vertical => format!(
@@ -66,14 +66,14 @@ pub fn ResizableDivider(
             cursor: row-resize; z-index: 999; \
             background: {}; \
             transition: background 0.2s ease;",
-            if *is_hovering.read() || *is_dragging.read() { 
-                "rgba(255, 193, 7, 0.2)" 
-            } else { 
-                "transparent" 
+            if *is_hovering.read() || *is_dragging.read() {
+                "rgba(255, 193, 7, 0.2)"
+            } else {
+                "transparent"
             }
         ),
     };
-    
+
     let active_style = if *is_dragging.read() {
         "background: rgba(255, 193, 7, 0.3) !important;"
     } else {
@@ -92,7 +92,7 @@ pub fn ResizableDivider(
                 onmouseup: handle_mouse_up,
             }
         }
-        
+
         // The actual divider
         div {
             style: "{divider_style} {active_style}",
@@ -103,7 +103,7 @@ pub fn ResizableDivider(
             onmouseleave: move |_| {
                 is_hovering.set(false);
             },
-            
+
             // Visual indicator
             div {
                 style: match direction {
@@ -111,20 +111,20 @@ pub fn ResizableDivider(
                         "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); \
                         width: 2px; height: 40px; background: {}; \
                         border-radius: 1px; pointer-events: none;",
-                        if *is_dragging.read() || *is_hovering.read() { 
-                            "rgba(255, 193, 7, 0.8)" 
-                        } else { 
-                            "rgba(255, 255, 255, 0.3)" 
+                        if *is_dragging.read() || *is_hovering.read() {
+                            "rgba(255, 193, 7, 0.8)"
+                        } else {
+                            "rgba(255, 255, 255, 0.3)"
                         }
                     ),
                     ResizeDirection::Vertical => format!(
                         "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); \
                         width: 40px; height: 2px; background: {}; \
                         border-radius: 1px; pointer-events: none;",
-                        if *is_dragging.read() || *is_hovering.read() { 
-                            "rgba(255, 193, 7, 0.8)" 
-                        } else { 
-                            "rgba(255, 255, 255, 0.3)" 
+                        if *is_dragging.read() || *is_hovering.read() {
+                            "rgba(255, 193, 7, 0.8)"
+                        } else {
+                            "rgba(255, 255, 255, 0.3)"
                         }
                     ),
                 }
@@ -132,7 +132,6 @@ pub fn ResizableDivider(
         }
     }
 }
-
 
 /// Direction of resize
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -144,12 +143,12 @@ pub enum ResizeDirection {
 /// Simple hook for panel sizes without persistence
 pub fn use_panel_sizes() -> (Signal<PanelSizes>, impl Fn()) {
     let panel_sizes = use_signal(|| PanelSizes::default());
-    
+
     // Save function (no-op for now)
     let save_sizes = move || {
         // In the future, we can add persistence here
     };
-    
+
     (panel_sizes, save_sizes)
 }
 

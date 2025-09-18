@@ -1,5 +1,5 @@
 //! Problems Panel Integration
-//! 
+//!
 //! Provides VS Code-style problems panel for displaying:
 //! - Git conflicts
 //! - Build errors and warnings
@@ -7,31 +7,26 @@
 //! - Navigation to problem locations
 //! - Real-time updates from build systems
 
-pub mod problems_panel;
 pub mod build_integration;
 pub mod navigation_handler;
+pub mod problems_panel;
 pub mod real_time_updates;
 pub mod status_bar_integration;
 
 pub use problems_panel::{
-    ProblemsPanel, ProblemItem, ProblemSeverity, ProblemSource, ProblemsState,
+    ProblemItem, ProblemSeverity, ProblemSource, ProblemsPanel, ProblemsState,
     PROBLEMS_PANEL_STYLES,
 };
 
-pub use build_integration::{
-    BuildSystemIntegration, BuildTool, BuildStats,
-};
+pub use build_integration::{BuildStats, BuildSystemIntegration, BuildTool};
 
 pub use navigation_handler::{
-    ProblemNavigationHandler, NavigationResult, EditorIntegration,
-    NavigationEvent, NavigationHistoryEntry, NavigationAction,
-    navigation_utils,
+    navigation_utils, EditorIntegration, NavigationAction, NavigationEvent, NavigationHistoryEntry,
+    NavigationResult, ProblemNavigationHandler,
 };
 
-pub use real_time_updates::{
-    ProblemsUpdateManager, UpdateEvent, UpdateFrequency,
-};
+pub use real_time_updates::{ProblemsUpdateManager, UpdateEvent, UpdateFrequency};
 
 pub use status_bar_integration::{
-    ProblemsStatusBar, DetailedProblemsStatusBar, STATUS_BAR_PROBLEMS_STYLES,
+    DetailedProblemsStatusBar, ProblemsStatusBar, STATUS_BAR_PROBLEMS_STYLES,
 };

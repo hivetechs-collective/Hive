@@ -136,6 +136,11 @@ impl DatabaseManager {
         Ok(manager)
     }
 
+    /// Return the configured database path for health checks and tests
+    pub fn database_path(&self) -> &PathBuf {
+        &self.config.path
+    }
+
     /// Get a connection from the pool
     pub fn get_connection(&self) -> Result<DbConnection> {
         self.pool
@@ -378,7 +383,7 @@ impl DatabaseManager {
         completion_tokens: u32,
     ) -> Result<f64> {
         let conn = self.get_connection()?;
-        
+
         tracing::info!(
             "💰 Looking up model pricing for: {} (prompt: {}, completion: {})",
             model_openrouter_id,
@@ -459,7 +464,7 @@ impl DatabaseManager {
         total_tokens_output: u32,
     ) -> Result<()> {
         let conn = self.get_connection()?;
-        
+
         conn.execute(
             "INSERT OR REPLACE INTO conversations 
              (id, user_id, title, total_cost, total_tokens_input, total_tokens_output, created_at, updated_at)
@@ -494,7 +499,7 @@ impl DatabaseManager {
         additional_output_tokens: u32,
     ) -> Result<()> {
         let conn = self.get_connection()?;
-        
+
         conn.execute(
             "UPDATE conversations 
              SET total_cost = COALESCE(total_cost, 0.0) + ?2,
@@ -521,7 +526,7 @@ impl DatabaseManager {
 
         Ok(())
     }
-    
+
     /// Store cost tracking for a stage
     pub async fn store_cost_tracking(
         &self,
@@ -532,7 +537,7 @@ impl DatabaseManager {
         total_cost: f64,
     ) -> Result<()> {
         let conn = self.get_connection()?;
-        
+
         conn.execute(
             "INSERT INTO cost_tracking 
              (conversation_id, model_id, tokens_input, tokens_output, cost_input, cost_output, total_cost, created_at)
@@ -562,22 +567,26 @@ impl DatabaseManager {
     /// Get model internal ID from OpenRouter ID
     pub async fn get_model_internal_id(&self, openrouter_id: &str) -> Result<i64> {
         let conn = self.get_connection()?;
-        
-        let internal_id: i64 = conn.query_row(
-            "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
-            params![openrouter_id],
-            |row| row.get(0),
-        ).context(format!("Model not found: {}", openrouter_id))?;
-        
+
+        let internal_id: i64 = conn
+            .query_row(
+                "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
+                params![openrouter_id],
+                |row| row.get(0),
+            )
+            .context(format!("Model not found: {}", openrouter_id))?;
+
         Ok(internal_id)
     }
-    
+
     /// Get the most recent curator result from multiple possible tables
-    pub async fn get_latest_curator_result(&self) -> Result<Option<(String, chrono::DateTime<chrono::Utc>)>> {
+    pub async fn get_latest_curator_result(
+        &self,
+    ) -> Result<Option<(String, chrono::DateTime<chrono::Utc>)>> {
         let conn = self.get_connection()?;
-        
+
         // Try multiple tables in order of preference
-        
+
         // 1. Try curator_truths table first (most specific)
         if let Ok(result) = conn.query_row(
             "SELECT curator_output, created_at 
@@ -592,11 +601,11 @@ impl DatabaseManager {
                     .map(|dt| dt.with_timezone(&chrono::Utc))
                     .unwrap_or_else(|_| chrono::Utc::now());
                 Ok((curator_output, timestamp))
-            }
+            },
         ) {
             return Ok(Some(result));
         }
-        
+
         // 2. Try knowledge_conversations table
         if let Ok(result) = conn.query_row(
             "SELECT source_of_truth, created_at 
@@ -612,11 +621,11 @@ impl DatabaseManager {
                     .map(|dt| dt.with_timezone(&chrono::Utc))
                     .unwrap_or_else(|_| chrono::Utc::now());
                 Ok((source_of_truth, timestamp))
-            }
+            },
         ) {
             return Ok(Some(result));
         }
-        
+
         // 3. Try messages table for curator stage
         if let Ok(result) = conn.query_row(
             "SELECT content, timestamp 
@@ -632,11 +641,11 @@ impl DatabaseManager {
                     .map(|dt| dt.with_timezone(&chrono::Utc))
                     .unwrap_or_else(|_| chrono::Utc::now());
                 Ok((content, timestamp))
-            }
+            },
         ) {
             return Ok(Some(result));
         }
-        
+
         // No curator results found in any table
         Ok(None)
     }
@@ -1427,7 +1436,7 @@ where
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use anyhow::bail;

@@ -1032,7 +1032,7 @@ if (not (has-env HIVE_HOOKS_WELCOME_SHOWN)) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use std::env;

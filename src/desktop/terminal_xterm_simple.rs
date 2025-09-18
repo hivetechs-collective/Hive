@@ -2,23 +2,28 @@
 //!
 //! This provides a full-featured terminal using xterm.js in the WebView.
 
-use dioxus::prelude::*;
-use dioxus::document::eval;
-use dioxus::events::{KeyboardData, Key};
-use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem, MasterPty};
-use std::sync::{Arc, Mutex};
-use std::io::{Read, Write};
+use crate::desktop::terminal_buffer::{
+    add_to_terminal_buffer, register_terminal_buffer, unregister_terminal_buffer,
+};
 use crate::desktop::terminal_registry::{register_terminal, unregister_terminal};
-use crate::desktop::terminal_buffer::{register_terminal_buffer, add_to_terminal_buffer, unregister_terminal_buffer};
-use once_cell::sync::Lazy;
 use base64;
+use dioxus::document::eval;
+use dioxus::events::{Key, KeyboardData};
+use dioxus::prelude::*;
+use once_cell::sync::Lazy;
+use portable_pty::{CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
-static OUTPUT_QUEUES: Lazy<Mutex<HashMap<String, Vec<String>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-static PTY_HANDLES: Lazy<Mutex<HashMap<String, Arc<Mutex<Box<dyn MasterPty + Send>>>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static OUTPUT_QUEUES: Lazy<Mutex<HashMap<String, Vec<String>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+static PTY_HANDLES: Lazy<Mutex<HashMap<String, Arc<Mutex<Box<dyn MasterPty + Send>>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 // Event-driven notification system to replace polling
-static OUTPUT_NOTIFIERS: Lazy<Mutex<HashMap<String, Arc<Notify>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static OUTPUT_NOTIFIERS: Lazy<Mutex<HashMap<String, Arc<Notify>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Terminal emulator state
 pub struct XtermTerminal {
@@ -36,43 +41,56 @@ pub fn TerminalXterm(
     let mut terminal_writer = use_signal(|| None::<Arc<Mutex<Box<dyn Write + Send>>>>);
     let mut is_initialized = use_signal(|| false);
     let terminal_div_id = format!("xterm-{}", terminal_id);
-    
+
     // Cleanup on unmount
     let terminal_id_cleanup = terminal_id.clone();
     use_drop(move || {
         unregister_terminal(&terminal_id_cleanup);
         unregister_terminal_buffer(&terminal_id_cleanup);
-        
+
         // Clean up PTY handle
         if let Ok(mut pty_handles) = PTY_HANDLES.lock() {
             pty_handles.remove(&terminal_id_cleanup);
-            tracing::info!("🗑️ Cleaned up PTY handle for terminal {}", terminal_id_cleanup);
+            tracing::info!(
+                "🗑️ Cleaned up PTY handle for terminal {}",
+                terminal_id_cleanup
+            );
         }
-        
+
         // Also clean up the output queue for this terminal
         if let Ok(mut queues) = OUTPUT_QUEUES.lock() {
             queues.remove(&terminal_id_cleanup);
-            tracing::info!("🗑️ Cleaned up output queue for terminal {}", terminal_id_cleanup);
+            tracing::info!(
+                "🗑️ Cleaned up output queue for terminal {}",
+                terminal_id_cleanup
+            );
         }
-        
+
         // Clean up the notifier for this terminal
         if let Ok(mut notifiers) = OUTPUT_NOTIFIERS.lock() {
             notifiers.remove(&terminal_id_cleanup);
-            tracing::info!("🗑️ Cleaned up output notifier for terminal {}", terminal_id_cleanup);
+            tracing::info!(
+                "🗑️ Cleaned up output notifier for terminal {}",
+                terminal_id_cleanup
+            );
         }
     });
-    
+
     // Initialize terminal
     let terminal_id_init = terminal_id.clone();
     let div_id_init = terminal_div_id.clone();
     use_effect({
         let is_initialized = is_initialized.clone();
         let terminal_writer = terminal_writer.clone();
-        
+
         move || {
             let current_initialized = is_initialized.read().clone();
-            tracing::info!("🔍 Terminal {} initialization check: initialized={}", terminal_id_init, current_initialized);
-            
+            tracing::info!(
+                "🔍 Terminal {} initialization check: initialized={}",
+                terminal_id_init,
+                current_initialized
+            );
+
             if !current_initialized {
                 let tid = terminal_id_init.clone();
                 let div_id = div_id_init.clone();
@@ -82,35 +100,35 @@ pub fn TerminalXterm(
                 let cmd_args = args.clone();
                 let mut is_initialized_task = is_initialized.clone();
                 let mut terminal_writer_task = terminal_writer.clone();
-            
-            spawn(async move {
-                // Initialize PTY
-                if let Ok((writer, mut reader, pty_handle)) = create_pty(initial_dir, is_claude_code, cmd, cmd_args) {
-                    terminal_writer_task.set(Some(writer.clone()));
-                    
-                    // Store PTY handle for resizing
-                    if let Ok(mut pty_handles) = PTY_HANDLES.lock() {
-                        pty_handles.insert(tid.clone(), pty_handle);
-                        tracing::info!("📝 Stored PTY handle for terminal {}", tid);
-                    }
-                    
-                    // Register in global registry
-                    register_terminal(
-                        tid.clone(),
-                        Some(writer)
-                    );
-                    
-                    // Register terminal buffer for output capture
-                    register_terminal_buffer(tid.clone());
-                    
-                    // Initialize xterm.js
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                    init_xterm(&div_id, &tid).await;
-                    
-                    // CRITICAL FIX: Force immediate resize after xterm initialization
-                    // This prevents the terminal text from being smashed to the left
-                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                    let resize_script = format!(r#"
+
+                spawn(async move {
+                    // Initialize PTY
+                    if let Ok((writer, mut reader, pty_handle)) =
+                        create_pty(initial_dir, is_claude_code, cmd, cmd_args)
+                    {
+                        terminal_writer_task.set(Some(writer.clone()));
+
+                        // Store PTY handle for resizing
+                        if let Ok(mut pty_handles) = PTY_HANDLES.lock() {
+                            pty_handles.insert(tid.clone(), pty_handle);
+                            tracing::info!("📝 Stored PTY handle for terminal {}", tid);
+                        }
+
+                        // Register in global registry
+                        register_terminal(tid.clone(), Some(writer));
+
+                        // Register terminal buffer for output capture
+                        register_terminal_buffer(tid.clone());
+
+                        // Initialize xterm.js
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        init_xterm(&div_id, &tid).await;
+
+                        // CRITICAL FIX: Force immediate resize after xterm initialization
+                        // This prevents the terminal text from being smashed to the left
+                        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                        let resize_script = format!(
+                            r#"
                         if (window.terminals && window.terminals['{}']) {{
                             const term = window.terminals['{}'];
                             const container = document.getElementById('{}');
@@ -135,82 +153,94 @@ pub fn TerminalXterm(
                                 console.log('🚀 Forced initial resize to ' + cols + 'x' + rows);
                             }}
                         }}
-                    "#, tid, tid, div_id, tid);
-                    let _ = dioxus::document::eval(&resize_script).await;
-                    
-                    // Create or get notifier for this terminal
-                    let notifier = {
-                        let mut notifiers = OUTPUT_NOTIFIERS.lock().unwrap();
-                        notifiers.entry(tid.clone())
-                            .or_insert_with(|| Arc::new(Notify::new()))
-                            .clone()
-                    };
-                    
-                    // Start the output processor for this specific terminal (event-driven, not polling!)
-                    let tid_processor = tid.clone();
-                    spawn(async move {
-                        tracing::info!("🔄 Starting event-driven output processor for terminal {}", tid_processor);
-                        loop {
-                            // Wait for notification that output is available
-                            notifier.notified().await;
-                            
-                            // Check if consensus is running - if so, skip processing
-                            if crate::consensus::pipeline::CONSENSUS_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
-                                // Terminal output paused during consensus - no need to log repeatedly
-                                continue;
-                            }
-                            
-                            // Process any queued output
-                            process_terminal_output_queue(&tid_processor).await;
-                        }
-                    });
-                    
-                    // Handle output in a separate task
-                    let tid_output = tid.clone();
-                    tokio::task::spawn_blocking(move || {
-                        tracing::info!("📖 PTY reader thread started for {}", tid_output);
-                        let mut buf = vec![0u8; 4096];
-                        loop {
-                            match reader.read(&mut buf) {
-                                Ok(0) => {
-                                    tracing::warn!("PTY reader got EOF");
-                                    break;
+                    "#,
+                            tid, tid, div_id, tid
+                        );
+                        let _ = dioxus::document::eval(&resize_script).await;
+
+                        // Create or get notifier for this terminal
+                        let notifier = {
+                            let mut notifiers = OUTPUT_NOTIFIERS.lock().unwrap();
+                            notifiers
+                                .entry(tid.clone())
+                                .or_insert_with(|| Arc::new(Notify::new()))
+                                .clone()
+                        };
+
+                        // Start the output processor for this specific terminal (event-driven, not polling!)
+                        let tid_processor = tid.clone();
+                        spawn(async move {
+                            tracing::info!(
+                                "🔄 Starting event-driven output processor for terminal {}",
+                                tid_processor
+                            );
+                            loop {
+                                // Wait for notification that output is available
+                                notifier.notified().await;
+
+                                // Check if consensus is running - if so, skip processing
+                                if crate::consensus::pipeline::CONSENSUS_ACTIVE
+                                    .load(std::sync::atomic::Ordering::Relaxed)
+                                {
+                                    // Terminal output paused during consensus - no need to log repeatedly
+                                    continue;
                                 }
-                                Ok(n) => {
-                                    // Removed excessive trace logging - was causing performance issues
-                                    if let Ok(text) = String::from_utf8(buf[..n].to_vec()) {
-                                        // Removed trace log - was causing performance issues during consensus
-                                        write_to_xterm(&tid_output, &text);
-                                    } else {
-                                        // Handle non-UTF8 data
-                                        let text = String::from_utf8_lossy(&buf[..n]);
-                                        // Removed trace log - was causing performance issues
-                                        write_to_xterm(&tid_output, &text);
+
+                                // Process any queued output
+                                process_terminal_output_queue(&tid_processor).await;
+                            }
+                        });
+
+                        // Handle output in a separate task
+                        let tid_output = tid.clone();
+                        tokio::task::spawn_blocking(move || {
+                            tracing::info!("📖 PTY reader thread started for {}", tid_output);
+                            let mut buf = vec![0u8; 4096];
+                            loop {
+                                match reader.read(&mut buf) {
+                                    Ok(0) => {
+                                        tracing::warn!("PTY reader got EOF");
+                                        break;
+                                    }
+                                    Ok(n) => {
+                                        // Removed excessive trace logging - was causing performance issues
+                                        if let Ok(text) = String::from_utf8(buf[..n].to_vec()) {
+                                            // Removed trace log - was causing performance issues during consensus
+                                            write_to_xterm(&tid_output, &text);
+                                        } else {
+                                            // Handle non-UTF8 data
+                                            let text = String::from_utf8_lossy(&buf[..n]);
+                                            // Removed trace log - was causing performance issues
+                                            write_to_xterm(&tid_output, &text);
+                                        }
+                                    }
+                                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                                        continue
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("PTY reader error: {}", e);
+                                        break;
                                     }
                                 }
-                                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                                Err(e) => {
-                                    tracing::error!("PTY reader error: {}", e);
-                                    break;
-                                }
                             }
-                        }
-                        tracing::info!("📕 PTY reader thread ended for {}", tid_output);
-                    });
-                    
-                    // Mark as initialized immediately - don't wait for shell prompt
-                    is_initialized_task.set(true);
-                    tracing::info!("🚀 Terminal {} ready immediately - accepting input", tid);
-                    
-                    // Removed special Claude Code terminal help text
-                    
-                    // Focus this specific terminal after initialization
-                    let div_id_focus = div_id.clone();
-                    let tid_focus = tid.clone();
-                    spawn(async move {
-                        for i in 0..5 {
-                            tokio::time::sleep(std::time::Duration::from_millis(50 + i * 50)).await;
-                            let script = format!(r#"
+                            tracing::info!("📕 PTY reader thread ended for {}", tid_output);
+                        });
+
+                        // Mark as initialized immediately - don't wait for shell prompt
+                        is_initialized_task.set(true);
+                        tracing::info!("🚀 Terminal {} ready immediately - accepting input", tid);
+
+                        // Removed special Claude Code terminal help text
+
+                        // Focus this specific terminal after initialization
+                        let div_id_focus = div_id.clone();
+                        let tid_focus = tid.clone();
+                        spawn(async move {
+                            for i in 0..5 {
+                                tokio::time::sleep(std::time::Duration::from_millis(50 + i * 50))
+                                    .await;
+                                let script = format!(
+                                    r#"
                                 const terminalDiv = document.getElementById('{}').parentElement;
                                 if (terminalDiv && document.activeElement !== terminalDiv) {{
                                     terminalDiv.focus();
@@ -221,78 +251,106 @@ pub fn TerminalXterm(
                                     return true;
                                 }}
                                 return false;
-                            "#, div_id_focus, tid_focus, tid_focus);
-                            
-                            if let Ok(result) = eval(&script).await {
-                                if result.as_str() == Some("true") {
-                                    tracing::info!("✅ Terminal {} focus acquired on attempt {}", tid_focus, i + 1);
-                                    break;
+                            "#,
+                                    div_id_focus, tid_focus, tid_focus
+                                );
+
+                                if let Ok(result) = eval(&script).await {
+                                    if result.as_str() == Some("true") {
+                                        tracing::info!(
+                                            "✅ Terminal {} focus acquired on attempt {}",
+                                            tid_focus,
+                                            i + 1
+                                        );
+                                        break;
+                                    }
                                 }
                             }
-                        }
-                    });
-                }
-            });
+                        });
+                    }
+                });
             }
         }
     });
-    
+
     // Handle keyboard input directly
     let handle_keydown = {
         let terminal_writer = terminal_writer.clone();
         let is_initialized = is_initialized.clone();
         let terminal_id_for_input = terminal_id.clone();
-        
+
         move |evt: Event<KeyboardData>| {
             // Log immediately to verify events are being received
             let ready = is_initialized();
-            tracing::info!("🎹 Terminal {} keyboard event: key={:?}, ready={}", terminal_id_for_input, evt.key(), ready);
-            
+            tracing::info!(
+                "🎹 Terminal {} keyboard event: key={:?}, ready={}",
+                terminal_id_for_input,
+                evt.key(),
+                ready
+            );
+
             // Only prevent default to stop browser behavior
             evt.prevent_default();
-            
+
             // Only process input if terminal is ready
             if !ready {
-                tracing::warn!("⏳ Terminal {} not ready yet, ignoring input", terminal_id_for_input);
+                tracing::warn!(
+                    "⏳ Terminal {} not ready yet, ignoring input",
+                    terminal_id_for_input
+                );
                 return;
             }
-            
+
             if let Some(writer) = terminal_writer.read().as_ref() {
                 if let Some(input) = keyboard_to_bytes(&evt) {
                     let input_str = String::from_utf8_lossy(&input);
-                    tracing::info!("⌨️ Terminal {} sending keyboard input: {:?}", terminal_id_for_input, input_str);
-                    
+                    tracing::info!(
+                        "⌨️ Terminal {} sending keyboard input: {:?}",
+                        terminal_id_for_input,
+                        input_str
+                    );
+
                     // Removed special Claude Code command detection
-                    
+
                     // Send input to terminal immediately
                     if let Ok(mut w) = writer.lock() {
                         match w.write_all(&input) {
-                            Ok(_) => {
-                                match w.flush() {
-                                    Ok(_) => {
-                                        tracing::info!("✅ Terminal {} keyboard input sent and flushed successfully", terminal_id_for_input);
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("❌ Failed to flush after keyboard input: {}", e);
-                                    }
+                            Ok(_) => match w.flush() {
+                                Ok(_) => {
+                                    tracing::info!("✅ Terminal {} keyboard input sent and flushed successfully", terminal_id_for_input);
                                 }
-                            }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "❌ Failed to flush after keyboard input: {}",
+                                        e
+                                    );
+                                }
+                            },
                             Err(e) => tracing::error!("❌ Failed to send keyboard input: {}", e),
                         }
                     } else {
-                        tracing::error!("❌ Terminal {} failed to acquire writer lock for keyboard input", terminal_id_for_input);
+                        tracing::error!(
+                            "❌ Terminal {} failed to acquire writer lock for keyboard input",
+                            terminal_id_for_input
+                        );
                     }
                 } else {
-                    tracing::warn!("❌ Terminal {} has no writer available for keyboard input", terminal_id_for_input);
+                    tracing::warn!(
+                        "❌ Terminal {} has no writer available for keyboard input",
+                        terminal_id_for_input
+                    );
                 }
             } else {
-                tracing::warn!("❌ Terminal {} writer not initialized yet", terminal_id_for_input);
+                tracing::warn!(
+                    "❌ Terminal {} writer not initialized yet",
+                    terminal_id_for_input
+                );
             }
         }
     };
-    
+
     // Note: Output processor is now started during terminal initialization to ensure proper isolation
-    
+
     rsx! {
         div {
             class: "terminal-xterm",
@@ -315,7 +373,7 @@ pub fn TerminalXterm(
                     });
                 }
             },
-            
+
             div {
                 id: "{terminal_div_id}",
                 style: "width: 100%; height: 100%;",
@@ -326,7 +384,8 @@ pub fn TerminalXterm(
 
 /// Initialize xterm.js
 async fn init_xterm(div_id: &str, terminal_id: &str) {
-    let script = format!(r#"
+    let script = format!(
+        r#"
         (function() {{
             // Load xterm.js if needed
             if (!window.Terminal && !document.getElementById('xterm-js')) {{
@@ -522,8 +581,10 @@ async fn init_xterm(div_id: &str, terminal_id: &str) {
                 }}
             }}
         }})();
-    "#, div_id, terminal_id, terminal_id, terminal_id, terminal_id);
-    
+    "#,
+        div_id, terminal_id, terminal_id, terminal_id, terminal_id
+    );
+
     let _ = eval(&script).await;
 }
 
@@ -534,33 +595,33 @@ fn keyboard_to_bytes(event: &Event<KeyboardData>) -> Option<Vec<u8>> {
     let _shift = event.modifiers().shift();
     let ctrl = event.modifiers().ctrl();
     let alt = event.modifiers().alt();
-    
+
     match key {
         Key::Enter => Some(b"\r".to_vec()),
         Key::Tab => Some(b"\t".to_vec()),
         Key::Backspace => Some(vec![0x7f]),
         Key::Escape => Some(b"\x1b".to_vec()),
-        
+
         // Arrow keys
         Key::ArrowUp => Some(b"\x1b[A".to_vec()),
         Key::ArrowDown => Some(b"\x1b[B".to_vec()),
         Key::ArrowRight => Some(b"\x1b[C".to_vec()),
         Key::ArrowLeft => Some(b"\x1b[D".to_vec()),
-        
+
         // Page Up/Down
         Key::PageUp => Some(b"\x1b[5~".to_vec()),
         Key::PageDown => Some(b"\x1b[6~".to_vec()),
-        
+
         // Home/End
         Key::Home => Some(b"\x1b[H".to_vec()),
         Key::End => Some(b"\x1b[F".to_vec()),
-        
+
         // Function keys
         Key::F1 => Some(b"\x1bOP".to_vec()),
         Key::F2 => Some(b"\x1bOQ".to_vec()),
         Key::F3 => Some(b"\x1bOR".to_vec()),
         Key::F4 => Some(b"\x1bOS".to_vec()),
-        
+
         // Regular characters
         Key::Character(c) => {
             if ctrl {
@@ -598,7 +659,7 @@ fn keyboard_to_bytes(event: &Event<KeyboardData>) -> Option<Vec<u8>> {
                 Some(c.as_bytes().to_vec())
             }
         }
-        
+
         _ => None,
     }
 }
@@ -607,23 +668,29 @@ fn keyboard_to_bytes(event: &Event<KeyboardData>) -> Option<Vec<u8>> {
 fn write_to_xterm(terminal_id: &str, text: &str) {
     // Removed excessive trace logging that was causing performance issues
     // Only log errors and important events, not every byte of output
-    
+
     // Add to terminal buffer for Send to Consensus functionality
     add_to_terminal_buffer(terminal_id, text);
-    
+
     // Convert bytes to base64 to avoid any encoding issues
     use base64::Engine;
     let base64_text = base64::engine::general_purpose::STANDARD.encode(text.as_bytes());
-    
+
     // Queue the output to be processed later for this specific terminal
     if let Ok(mut queues) = OUTPUT_QUEUES.lock() {
-        let queue = queues.entry(terminal_id.to_string()).or_insert_with(Vec::new);
+        let queue = queues
+            .entry(terminal_id.to_string())
+            .or_insert_with(Vec::new);
         queue.push(base64_text);
-        tracing::debug!("📥 Queued output for {}, queue size: {}", terminal_id, queue.len());
+        tracing::debug!(
+            "📥 Queued output for {}, queue size: {}",
+            terminal_id,
+            queue.len()
+        );
     } else {
         tracing::error!("❌ Failed to lock output queues");
     }
-    
+
     // Notify the processor that output is available (event-driven!)
     if let Ok(notifiers) = OUTPUT_NOTIFIERS.lock() {
         if let Some(notifier) = notifiers.get(terminal_id) {
@@ -646,13 +713,14 @@ async fn process_terminal_output_queue(terminal_id: &str) {
             return;
         }
     };
-    
+
     if !items.is_empty() {
         // Removed trace log - was logging every output processing cycle
     }
-    
+
     for base64_text in items {
-        let script = format!(r#"
+        let script = format!(
+            r#"
             if (window.terminals && window.terminals['{}']) {{
                 const term = window.terminals['{}'];
                 // Decode base64 back to binary
@@ -670,8 +738,10 @@ async fn process_terminal_output_queue(terminal_id: &str) {
             }} else {{
                 console.warn('❌ Terminal not found: {}');
             }}
-        "#, terminal_id, terminal_id, base64_text, terminal_id, terminal_id);
-        
+        "#,
+            terminal_id, terminal_id, base64_text, terminal_id, terminal_id
+        );
+
         if let Err(e) = eval(&script).await {
             tracing::error!("❌ Failed to write to xterm {}: {}", terminal_id, e);
         }
@@ -689,45 +759,56 @@ pub fn resize_terminal_pty(terminal_id: &str, cols: u16, rows: u16) -> bool {
                     pixel_width: cols * 10,  // Approximate pixel width
                     pixel_height: rows * 20, // Approximate pixel height
                 };
-                
+
                 match pty.resize(new_size) {
                     Ok(_) => {
-                        tracing::info!("✅ Resized PTY for terminal {}: {}x{}", terminal_id, cols, rows);
-                        
+                        tracing::info!(
+                            "✅ Resized PTY for terminal {}: {}x{}",
+                            terminal_id,
+                            cols,
+                            rows
+                        );
+
                         // ⚡ CRITICAL FIX: Force LazyGit to refresh immediately after resize
                         // LazyGit doesn't automatically refresh when PTY is resized, so we need to trigger it
                         if terminal_id.contains("lazygit") {
                             // Get the writer for this terminal to send refresh signals
-                            if let Ok(terminal_registry) = crate::desktop::terminal_registry::TERMINAL_REGISTRY.lock() {
+                            if let Ok(terminal_registry) =
+                                crate::desktop::terminal_registry::TERMINAL_REGISTRY.lock()
+                            {
                                 if let Some(terminal_info) = terminal_registry.get(terminal_id) {
                                     if let Some(writer) = &terminal_info.writer {
                                         if let Ok(mut w) = writer.lock() {
                                             // AGGRESSIVE REFRESH: Send multiple signals to force LazyGit to redraw
-                                            
+
                                             // 1. Send Ctrl+L (clear screen and redraw)
                                             let _ = w.write_all(&[0x0C]); // Ctrl+L (Form Feed)
                                             let _ = w.flush();
-                                            
+
                                             // 2. Send 'r' key (LazyGit refresh command)
                                             let _ = w.write_all(b"r");
                                             let _ = w.flush();
-                                            
+
                                             // 3. Send Escape to cancel any pending operations, then refresh again
                                             let _ = w.write_all(&[0x1B]); // Escape
-                                            let _ = w.write_all(b"r");    // Refresh again
+                                            let _ = w.write_all(b"r"); // Refresh again
                                             let _ = w.flush();
-                                            
+
                                             tracing::info!("🔄 Sent AGGRESSIVE refresh signals to LazyGit after resize (Ctrl+L, r, Esc+r)");
                                         }
                                     }
                                 }
                             }
                         }
-                        
+
                         return true;
                     }
                     Err(e) => {
-                        tracing::error!("❌ Failed to resize PTY for terminal {}: {}", terminal_id, e);
+                        tracing::error!(
+                            "❌ Failed to resize PTY for terminal {}: {}",
+                            terminal_id,
+                            e
+                        );
                     }
                 }
             }
@@ -739,12 +820,29 @@ pub fn resize_terminal_pty(terminal_id: &str, cols: u16, rows: u16) -> bool {
 }
 
 /// Create PTY
-fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: Option<String>, args: Vec<String>) -> Result<(Arc<Mutex<Box<dyn Write + Send>>>, Box<dyn Read + Send>, Arc<Mutex<Box<dyn MasterPty + Send>>>), Box<dyn std::error::Error>> {
+fn create_pty(
+    working_directory: Option<String>,
+    is_claude_code: bool,
+    command: Option<String>,
+    args: Vec<String>,
+) -> Result<
+    (
+        Arc<Mutex<Box<dyn Write + Send>>>,
+        Box<dyn Read + Send>,
+        Arc<Mutex<Box<dyn MasterPty + Send>>>,
+    ),
+    Box<dyn std::error::Error>,
+> {
     let pty_system = NativePtySystem::default();
-    
+
     let mut cmd = if let Some(custom_command) = command {
         // Use custom command (e.g., "lazygit")
-        tracing::info!("🚀 Launching custom command: {} {:?} in directory: {:?}", custom_command, args, working_directory);
+        tracing::info!(
+            "🚀 Launching custom command: {} {:?} in directory: {:?}",
+            custom_command,
+            args,
+            working_directory
+        );
         let mut builder = CommandBuilder::new(custom_command);
         for arg in args {
             builder.arg(arg);
@@ -756,11 +854,11 @@ fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: 
         tracing::info!("🐚 Launching shell terminal: {}", shell);
         CommandBuilder::new(shell)
     };
-    
+
     if let Some(dir) = working_directory {
         cmd.cwd(dir);
     }
-    
+
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("LANG", "en_US.UTF-8");
@@ -768,29 +866,30 @@ fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: 
     // DO NOT set COLUMNS and LINES environment variables!
     // These hardcoded values (80x24) prevent LazyGit from using the full terminal size.
     // Instead, let the PTY size and dynamic resize system handle the dimensions.
-    
+
     // Create PTY with much larger initial size to prevent text being smashed to left
     // This ensures the terminal starts with proper width even before resize events
     let pty_pair = pty_system.openpty(PtySize {
-        rows: 50,      // Good default height
-        cols: 160,     // Wide default to prevent column-like display
+        rows: 50,  // Good default height
+        cols: 160, // Wide default to prevent column-like display
         pixel_width: 160 * 10,
         pixel_height: 50 * 20,
     })?;
-    
+
     let _child = pty_pair.slave.spawn_command(cmd)?;
     std::mem::drop(pty_pair.slave);
-    
+
     let reader = pty_pair.master.try_clone_reader()?;
     let writer = pty_pair.master.take_writer()?;
     let pty_handle = Arc::new(Mutex::new(pty_pair.master));
-    
+
     Ok((Arc::new(Mutex::new(writer)), reader, pty_handle))
 }
 
 /// Get terminal content from xterm.js
 pub async fn get_xterm_content(terminal_id: &str) -> Option<String> {
-    let script = format!(r#"
+    let script = format!(
+        r#"
         if (window.terminals && window.terminals['{}']) {{
             const term = window.terminals['{}'];
             const buffer = term.buffer.active;
@@ -813,8 +912,10 @@ pub async fn get_xterm_content(terminal_id: &str) -> Option<String> {
             return lines.join('\n').trim();
         }}
         return null;
-    "#, terminal_id, terminal_id);
-    
+    "#,
+        terminal_id, terminal_id
+    );
+
     match eval(&script).await {
         Ok(result) => result.as_str().map(|s| s.to_string()),
         Err(_) => None,

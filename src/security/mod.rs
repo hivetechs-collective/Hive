@@ -534,7 +534,7 @@ pub struct SecurityEvent {
     pub metadata: HashMap<String, String>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::tempdir;

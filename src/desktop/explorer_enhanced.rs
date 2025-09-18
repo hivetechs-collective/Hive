@@ -2,8 +2,8 @@
 //! Based on VS Code's src/vs/workbench/contrib/files/browser/
 
 use dioxus::prelude::*;
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// File decoration types (Git status, problems, etc.)
 #[derive(Clone, Debug, PartialEq)]
@@ -27,7 +27,7 @@ pub struct FileNode {
     pub children: Vec<FileNode>,
     pub decorations: Vec<FileDecoration>,
     pub is_selected: bool,
-    pub is_cut: bool, // For cut/paste operations
+    pub is_cut: bool,     // For cut/paste operations
     pub is_renamed: bool, // For inline rename
 }
 
@@ -62,23 +62,23 @@ pub fn EnhancedExplorer(
     on_context_menu: EventHandler<(PathBuf, i32, i32)>,
 ) -> Element {
     let explorer_state = state.read();
-    
+
     rsx! {
         div {
             class: "explorer-viewlet",
-            
+
             // Explorer header with title and actions
             div {
                 class: "explorer-header",
-                
+
                 div {
                     class: "explorer-title",
-                    
+
                     span { class: "title-label", "EXPLORER" }
-                    
+
                     div {
                         class: "explorer-actions",
-                        
+
                         button {
                             class: "action-button",
                             title: "New File... (Ctrl+Alt+N)",
@@ -87,7 +87,7 @@ pub fn EnhancedExplorer(
                             },
                             span { class: "codicon codicon-new-file" }
                         }
-                        
+
                         button {
                             class: "action-button",
                             title: "New Folder...",
@@ -96,7 +96,7 @@ pub fn EnhancedExplorer(
                             },
                             span { class: "codicon codicon-new-folder" }
                         }
-                        
+
                         button {
                             class: "action-button",
                             title: "Refresh Explorer",
@@ -105,7 +105,7 @@ pub fn EnhancedExplorer(
                             },
                             span { class: "codicon codicon-refresh" }
                         }
-                        
+
                         button {
                             class: "action-button",
                             title: "Collapse All",
@@ -116,11 +116,11 @@ pub fn EnhancedExplorer(
                         }
                     }
                 }
-                
+
                 // Search box
                 div {
                     class: "explorer-search",
-                    
+
                     input {
                         class: "search-input",
                         placeholder: "Search files by name",
@@ -129,7 +129,7 @@ pub fn EnhancedExplorer(
                             state.write().search_query = e.value();
                         },
                     }
-                    
+
                     if !explorer_state.search_query.is_empty() {
                         button {
                             class: "search-clear",
@@ -141,13 +141,13 @@ pub fn EnhancedExplorer(
                     }
                 }
             }
-            
+
             // File tree container
             div {
                 class: "explorer-folders-view",
                 role: "tree",
                 aria_label: "Files Explorer",
-                
+
                 if explorer_state.file_tree.is_empty() {
                     div {
                         class: "explorer-empty",
@@ -166,16 +166,16 @@ pub fn EnhancedExplorer(
                     }
                 }
             }
-            
+
             // Outline view (collapsible section)
             div {
                 class: "outline-view",
-                
+
                 div {
                     class: "outline-header",
                     "OUTLINE"
                 }
-                
+
                 div {
                     class: "outline-content",
                     "No symbols in active editor"
@@ -197,7 +197,7 @@ fn FileTreeNode(
 ) -> Element {
     let indent = level * 20;
     let is_expanded = node.is_expanded;
-    
+
     // Build node classes
     let mut node_classes = vec!["file-node"];
     if node.is_selected {
@@ -206,7 +206,7 @@ fn FileTreeNode(
     if node.is_cut {
         node_classes.push("cut");
     }
-    
+
     // Get file icon based on type/extension
     let icon_class = if node.is_directory {
         if is_expanded {
@@ -217,10 +217,12 @@ fn FileTreeNode(
     } else {
         get_file_icon(&node.name)
     };
-    
+
     // Build decoration indicators
-    let decorations = node.decorations.iter().map(|d| {
-        match d {
+    let decorations = node
+        .decorations
+        .iter()
+        .map(|d| match d {
             FileDecoration::GitModified => ("M".to_string(), "git-decoration-modified"),
             FileDecoration::GitAdded => ("A".to_string(), "git-decoration-added"),
             FileDecoration::GitDeleted => ("D".to_string(), "git-decoration-deleted"),
@@ -228,9 +230,9 @@ fn FileTreeNode(
             FileDecoration::GitIgnored => ("".to_string(), "git-decoration-ignored"),
             FileDecoration::Error(count) => (format!("{}", count), "problems-decoration-error"),
             FileDecoration::Warning(count) => (format!("{}", count), "problems-decoration-warning"),
-        }
-    }).collect::<Vec<_>>();
-    
+        })
+        .collect::<Vec<_>>();
+
     rsx! {
         div {
             class: node_classes.join(" "),
@@ -238,7 +240,7 @@ fn FileTreeNode(
             role: "treeitem",
             aria_expanded: if node.is_directory { Some(is_expanded.to_string()) } else { None },
             aria_selected: "{node.is_selected}",
-            
+
             div {
                 class: "file-node-content",
                 onclick: {
@@ -267,7 +269,7 @@ fn FileTreeNode(
                         on_context_menu.call((path.clone(), coords.x as i32, coords.y as i32));
                     }
                 },
-                
+
                 // Expand/collapse chevron for directories
                 if node.is_directory {
                     span {
@@ -284,12 +286,12 @@ fn FileTreeNode(
                         },
                     }
                 }
-                
+
                 // File/folder icon
                 span {
                     class: "file-icon codicon {icon_class}",
                 }
-                
+
                 // File name (with inline rename support)
                 if node.is_renamed {
                     input {
@@ -317,12 +319,12 @@ fn FileTreeNode(
                         "{node.name}"
                     }
                 }
-                
+
                 // Decorations (Git status, errors, etc.)
                 if !decorations.is_empty() {
                     div {
                         class: "file-decorations",
-                        
+
                         for (text, class) in decorations {
                             span {
                                 class: "decoration {class}",
@@ -332,12 +334,12 @@ fn FileTreeNode(
                     }
                 }
             }
-            
+
             // Render children if expanded
             if node.is_directory && is_expanded {
                 div {
                     class: "file-node-children",
-                    
+
                     for child in &node.children {
                         FileTreeNode {
                             node: child.clone(),
@@ -357,7 +359,7 @@ fn FileTreeNode(
 /// Get appropriate file icon based on file extension
 fn get_file_icon(filename: &str) -> &'static str {
     let extension = filename.split('.').last().unwrap_or("");
-    
+
     match extension.to_lowercase().as_str() {
         "rs" => "codicon-file-code",
         "js" | "jsx" => "codicon-file-js",

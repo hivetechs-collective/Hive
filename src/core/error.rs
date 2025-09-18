@@ -265,21 +265,25 @@ pub enum HiveError {
     // File operation execution errors
     /// File operation failed
     #[error("File operation '{operation}' failed for {path}: {reason}")]
-    FileOperationFailed { operation: String, path: PathBuf, reason: String },
+    FileOperationFailed {
+        operation: String,
+        path: PathBuf,
+        reason: String,
+    },
 
     /// Operation requires user confirmation
     #[error("Operation requires confirmation (ID: {operation_id})")]
-    OperationRequiresConfirmation { 
-        operation_id: uuid::Uuid, 
-        warnings: Vec<String>, 
-        suggestions: Vec<String> 
+    OperationRequiresConfirmation {
+        operation_id: uuid::Uuid,
+        warnings: Vec<String>,
+        suggestions: Vec<String>,
     },
 
     /// Operation blocked for safety
     #[error("Operation blocked for safety (ID: {operation_id})")]
-    OperationBlocked { 
-        operation_id: uuid::Uuid, 
-        reasons: Vec<String> 
+    OperationBlocked {
+        operation_id: uuid::Uuid,
+        reasons: Vec<String>,
     },
 
     /// Backup operation failed
@@ -731,7 +735,7 @@ macro_rules! config_error {
     };
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

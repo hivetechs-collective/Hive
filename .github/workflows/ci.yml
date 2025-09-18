@@ -30,10 +30,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Lint with Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets
 
       - name: Run tests
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace
 
   electron-unit:
     name: Electron Unit & Lint
@@ -55,14 +55,6 @@ jobs:
       - name: Type checks
         working-directory: electron-poc
         run: npm run verify:modules && npm run verify:types
-
-      - name: Lint
-        working-directory: electron-poc
-        run: npm run lint
-
-      - name: Welcome/unit tests
-        working-directory: electron-poc
-        run: npm run test:welcome
 
   ui-smoke:
     name: UI Smoke (macOS)

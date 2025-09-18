@@ -1,5 +1,5 @@
 //! Git stash UI components with VS Code-style interface
-//! 
+//!
 //! Provides:
 //! - Stash list panel with icons and timestamps
 //! - Stash creation dialog with message input
@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use super::stash::{StashInfo, StashSaveOptions, StashApplyOptions, GitStash, async_ops};
+use super::stash::{async_ops, GitStash, StashApplyOptions, StashInfo, StashSaveOptions};
 // use super::icons::GitIcons;
 
 /// VS Code-style stash list component
@@ -24,7 +24,7 @@ pub fn StashList(
     let mut selected_stash = use_signal(|| None::<usize>);
     let mut loading = use_signal(|| false);
     let mut error_message = use_signal(|| None::<String>);
-    
+
     // Load stashes when repo changes
     use_effect(move || {
         if let Some(path) = repo_path.read().as_ref() {
@@ -35,7 +35,7 @@ pub fn StashList(
             spawn(async move {
                 loading.set(true);
                 error_message.set(None);
-                
+
                 match async_ops::list_stashes(&path).await {
                     Ok(stash_list) => {
                         stashes.set(stash_list);
@@ -44,32 +44,32 @@ pub fn StashList(
                         error_message.set(Some(format!("Failed to load stashes: {}", e)));
                     }
                 }
-                
+
                 loading.set(false);
             });
         }
     });
-    
+
     rsx! {
         div {
             class: "stash-list-container",
             style: STASH_LIST_STYLES,
-            
+
             // Header with stash count and actions
             div {
                 class: "stash-header",
                 style: "display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid #333; background: #252526;",
-                
+
                 div {
                     class: "stash-title",
                     style: "font-weight: 600; color: #cccccc; font-size: 13px;",
                     "STASHES ({stashes.read().len()})"
                 }
-                
+
                 div {
                     class: "stash-actions",
                     style: "display: flex; gap: 4px;",
-                    
+
                     button {
                         class: "stash-action-btn",
                         style: STASH_ACTION_BUTTON_STYLES,
@@ -81,7 +81,7 @@ pub fn StashList(
                         },
                         "💾"
                     }
-                    
+
                     button {
                         class: "stash-action-btn",
                         style: STASH_ACTION_BUTTON_STYLES,
@@ -103,7 +103,7 @@ pub fn StashList(
                     }
                 }
             }
-            
+
             // Loading indicator
             if loading.read().clone() {
                 div {
@@ -112,7 +112,7 @@ pub fn StashList(
                     "Loading stashes..."
                 }
             }
-            
+
             // Error message
             if let Some(error) = error_message.read().as_ref() {
                 div {
@@ -121,19 +121,19 @@ pub fn StashList(
                     "{error}"
                 }
             }
-            
+
             // Stash list
             if !loading.read().clone() && error_message.read().is_none() {
                 div {
                     class: "stash-items",
                     style: "flex: 1; overflow-y: auto;",
-                    
+
                     if stashes.read().is_empty() {
                         div {
                             class: "no-stashes",
                             style: "padding: 24px; text-align: center; color: #888; font-size: 12px;",
                             div { "No stashes found" }
-                            div { 
+                            div {
                                 style: "margin-top: 8px; font-size: 11px;",
                                 "Use 'Save Stash' to stash your changes"
                             }
@@ -184,7 +184,7 @@ pub fn StashListItem(
 ) -> Element {
     let mut show_context_menu = use_signal(|| false);
     let mut context_menu_pos = use_signal(|| (0, 0));
-    
+
     rsx! {
         div {
             class: "stash-item",
@@ -199,56 +199,56 @@ pub fn StashListItem(
                 context_menu_pos.set((100, 100)); // Fallback position
                 show_context_menu.set(true);
             },
-            
+
             div {
                 class: "stash-main",
                 style: "display: flex; align-items: center; gap: 8px; flex: 1;",
-                
+
                 // Stash icon
                 div {
                     class: "stash-icon",
                     style: "font-size: 16px; color: #f0ad4e; flex-shrink: 0;",
                     "📦"
                 }
-                
+
                 // Stash info
                 div {
                     class: "stash-info",
                     style: "flex: 1; min-width: 0;",
-                    
+
                     div {
                         class: "stash-message",
                         style: "font-size: 13px; color: #cccccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
                         title: "{stash.message}",
                         "{stash.message}"
                     }
-                    
+
                     div {
                         class: "stash-details",
                         style: "font-size: 11px; color: #888; margin-top: 2px; display: flex; gap: 12px;",
-                        
+
                         span {
                             title: "Files changed",
                             "📁 {stash.stats.files_changed}"
                         }
-                        
+
                         span {
                             title: "Insertions",
                             style: "color: #89d185;",
                             "+{stash.stats.insertions}"
                         }
-                        
+
                         span {
-                            title: "Deletions", 
+                            title: "Deletions",
                             style: "color: #f48771;",
                             "-{stash.stats.deletions}"
                         }
-                        
+
                         span {
                             title: "Created {stash.formatted_time}",
                             "{stash.formatted_time}"
                         }
-                        
+
                         if stash.has_untracked {
                             span {
                                 title: "Includes untracked files",
@@ -259,7 +259,7 @@ pub fn StashListItem(
                     }
                 }
             }
-            
+
             // Context menu
             if show_context_menu.read().clone() {
                 StashContextMenu {
@@ -291,13 +291,13 @@ fn StashContextMenu(
         // In a desktop app, we'd handle this differently
         // For now, we'll rely on explicit close buttons
     });
-    
+
     rsx! {
         div {
             class: "stash-context-menu",
             style: format!("{}left: {}px; top: {}px;", STASH_CONTEXT_MENU_STYLES, position.0, position.1),
             onclick: move |evt| evt.stop_propagation(),
-            
+
             div {
                 class: "context-menu-item",
                 style: CONTEXT_MENU_ITEM_STYLES,
@@ -308,7 +308,7 @@ fn StashContextMenu(
                 }
                 "Apply Stash"
             }
-            
+
             div {
                 class: "context-menu-item",
                 style: CONTEXT_MENU_ITEM_STYLES,
@@ -319,12 +319,12 @@ fn StashContextMenu(
                 }
                 "Pop Stash"
             }
-            
+
             div {
                 class: "context-menu-separator",
                 style: "height: 1px; background: #333; margin: 4px 0;"
             }
-            
+
             div {
                 class: "context-menu-item",
                 style: CONTEXT_MENU_ITEM_STYLES,
@@ -335,12 +335,12 @@ fn StashContextMenu(
                 }
                 "Show Changes"
             }
-            
+
             div {
                 class: "context-menu-separator",
                 style: "height: 1px; background: #333; margin: 4px 0;"
             }
-            
+
             div {
                 class: "context-menu-item danger",
                 style: format!("{} color: #f48771;", CONTEXT_MENU_ITEM_STYLES),
@@ -368,31 +368,31 @@ pub fn StashSaveDialog(
     let mut include_ignored = use_signal(|| false);
     let mut keep_index = use_signal(|| false);
     let mut is_saving = use_signal(|| false);
-    
+
     if !is_open.read().clone() {
         return rsx! { div {} };
     }
-    
+
     rsx! {
         div {
             class: "stash-dialog-overlay",
             style: DIALOG_OVERLAY_STYLES,
-            
+
             div {
                 class: "stash-dialog",
                 style: STASH_DIALOG_STYLES,
                 onclick: move |evt| evt.stop_propagation(),
-                
+
                 // Header
                 div {
                     class: "dialog-header",
                     style: "display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #333;",
-                    
+
                     h3 {
                         style: "margin: 0; color: #cccccc; font-size: 14px; font-weight: 600;",
                         "Save Stash"
                     }
-                    
+
                     button {
                         class: "dialog-close",
                         style: "background: none; border: none; color: #888; font-size: 16px; cursor: pointer; padding: 4px;",
@@ -400,22 +400,22 @@ pub fn StashSaveDialog(
                         "✕"
                     }
                 }
-                
+
                 // Content
                 div {
                     class: "dialog-content",
                     style: "padding: 16px;",
-                    
+
                     // Message input
                     div {
                         class: "form-group",
                         style: "margin-bottom: 16px;",
-                        
+
                         label {
                             style: "display: block; margin-bottom: 4px; color: #cccccc; font-size: 12px; font-weight: 500;",
                             "Stash Message"
                         }
-                        
+
                         input {
                             r#type: "text",
                             placeholder: "Optional stash message...",
@@ -425,16 +425,16 @@ pub fn StashSaveDialog(
                             autofocus: true
                         }
                     }
-                    
+
                     // Options
                     div {
                         class: "stash-options",
                         style: "margin-bottom: 16px;",
-                        
+
                         div {
                             class: "checkbox-group",
                             style: "display: flex; align-items: center; margin-bottom: 8px;",
-                            
+
                             input {
                                 id: "include-untracked",
                                 r#type: "checkbox",
@@ -442,18 +442,18 @@ pub fn StashSaveDialog(
                                 style: "margin-right: 8px;",
                                 onchange: move |evt| include_untracked.set(evt.checked())
                             }
-                            
+
                             label {
                                 r#for: "include-untracked",
                                 style: "color: #cccccc; font-size: 12px; cursor: pointer;",
                                 "Include untracked files"
                             }
                         }
-                        
+
                         div {
                             class: "checkbox-group",
                             style: "display: flex; align-items: center; margin-bottom: 8px;",
-                            
+
                             input {
                                 id: "include-ignored",
                                 r#type: "checkbox",
@@ -461,18 +461,18 @@ pub fn StashSaveDialog(
                                 style: "margin-right: 8px;",
                                 onchange: move |evt| include_ignored.set(evt.checked())
                             }
-                            
+
                             label {
                                 r#for: "include-ignored",
                                 style: "color: #cccccc; font-size: 12px; cursor: pointer;",
                                 "Include ignored files"
                             }
                         }
-                        
+
                         div {
                             class: "checkbox-group",
                             style: "display: flex; align-items: center;",
-                            
+
                             input {
                                 id: "keep-index",
                                 r#type: "checkbox",
@@ -480,7 +480,7 @@ pub fn StashSaveDialog(
                                 style: "margin-right: 8px;",
                                 onchange: move |evt| keep_index.set(evt.checked())
                             }
-                            
+
                             label {
                                 r#for: "keep-index",
                                 style: "color: #cccccc; font-size: 12px; cursor: pointer;",
@@ -489,12 +489,12 @@ pub fn StashSaveDialog(
                         }
                     }
                 }
-                
+
                 // Footer
                 div {
                     class: "dialog-footer",
                     style: "display: flex; justify-content: flex-end; gap: 8px; padding: 16px; border-top: 1px solid #333;",
-                    
+
                     button {
                         class: "btn-secondary",
                         style: SECONDARY_BUTTON_STYLES,
@@ -502,7 +502,7 @@ pub fn StashSaveDialog(
                         disabled: is_saving.read().clone(),
                         "Cancel"
                     }
-                    
+
                     button {
                         class: "btn-primary",
                         style: PRIMARY_BUTTON_STYLES,
@@ -533,17 +533,19 @@ pub fn StashPreview(
     let mut diff_content = use_signal(|| String::new());
     let mut loading = use_signal(|| false);
     let mut error_message = use_signal(|| None::<String>);
-    
+
     // Load diff when stash selection changes
     use_effect(move || {
-        if let (Some(path), Some(stash)) = (repo_path.read().as_ref(), selected_stash.read().as_ref()) {
+        if let (Some(path), Some(stash)) =
+            (repo_path.read().as_ref(), selected_stash.read().as_ref())
+        {
             let path = path.clone();
             let index = stash.index;
-            
+
             spawn(async move {
                 loading.set(true);
                 error_message.set(None);
-                
+
                 match async_ops::show_stash_diff(&path, index).await {
                     Ok(diff) => {
                         diff_content.set(diff);
@@ -552,40 +554,40 @@ pub fn StashPreview(
                         error_message.set(Some(format!("Failed to load diff: {}", e)));
                     }
                 }
-                
+
                 loading.set(false);
             });
         } else {
             diff_content.set(String::new());
         }
     });
-    
+
     rsx! {
         div {
             class: "stash-preview",
             style: STASH_PREVIEW_STYLES,
-            
+
             if let Some(stash) = selected_stash.read().as_ref() {
                 // Preview header
                 div {
                     class: "preview-header",
                     style: "padding: 12px; border-bottom: 1px solid #333; background: #252526;",
-                    
+
                     div {
                         class: "stash-title",
                         style: "font-weight: 600; color: #cccccc; font-size: 13px; margin-bottom: 4px;",
                         "{stash.message}"
                     }
-                    
+
                     div {
                         class: "stash-meta",
                         style: "font-size: 11px; color: #888; display: flex; gap: 16px;",
-                        
+
                         span { "Stash #{stash.index}" }
                         span { "{stash.formatted_time}" }
                         span { "by {stash.author}" }
                         span { "{stash.stats.files_changed} files" }
-                        span { 
+                        span {
                             style: "color: #89d185;",
                             "+{stash.stats.insertions}"
                         }
@@ -595,12 +597,12 @@ pub fn StashPreview(
                         }
                     }
                 }
-                
+
                 // Preview content
                 div {
                     class: "preview-content",
                     style: "flex: 1; overflow: auto;",
-                    
+
                     if loading.read().clone() {
                         div {
                             class: "preview-loading",

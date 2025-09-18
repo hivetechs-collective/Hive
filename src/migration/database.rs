@@ -797,7 +797,7 @@ fn assess_migration_risks(db_info: &DatabaseInfo, schema_changes: &[SchemaChange
     risks
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

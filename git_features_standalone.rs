@@ -1,5 +1,5 @@
 //! Standalone Git Features Demo
-//! 
+//!
 //! A completely independent demonstration of the git features built for Hive.
 //! This showcases VS Code-style git integration without requiring the main library.
 //!
@@ -12,14 +12,14 @@
 //! - Real-time performance monitoring
 //! - Beautiful VS Code-inspired UI
 
-use dioxus::prelude::*;
-use git2::{Repository, StatusOptions, BranchType as Git2BranchType, Status};
-use std::path::PathBuf;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use tokio::time::interval;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use dioxus::prelude::*;
+use git2::{BranchType as Git2BranchType, Repository, Status, StatusOptions};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+use tokio::time::interval;
 
 /// Repository information
 #[derive(Debug, Clone, PartialEq)]
@@ -82,7 +82,9 @@ impl StatusType {
             StatusType::Deleted
         } else if status.contains(Status::WT_RENAMED) || status.contains(Status::INDEX_RENAMED) {
             StatusType::Renamed
-        } else if status.contains(Status::WT_TYPECHANGE) || status.contains(Status::INDEX_TYPECHANGE) {
+        } else if status.contains(Status::WT_TYPECHANGE)
+            || status.contains(Status::INDEX_TYPECHANGE)
+        {
             StatusType::Typechange
         } else if status.contains(Status::IGNORED) {
             StatusType::Ignored
@@ -157,7 +159,8 @@ pub fn discover_repository(path: &std::path::Path) -> Result<Option<RepositoryIn
     match Repository::discover(path) {
         Ok(repo) => {
             let workdir = repo.workdir().unwrap_or_else(|| repo.path());
-            let name = workdir.file_name()
+            let name = workdir
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("Unknown")
                 .to_string();
@@ -182,11 +185,11 @@ pub fn discover_repository(path: &std::path::Path) -> Result<Option<RepositoryIn
 pub fn get_current_branch(repo_path: &std::path::Path) -> Result<Option<BranchInfo>> {
     let repo = Repository::open(repo_path)?;
     let head = repo.head()?;
-    
+
     if let Some(branch_name) = head.shorthand() {
         let branch = repo.find_branch(branch_name, Git2BranchType::Local)?;
         let commit = head.peel_to_commit()?;
-        
+
         let commit_info = CommitInfo {
             hash: commit.id().to_string(),
             hash_short: commit.id().to_string()[..8].to_string(),
@@ -198,9 +201,10 @@ pub fn get_current_branch(repo_path: &std::path::Path) -> Result<Option<BranchIn
         Ok(Some(BranchInfo {
             name: branch_name.to_string(),
             is_current: true,
-            upstream: branch.upstream().ok().and_then(|upstream| {
-                upstream.name().ok().flatten().map(String::from)
-            }),
+            upstream: branch
+                .upstream()
+                .ok()
+                .and_then(|upstream| upstream.name().ok().flatten().map(String::from)),
             last_commit: Some(commit_info),
         }))
     } else {
@@ -212,7 +216,7 @@ pub fn get_file_statuses(repo_path: &std::path::Path) -> Result<HashMap<PathBuf,
     let repo = Repository::open(repo_path)?;
     let mut status_opts = StatusOptions::new();
     status_opts.include_untracked(true).include_ignored(false);
-    
+
     let statuses = repo.statuses(Some(&mut status_opts))?;
     let mut file_statuses = HashMap::new();
 
@@ -220,25 +224,25 @@ pub fn get_file_statuses(repo_path: &std::path::Path) -> Result<HashMap<PathBuf,
         if let Some(path_str) = entry.path() {
             let path = PathBuf::from(path_str);
             let status = entry.status();
-            
+
             let file_status = FileStatus {
                 status_type: StatusType::from_git2_status(status),
                 has_staged_changes: status.intersects(
-                    Status::INDEX_NEW | 
-                    Status::INDEX_MODIFIED | 
-                    Status::INDEX_DELETED |
-                    Status::INDEX_RENAMED |
-                    Status::INDEX_TYPECHANGE
+                    Status::INDEX_NEW
+                        | Status::INDEX_MODIFIED
+                        | Status::INDEX_DELETED
+                        | Status::INDEX_RENAMED
+                        | Status::INDEX_TYPECHANGE,
                 ),
                 has_unstaged_changes: status.intersects(
-                    Status::WT_NEW |
-                    Status::WT_MODIFIED |
-                    Status::WT_DELETED |
-                    Status::WT_RENAMED |
-                    Status::WT_TYPECHANGE
+                    Status::WT_NEW
+                        | Status::WT_MODIFIED
+                        | Status::WT_DELETED
+                        | Status::WT_RENAMED
+                        | Status::WT_TYPECHANGE,
                 ),
             };
-            
+
             file_statuses.insert(path, file_status);
         }
     }
@@ -276,18 +280,17 @@ impl DemoState {
 
 fn main() {
     println!("🐝 Starting Hive Git Features Demo...");
-    
+
     // Launch the Dioxus desktop app
     LaunchBuilder::desktop()
         .with_cfg(
-            dioxus_desktop::Config::new()
-                .with_window(
-                    dioxus_desktop::WindowBuilder::new()
-                        .with_title("🐝 Hive Git Features Demo - VS Code Style Integration")
-                        .with_inner_size(dioxus_desktop::LogicalSize::new(1400.0, 900.0))
-                        .with_min_inner_size(dioxus_desktop::LogicalSize::new(1000.0, 700.0))
-                        .with_resizable(true)
-                )
+            dioxus_desktop::Config::new().with_window(
+                dioxus_desktop::WindowBuilder::new()
+                    .with_title("🐝 Hive Git Features Demo - VS Code Style Integration")
+                    .with_inner_size(dioxus_desktop::LogicalSize::new(1400.0, 900.0))
+                    .with_min_inner_size(dioxus_desktop::LogicalSize::new(1000.0, 700.0))
+                    .with_resizable(true),
+            ),
         )
         .launch(App);
 }
@@ -295,26 +298,30 @@ fn main() {
 #[component]
 fn App() -> Element {
     let state = use_context_provider(|| DemoState::new());
-    
+
     // Initialize the demo with the current directory
     use_effect(move || {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         spawn(async move {
             if let Ok(Some(repo_info)) = discover_repository(&current_dir) {
                 state.current_repo.set(Some(repo_info.clone()));
-                state.status_message.set(format!("✅ Git repository detected: {}", repo_info.name));
-                
+                state
+                    .status_message
+                    .set(format!("✅ Git repository detected: {}", repo_info.name));
+
                 // Get branch info
                 if let Ok(Some(branch_info)) = get_current_branch(&repo_info.path) {
                     state.current_branch.set(Some(branch_info));
                 }
-                
+
                 // Get file statuses
                 if let Ok(file_statuses) = get_file_statuses(&repo_info.path) {
                     state.file_statuses.set(file_statuses);
                 }
             } else {
-                state.status_message.set("⚠️ No git repository found in current directory".to_string());
+                state
+                    .status_message
+                    .set("⚠️ No git repository found in current directory".to_string());
             }
         });
     });
@@ -323,14 +330,14 @@ fn App() -> Element {
     use_effect(move || {
         spawn(async move {
             let mut interval = interval(Duration::from_secs(3));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Update refresh count and performance stats
                 let current_count = state.refresh_count.read().clone();
                 state.refresh_count.set(current_count + 1);
-                
+
                 // Simulate realistic performance stats
                 let mut stats = state.performance_stats.read().clone();
                 stats.total_operations += 1;
@@ -338,9 +345,9 @@ fn App() -> Element {
                 stats.cache_misses += if current_count % 4 == 0 { 1 } else { 0 };
                 stats.average_time_ms = 12.0 + (current_count as f64 * 0.3) % 8.0;
                 stats.background_tasks = (current_count / 3) as u64;
-                
+
                 state.performance_stats.set(stats);
-                
+
                 // Refresh file statuses if we have a repo
                 if let Some(repo_info) = state.current_repo.read().as_ref() {
                     if let Ok(file_statuses) = get_file_statuses(&repo_info.path) {
@@ -355,7 +362,7 @@ fn App() -> Element {
         style { {VSCODE_STYLES} }
         div {
             class: "app-container",
-            
+
             // Header with VS Code styling
             div {
                 class: "header",
@@ -377,24 +384,24 @@ fn App() -> Element {
                     StatusBar {}
                 }
             }
-            
+
             // Main content area
             div {
                 class: "main-content",
-                
+
                 // Tab navigation
                 div {
                     class: "tab-bar",
                     TabBar {}
                 }
-                
+
                 // Content panels
                 div {
                     class: "content-panels",
                     ContentArea {}
                 }
             }
-            
+
             // Footer
             div {
                 class: "footer",
@@ -411,16 +418,16 @@ fn StatusBar() -> Element {
     let elapsed = demo_start_time.elapsed().as_secs();
     let minutes = elapsed / 60;
     let seconds = elapsed % 60;
-    
+
     rsx! {
         div {
             class: "status-bar-content",
-            
+
             div {
                 class: "status-left",
                 span { class: "status-message", {state.status_message.read().clone()} }
             }
-            
+
             div {
                 class: "status-right",
                 span { class: "runtime-info", "Runtime: {minutes:02}:{seconds:02}" }
@@ -444,14 +451,14 @@ fn StatusBar() -> Element {
 #[component]
 fn TabBar() -> Element {
     let state = use_context::<DemoState>();
-    
+
     let tabs = vec![
         ("Repository", "📁"),
         ("File Status", "📄"),
         ("Performance", "⚡"),
         ("About", "ℹ️"),
     ];
-    
+
     rsx! {
         div {
             class: "tab-container",
@@ -472,7 +479,7 @@ fn TabBar() -> Element {
 fn ContentArea() -> Element {
     let state = use_context::<DemoState>();
     let selected_tab = state.selected_tab.read().clone();
-    
+
     rsx! {
         div {
             class: "content-area",
@@ -490,21 +497,21 @@ fn ContentArea() -> Element {
 #[component]
 fn RepositoryPanel() -> Element {
     let state = use_context::<DemoState>();
-    
+
     rsx! {
         div {
             class: "panel repository-panel",
-            
+
             h2 {
                 class: "panel-title",
                 span { class: "panel-icon", "📁" }
                 "Repository Information"
             }
-            
+
             if let Some(repo_info) = state.current_repo.read().as_ref() {
                 div {
                     class: "repo-details",
-                    
+
                     div {
                         class: "detail-card",
                         div {
@@ -516,7 +523,7 @@ fn RepositoryPanel() -> Element {
                         }
                         div { class: "detail-value repo-name", {repo_info.name.clone()} }
                     }
-                    
+
                     div {
                         class: "detail-card",
                         div { class: "detail-header",
@@ -527,7 +534,7 @@ fn RepositoryPanel() -> Element {
                             {repo_info.path.to_string_lossy().to_string()}
                         }
                     }
-                    
+
                     div {
                         class: "detail-card",
                         div { class: "detail-header",
@@ -538,17 +545,17 @@ fn RepositoryPanel() -> Element {
                             if repo_info.is_bare { "Bare Repository" } else { "Working Directory" }
                         }
                     }
-                    
+
                     if let Some(branch_info) = state.current_branch.read().as_ref() {
                         div {
                             class: "branch-details",
-                            
+
                             h3 {
                                 class: "branch-header",
                                 span { class: "branch-icon", "🌿" }
                                 "Current Branch"
                             }
-                            
+
                             div {
                                 class: "detail-card",
                                 div { class: "detail-header",
@@ -559,11 +566,11 @@ fn RepositoryPanel() -> Element {
                                     {branch_info.name.clone()}
                                 }
                             }
-                            
+
                             if let Some(commit_info) = &branch_info.last_commit {
                                 div {
                                     class: "commit-details",
-                                    
+
                                     div {
                                         class: "detail-card",
                                         div { class: "detail-header",
@@ -581,7 +588,7 @@ fn RepositoryPanel() -> Element {
                                             }
                                         }
                                     }
-                                    
+
                                     div {
                                         class: "detail-card",
                                         div { class: "detail-header",
@@ -614,17 +621,17 @@ fn RepositoryPanel() -> Element {
 fn FileStatusPanel() -> Element {
     let state = use_context::<DemoState>();
     let file_statuses = state.file_statuses.read();
-    
+
     rsx! {
         div {
             class: "panel file-status-panel",
-            
+
             h2 {
                 class: "panel-title",
                 span { class: "panel-icon", "📄" }
                 "File Status ({file_statuses.len()} files)"
             }
-            
+
             if file_statuses.is_empty() {
                 div {
                     class: "empty-state",
@@ -635,18 +642,18 @@ fn FileStatusPanel() -> Element {
             } else {
                 div {
                     class: "file-status-list",
-                    
+
                     for (path, status) in file_statuses.iter() {
                         div {
                             key: "{path:?}",
                             class: "file-status-item",
-                            
+
                             div {
                                 class: "file-status-icon",
                                 style: "background-color: {status.status_type.color()}20; border-color: {status.status_type.color()}; color: {status.status_type.color()};",
                                 {status.status_type.icon()}
                             }
-                            
+
                             div {
                                 class: "file-info",
                                 div {
@@ -658,7 +665,7 @@ fn FileStatusPanel() -> Element {
                                     {status.status_type.description()}
                                 }
                             }
-                            
+
                             div {
                                 class: "file-badges",
                                 if status.has_staged_changes {
@@ -681,72 +688,72 @@ fn PerformancePanel() -> Element {
     let state = use_context::<DemoState>();
     let stats = state.performance_stats.read();
     let refresh_count = state.refresh_count.read();
-    
+
     rsx! {
         div {
             class: "panel performance-panel",
-            
+
             h2 {
                 class: "panel-title",
                 span { class: "panel-icon", "⚡" }
                 "Performance Monitor"
             }
-            
+
             div {
                 class: "perf-metrics",
-                
+
                 div {
                     class: "metric-card",
                     div { class: "metric-label", "Cache Hit Rate" }
                     div { class: "metric-value primary", "{stats.cache_hit_rate() * 100.0:.1}%" }
                 }
-                
+
                 div {
                     class: "metric-card",
                     div { class: "metric-label", "Avg Response Time" }
                     div { class: "metric-value success", "{stats.average_time_ms:.1}ms" }
                 }
-                
+
                 div {
                     class: "metric-card",
                     div { class: "metric-label", "Total Operations" }
                     div { class: "metric-value info", "{stats.total_operations}" }
                 }
-                
+
                 div {
                     class: "metric-card",
                     div { class: "metric-label", "Background Tasks" }
                     div { class: "metric-value warning", "{stats.background_tasks}" }
                 }
-                
+
                 div {
                     class: "metric-card",
                     div { class: "metric-label", "Refresh Count" }
                     div { class: "metric-value", "{refresh_count}" }
                 }
-                
+
                 div {
                     class: "metric-card",
                     div { class: "metric-label", "Cache Hits" }
                     div { class: "metric-value success", "{stats.cache_hits}" }
                 }
             }
-            
+
             div {
                 class: "performance-indicators",
-                
+
                 div {
                     class: "indicator-item active",
                     div { class: "indicator-icon", "✅" }
                     div { class: "indicator-text", "Git Integration Active" }
                 }
-                
+
                 div {
                     class: "indicator-item monitoring",
                     div { class: "indicator-icon", "📊" }
                     div { class: "indicator-text", "Real-time Monitoring" }
                 }
-                
+
                 div {
                     class: "indicator-item refresh",
                     div { class: "indicator-icon", "🔄" }
@@ -762,16 +769,16 @@ fn AboutPanel() -> Element {
     rsx! {
         div {
             class: "panel about-panel",
-            
+
             h2 {
                 class: "panel-title",
                 span { class: "panel-icon", "ℹ️" }
                 "About This Demo"
             }
-            
+
             div {
                 class: "about-content",
-                
+
                 div {
                     class: "feature-section",
                     h3 { "🎯 Features Demonstrated" }
@@ -785,7 +792,7 @@ fn AboutPanel() -> Element {
                         li { "Beautiful, responsive UI design" }
                     }
                 }
-                
+
                 div {
                     class: "tech-section",
                     h3 { "🛠️ Technology Stack" }
@@ -798,7 +805,7 @@ fn AboutPanel() -> Element {
                         li { "📅 Chrono - Date and time handling" }
                     }
                 }
-                
+
                 div {
                     class: "info-section",
                     h3 { "📊 Performance Highlights" }
@@ -811,7 +818,7 @@ fn AboutPanel() -> Element {
                         li { "🔄 Real-time file monitoring" }
                     }
                 }
-                
+
                 div {
                     class: "project-section",
                     h3 { "🐝 About Hive AI" }
@@ -821,7 +828,7 @@ fn AboutPanel() -> Element {
                         "provides advanced code analysis, intelligent suggestions, and seamless "
                         "integration with your development workflow."
                     }
-                    
+
                     div {
                         class: "version-info",
                         "Demo Version: 2.0.2 • Built with ❤️ in Rust"
@@ -839,18 +846,18 @@ fn Footer() -> Element {
     let elapsed = demo_start_time.elapsed();
     let minutes = elapsed.as_secs() / 60;
     let seconds = elapsed.as_secs() % 60;
-    
+
     rsx! {
         div {
             class: "footer-content",
-            
+
             div {
                 class: "footer-left",
                 span { class: "footer-label", "🐝 Hive Git Features Demo" }
                 span { class: "footer-separator", "•" }
                 span { "Running for {minutes:02}:{seconds:02}" }
             }
-            
+
             div {
                 class: "footer-right",
                 span { "Built with Dioxus + Rust" }

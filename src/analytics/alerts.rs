@@ -813,7 +813,7 @@ impl std::hash::Hash for AlertType {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

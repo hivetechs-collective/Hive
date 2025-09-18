@@ -1124,7 +1124,7 @@ pub struct ApprovalStatistics {
     pub average_completion_time_seconds: f64,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

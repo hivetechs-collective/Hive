@@ -1,14 +1,14 @@
 // Progress Indicators and Status Display Components
 // Shows real-time progress of file operations and AI processing
 
-use dioxus::prelude::*;
 use crate::consensus::{
-    stages::file_aware_curator::FileOperation,
     ai_operation_parser::FileOperationWithMetadata,
     file_executor::{ExecutionResult, ExecutionSummary},
+    stages::file_aware_curator::FileOperation,
     ConsensusStage,
 };
 use crate::desktop::styles::theme::ThemeColors;
+use dioxus::prelude::*;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -39,22 +39,22 @@ pub enum OperationStatus {
 pub struct ProgressIndicatorsProps {
     /// Current consensus stage
     pub consensus_stage: Option<ConsensusStage>,
-    
+
     /// Operations being processed
     pub operations: Vec<FileOperationWithMetadata>,
-    
+
     /// Progress for each operation
     pub operation_progress: HashMap<usize, OperationProgress>,
-    
+
     /// Overall execution summary
     pub execution_summary: Option<ExecutionSummary>,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Whether to show detailed progress
     pub show_details: bool,
-    
+
     /// Callback when user clicks on an operation
     pub on_operation_click: EventHandler<usize>,
 }
@@ -64,15 +64,15 @@ pub struct ProgressIndicatorsProps {
 pub fn ProgressIndicators(props: ProgressIndicatorsProps) -> Element {
     let mut expanded_operations = use_signal(|| Vec::<usize>::new());
     let mut show_timeline = use_signal(|| true);
-    
+
     // Calculate overall progress
     let (overall_progress, stats) = calculate_overall_progress(&props.operation_progress);
-    
+
     rsx! {
         div {
             class: "progress-indicators",
             style: "padding: 20px;",
-            
+
             // Overall progress card
             OverallProgressCard {
                 progress: overall_progress,
@@ -81,7 +81,7 @@ pub fn ProgressIndicators(props: ProgressIndicatorsProps) -> Element {
                 execution_summary: props.execution_summary.clone(),
                 theme: props.theme.clone(),
             }
-            
+
             // Stage indicator
             if let Some(stage) = &props.consensus_stage {
                 StageIndicator {
@@ -89,28 +89,28 @@ pub fn ProgressIndicators(props: ProgressIndicatorsProps) -> Element {
                     theme: props.theme.clone(),
                 }
             }
-            
+
             // Operation progress list
             div {
                 style: "margin-top: 24px;",
-                
+
                 div {
                     style: "
                         display: flex;
                         align-items: center;
                         margin-bottom: 16px;
                     ",
-                    
+
                     h3 {
                         style: "margin: 0; color: {props.theme.text}; flex: 1;",
                         "Operation Progress"
                     }
-                    
+
                     {
                         let show_timeline_value = show_timeline();
                         let bg_color = if show_timeline_value { props.theme.primary.clone() } else { "transparent".to_string() };
                         let text_color = if show_timeline_value { props.theme.background.clone() } else { props.theme.text.clone() };
-                        
+
                         rsx! {
                             button {
                                 style: "
@@ -128,7 +128,7 @@ pub fn ProgressIndicators(props: ProgressIndicatorsProps) -> Element {
                         }
                     }
                 }
-                
+
                 if show_timeline() {
                     TimelineView {
                         operations: props.operations.clone(),
@@ -139,7 +139,7 @@ pub fn ProgressIndicators(props: ProgressIndicatorsProps) -> Element {
                 } else {
                     div {
                         style: "display: flex; flex-direction: column; gap: 12px;",
-                        
+
                         for (idx, operation) in props.operations.iter().enumerate() {
                             OperationProgressItem {
                                 operation: operation.clone(),
@@ -161,7 +161,7 @@ pub fn ProgressIndicators(props: ProgressIndicatorsProps) -> Element {
                     }
                 }
             }
-            
+
             // Real-time status feed
             if props.show_details {
                 StatusFeed {
@@ -202,18 +202,18 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                 border-radius: 8px;
                 padding: 20px;
             ",
-            
+
             div {
                 style: "display: flex; align-items: center; margin-bottom: 16px;",
-                
+
                 div {
                     style: "flex: 1;",
-                    
+
                     h2 {
                         style: "margin: 0 0 4px; color: {props.theme.text};",
                         "Overall Progress"
                     }
-                    
+
                     if let Some(stage) = &props.consensus_stage {
                         div {
                             style: "font-size: 14px; color: {props.theme.text_secondary};",
@@ -221,7 +221,7 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                         }
                     }
                 }
-                
+
                 // Circular progress indicator
                 CircularProgress {
                     value: props.progress,
@@ -229,7 +229,7 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                     theme: props.theme.clone(),
                 }
             }
-            
+
             // Progress bar
             div {
                 style: "
@@ -239,7 +239,7 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                     overflow: hidden;
                     margin-bottom: 16px;
                 ",
-                
+
                 div {
                     style: "
                         height: 100%;
@@ -249,32 +249,32 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                     ",
                 }
             }
-            
+
             // Statistics
             div {
                 style: "display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;",
-                
+
                 StatItem {
                     label: "Total",
                     value: props.stats.total.to_string(),
                     color: props.theme.text.clone(),
                     theme: props.theme.clone(),
                 }
-                
+
                 StatItem {
                     label: "Completed",
                     value: props.stats.completed.to_string(),
                     color: props.theme.success.clone(),
                     theme: props.theme.clone(),
                 }
-                
+
                 StatItem {
                     label: "Failed",
                     value: props.stats.failed.to_string(),
                     color: props.theme.error.clone(),
                     theme: props.theme.clone(),
                 }
-                
+
                 StatItem {
                     label: "In Progress",
                     value: props.stats.in_progress.to_string(),
@@ -282,7 +282,7 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                     theme: props.theme.clone(),
                 }
             }
-            
+
             // Execution summary
             if let Some(summary) = &props.execution_summary {
                 div {
@@ -291,14 +291,14 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                         padding-top: 16px;
                         border-top: 1px solid {props.theme.border};
                     ",
-                    
+
                     div {
                         style: "
                             display: flex;
                             justify-content: space-between;
                             font-size: 14px;
                         ",
-                        
+
                         div {
                             style: "color: {props.theme.text_secondary};",
                             "Execution Time:"
@@ -308,7 +308,7 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                             {format_duration(summary.total_execution_time)}
                         }
                     }
-                    
+
                     if summary.successful_operations > 0 {
                         div {
                             style: "
@@ -317,7 +317,7 @@ fn OverallProgressCard(props: OverallProgressCardProps) -> Element {
                                 font-size: 14px;
                                 margin-top: 4px;
                             ",
-                            
+
                             div {
                                 style: "color: {props.theme.text_secondary};",
                                 "Successful Operations:"
@@ -349,7 +349,7 @@ fn StageIndicator(props: StageIndicatorProps) -> Element {
         (ConsensusStage::Validator, "Validator", "✓"),
         (ConsensusStage::Curator, "Curator", "📋"),
     ];
-    
+
     rsx! {
         div {
             style: "
@@ -359,10 +359,10 @@ fn StageIndicator(props: StageIndicatorProps) -> Element {
                 padding: 16px;
                 margin-top: 16px;
             ",
-            
+
             div {
                 style: "display: flex; justify-content: space-between; align-items: center;",
-                
+
                 for (stage, name, icon) in stages {
                     StageItem {
                         name: name,
@@ -390,15 +390,30 @@ struct StageItemProps {
 #[component]
 fn StageItem(props: StageItemProps) -> Element {
     let (bg_color, icon_color, border_color, text_color) = if props.is_active {
-        (props.theme.primary.clone(), props.theme.background.clone(), props.theme.primary.clone(), props.theme.text.clone())
+        (
+            props.theme.primary.clone(),
+            props.theme.background.clone(),
+            props.theme.primary.clone(),
+            props.theme.text.clone(),
+        )
     } else if props.is_completed {
-        (props.theme.success.clone(), props.theme.background.clone(), props.theme.success.clone(), props.theme.text.clone())
+        (
+            props.theme.success.clone(),
+            props.theme.background.clone(),
+            props.theme.success.clone(),
+            props.theme.text.clone(),
+        )
     } else {
-        ("transparent".to_string(), props.theme.text_secondary.clone(), props.theme.border.clone(), props.theme.text_secondary.clone())
+        (
+            "transparent".to_string(),
+            props.theme.text_secondary.clone(),
+            props.theme.border.clone(),
+            props.theme.text_secondary.clone(),
+        )
     };
-    
+
     let font_weight = if props.is_active { "bold" } else { "normal" };
-    
+
     rsx! {
         div {
             style: "
@@ -407,7 +422,7 @@ fn StageItem(props: StageItemProps) -> Element {
                 align-items: center;
                 gap: 8px;
             ",
-            
+
             div {
                 style: "
                     width: 50px;
@@ -424,7 +439,7 @@ fn StageItem(props: StageItemProps) -> Element {
                 ",
                 "{props.icon}"
             }
-            
+
             div {
                 style: "
                     font-size: 12px;
@@ -457,7 +472,7 @@ fn TimelineView(props: TimelineViewProps) -> Element {
                 padding: 20px;
                 overflow-x: auto;
             ",
-            
+
             // Timeline header
             div {
                 style: "
@@ -468,11 +483,11 @@ fn TimelineView(props: TimelineViewProps) -> Element {
                     font-size: 12px;
                     color: {props.theme.text_secondary};
                 ",
-                
+
                 div { "Operation" }
                 div { "Timeline" }
             }
-            
+
             // Timeline items
             for (idx, operation) in props.operations.iter().enumerate() {
                 TimelineItem {
@@ -501,11 +516,13 @@ fn TimelineItem(props: TimelineItemProps) -> Element {
     let status_color = match progress.map(|p| &p.status) {
         Some(OperationStatus::Completed) => props.theme.success.clone(),
         Some(OperationStatus::Failed) => props.theme.error.clone(),
-        Some(OperationStatus::Processing) | Some(OperationStatus::Executing) => props.theme.warning.clone(),
+        Some(OperationStatus::Processing) | Some(OperationStatus::Executing) => {
+            props.theme.warning.clone()
+        }
         Some(OperationStatus::Skipped) => props.theme.text_secondary.clone(),
         _ => props.theme.border.clone(),
     };
-    
+
     rsx! {
         div {
             style: "
@@ -517,7 +534,7 @@ fn TimelineItem(props: TimelineItemProps) -> Element {
                 cursor: pointer;
             ",
             onclick: move |_| props.on_click.call(()),
-            
+
             // Operation info
             div {
                 style: "
@@ -525,7 +542,7 @@ fn TimelineItem(props: TimelineItemProps) -> Element {
                     align-items: center;
                     gap: 8px;
                 ",
-                
+
                 div {
                     style: "
                         width: 8px;
@@ -534,7 +551,7 @@ fn TimelineItem(props: TimelineItemProps) -> Element {
                         border-radius: 50%;
                     ",
                 }
-                
+
                 div {
                     style: "
                         font-size: 13px;
@@ -546,7 +563,7 @@ fn TimelineItem(props: TimelineItemProps) -> Element {
                     "{get_operation_path(&props.operation.operation)}"
                 }
             }
-            
+
             // Timeline bar
             div {
                 style: "
@@ -556,7 +573,7 @@ fn TimelineItem(props: TimelineItemProps) -> Element {
                     overflow: hidden;
                     position: relative;
                 ",
-                
+
                 if let Some(progress) = progress {
                     div {
                         style: "
@@ -571,7 +588,7 @@ fn TimelineItem(props: TimelineItemProps) -> Element {
                             align-items: center;
                             padding: 0 8px;
                         ",
-                        
+
                         if progress.progress_percentage > 20.0 {
                             div {
                                 style: "
@@ -602,7 +619,7 @@ struct OperationProgressItemProps {
 #[component]
 fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
     let progress = props.progress.as_ref();
-    
+
     let (icon, color) = match &props.operation.operation {
         FileOperation::Create { .. } => ("🆕", props.theme.success.clone()),
         FileOperation::Update { .. } => ("✏️", props.theme.warning.clone()),
@@ -610,7 +627,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
         FileOperation::Rename { .. } => ("🔄", props.theme.primary.clone()),
         FileOperation::Append { .. } => ("📝", props.theme.info.clone()),
     };
-    
+
     let status_icon = match progress.map(|p| &p.status) {
         Some(OperationStatus::Completed) => Some(("✓", props.theme.success.clone())),
         Some(OperationStatus::Failed) => Some(("✗", props.theme.error.clone())),
@@ -619,7 +636,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
         Some(OperationStatus::Skipped) => Some(("⏭️", props.theme.text_secondary.clone())),
         _ => None,
     };
-    
+
     rsx! {
         div {
             style: "
@@ -629,7 +646,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                 overflow: hidden;
                 transition: all 0.2s;
             ",
-            
+
             // Header
             div {
                 style: "
@@ -639,15 +656,15 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                     cursor: pointer;
                 ",
                 onclick: move |_| props.on_click.call(()),
-                
+
                 span {
                     style: "font-size: 18px; margin-right: 12px;",
                     "{icon}"
                 }
-                
+
                 div {
                     style: "flex: 1;",
-                    
+
                     div {
                         style: "
                             font-size: 14px;
@@ -656,7 +673,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                         ",
                         "{get_operation_path(&props.operation.operation)}"
                     }
-                    
+
                     if let Some(progress) = progress {
                         div {
                             style: "
@@ -667,7 +684,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                         }
                     }
                 }
-                
+
                 if let Some((icon, color)) = status_icon {
                     div {
                         style: "
@@ -678,7 +695,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                         "{icon}"
                     }
                 }
-                
+
                 // Progress percentage
                 if let Some(progress) = progress {
                     if progress.status == OperationStatus::Processing || progress.status == OperationStatus::Executing {
@@ -694,7 +711,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                     }
                 }
             }
-            
+
             // Progress bar
             if let Some(progress) = progress {
                 if progress.status == OperationStatus::Processing || progress.status == OperationStatus::Executing {
@@ -703,7 +720,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                             height: 3px;
                             background: {props.theme.background};
                         ",
-                        
+
                         div {
                             style: "
                                 height: 100%;
@@ -715,7 +732,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                     }
                 }
             }
-            
+
             // Expanded details
             if props.is_expanded {
                 if let Some(progress) = progress {
@@ -725,7 +742,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                             border-top: 1px solid {props.theme.border};
                             font-size: 13px;
                         ",
-                        
+
                         if let Some(error) = &progress.error {
                             div {
                                 style: "
@@ -738,10 +755,10 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                                 "Error: {error}"
                             }
                         }
-                        
+
                         div {
                             style: "display: flex; gap: 24px;",
-                            
+
                             div {
                                 span {
                                     style: "color: {props.theme.text_secondary};",
@@ -752,7 +769,7 @@ fn OperationProgressItem(props: OperationProgressItemProps) -> Element {
                                     "{format_time_ago(progress.started_at)}"
                                 }
                             }
-                            
+
                             if let Some(completed_at) = progress.completed_at {
                                 div {
                                     span {
@@ -783,14 +800,17 @@ struct StatusFeedProps {
 #[component]
 fn StatusFeed(props: StatusFeedProps) -> Element {
     // Get recent status updates
-    let mut recent_updates: Vec<(usize, &OperationProgress)> = props.operation_progress
+    let mut recent_updates: Vec<(usize, &OperationProgress)> = props
+        .operation_progress
         .iter()
-        .filter(|(_, p)| p.status == OperationStatus::Processing || p.status == OperationStatus::Executing)
+        .filter(|(_, p)| {
+            p.status == OperationStatus::Processing || p.status == OperationStatus::Executing
+        })
         .map(|(id, p)| (*id, p))
         .collect();
-    
+
     recent_updates.sort_by_key(|(_, p)| std::cmp::Reverse(p.started_at));
-    
+
     rsx! {
         div {
             style: "
@@ -800,12 +820,12 @@ fn StatusFeed(props: StatusFeedProps) -> Element {
                 border-radius: 8px;
                 padding: 16px;
             ",
-            
+
             h4 {
                 style: "margin: 0 0 12px; color: {props.theme.text};",
                 "🔄 Live Status Feed"
             }
-            
+
             if recent_updates.is_empty() {
                 div {
                     style: "
@@ -819,7 +839,7 @@ fn StatusFeed(props: StatusFeedProps) -> Element {
             } else {
                 div {
                     style: "display: flex; flex-direction: column; gap: 8px;",
-                    
+
                     for (id, progress) in recent_updates.into_iter().take(5) {
                         StatusFeedItem {
                             operation_id: id,
@@ -848,7 +868,7 @@ fn StatusFeedItem(props: StatusFeedItemProps) -> Element {
         OperationStatus::Executing => props.theme.primary.clone(),
         _ => props.theme.text_secondary.clone(),
     };
-    
+
     rsx! {
         div {
             style: "
@@ -859,11 +879,11 @@ fn StatusFeedItem(props: StatusFeedItemProps) -> Element {
                 background: {props.theme.background};
                 border-radius: 4px;
             ",
-            
+
             // Animated indicator
             div {
                 style: "position: relative;",
-                
+
                 div {
                     style: "
                         width: 8px;
@@ -872,7 +892,7 @@ fn StatusFeedItem(props: StatusFeedItemProps) -> Element {
                         border-radius: 50%;
                     ",
                 }
-                
+
                 div {
                     style: "
                         position: absolute;
@@ -886,10 +906,10 @@ fn StatusFeedItem(props: StatusFeedItemProps) -> Element {
                     ",
                 }
             }
-            
+
             div {
                 style: "flex: 1;",
-                
+
                 div {
                     style: "
                         font-size: 13px;
@@ -897,7 +917,7 @@ fn StatusFeedItem(props: StatusFeedItemProps) -> Element {
                     ",
                     "Operation #{props.operation_id}"
                 }
-                
+
                 div {
                     style: "
                         font-size: 12px;
@@ -906,7 +926,7 @@ fn StatusFeedItem(props: StatusFeedItemProps) -> Element {
                     "{props.progress.current_step}"
                 }
             }
-            
+
             div {
                 style: "
                     font-size: 12px;
@@ -932,7 +952,7 @@ fn StatItem(props: StatItemProps) -> Element {
     rsx! {
         div {
             style: "text-align: center;",
-            
+
             div {
                 style: "
                     font-size: 24px;
@@ -942,7 +962,7 @@ fn StatItem(props: StatItemProps) -> Element {
                 ",
                 "{props.value}"
             }
-            
+
             div {
                 style: "
                     font-size: 12px;
@@ -969,12 +989,12 @@ fn CircularProgress(props: CircularProgressProps) -> Element {
     let radius = props.size / 2 - 4;
     let circumference = 2.0 * std::f32::consts::PI * radius as f32;
     let stroke_dashoffset = circumference * (1.0 - props.value / 100.0);
-    
+
     rsx! {
         svg {
             width: "{props.size}",
             height: "{props.size}",
-            
+
             circle {
                 cx: "{props.size / 2}",
                 cy: "{props.size / 2}",
@@ -983,7 +1003,7 @@ fn CircularProgress(props: CircularProgressProps) -> Element {
                 stroke: props.theme.border,
                 stroke_width: "4",
             }
-            
+
             circle {
                 cx: "{props.size / 2}",
                 cy: "{props.size / 2}",
@@ -996,7 +1016,7 @@ fn CircularProgress(props: CircularProgressProps) -> Element {
                 transform: "rotate(-90 {props.size / 2} {props.size / 2})",
                 style: "transition: stroke-dashoffset 0.3s;",
             }
-            
+
             text {
                 x: "{props.size / 2}",
                 y: "{props.size / 2}",
@@ -1013,18 +1033,23 @@ fn CircularProgress(props: CircularProgressProps) -> Element {
 
 /// Helper functions
 
-fn calculate_overall_progress(progress: &HashMap<usize, OperationProgress>) -> (f32, ProgressStats) {
+fn calculate_overall_progress(
+    progress: &HashMap<usize, OperationProgress>,
+) -> (f32, ProgressStats) {
     let total = progress.len();
     if total == 0 {
-        return (0.0, ProgressStats {
-            total: 0,
-            completed: 0,
-            failed: 0,
-            skipped: 0,
-            in_progress: 0,
-        });
+        return (
+            0.0,
+            ProgressStats {
+                total: 0,
+                completed: 0,
+                failed: 0,
+                skipped: 0,
+                in_progress: 0,
+            },
+        );
     }
-    
+
     let mut stats = ProgressStats {
         total,
         completed: 0,
@@ -1032,7 +1057,7 @@ fn calculate_overall_progress(progress: &HashMap<usize, OperationProgress>) -> (
         skipped: 0,
         in_progress: 0,
     };
-    
+
     for (_, op_progress) in progress {
         match op_progress.status {
             OperationStatus::Completed => stats.completed += 1,
@@ -1042,9 +1067,10 @@ fn calculate_overall_progress(progress: &HashMap<usize, OperationProgress>) -> (
             _ => {}
         }
     }
-    
-    let progress_percentage = ((stats.completed + stats.failed + stats.skipped) as f32 / total as f32) * 100.0;
-    
+
+    let progress_percentage =
+        ((stats.completed + stats.failed + stats.skipped) as f32 / total as f32) * 100.0;
+
     (progress_percentage, stats)
 }
 
@@ -1062,7 +1088,7 @@ fn format_duration(duration: Duration) -> String {
 fn format_time_ago(instant: Instant) -> String {
     let elapsed = instant.elapsed();
     let secs = elapsed.as_secs();
-    
+
     if secs < 5 {
         "just now".to_string()
     } else if secs < 60 {
@@ -1076,10 +1102,10 @@ fn format_time_ago(instant: Instant) -> String {
 
 fn get_operation_path(operation: &FileOperation) -> String {
     match operation {
-        FileOperation::Create { path, .. } |
-        FileOperation::Update { path, .. } |
-        FileOperation::Append { path, .. } |
-        FileOperation::Delete { path } => path.to_string_lossy().to_string(),
+        FileOperation::Create { path, .. }
+        | FileOperation::Update { path, .. }
+        | FileOperation::Append { path, .. }
+        | FileOperation::Delete { path } => path.to_string_lossy().to_string(),
         FileOperation::Rename { from, to } => format!("{} → {}", from.display(), to.display()),
     }
 }

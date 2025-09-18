@@ -2,29 +2,29 @@
 // This module provides Claude Code-like abilities to create, modify, and manage files
 // based on consensus decisions and AI-enhanced auto-accept logic
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_analysis::{
-    OperationContext as ConsensusOperationContext, OperationAnalysis as ConsensusOperationAnalysis,
-    UnifiedScore, OperationGroups, ComponentScores, ScoringFactors
-};
-use crate::consensus::smart_decision_engine::{SmartDecisionEngine, ExecutionDecision};
-use crate::consensus::operation_intelligence::{
-    OperationIntelligenceCoordinator, OperationAnalysis as IntelligenceOperationAnalysis,
-    OperationContext as IntelligenceOperationContext
-};
 use crate::consensus::ai_operation_parser::{AIOperationParser, ParsedOperations};
-use crate::consensus::operation_preview_generator::{
-    OperationPreviewGenerator, PreviewConfig, OperationPreviewSet
-};
 use crate::consensus::file_planner::{
-    OperationPlan, ExecutionPlanDecision, SafetyCheck, BatchOperationPlan
+    BatchOperationPlan, ExecutionPlanDecision, OperationPlan, SafetyCheck,
 };
-use std::collections::HashMap;
+use crate::consensus::operation_analysis::{
+    ComponentScores, OperationAnalysis as ConsensusOperationAnalysis,
+    OperationContext as ConsensusOperationContext, OperationGroups, ScoringFactors, UnifiedScore,
+};
+use crate::consensus::operation_intelligence::{
+    OperationAnalysis as IntelligenceOperationAnalysis,
+    OperationContext as IntelligenceOperationContext, OperationIntelligenceCoordinator,
+};
+use crate::consensus::operation_preview_generator::{
+    OperationPreviewGenerator, OperationPreviewSet, PreviewConfig,
+};
+use crate::consensus::smart_decision_engine::{ExecutionDecision, SmartDecisionEngine};
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::core::error::HiveError;
-use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
-use std::time::{SystemTime, Duration};
-use serde::{Serialize, Deserialize};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 /// Represents the outcome of a file operation execution
@@ -57,25 +57,25 @@ pub struct BackupInfo {
 pub struct ExecutionSummary {
     /// Total number of operations found
     pub total_operations: usize,
-    
+
     /// Number of successfully executed operations
     pub successful_operations: usize,
-    
+
     /// Number of failed operations
     pub failed_operations: usize,
-    
+
     /// Detailed results for each operation
     pub results: Vec<ExecutionResult>,
-    
+
     /// Parser confidence score
     pub parser_confidence: f32,
-    
+
     /// Warnings from parser
     pub parser_warnings: Vec<String>,
-    
+
     /// Code blocks that couldn't be parsed
     pub unparsed_blocks: Vec<String>,
-    
+
     /// Total execution time
     pub total_execution_time: Duration,
 }
@@ -100,13 +100,27 @@ impl Default for ExecutorConfig {
             dry_run_mode: false,
             max_file_size: 10 * 1024 * 1024, // 10MB
             allowed_extensions: vec![
-                "rs".to_string(), "js".to_string(), "ts".to_string(),
-                "py".to_string(), "java".to_string(), "cpp".to_string(),
-                "c".to_string(), "h".to_string(), "hpp".to_string(),
-                "go".to_string(), "rb".to_string(), "php".to_string(),
-                "md".to_string(), "txt".to_string(), "json".to_string(),
-                "yaml".to_string(), "yml".to_string(), "toml".to_string(),
-                "html".to_string(), "css".to_string(), "scss".to_string(),
+                "rs".to_string(),
+                "js".to_string(),
+                "ts".to_string(),
+                "py".to_string(),
+                "java".to_string(),
+                "cpp".to_string(),
+                "c".to_string(),
+                "h".to_string(),
+                "hpp".to_string(),
+                "go".to_string(),
+                "rb".to_string(),
+                "php".to_string(),
+                "md".to_string(),
+                "txt".to_string(),
+                "json".to_string(),
+                "yaml".to_string(),
+                "yml".to_string(),
+                "toml".to_string(),
+                "html".to_string(),
+                "css".to_string(),
+                "scss".to_string(),
             ],
             forbidden_paths: vec![
                 PathBuf::from("/etc"),
@@ -221,7 +235,7 @@ impl FileOperationExecutor {
             collapse_unchanged: true,
             unified_diff: true,
         };
-        
+
         Self {
             backup_manager: BackupManager::new(config.create_backups),
             syntax_validator: SyntaxValidator::new(config.validate_syntax),
@@ -251,8 +265,9 @@ impl FileOperationExecutor {
             project_metadata: HashMap::new(), // Could be populated from project files
         };
 
-        // Step 2: AI-enhanced analysis  
-        let intelligence_analysis = self.intelligence_coordinator
+        // Step 2: AI-enhanced analysis
+        let intelligence_analysis = self
+            .intelligence_coordinator
             .analyze_operation(&operation, &intelligence_context)
             .await?;
 
@@ -264,28 +279,44 @@ impl FileOperationExecutor {
         );
 
         // Step 4: Smart decision making
-        let decision = self.decision_engine
+        let decision = self
+            .decision_engine
             .make_decision(&consensus_analysis)
             .await?;
 
         // Step 5: Execute based on decision
         match decision {
-            ExecutionDecision::AutoExecute { reason, confidence, risk_level } => {
-                log::info!("Auto-executing operation with {}% confidence, {}% risk: {}", 
-                          confidence, risk_level, reason);
-                self.execute_with_safety_checks(operation, operation_id, start_time).await
+            ExecutionDecision::AutoExecute {
+                reason,
+                confidence,
+                risk_level,
+            } => {
+                log::info!(
+                    "Auto-executing operation with {}% confidence, {}% risk: {}",
+                    confidence,
+                    risk_level,
+                    reason
+                );
+                self.execute_with_safety_checks(operation, operation_id, start_time)
+                    .await
             }
-            ExecutionDecision::RequireConfirmation { warnings, suggestions, .. } => {
+            ExecutionDecision::RequireConfirmation {
+                warnings,
+                suggestions,
+                ..
+            } => {
                 log::warn!("Operation requires user confirmation: {:?}", warnings);
-                Err(HiveError::OperationRequiresConfirmation { 
+                Err(HiveError::OperationRequiresConfirmation {
                     operation_id,
                     warnings,
                     suggestions,
                 })
             }
-            ExecutionDecision::Block { critical_issues, .. } => {
+            ExecutionDecision::Block {
+                critical_issues, ..
+            } => {
                 log::error!("Operation blocked for safety: {:?}", critical_issues);
-                Err(HiveError::OperationBlocked { 
+                Err(HiveError::OperationBlocked {
                     operation_id,
                     reasons: critical_issues,
                 })
@@ -312,12 +343,14 @@ impl FileOperationExecutor {
         };
 
         // Analyze all operations first
-        let intelligence_analyses = self.intelligence_coordinator
+        let intelligence_analyses = self
+            .intelligence_coordinator
             .analyze_operations_batch(&operations, &intelligence_context)
             .await?;
 
         // Convert to consensus format
-        let consensus_analyses: Vec<_> = operations.iter()
+        let consensus_analyses: Vec<_> = operations
+            .iter()
             .zip(intelligence_analyses.into_iter())
             .map(|(op, intel_analysis)| {
                 convert_analysis(intel_analysis, vec![op.clone()], context.clone())
@@ -326,13 +359,16 @@ impl FileOperationExecutor {
 
         // Execute operations in dependency order
         for (operation, analysis) in operations.into_iter().zip(consensus_analyses.into_iter()) {
-            match self.execute_operation_with_analysis(operation.clone(), analysis, context).await {
+            match self
+                .execute_operation_with_analysis(operation.clone(), analysis, context)
+                .await
+            {
                 Ok(result) => {
                     let success = matches!(result.decision, ExecutionPlanDecision::Approved { .. });
                     if success {
                         successful_operations.push(operation.clone());
                     }
-                    
+
                     // Convert OperationPlan to ExecutionResult
                     let execution_result = ExecutionResult {
                         operation_id: result.operation_id,
@@ -344,25 +380,28 @@ impl FileOperationExecutor {
                         backup_created: None,
                         rollback_required: false,
                         files_affected: match &result.operation {
-                            FileOperation::Create { path, .. } |
-                            FileOperation::Update { path, .. } |
-                            FileOperation::Delete { path } |
-                            FileOperation::Append { path, .. } => vec![path.clone()],
+                            FileOperation::Create { path, .. }
+                            | FileOperation::Update { path, .. }
+                            | FileOperation::Delete { path }
+                            | FileOperation::Append { path, .. } => vec![path.clone()],
                             FileOperation::Rename { from, to } => vec![from.clone(), to.clone()],
                         },
                     };
                     results.push(execution_result);
                 }
                 Err(e) => {
-                    log::error!("Operation failed, rolling back previous operations: {:?}", e);
-                    
+                    log::error!(
+                        "Operation failed, rolling back previous operations: {:?}",
+                        e
+                    );
+
                     // Rollback all successful operations
                     for prev_op in successful_operations.iter().rev() {
                         if let Err(rollback_error) = self.rollback_operation(prev_op).await {
                             log::error!("Rollback failed: {:?}", rollback_error);
                         }
                     }
-                    
+
                     return Err(e);
                 }
             }
@@ -385,15 +424,14 @@ impl FileOperationExecutor {
 
         match decision {
             ExecutionDecision::AutoExecute { .. } => {
-                self.execute_with_safety_checks(operation, operation_id, start_time).await
+                self.execute_with_safety_checks(operation, operation_id, start_time)
+                    .await
             }
-            _ => {
-                Err(HiveError::OperationRequiresConfirmation { 
-                    operation_id,
-                    warnings: vec!["Batch operation requires individual confirmation".to_string()],
-                    suggestions: vec!["Execute operations individually".to_string()],
-                })
-            }
+            _ => Err(HiveError::OperationRequiresConfirmation {
+                operation_id,
+                warnings: vec!["Batch operation requires individual confirmation".to_string()],
+                suggestions: vec!["Execute operations individually".to_string()],
+            }),
         }
     }
 
@@ -422,12 +460,8 @@ impl FileOperationExecutor {
             FileOperation::Update { path, content } => {
                 self.execute_update_file(path, content).await
             }
-            FileOperation::Delete { path } => {
-                self.execute_delete_file(path).await
-            }
-            FileOperation::Rename { from, to } => {
-                self.execute_move_file(from, to).await
-            }
+            FileOperation::Delete { path } => self.execute_delete_file(path).await,
+            FileOperation::Rename { from, to } => self.execute_move_file(from, to).await,
             FileOperation::Append { path, content } => {
                 self.execute_append_file(path, content).await
             }
@@ -440,20 +474,28 @@ impl FileOperationExecutor {
                 // Validate syntax if enabled
                 if self.config.validate_syntax {
                     for file_path in &files_affected {
-                        if let Err(syntax_error) = self.syntax_validator.validate_file(file_path).await {
-                            log::warn!("Syntax validation failed for {}: {:?}", 
-                                     file_path.display(), syntax_error);
-                            
+                        if let Err(syntax_error) =
+                            self.syntax_validator.validate_file(file_path).await
+                        {
+                            log::warn!(
+                                "Syntax validation failed for {}: {:?}",
+                                file_path.display(),
+                                syntax_error
+                            );
+
                             // Rollback if syntax is invalid
                             if let Some(backup) = &backup_info {
                                 let _ = self.backup_manager.restore_backup(&backup).await;
                             }
-                            
+
                             return Ok(OperationPlan {
                                 operation_id,
                                 operation,
                                 decision: ExecutionPlanDecision::Blocked {
-                                    reasons: vec![format!("Syntax validation failed: {:?}", syntax_error)],
+                                    reasons: vec![format!(
+                                        "Syntax validation failed: {:?}",
+                                        syntax_error
+                                    )],
                                 },
                                 safety_checks: Vec::new(),
                                 backup_required: false,
@@ -480,30 +522,28 @@ impl FileOperationExecutor {
                     created_at: start_time,
                 })
             }
-            Err(error) => {
-                Ok(OperationPlan {
-                    operation_id,
-                    operation,
-                    decision: ExecutionPlanDecision::Blocked {
-                        reasons: vec![format!("Operation failed: {}", error)],
-                    },
-                    safety_checks: Vec::new(),
-                    backup_required: backup_info.is_some(),
-                    validation_required: false,
-                    analysis: ConsensusOperationAnalysis::default(),
-                    created_at: start_time,
-                })
-            }
+            Err(error) => Ok(OperationPlan {
+                operation_id,
+                operation,
+                decision: ExecutionPlanDecision::Blocked {
+                    reasons: vec![format!("Operation failed: {}", error)],
+                },
+                safety_checks: Vec::new(),
+                backup_required: backup_info.is_some(),
+                validation_required: false,
+                analysis: ConsensusOperationAnalysis::default(),
+                created_at: start_time,
+            }),
         }
     }
 
     /// Validate operation safety before execution
     fn validate_operation_safety(&self, operation: &FileOperation) -> Result<(), HiveError> {
         let path = match operation {
-            FileOperation::Create { path, .. } |
-            FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } |
-            FileOperation::Append { path, .. } => path,
+            FileOperation::Create { path, .. }
+            | FileOperation::Update { path, .. }
+            | FileOperation::Delete { path }
+            | FileOperation::Append { path, .. } => path,
             FileOperation::Rename { from, .. } => from,
         };
 
@@ -512,15 +552,22 @@ impl FileOperationExecutor {
             if path.starts_with(forbidden) {
                 return Err(HiveError::OperationBlocked {
                     operation_id: Uuid::new_v4(),
-                    reasons: vec![format!("Path {} is in forbidden directory {}", 
-                                        path.display(), forbidden.display())],
+                    reasons: vec![format!(
+                        "Path {} is in forbidden directory {}",
+                        path.display(),
+                        forbidden.display()
+                    )],
                 });
             }
         }
 
         // Check file extension
         if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
-            if !self.config.allowed_extensions.contains(&extension.to_string()) {
+            if !self
+                .config
+                .allowed_extensions
+                .contains(&extension.to_string())
+            {
                 return Err(HiveError::OperationBlocked {
                     operation_id: Uuid::new_v4(),
                     reasons: vec![format!("File extension '{}' is not allowed", extension)],
@@ -532,7 +579,11 @@ impl FileOperationExecutor {
     }
 
     /// Execute file creation
-    async fn execute_create_file(&self, path: &Path, content: &str) -> Result<Vec<PathBuf>, HiveError> {
+    async fn execute_create_file(
+        &self,
+        path: &Path,
+        content: &str,
+    ) -> Result<Vec<PathBuf>, HiveError> {
         if self.config.dry_run_mode {
             log::info!("DRY RUN: Would create file {}", path.display());
             return Ok(vec![path.to_path_buf()]);
@@ -542,35 +593,40 @@ impl FileOperationExecutor {
         if content.len() as u64 > self.config.max_file_size {
             return Err(HiveError::OperationBlocked {
                 operation_id: Uuid::new_v4(),
-                reasons: vec![format!("File size {} exceeds limit {}", 
-                                    content.len(), self.config.max_file_size)],
+                reasons: vec![format!(
+                    "File size {} exceeds limit {}",
+                    content.len(),
+                    self.config.max_file_size
+                )],
             });
         }
 
         // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| HiveError::FileOperationFailed {
-                    operation: "create_parent_dirs".to_string(),
-                    path: parent.to_path_buf(),
-                    reason: e.to_string(),
-                })?;
+            fs::create_dir_all(parent).map_err(|e| HiveError::FileOperationFailed {
+                operation: "create_parent_dirs".to_string(),
+                path: parent.to_path_buf(),
+                reason: e.to_string(),
+            })?;
         }
 
         // Write the file
-        fs::write(path, content)
-            .map_err(|e| HiveError::FileOperationFailed {
-                operation: "create_file".to_string(),
-                path: path.to_path_buf(),
-                reason: e.to_string(),
-            })?;
+        fs::write(path, content).map_err(|e| HiveError::FileOperationFailed {
+            operation: "create_file".to_string(),
+            path: path.to_path_buf(),
+            reason: e.to_string(),
+        })?;
 
         log::info!("Successfully created file: {}", path.display());
         Ok(vec![path.to_path_buf()])
     }
 
     /// Execute file update
-    async fn execute_update_file(&self, path: &Path, content: &str) -> Result<Vec<PathBuf>, HiveError> {
+    async fn execute_update_file(
+        &self,
+        path: &Path,
+        content: &str,
+    ) -> Result<Vec<PathBuf>, HiveError> {
         if self.config.dry_run_mode {
             log::info!("DRY RUN: Would update file {}", path.display());
             return Ok(vec![path.to_path_buf()]);
@@ -589,18 +645,20 @@ impl FileOperationExecutor {
         if content.len() as u64 > self.config.max_file_size {
             return Err(HiveError::OperationBlocked {
                 operation_id: Uuid::new_v4(),
-                reasons: vec![format!("File size {} exceeds limit {}", 
-                                    content.len(), self.config.max_file_size)],
+                reasons: vec![format!(
+                    "File size {} exceeds limit {}",
+                    content.len(),
+                    self.config.max_file_size
+                )],
             });
         }
 
         // Write the updated content
-        fs::write(path, content)
-            .map_err(|e| HiveError::FileOperationFailed {
-                operation: "update_file".to_string(),
-                path: path.to_path_buf(),
-                reason: e.to_string(),
-            })?;
+        fs::write(path, content).map_err(|e| HiveError::FileOperationFailed {
+            operation: "update_file".to_string(),
+            path: path.to_path_buf(),
+            reason: e.to_string(),
+        })?;
 
         log::info!("Successfully updated file: {}", path.display());
         Ok(vec![path.to_path_buf()])
@@ -623,12 +681,11 @@ impl FileOperationExecutor {
         }
 
         // Delete the file
-        fs::remove_file(path)
-            .map_err(|e| HiveError::FileOperationFailed {
-                operation: "delete_file".to_string(),
-                path: path.to_path_buf(),
-                reason: e.to_string(),
-            })?;
+        fs::remove_file(path).map_err(|e| HiveError::FileOperationFailed {
+            operation: "delete_file".to_string(),
+            path: path.to_path_buf(),
+            reason: e.to_string(),
+        })?;
 
         log::info!("Successfully deleted file: {}", path.display());
         Ok(vec![path.to_path_buf()])
@@ -637,7 +694,11 @@ impl FileOperationExecutor {
     /// Execute file move
     async fn execute_move_file(&self, from: &Path, to: &Path) -> Result<Vec<PathBuf>, HiveError> {
         if self.config.dry_run_mode {
-            log::info!("DRY RUN: Would move file {} to {}", from.display(), to.display());
+            log::info!(
+                "DRY RUN: Would move file {} to {}",
+                from.display(),
+                to.display()
+            );
             return Ok(vec![from.to_path_buf(), to.to_path_buf()]);
         }
 
@@ -652,28 +713,34 @@ impl FileOperationExecutor {
 
         // Create parent directories for destination
         if let Some(parent) = to.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| HiveError::FileOperationFailed {
-                    operation: "create_parent_dirs".to_string(),
-                    path: parent.to_path_buf(),
-                    reason: e.to_string(),
-                })?;
+            fs::create_dir_all(parent).map_err(|e| HiveError::FileOperationFailed {
+                operation: "create_parent_dirs".to_string(),
+                path: parent.to_path_buf(),
+                reason: e.to_string(),
+            })?;
         }
 
         // Move the file
-        fs::rename(from, to)
-            .map_err(|e| HiveError::FileOperationFailed {
-                operation: "move_file".to_string(),
-                path: from.to_path_buf(),
-                reason: e.to_string(),
-            })?;
+        fs::rename(from, to).map_err(|e| HiveError::FileOperationFailed {
+            operation: "move_file".to_string(),
+            path: from.to_path_buf(),
+            reason: e.to_string(),
+        })?;
 
-        log::info!("Successfully moved file from {} to {}", from.display(), to.display());
+        log::info!(
+            "Successfully moved file from {} to {}",
+            from.display(),
+            to.display()
+        );
         Ok(vec![from.to_path_buf(), to.to_path_buf()])
     }
 
     /// Execute file append
-    async fn execute_append_file(&self, path: &Path, content: &str) -> Result<Vec<PathBuf>, HiveError> {
+    async fn execute_append_file(
+        &self,
+        path: &Path,
+        content: &str,
+    ) -> Result<Vec<PathBuf>, HiveError> {
         if self.config.dry_run_mode {
             log::info!("DRY RUN: Would append to file {}", path.display());
             return Ok(vec![path.to_path_buf()]);
@@ -700,8 +767,11 @@ impl FileOperationExecutor {
         if current_size + content.len() as u64 > self.config.max_file_size {
             return Err(HiveError::OperationBlocked {
                 operation_id: Uuid::new_v4(),
-                reasons: vec![format!("File size after append {} would exceed limit {}", 
-                                    current_size + content.len() as u64, self.config.max_file_size)],
+                reasons: vec![format!(
+                    "File size after append {} would exceed limit {}",
+                    current_size + content.len() as u64,
+                    self.config.max_file_size
+                )],
             });
         }
 
@@ -735,7 +805,7 @@ impl FileOperationExecutor {
         // TODO: Implement actual rollback logic
         Ok(())
     }
-    
+
     /// Parse operations from curator response without executing them
     pub async fn parse_operations_from_curator_response(
         &self,
@@ -745,7 +815,7 @@ impl FileOperationExecutor {
         // Use the existing parse_curator_response method
         self.parse_curator_response(curator_response, context).await
     }
-    
+
     /// Analyze a single operation and get the decision without executing
     pub async fn analyze_operation_decision(
         &self,
@@ -760,26 +830,27 @@ impl FileOperationExecutor {
             related_files: Vec::new(),
             project_metadata: HashMap::new(),
         };
-        
-        // AI-enhanced analysis  
-        let intelligence_analysis = self.intelligence_coordinator
+
+        // AI-enhanced analysis
+        let intelligence_analysis = self
+            .intelligence_coordinator
             .analyze_operation(operation, &intelligence_context)
             .await?;
-        
+
         // Convert to consensus format
         let consensus_analysis = convert_analysis(
             intelligence_analysis,
             vec![operation.clone()],
             context.clone(),
         );
-        
+
         // Get decision from smart decision engine
         self.decision_engine
             .make_decision(&consensus_analysis)
             .await
             .map_err(|e| HiveError::Internal {
                 context: "decision_engine".to_string(),
-                message: format!("Failed to make decision: {}", e)
+                message: format!("Failed to make decision: {}", e),
             })
     }
 
@@ -790,7 +861,7 @@ impl FileOperationExecutor {
         context: &ConsensusOperationContext,
     ) -> Result<ExecutionSummary, HiveError> {
         let start_time = SystemTime::now();
-        
+
         // Step 1: Convert context for AI parser
         let intelligence_context = IntelligenceOperationContext {
             repository_path: context.repository_path.clone(),
@@ -801,16 +872,20 @@ impl FileOperationExecutor {
         };
 
         // Step 2: Parse curator response using AI-enhanced parser
-        let parsed = self.ai_parser
+        let parsed = self
+            .ai_parser
             .parse_response(curator_response, &intelligence_context)
             .await
-            .map_err(|e| HiveError::Internal { 
+            .map_err(|e| HiveError::Internal {
                 context: "ai_parser".to_string(),
-                message: format!("Failed to parse curator response: {}", e)
+                message: format!("Failed to parse curator response: {}", e),
             })?;
 
-        log::info!("🤖 Parsed {} operations with {}% confidence", 
-                  parsed.operations.len(), parsed.confidence);
+        log::info!(
+            "🤖 Parsed {} operations with {}% confidence",
+            parsed.operations.len(),
+            parsed.confidence
+        );
 
         // Log warnings if any
         for warning in &parsed.warnings {
@@ -824,14 +899,14 @@ impl FileOperationExecutor {
                 message: format!(
                     "Parsing confidence too low: {:.0}%. Clarifications needed: {:?}",
                     parsed.confidence, parsed.clarifications
-                )
+                ),
             });
         }
 
         // Step 3: Extract operations in dependency order
         let mut operations_in_order = Vec::new();
         let mut processed = vec![false; parsed.operations.len()];
-        
+
         // First, add operations without dependencies
         for (idx, op_meta) in parsed.operations.iter().enumerate() {
             if op_meta.dependencies.is_empty() {
@@ -839,16 +914,18 @@ impl FileOperationExecutor {
                 processed[idx] = true;
             }
         }
-        
+
         // Then, add operations with satisfied dependencies
         while operations_in_order.len() < parsed.operations.len() {
             let mut added_any = false;
-            
+
             for (idx, op_meta) in parsed.operations.iter().enumerate() {
                 if !processed[idx] {
-                    let deps_satisfied = op_meta.dependencies.iter()
+                    let deps_satisfied = op_meta
+                        .dependencies
+                        .iter()
                         .all(|&dep_idx| processed[dep_idx]);
-                    
+
                     if deps_satisfied {
                         operations_in_order.push((idx, &op_meta.operation));
                         processed[idx] = true;
@@ -856,11 +933,11 @@ impl FileOperationExecutor {
                     }
                 }
             }
-            
+
             if !added_any {
                 return Err(HiveError::Internal {
                     context: "dependency_resolution".to_string(),
-                    message: "Circular dependencies detected in operations".to_string()
+                    message: "Circular dependencies detected in operations".to_string(),
                 });
             }
         }
@@ -871,8 +948,12 @@ impl FileOperationExecutor {
         let mut failed_count = 0;
 
         for (idx, operation) in operations_in_order {
-            log::info!("Executing operation {} of {}: {:?}", 
-                      idx + 1, parsed.operations.len(), operation);
+            log::info!(
+                "Executing operation {} of {}: {:?}",
+                idx + 1,
+                parsed.operations.len(),
+                operation
+            );
 
             match self.execute_operation(operation.clone(), context).await {
                 Ok(result) => {
@@ -894,10 +975,10 @@ impl FileOperationExecutor {
                         backup_created: None,
                         rollback_required: false,
                         files_affected: match &operation {
-                            FileOperation::Create { path, .. } |
-                            FileOperation::Update { path, .. } |
-                            FileOperation::Delete { path } |
-                            FileOperation::Append { path, .. } => vec![path.clone()],
+                            FileOperation::Create { path, .. }
+                            | FileOperation::Update { path, .. }
+                            | FileOperation::Delete { path }
+                            | FileOperation::Append { path, .. } => vec![path.clone()],
                             FileOperation::Rename { from, to } => vec![from.clone(), to.clone()],
                         },
                     };
@@ -906,7 +987,7 @@ impl FileOperationExecutor {
                 Err(e) => {
                     failed_count += 1;
                     log::error!("❌ Operation execution error: {}", e);
-                    
+
                     // Create error result
                     results.push(ExecutionResult {
                         operation_id: Uuid::new_v4(),
@@ -963,7 +1044,7 @@ impl FileOperationExecutor {
             .await
             .map_err(|e| HiveError::Internal {
                 context: "ai_parser".to_string(),
-                message: format!("Failed to parse curator response: {}", e)
+                message: format!("Failed to parse curator response: {}", e),
             })
     }
 
@@ -979,7 +1060,7 @@ impl FileOperationExecutor {
             .await
             .map_err(|e| HiveError::Internal {
                 context: "preview_generator".to_string(),
-                message: format!("Failed to generate operation previews: {}", e)
+                message: format!("Failed to generate operation previews: {}", e),
             })
     }
 
@@ -991,8 +1072,10 @@ impl FileOperationExecutor {
         generate_preview: bool,
     ) -> Result<(ExecutionSummary, Option<OperationPreviewSet>), HiveError> {
         // First parse the operations
-        let parsed = self.parse_curator_response(curator_response, context).await?;
-        
+        let parsed = self
+            .parse_curator_response(curator_response, context)
+            .await?;
+
         // Generate preview if requested
         let preview = if generate_preview {
             Some(self.generate_operation_previews(&parsed, context).await?)
@@ -1001,7 +1084,9 @@ impl FileOperationExecutor {
         };
 
         // Execute the operations
-        let summary = self.parse_and_execute_curator_response(curator_response, context).await?;
+        let summary = self
+            .parse_and_execute_curator_response(curator_response, context)
+            .await?;
 
         Ok((summary, preview))
     }
@@ -1027,29 +1112,34 @@ impl BackupManager {
         }
 
         let original_path = match operation {
-            FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } |
-            FileOperation::Append { path, .. } => path.clone(),
+            FileOperation::Update { path, .. }
+            | FileOperation::Delete { path }
+            | FileOperation::Append { path, .. } => path.clone(),
             FileOperation::Rename { from, .. } => from.clone(),
             FileOperation::Create { .. } => {
                 // No backup needed for create operations
-                return Err(HiveError::BackupError("No backup needed for create operation".to_string()));
+                return Err(HiveError::BackupError(
+                    "No backup needed for create operation".to_string(),
+                ));
             }
         };
 
         if !original_path.exists() {
-            return Err(HiveError::BackupError("Original file does not exist".to_string()));
+            return Err(HiveError::BackupError(
+                "Original file does not exist".to_string(),
+            ));
         }
 
         // Create backup directory
-        fs::create_dir_all(&self.backup_dir)
-            .map_err(|e| HiveError::BackupError(e.to_string()))?;
+        fs::create_dir_all(&self.backup_dir).map_err(|e| HiveError::BackupError(e.to_string()))?;
 
         // Generate backup path
         let backup_id = Uuid::new_v4();
-        let backup_filename = format!("{}_{}", 
-                                    backup_id.to_string(), 
-                                    original_path.file_name().unwrap().to_string_lossy());
+        let backup_filename = format!(
+            "{}_{}",
+            backup_id.to_string(),
+            original_path.file_name().unwrap().to_string_lossy()
+        );
         let backup_path = self.backup_dir.join(backup_filename);
 
         // Copy file to backup location
@@ -1057,8 +1147,8 @@ impl BackupManager {
             .map_err(|e| HiveError::BackupError(e.to_string()))?;
 
         // Calculate file hash for verification
-        let file_content = fs::read(&original_path)
-            .map_err(|e| HiveError::BackupError(e.to_string()))?;
+        let file_content =
+            fs::read(&original_path).map_err(|e| HiveError::BackupError(e.to_string()))?;
         let file_hash = format!("{:x}", md5::compute(file_content));
 
         Ok(BackupInfo {
@@ -1073,16 +1163,20 @@ impl BackupManager {
 
     pub async fn restore_backup(&self, backup_info: &BackupInfo) -> Result<(), HiveError> {
         if !backup_info.backup_path.exists() {
-            return Err(HiveError::BackupError("Backup file does not exist".to_string()));
+            return Err(HiveError::BackupError(
+                "Backup file does not exist".to_string(),
+            ));
         }
 
         // Restore the file
         fs::copy(&backup_info.backup_path, &backup_info.original_path)
             .map_err(|e| HiveError::BackupError(e.to_string()))?;
 
-        log::info!("Restored file from backup: {} -> {}", 
-                  backup_info.backup_path.display(), 
-                  backup_info.original_path.display());
+        log::info!(
+            "Restored file from backup: {} -> {}",
+            backup_info.backup_path.display(),
+            backup_info.original_path.display()
+        );
 
         Ok(())
     }
@@ -1103,9 +1197,7 @@ impl SyntaxValidator {
             return Ok(());
         }
 
-        let extension = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         match extension {
             "rs" => self.validate_rust_syntax(path).await,
@@ -1117,11 +1209,10 @@ impl SyntaxValidator {
 
     async fn validate_rust_syntax(&self, path: &Path) -> Result<(), HiveError> {
         // Basic Rust syntax validation
-        let content = fs::read_to_string(path)
-            .map_err(|e| HiveError::SyntaxValidationError {
-                file: path.to_path_buf(),
-                message: e.to_string(),
-            })?;
+        let content = fs::read_to_string(path).map_err(|e| HiveError::SyntaxValidationError {
+            file: path.to_path_buf(),
+            message: e.to_string(),
+        })?;
 
         // Check for basic syntax issues
         if content.contains("fn main(") && !content.contains("}") {
@@ -1148,10 +1239,10 @@ impl SyntaxValidator {
     /// Get affected files from operation
     fn get_affected_files(&self, operation: &FileOperation) -> Vec<PathBuf> {
         match operation {
-            FileOperation::Create { path, .. } |
-            FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } |
-            FileOperation::Append { path, .. } => vec![path.clone()],
+            FileOperation::Create { path, .. }
+            | FileOperation::Update { path, .. }
+            | FileOperation::Delete { path }
+            | FileOperation::Append { path, .. } => vec![path.clone()],
             FileOperation::Rename { from, to } => vec![from.clone(), to.clone()],
         }
     }

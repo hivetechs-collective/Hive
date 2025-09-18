@@ -157,7 +157,10 @@ impl ProblemsUpdateManager {
 
     /// Initialize the update manager
     pub async fn initialize(&mut self) -> Result<()> {
-        info!("🔄 Initializing problems update manager for: {}", self.workspace_path.display());
+        info!(
+            "🔄 Initializing problems update manager for: {}",
+            self.workspace_path.display()
+        );
 
         // Set up file system watching
         self.setup_file_watcher().await?;
@@ -175,12 +178,7 @@ impl ProblemsUpdateManager {
         let mut watcher = notify::recommended_watcher(fs_sender)?;
 
         // Watch source directories
-        let watch_paths = [
-            "src",
-            "tests",
-            "examples",
-            "benches",
-        ];
+        let watch_paths = ["src", "tests", "examples", "benches"];
 
         for watch_path in &watch_paths {
             let path = self.workspace_path.join(watch_path);
@@ -228,7 +226,14 @@ impl ProblemsUpdateManager {
         let debounce_timers_clone = self.debounce_timers.clone();
 
         tokio::spawn(async move {
-            Self::file_watcher_loop(fs_receiver, sender_clone, workspace_clone, settings_clone, debounce_timers_clone).await;
+            Self::file_watcher_loop(
+                fs_receiver,
+                sender_clone,
+                workspace_clone,
+                settings_clone,
+                debounce_timers_clone,
+            )
+            .await;
         });
 
         Ok(())
@@ -245,7 +250,9 @@ impl ProblemsUpdateManager {
         loop {
             match receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(Ok(event)) => {
-                    if let Some((paths, change_type)) = Self::process_file_event(&event, &workspace_path).await {
+                    if let Some((paths, change_type)) =
+                        Self::process_file_event(&event, &workspace_path).await
+                    {
                         // Check debouncing
                         let should_send = {
                             let settings_read = settings.read().await;
@@ -253,7 +260,7 @@ impl ProblemsUpdateManager {
                                 let mut timers = debounce_timers.write().await;
                                 let now = Instant::now();
                                 let debounce_duration = settings_read.frequency.file_watch_debounce;
-                                
+
                                 let mut should_send = false;
                                 for path in &paths {
                                     if let Some(last_time) = timers.get(path) {
@@ -310,13 +317,18 @@ impl ProblemsUpdateManager {
 
                         // Determine change type and relevance
                         if path_str.ends_with(".rs") {
-                            change_type = if path_str.contains("/tests/") || path_str.starts_with("tests/") {
-                                FileChangeType::Test
-                            } else {
-                                FileChangeType::SourceCode
-                            };
+                            change_type =
+                                if path_str.contains("/tests/") || path_str.starts_with("tests/") {
+                                    FileChangeType::Test
+                                } else {
+                                    FileChangeType::SourceCode
+                                };
                             relevant_paths.push(path.clone());
-                        } else if path_str.ends_with(".js") || path_str.ends_with(".ts") || path_str.ends_with(".tsx") || path_str.ends_with(".jsx") {
+                        } else if path_str.ends_with(".js")
+                            || path_str.ends_with(".ts")
+                            || path_str.ends_with(".tsx")
+                            || path_str.ends_with(".jsx")
+                        {
                             change_type = FileChangeType::SourceCode;
                             relevant_paths.push(path.clone());
                         } else if Self::is_config_file(&path_str) {
@@ -345,12 +357,23 @@ impl ProblemsUpdateManager {
     /// Check if a file is a configuration file
     fn is_config_file(path_str: &str) -> bool {
         let config_files = [
-            "Cargo.toml", "Cargo.lock", "package.json", "package-lock.json",
-            "tsconfig.json", ".eslintrc.json", ".eslintrc.js", "eslint.config.js",
-            "rustfmt.toml", "clippy.toml", ".gitignore", "README.md",
+            "Cargo.toml",
+            "Cargo.lock",
+            "package.json",
+            "package-lock.json",
+            "tsconfig.json",
+            ".eslintrc.json",
+            ".eslintrc.js",
+            "eslint.config.js",
+            "rustfmt.toml",
+            "clippy.toml",
+            ".gitignore",
+            "README.md",
         ];
 
-        config_files.iter().any(|&config| path_str.ends_with(config))
+        config_files
+            .iter()
+            .any(|&config| path_str.ends_with(config))
     }
 
     /// Set up periodic tasks
@@ -411,7 +434,10 @@ impl ProblemsUpdateManager {
         loop {
             let (enabled, interval) = {
                 let settings_read = settings.read().await;
-                (settings_read.auto_refresh_enabled, settings_read.frequency.auto_refresh_interval)
+                (
+                    settings_read.auto_refresh_enabled,
+                    settings_read.frequency.auto_refresh_interval,
+                )
             };
 
             if enabled {
@@ -444,7 +470,9 @@ impl ProblemsUpdateManager {
                         git_status.conflicts.push(workspace_path.join(file_path));
                     }
                     _ if status_chars.chars().any(|c| c != ' ' && c != '?') => {
-                        git_status.modified_files.push(workspace_path.join(file_path));
+                        git_status
+                            .modified_files
+                            .push(workspace_path.join(file_path));
                     }
                     _ => {
                         // Ignore other status combinations
@@ -467,13 +495,26 @@ impl ProblemsUpdateManager {
             UpdateEvent::BuildStarted { tool } => {
                 self.handle_build_started(tool).await?;
             }
-            UpdateEvent::BuildCompleted { tool, problems, success, duration } => {
-                self.handle_build_completed(tool, problems, success, duration).await?;
+            UpdateEvent::BuildCompleted {
+                tool,
+                problems,
+                success,
+                duration,
+            } => {
+                self.handle_build_completed(tool, problems, success, duration)
+                    .await?;
             }
-            UpdateEvent::GitStatusChanged { modified_files, conflicts } => {
-                self.handle_git_status_changed(modified_files, conflicts).await?;
+            UpdateEvent::GitStatusChanged {
+                modified_files,
+                conflicts,
+            } => {
+                self.handle_git_status_changed(modified_files, conflicts)
+                    .await?;
             }
-            UpdateEvent::LspDiagnosticsReceived { file_path, problems } => {
+            UpdateEvent::LspDiagnosticsReceived {
+                file_path,
+                problems,
+            } => {
                 self.handle_lsp_diagnostics(file_path, problems).await?;
             }
             UpdateEvent::ProblemsCleared { source } => {
@@ -488,29 +529,47 @@ impl ProblemsUpdateManager {
     }
 
     /// Handle file changed event
-    async fn handle_file_changed(&mut self, paths: Vec<PathBuf>, change_type: FileChangeType) -> Result<()> {
+    async fn handle_file_changed(
+        &mut self,
+        paths: Vec<PathBuf>,
+        change_type: FileChangeType,
+    ) -> Result<()> {
         debug!("📝 File changed: {:?} (type: {:?})", paths, change_type);
 
         let settings = self.settings.read().await;
-        
-        if settings.auto_build_on_save && matches!(change_type, FileChangeType::SourceCode | FileChangeType::Configuration) {
+
+        if settings.auto_build_on_save
+            && matches!(
+                change_type,
+                FileChangeType::SourceCode | FileChangeType::Configuration
+            )
+        {
             // Trigger appropriate build tools
             let mut build_integration = self.build_integration.write().await;
-            
+
             match change_type {
                 FileChangeType::SourceCode => {
                     // Trigger relevant build tools
-                    if paths.iter().any(|p| p.extension().map_or(false, |ext| ext == "rs")) {
+                    if paths
+                        .iter()
+                        .any(|p| p.extension().map_or(false, |ext| ext == "rs"))
+                    {
                         build_integration.run_build_check(&BuildTool::Cargo).await?;
-                        build_integration.run_build_check(&BuildTool::Clippy).await?;
+                        build_integration
+                            .run_build_check(&BuildTool::Clippy)
+                            .await?;
                     }
-                    
+
                     if paths.iter().any(|p| {
                         let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
                         matches!(ext, "js" | "ts" | "tsx" | "jsx")
                     }) {
-                        build_integration.run_build_check(&BuildTool::TypeScript).await?;
-                        build_integration.run_build_check(&BuildTool::ESLint).await?;
+                        build_integration
+                            .run_build_check(&BuildTool::TypeScript)
+                            .await?;
+                        build_integration
+                            .run_build_check(&BuildTool::ESLint)
+                            .await?;
                     }
                 }
                 FileChangeType::Configuration => {
@@ -527,7 +586,7 @@ impl ProblemsUpdateManager {
     /// Handle build started event
     async fn handle_build_started(&mut self, tool: BuildTool) -> Result<()> {
         debug!("🔧 Build started: {:?}", tool);
-        
+
         {
             let mut active_builds = self.active_builds.write().await;
             active_builds.insert(tool);
@@ -537,9 +596,20 @@ impl ProblemsUpdateManager {
     }
 
     /// Handle build completed event
-    async fn handle_build_completed(&mut self, tool: BuildTool, problems: Vec<ProblemItem>, success: bool, duration: Duration) -> Result<()> {
-        info!("🔧 Build completed: {:?} - {} problems in {:?}", tool, problems.len(), duration);
-        
+    async fn handle_build_completed(
+        &mut self,
+        tool: BuildTool,
+        problems: Vec<ProblemItem>,
+        success: bool,
+        duration: Duration,
+    ) -> Result<()> {
+        info!(
+            "🔧 Build completed: {:?} - {} problems in {:?}",
+            tool,
+            problems.len(),
+            duration
+        );
+
         {
             let mut active_builds = self.active_builds.write().await;
             active_builds.remove(&tool);
@@ -552,22 +622,38 @@ impl ProblemsUpdateManager {
     }
 
     /// Handle git status changed event
-    async fn handle_git_status_changed(&mut self, modified_files: Vec<PathBuf>, conflicts: Vec<PathBuf>) -> Result<()> {
-        debug!("📋 Git status changed: {} modified, {} conflicts", modified_files.len(), conflicts.len());
-        
+    async fn handle_git_status_changed(
+        &mut self,
+        modified_files: Vec<PathBuf>,
+        conflicts: Vec<PathBuf>,
+    ) -> Result<()> {
+        debug!(
+            "📋 Git status changed: {} modified, {} conflicts",
+            modified_files.len(),
+            conflicts.len()
+        );
+
         // Update git-related problems in the build integration
         // This would typically involve updating conflict markers and unstaged changes
-        
+
         Ok(())
     }
 
     /// Handle LSP diagnostics received
-    async fn handle_lsp_diagnostics(&mut self, file_path: PathBuf, problems: Vec<ProblemItem>) -> Result<()> {
-        debug!("🔍 LSP diagnostics received for {}: {} problems", file_path.display(), problems.len());
-        
+    async fn handle_lsp_diagnostics(
+        &mut self,
+        file_path: PathBuf,
+        problems: Vec<ProblemItem>,
+    ) -> Result<()> {
+        debug!(
+            "🔍 LSP diagnostics received for {}: {} problems",
+            file_path.display(),
+            problems.len()
+        );
+
         // This would integrate with language server protocol diagnostics
         // For now, just log the event
-        
+
         Ok(())
     }
 
@@ -580,10 +666,10 @@ impl ProblemsUpdateManager {
     /// Handle refresh requested event
     async fn handle_refresh_requested(&mut self) -> Result<()> {
         info!("🔄 Manual refresh requested");
-        
+
         let mut build_integration = self.build_integration.write().await;
         build_integration.refresh_all().await?;
-        
+
         Ok(())
     }
 

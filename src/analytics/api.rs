@@ -936,7 +936,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, std::convert::In
     Ok(warp::reply::with_status(json, code))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

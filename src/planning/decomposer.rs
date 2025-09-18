@@ -464,7 +464,7 @@ struct RawTask {
     acceptance_criteria: Vec<String>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

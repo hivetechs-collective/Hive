@@ -18,9 +18,9 @@ pub struct ProblemNavigationHandler {
 /// Editor integration types
 #[derive(Debug, Clone)]
 pub enum EditorIntegration {
-    Internal,  // Use internal code editor
-    VSCode,    // Open in VS Code
-    Vim,       // Open in Vim
+    Internal,       // Use internal code editor
+    VSCode,         // Open in VS Code
+    Vim,            // Open in Vim
     Custom(String), // Custom command
 }
 
@@ -80,15 +80,34 @@ impl ProblemNavigationHandler {
 
         // Validate location is reasonable
         if let Err(e) = self.validate_location(&file_path, line, column).await {
-            warn!("Invalid location {}:{}:{} - {}", file_path.display(), line, column, e);
-            return Ok(NavigationResult::InvalidLocation { file_path, line, column });
+            warn!(
+                "Invalid location {}:{}:{} - {}",
+                file_path.display(),
+                line,
+                column,
+                e
+            );
+            return Ok(NavigationResult::InvalidLocation {
+                file_path,
+                line,
+                column,
+            });
         }
 
         // Perform navigation based on editor integration
         match self.perform_navigation(&file_path, line, column).await {
             Ok(()) => {
-                info!("✅ Successfully navigated to {}:{}:{}", file_path.display(), line, column);
-                Ok(NavigationResult::Success { file_path, line, column })
+                info!(
+                    "✅ Successfully navigated to {}:{}:{}",
+                    file_path.display(),
+                    line,
+                    column
+                );
+                Ok(NavigationResult::Success {
+                    file_path,
+                    line,
+                    column,
+                })
             }
             Err(e) => {
                 error!("❌ Navigation failed: {}", e);
@@ -106,7 +125,10 @@ impl ProblemNavigationHandler {
 
         // For very large line numbers, we might want to validate against actual file length
         if line > 100000 {
-            return Err(anyhow::anyhow!("Line number {} seems unreasonably large", line));
+            return Err(anyhow::anyhow!(
+                "Line number {} seems unreasonably large",
+                line
+            ));
         }
 
         // Could add more sophisticated validation here:
@@ -119,19 +141,17 @@ impl ProblemNavigationHandler {
 
     /// Perform the actual navigation
     async fn perform_navigation(&self, file_path: &Path, line: u32, column: u32) -> Result<()> {
-        let integration = self.editor_integration.as_ref()
+        let integration = self
+            .editor_integration
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No editor integration configured"))?;
 
         match integration {
             EditorIntegration::Internal => {
                 self.navigate_internal_editor(file_path, line, column).await
             }
-            EditorIntegration::VSCode => {
-                self.navigate_vscode(file_path, line, column).await
-            }
-            EditorIntegration::Vim => {
-                self.navigate_vim(file_path, line, column).await
-            }
+            EditorIntegration::VSCode => self.navigate_vscode(file_path, line, column).await,
+            EditorIntegration::Vim => self.navigate_vim(file_path, line, column).await,
             EditorIntegration::Custom(command) => {
                 self.navigate_custom(command, file_path, line, column).await
             }
@@ -139,8 +159,18 @@ impl ProblemNavigationHandler {
     }
 
     /// Navigate using internal editor
-    async fn navigate_internal_editor(&self, file_path: &Path, line: u32, column: u32) -> Result<()> {
-        debug!("📝 Opening in internal editor: {}:{}:{}", file_path.display(), line, column);
+    async fn navigate_internal_editor(
+        &self,
+        file_path: &Path,
+        line: u32,
+        column: u32,
+    ) -> Result<()> {
+        debug!(
+            "📝 Opening in internal editor: {}:{}:{}",
+            file_path.display(),
+            line,
+            column
+        );
 
         // This would integrate with the internal code editor component
         // For now, we'll create the event structure
@@ -160,7 +190,12 @@ impl ProblemNavigationHandler {
 
     /// Navigate using VS Code
     async fn navigate_vscode(&self, file_path: &Path, line: u32, column: u32) -> Result<()> {
-        debug!("📝 Opening in VS Code: {}:{}:{}", file_path.display(), line, column);
+        debug!(
+            "📝 Opening in VS Code: {}:{}:{}",
+            file_path.display(),
+            line,
+            column
+        );
 
         let command = "code";
         let arg = format!("{}:{}:{}", file_path.display(), line, column);
@@ -182,7 +217,12 @@ impl ProblemNavigationHandler {
 
     /// Navigate using Vim
     async fn navigate_vim(&self, file_path: &Path, line: u32, column: u32) -> Result<()> {
-        debug!("📝 Opening in Vim: {}:{}:{}", file_path.display(), line, column);
+        debug!(
+            "📝 Opening in Vim: {}:{}:{}",
+            file_path.display(),
+            line,
+            column
+        );
 
         let command = "vim";
         let position_arg = format!("+{}", line);
@@ -190,10 +230,10 @@ impl ProblemNavigationHandler {
 
         let mut cmd = tokio::process::Command::new(command);
         cmd.arg(&position_arg)
-           .arg("-c")
-           .arg(&column_cmd)
-           .arg(file_path)
-           .current_dir(&self.workspace_path);
+            .arg("-c")
+            .arg(&column_cmd)
+            .arg(file_path)
+            .current_dir(&self.workspace_path);
 
         // For terminal editors like Vim, we might want to handle this differently
         // depending on whether we're in a GUI or terminal environment
@@ -208,8 +248,20 @@ impl ProblemNavigationHandler {
     }
 
     /// Navigate using custom command
-    async fn navigate_custom(&self, command_template: &str, file_path: &Path, line: u32, column: u32) -> Result<()> {
-        debug!("📝 Opening with custom command: {} {}:{}:{}", command_template, file_path.display(), line, column);
+    async fn navigate_custom(
+        &self,
+        command_template: &str,
+        file_path: &Path,
+        line: u32,
+        column: u32,
+    ) -> Result<()> {
+        debug!(
+            "📝 Opening with custom command: {} {}:{}:{}",
+            command_template,
+            file_path.display(),
+            line,
+            column
+        );
 
         // Replace placeholders in command template
         let command = command_template
@@ -243,8 +295,12 @@ impl ProblemNavigationHandler {
     /// Dispatch navigation event to the editor
     async fn dispatch_navigation_event(&self, event: NavigationEvent) -> Result<()> {
         // This would integrate with the event system to notify the code editor
-        debug!("📡 Dispatching navigation event: {}:{}:{}", 
-               event.file_path.display(), event.line, event.column);
+        debug!(
+            "📡 Dispatching navigation event: {}:{}:{}",
+            event.file_path.display(),
+            event.line,
+            event.column
+        );
 
         // In a real implementation, this would use the event bus:
         // let event = Event::navigation_request(event);
@@ -275,15 +331,24 @@ impl ProblemNavigationHandler {
     }
 
     /// Quick navigation to next problem of same type
-    pub async fn navigate_to_next_problem_of_type(&self, current_problem: &ProblemItem, problems: &[ProblemItem]) -> Result<Option<NavigationResult>> {
-        debug!("⏭️ Navigating to next problem of type: {:?}", current_problem.severity);
+    pub async fn navigate_to_next_problem_of_type(
+        &self,
+        current_problem: &ProblemItem,
+        problems: &[ProblemItem],
+    ) -> Result<Option<NavigationResult>> {
+        debug!(
+            "⏭️ Navigating to next problem of type: {:?}",
+            current_problem.severity
+        );
 
         // Find next problem of same severity and source
         let current_index = problems.iter().position(|p| p.id == current_problem.id);
-        
+
         if let Some(current_idx) = current_index {
             for (idx, problem) in problems.iter().enumerate().skip(current_idx + 1) {
-                if problem.severity == current_problem.severity && problem.source == current_problem.source {
+                if problem.severity == current_problem.severity
+                    && problem.source == current_problem.source
+                {
                     return Ok(Some(self.navigate_to_problem(problem).await?));
                 }
             }
@@ -293,15 +358,24 @@ impl ProblemNavigationHandler {
     }
 
     /// Quick navigation to previous problem of same type
-    pub async fn navigate_to_previous_problem_of_type(&self, current_problem: &ProblemItem, problems: &[ProblemItem]) -> Result<Option<NavigationResult>> {
-        debug!("⏮️ Navigating to previous problem of type: {:?}", current_problem.severity);
+    pub async fn navigate_to_previous_problem_of_type(
+        &self,
+        current_problem: &ProblemItem,
+        problems: &[ProblemItem],
+    ) -> Result<Option<NavigationResult>> {
+        debug!(
+            "⏮️ Navigating to previous problem of type: {:?}",
+            current_problem.severity
+        );
 
         // Find previous problem of same severity and source
         let current_index = problems.iter().position(|p| p.id == current_problem.id);
-        
+
         if let Some(current_idx) = current_index {
             for problem in problems.iter().take(current_idx).rev() {
-                if problem.severity == current_problem.severity && problem.source == current_problem.source {
+                if problem.severity == current_problem.severity
+                    && problem.source == current_problem.source
+                {
                     return Ok(Some(self.navigate_to_problem(problem).await?));
                 }
             }
@@ -383,14 +457,16 @@ pub mod navigation_utils {
 
     /// Extract relative path for display
     pub fn get_relative_path(workspace_path: &Path, file_path: &Path) -> PathBuf {
-        file_path.strip_prefix(workspace_path)
+        file_path
+            .strip_prefix(workspace_path)
             .unwrap_or(file_path)
             .to_path_buf()
     }
 
     /// Format location for display
     pub fn format_location(file_path: &Path, line: Option<u32>, column: Option<u32>) -> String {
-        let file_name = file_path.file_name()
+        let file_name = file_path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
 
@@ -404,28 +480,55 @@ pub mod navigation_utils {
     /// Check if file is editable (basic heuristic)
     pub fn is_file_editable(file_path: &Path) -> bool {
         if let Some(extension) = file_path.extension().and_then(|e| e.to_str()) {
-            matches!(extension.to_lowercase().as_str(), 
-                "rs" | "js" | "ts" | "tsx" | "jsx" | "py" | "go" | "java" | "cpp" | "c" | "h" | 
-                "css" | "scss" | "sass" | "html" | "xml" | "json" | "yaml" | "yml" | "toml" | 
-                "md" | "txt" | "sh" | "bat" | "ps1")
+            matches!(
+                extension.to_lowercase().as_str(),
+                "rs" | "js"
+                    | "ts"
+                    | "tsx"
+                    | "jsx"
+                    | "py"
+                    | "go"
+                    | "java"
+                    | "cpp"
+                    | "c"
+                    | "h"
+                    | "css"
+                    | "scss"
+                    | "sass"
+                    | "html"
+                    | "xml"
+                    | "json"
+                    | "yaml"
+                    | "yml"
+                    | "toml"
+                    | "md"
+                    | "txt"
+                    | "sh"
+                    | "bat"
+                    | "ps1"
+            )
         } else {
             false
         }
     }
 
     /// Get line preview from file (for hover/tooltip)
-    pub async fn get_line_preview(file_path: &Path, line: u32, context_lines: usize) -> Result<Vec<String>> {
+    pub async fn get_line_preview(
+        file_path: &Path,
+        line: u32,
+        context_lines: usize,
+    ) -> Result<Vec<String>> {
         let content = tokio::fs::read_to_string(file_path).await?;
         let lines: Vec<&str> = content.lines().collect();
-        
+
         let start_line = line.saturating_sub(context_lines as u32 + 1) as usize;
         let end_line = std::cmp::min((line + context_lines as u32) as usize, lines.len());
-        
+
         let preview: Vec<String> = lines[start_line..end_line]
             .iter()
             .map(|s| s.to_string())
             .collect();
-            
+
         Ok(preview)
     }
 }

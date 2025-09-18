@@ -1,14 +1,14 @@
 //! Repository Selector for Multi-Repository Workspace Support
-//! 
+//!
 //! Provides functionality to switch between multiple repositories
 //! in the workspace and manage repository status.
 
+use anyhow::Result;
 use dioxus::prelude::*;
 use std::path::PathBuf;
-use anyhow::Result;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
-use super::{GitRepository, BranchInfo, get_optimized_git_manager};
+use super::{get_optimized_git_manager, BranchInfo, GitRepository};
 
 /// Repository information for the selector
 #[derive(Debug, Clone, PartialEq)]
@@ -67,20 +67,23 @@ impl RepositoryInfo {
                 current_branch: None,
                 status: RepositoryStatus::NotRepository,
                 upstream_status: None,
-            }
+            },
         }
     }
 
     /// Detect repository status with optimizations
     async fn detect_status(repo: &GitRepository) -> RepositoryStatus {
         let repo_path = repo.path();
-        
+
         // Try to use optimized manager first
         let manager = get_optimized_git_manager();
         match manager.get_file_statuses_batched(repo_path).await {
             Ok(statuses) => {
                 // Check for conflicts first
-                if statuses.iter().any(|(_path, status)| status.is_conflicted()) {
+                if statuses
+                    .iter()
+                    .any(|(_path, status)| status.is_conflicted())
+                {
                     RepositoryStatus::HasConflicts
                 } else if !statuses.is_empty() {
                     RepositoryStatus::HasChanges
@@ -93,7 +96,10 @@ impl RepositoryInfo {
                 match repo.file_statuses() {
                     Ok(statuses) => {
                         // Check for conflicts first
-                        if statuses.iter().any(|(_path, status)| status.is_conflicted()) {
+                        if statuses
+                            .iter()
+                            .any(|(_path, status)| status.is_conflicted())
+                        {
                             RepositoryStatus::HasConflicts
                         } else if !statuses.is_empty() {
                             RepositoryStatus::HasChanges
@@ -178,7 +184,7 @@ impl RepositorySelectorState {
     pub fn remove_repository(&mut self, path: &PathBuf) {
         if let Some(pos) = self.repositories.iter().position(|r| &r.path == path) {
             self.repositories.remove(pos);
-            
+
             // Adjust current index
             if let Some(current) = self.current_repo_index {
                 if current == pos {
@@ -220,10 +226,10 @@ impl RepositorySelectorState {
     /// Scan workspace for repositories
     pub async fn scan_workspace(&mut self, workspace_path: &PathBuf) -> Result<()> {
         use tokio::fs;
-        
+
         let mut entries = fs::read_dir(workspace_path).await?;
         let mut found_repos = Vec::new();
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.is_dir() {
@@ -235,7 +241,7 @@ impl RepositorySelectorState {
                 }
             }
         }
-        
+
         // Update repositories list
         self.repositories = found_repos;
         self.current_repo_index = if self.repositories.is_empty() {
@@ -243,8 +249,11 @@ impl RepositorySelectorState {
         } else {
             Some(0)
         };
-        
-        info!("Found {} repositories in workspace", self.repositories.len());
+
+        info!(
+            "Found {} repositories in workspace",
+            self.repositories.len()
+        );
         Ok(())
     }
 }
@@ -256,7 +265,7 @@ pub fn RepositorySelector(
     on_repository_change: EventHandler<PathBuf>,
 ) -> Element {
     let selector_state = state.read();
-    
+
     if selector_state.repositories.is_empty() {
         return rsx! {
             div {
@@ -272,11 +281,11 @@ pub fn RepositorySelector(
     }
 
     let current_repo = selector_state.current_repository();
-    
+
     rsx! {
         div {
             class: "repository-selector",
-            
+
             // Current repository display
             div {
                 class: "current-repo",
@@ -284,7 +293,7 @@ pub fn RepositorySelector(
                     let is_expanded = state.read().is_expanded;
                     state.write().is_expanded = !is_expanded;
                 },
-                
+
                 if let Some(repo) = current_repo {
                     span {
                         class: "repo-status",
@@ -311,24 +320,24 @@ pub fn RepositorySelector(
                         }
                     }
                 }
-                
+
                 span {
                     class: "dropdown-arrow",
                     if selector_state.is_expanded { "▼" } else { "▶" }
                 }
             }
-            
+
             // Repository dropdown
             if selector_state.is_expanded {
                 div {
                     class: "repo-dropdown",
-                    
+
                     for (idx, repo) in selector_state.repositories.iter().enumerate() {
                         div {
-                            class: if Some(idx) == selector_state.current_repo_index { 
-                                "repo-item active" 
-                            } else { 
-                                "repo-item" 
+                            class: if Some(idx) == selector_state.current_repo_index {
+                                "repo-item active"
+                            } else {
+                                "repo-item"
                             },
                             onclick: {
                                 let repo_path = repo.path.clone();
@@ -338,7 +347,7 @@ pub fn RepositorySelector(
                                     on_repository_change.call(repo_path.clone());
                                 }
                             },
-                            
+
                             span {
                                 class: "repo-status",
                                 style: "color: {repo.status_color()}",

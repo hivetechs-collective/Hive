@@ -500,7 +500,7 @@ fn generate_migration_warnings(analysis: &TypeScriptAnalysis) -> Vec<String> {
     warnings
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

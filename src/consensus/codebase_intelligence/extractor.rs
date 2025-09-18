@@ -1,7 +1,7 @@
 //! Object extraction from source code files
 
-use std::path::Path;
 use anyhow::Result;
+use std::path::Path;
 
 /// Extracted object from source code
 #[derive(Debug, Clone)]
@@ -62,8 +62,11 @@ impl ObjectExtractor {
     pub fn new() -> Self {
         Self
     }
-    
-    pub async fn extract_from_file(&self, file: &super::scanner::ScannedFile) -> Result<Vec<ExtractedObject>> {
+
+    pub async fn extract_from_file(
+        &self,
+        file: &super::scanner::ScannedFile,
+    ) -> Result<Vec<ExtractedObject>> {
         // TODO: Implement actual AST parsing
         // For now, return empty vec
         Ok(vec![])

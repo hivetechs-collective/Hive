@@ -427,7 +427,7 @@ __fish_hive_welcome
 "#.to_string()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

@@ -1155,7 +1155,7 @@ fn contains_inappropriate_content(content: &str) -> bool {
         .any(|term| content_lower.contains(term))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

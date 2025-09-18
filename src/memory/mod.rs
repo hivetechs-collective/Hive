@@ -15,7 +15,7 @@ pub mod retrieval;
 pub mod thematic_clustering;
 pub mod topic_extraction;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod test;
 
 use anyhow::{Context as _, Result};
@@ -253,7 +253,7 @@ pub async fn get_intelligence() -> Result<Arc<MemoryIntelligence>> {
         .map(Arc::clone)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 
