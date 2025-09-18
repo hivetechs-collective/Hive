@@ -30,7 +30,12 @@ fi
 if [ "$PLATFORM" = "darwin" ]; then
     PLATFORM="mac"
     EXT="dmg"
-    MAKE_PATH="out/make/dmg/arm64/Hive Consensus.dmg"
+    DEFAULT_PATH="out/make/dmg/arm64/Hive Consensus.dmg"
+    if [ -f "$DEFAULT_PATH" ]; then
+        MAKE_PATH="$DEFAULT_PATH"
+    else
+        MAKE_PATH=$(find out/make -maxdepth 1 -name '*.dmg' | head -n1 || true)
+    fi
 elif [ "$PLATFORM" = "linux" ]; then
     PLATFORM="linux"
     EXT="AppImage"
@@ -43,21 +48,37 @@ fi
 echo "Uploading Hive Consensus v$VERSION for $PLATFORM-$ARCH..."
 
 # Check if distribution file exists
-if [ ! -f "$MAKE_PATH" ]; then
+if [ -z "$MAKE_PATH" ] || [ ! -f "$MAKE_PATH" ]; then
     echo "Distribution file not found: $MAKE_PATH"
     echo "Please run 'npm run make' first"
     exit 1
 fi
 
+UPLOAD_NAME="Hive-Consensus-$VERSION-$PLATFORM-$ARCH.$EXT"
+
+# Generate checksum
+SHA_PATH="/tmp/${UPLOAD_NAME}.sha256"
+shasum -a 256 "$MAKE_PATH" > "$SHA_PATH"
+
 # Upload to R2 using AWS CLI (works with R2)
 aws s3 cp "$MAKE_PATH" \
-    "s3://$R2_BUCKET/releases/v$VERSION/$PLATFORM/Hive-Consensus-$VERSION-$PLATFORM-$ARCH.$EXT" \
+    "s3://$R2_BUCKET/releases/v$VERSION/$PLATFORM/$UPLOAD_NAME" \
+    --endpoint-url "$R2_ENDPOINT" \
+    --region auto
+
+aws s3 cp "$SHA_PATH" \
+    "s3://$R2_BUCKET/releases/v$VERSION/$PLATFORM/${UPLOAD_NAME}.sha256" \
     --endpoint-url "$R2_ENDPOINT" \
     --region auto
 
 # Also upload as 'latest'
 aws s3 cp "$MAKE_PATH" \
     "s3://$R2_BUCKET/releases/latest/$PLATFORM/Hive-Consensus-$PLATFORM-$ARCH.$EXT" \
+    --endpoint-url "$R2_ENDPOINT" \
+    --region auto
+
+aws s3 cp "$SHA_PATH" \
+    "s3://$R2_BUCKET/releases/latest/$PLATFORM/Hive-Consensus-$PLATFORM-$ARCH.$EXT.sha256" \
     --endpoint-url "$R2_ENDPOINT" \
     --region auto
 

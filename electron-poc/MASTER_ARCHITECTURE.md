@@ -2132,6 +2132,52 @@ The application features collapsible panels to maximize screen real estate and p
   toggleConsensusPanel.title = 'Expand Panel';
   ```
 
+### Input Dialog Overlay & Command Prompts (v1.8.446)
+**Implementation**: `src/renderer.ts`
+
+#### Goals
+- Replace fragile native dialog stubs with an in-renderer, VS Code-style overlay.
+- Provide a single prompt surface for Go-to-file/line, project scaffolding, and future command palette workflows.
+- Guarantee deterministic styling and selectors for Playwright and accessibility tooling.
+
+#### Architecture
+- `showInputDialog(title, options)` injected onto `window` during renderer bootstrap.
+  - Accepts rich options (`message`, `placeholder`, `defaultValue`, `type`, `hint`, `validate`, `okLabel`, `cancelLabel`).
+  - Returns a `Promise<string | null>` resolved when the dialog closes.
+- Styles are injected once via `addInputDialogStyles()` which appends a scoped stylesheet when the DOM head is available (or waits for `DOMContentLoaded`).
+- Overlay structure:
+  ```html
+  <div class="input-dialog-overlay">
+    <div class="input-dialog">
+      <h3>Title</h3>
+      <div class="input-dialog-message">…</div>
+      <input class="input-dialog-field" data-testid="input-dialog-field" />
+      <div class="input-dialog-hint">…</div>
+      <div class="input-dialog-error">…</div>
+      <div class="input-dialog-buttons">
+        <button class="input-dialog-cancel" data-testid="input-dialog-cancel">Cancel</button>
+        <button class="input-dialog-ok" data-testid="input-dialog-ok">OK</button>
+      </div>
+    </div>
+  </div>
+  ```
+- Keyboard handling:
+  - <kbd>Enter</kbd> triggers validation + submit.
+  - <kbd>Escape</kbd> or clicking the overlay cancels.
+  - Validation errors are surfaced inline via `.input-dialog-error` without closing the prompt.
+- Visual design mirrors the dark VS Code palette and uses CSS focus cues for accessibility.
+
+#### Command Integrations
+- **Go → File** and **Go → Line** menu entries now use the overlay instead of IPC fallbacks.
+- Go-to-file accepts absolute paths when no folder is open, showing a guard alert only for relatives without context.
+- Go-to-line ensures an active editor exists; on success it routes through `executeCommand('go.line.navigate', …)` so the Monaco command registry stays the single source of truth.
+- Project creation flows on the Welcome page now use the overlay for name/template prompts, ensuring consistent UX.
+
+#### Test Instrumentation
+- The renderer registers `window.__hiveTestHelpers` with methods (`goToFile()`, `goToLine()`, `getActiveTab()`, `getActiveEditorLocation()`, etc.) and a readiness flag `__hiveTestHelpersReady` once the UI bootstraps.
+- Playwright drives prompts via these helpers, using `data-testid` hooks for field/button selection and polling helpers to confirm editor state.
+- Dialog cleanup utilities remove lingering overlays between tests to guarantee isolation.
+
 ### Center Panel Visibility & State (v1.8.378)
 Implementation: `src/renderer.ts`, `src/utils/panel-state.ts`, `src/utils/center-view.ts`, `src/index.css`
 
@@ -5959,6 +6005,104 @@ Hive Consensus.app/
 - IPC communication must be established
 - Dynamic ports must be allocated
 - All paths must be resolved correctly
+
+### Release Distribution via Cloudflare R2 (Public Downloads)
+
+**Goal**: Publish the freshly built DMG (and companion binaries) to an edge-accelerated CDN so users always download the latest installer from `https://releases.hivetechs.io`.
+
+#### Workflow Summary
+1. **Build the DMG** using `npm run build:complete` (17 phases) which leaves the signed installer at `electron-poc/out/make/Hive Consensus.dmg` and installs the same build locally for testing.
+2. **Stage release artifacts** in `dist/` (performed by the build or `scripts/package-macos.sh`):
+   - `hive-macos-arm64` (standalone binary)
+   - `Hive.app/` (macOS bundle)
+   - `releases.json` (channel metadata that drives the in-app updater)
+3. **Upload to Cloudflare R2** via `scripts/upload-to-r2.sh [stable|beta]`:
+   - Uses AWS S3-compatible CLI targeting bucket `releases-hivetechs`.
+   - Pushes channel-scoped payloads (`$CHANNEL/hive-macos-arm64`, `$CHANNEL/hive-macos-arm64.app.tar.gz`) plus root-level `releases.json`.
+   - Applies public-read ACLs and `Cache-Control` headers (1 hour for binaries, 5 minutes for metadata).
+   - Emits the canonical download URLs, e.g. `https://releases.hivetechs.io/stable/hive-macos-arm64.app.tar.gz`.
+4. **Optional cache purge**: the script prints a `curl` command to invalidate the Cloudflare edge cache for `releases.json` when promoting emergency builds.
+
+#### Supporting Tooling
+- `scripts/setup-r2-config.sh`, `scripts/test-r2-connection.sh`, `scripts/create-r2-bucket.sh`, `scripts/upload-to-r2-wrangler.sh`: bootstrap the R2 bucket, configure AWS CLI / Wrangler credentials, and verify connectivity.
+- `scripts/create-r2-proxy-worker.js` & `scripts/r2-releases-worker.js`: lightweight Cloudflare Workers that front the R2 bucket, set correct `Content-Type`, and enable CORS. A hardened variant lives in `cloudflare/secure-worker.js` for production rollout.
+- `dist/releases.json`: authoritative manifest consumed by the desktop updater (channel, version, URLs, checksums). Every upload overwrites it so the validator and website stay in sync.
+
+#### Release Channels & Automation
+- Channels (`stable`, `beta`, etc.) are directory prefixes inside the same bucket; switching channels only changes the CLI argument at upload time.
+- The website’s “Download for macOS” button points at the Worker URL, ensuring users pull from Cloudflare’s edge cache.
+- Continuous delivery agents (or humans) run `npm run build:complete` followed by `./scripts/upload-to-r2.sh stable` to publish; future CI pipeline steps should chain these commands and then run the smoke suite (`npm run test:ui`) against the packaged app.
+
+#### R2 Authentication Cheat Sheet (2025 UI)
+- R2 no longer exposes long-lived keys via the bucket page. Instead, create an **Account API token** scoped to the account (My Profile → API Tokens → Create token) with `Workers R2 Storage: Edit` and optional bucket scoping.
+- That token doubles as the S3 credential:
+  - Access Key ID = the token ID returned by `tokens/verify`.
+  - Secret Access Key = the SHA-256 hash of the token value.
+- Commands we used to derive the keys:
+  ```bash
+  # Access Key ID (token id)
+  ACCESS_KEY_ID=$(curl -s \
+    "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+    | jq -r '.result.id')
+
+  # Secret Access Key (hash of token value)
+  SECRET_ACCESS_KEY=$(printf '%s' "$CLOUDFLARE_API_TOKEN" \
+    | shasum -a 256 \
+    | awk '{print $1}')
+  ```
+- Feed those values (plus the 32-character account ID from the S3 endpoint) into `./scripts/github-ci-setup.sh`. The helper stores repo + environment secrets and locks down the `master` branch with the required CI checks.
+
+### GitHub CI/CD Pipeline (2025)
+**Objective**: keep `main` green, gate pull requests with fast feedback, and ship signed DMGs + Cloudflare releases from a single, repeatable workflow.
+
+#### Workflow Overview
+| Workflow | Trigger | Purpose | Key jobs |
+| --- | --- | --- | --- |
+| `.github/workflows/ci.yml` | PRs and pushes to `main` / `master` | Default status checks for code review | `rust` (fmt/clippy/tests), `electron-unit` (TypeScript checks, lint, welcome suite), optional `ui-smoke` (macOS build + Playwright smoke) |
+| `.github/workflows/release.yml` | Tag push `v*.*.*` or manual dispatch | Build DMG, run Playwright smoke, publish to R2 and GitHub Releases | Single macOS job calling `scripts/release.sh` |
+| `.github/workflows/codeql.yml` | PR/push + weekly cron | CodeQL static analysis for JS/TS + Python scripts | `analyze` matrix |
+
+#### CI Details
+- `rust` job installs toolchain via `dtolnay/rust-toolchain@stable`, caches with `Swatinem/rust-cache`, and enforces `cargo fmt`, `cargo clippy -D warnings`, and `cargo test --workspace --all-features`.
+- `electron-unit` job uses Node 18 with npm cache, runs `npm ci`, `npm run verify:all`, `npm run lint`, and the TS test suite (`npm run test:welcome`).
+- `ui-smoke` job (macOS) runs when pushing to main or when a PR is labeled `ui-smoke`. It builds the packaged app via `npm run build:complete` with Playwright remote debugging and automatically runs the smoke suite. It uploads the generated DMG/ZIP as artifacts for validation.
+- Summary step writes a consolidated status to the run log to support branch-protection rollups.
+
+**Recommendation**: mark `ci.yml` jobs (`rust`, `electron-unit`, `CI Summary`) as required status checks on `main`. Add a branch protection rule that enforces linear history and at least one approving review. To run the heavy UI smoke on a PR, add the `ui-smoke` label.
+
+#### Release Workflow
+- Secrets required (store under **Settings → Secrets and variables → Actions**):
+  - `R2_ACCESS_KEY_ID`
+  - `R2_SECRET_ACCESS_KEY`
+  - `R2_ACCOUNT_ID`
+- Environment: create `production` environment with optional reviewer approvals. The workflow expects the secrets to be available to that environment.
+- Steps executed:
+  1. Checkout + npm install (`electron-poc`).
+  2. `npx playwright install chromium` to provision browsers.
+  3. `./scripts/release.sh <channel>` → runs `npm run build:complete` with Playwright smoke tests and then `scripts/upload-to-r2.sh` using the channel provided (default `stable`).
+  4. Artifacts (`out/make/*.dmg`, `.zip`, `dist/releases.json`) uploaded for auditing.
+  5. When triggered by a tag (`vX.Y.Z`) the workflow attaches those payloads to a GitHub Release.
+- To publish without tagging, trigger **Release** manually from the Actions tab, pick the channel, and the workflow will upload to R2 but skip the GitHub Release step. Add a tag afterward if desired.
+
+#### Code Review Hygiene
+- Repository-level CODEOWNERS (`.github/CODEOWNERS`) defaults to `@veronelazio`; update with the appropriate teams (e.g. `@hivetechs/backend`, `@hivetechs/frontend`).
+- Ensure branch protections require status checks (`CI / Backend (Rust)`, `CI / Electron Unit & Lint`, `CI / CI Summary`) and at least one approving review before merge.
+- Enable **Dismiss stale approvals** so code changes after review trigger a fresh pass.
+
+#### Running UI Smoke Locally
+```
+cd electron-poc
+PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=61323 PLAYWRIGHT_RUN_TESTS=1 npm run build:complete
+```
+This mirrors the CI job, leaving the DMG in `out/make/` and the packaged app installed under `/Applications` for manual validation.
+
+#### Onboarding Checklist
+1. Configure GitHub secrets (`R2_*`) and the `production` environment.
+2. Enable branch protection on `main` with required checks.
+3. (Optional) Add an automation rule or PR template reminding authors to add the `ui-smoke` label for UI-heavy changes.
+4. Communicate to the team: feature PRs rely on `ci.yml`, releases go through **Release** workflow or `./scripts/release.sh` locally.
+5. Prefer automation? Run `scripts/github-ci-setup.sh` after `gh auth login` to perform steps 1–2 programmatically.
 
 ### Production Requirements (CRITICAL)
 
@@ -17628,6 +17772,7 @@ Tables used by Welcome
 ### Components
 - **`scripts/run-ui-tests.js`** – Orchestrates the suite, ensuring a packaged binary exists, selecting a remote debugging port, and invoking Playwright.
   - Prefers `/Applications/Hive Consensus.app` (post-build install) but respects `ELECTRON_APP_PATH` for custom artifacts.
+  - Asks `PortManager.allocatePortForService('playwright-remote-debug')` for a fresh port so DevTools never collides with the memory service or prior runs (falls back to an OS ephemeral when PortManager is unavailable).
   - Supports `--attach` to reuse an already running app started with remote debugging.
 - **`playwright.config.ts`** – Single-worker configuration with generous timeouts; keeps execution deterministic for Electron.
 - **`tests/ui/welcome-documentation.spec.ts`** – Chromium CDP harness that launches or attaches to the packaged binary, waits for `commandAPI`, and drives Welcome/Documentation flows with DOM assertions (no screenshots).
@@ -17641,10 +17786,10 @@ Tables used by Welcome
    Produces the DMG, installs to `/Applications`, and launches Hive with remote debugging enabled.
    Set `PLAYWRIGHT_RUN_TESTS=1` alongside those variables and the build script will automatically run `npm run test:ui` after installation (skipping the auto-launch so Playwright can attach immediately).
 2. **Default (launch per run):**
-   ```bash
-   npm run test:ui
-   ```
-   Finds/launches the packaged app, allocates a port via `PortManager` when available (falling back to an ephemeral OS port otherwise), runs the suite, and shuts the app down afterwards.
+  ```bash
+  npm run test:ui
+  ```
+   Finds/launches the packaged app, allocates a debug port via `PortManager` (service name `playwright-remote-debug`), runs the suite, and shuts the app down afterwards.
 3. **Attach mode:**
    ```bash
    PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 \
@@ -17654,11 +17799,12 @@ Tables used by Welcome
    Use when Hive is already running and you want to avoid spawning a second instance.
 
 ### Current Coverage
-- Verifies we can boot the packaged binary, clear Gatekeeper quarantine, and expose `window.commandAPI`.
+- Verifies we can boot the packaged binary, clear Gatekeeper quarantine, and expose `window.commandAPI` **plus** the test helper readiness flag.
 - Confirms Welcome → Documentation buttons trigger the right `view.*` commands and help content.
 - Exercises Help menu commands (`help.showGettingStarted`, `help.showMemoryGuide`, `help.showAbout`) with modal/dialog assertions.
 - Toggles Explorer/Git sidebars plus Settings/Memory/CLI Tools/Analytics panels through the command registry.
 - Validates TTYD terminal collapse/expand behaviour via the toggle button and `expandTTYDTerminal` helper.
+- Uses `__hiveTestHelpers` to drive the Go menu overlay, opening a temporary workspace file and jumping to a specific line through the Monaco API. The overlay selectors (`data-testid`) are verified for visibility and dismissal to guard against regressions in the prompt system.
 - Streams renderer logs during tests so missing IPC handlers or menu bindings surface in CI output.
 
 ### Gaps & Next Steps
@@ -17668,6 +17814,7 @@ Tables used by Welcome
 - Wire the suite into CI after the 17-phase build so releases are blocked on smoke regressions.
 
 ### Guidance for AI Agents
-- Always run the full build first with `PLAYWRIGHT_E2E=1` and a known `PLAYWRIGHT_REMOTE_DEBUG_PORT` so the packaged binary is fresh.
+- Always run the full build first with `PLAYWRIGHT_E2E=1` and a known `PLAYWRIGHT_REMOTE_DEBUG_PORT` so the packaged binary is fresh (or let `PortManager` allocate automatically when launching per run).
 - Use `npm run test:ui` (or `--attach`) to validate flows; watch the Playwright output for renderer warnings that may require fixes.
 - When adding scenarios, stay within the command registry—no direct DOM hacks or screenshots. Extend the shared harness helpers instead.
+- Wait for `__hiveTestHelpersReady` before invoking helpers and clean up lingering `.input-dialog-overlay` nodes between steps; the harness already exposes utilities for both patterns.
