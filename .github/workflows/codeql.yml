@@ -14,8 +14,28 @@ permissions:
   security-events: write
 
 jobs:
+  precheck:
+    name: Check Advanced Security
+    runs-on: ubuntu-latest
+    outputs:
+      advanced-security-enabled: ${{ steps.detect.outputs.enabled }}
+    steps:
+      - name: Detect advanced security status
+        id: detect
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const { data } = await github.rest.repos.get({ owner, repo });
+            const status = data.security_and_analysis?.advanced_security?.status || 'disabled';
+            core.info(`Advanced security status: ${status}`);
+            return { enabled: status === 'enabled' ? 'true' : 'false' };
+
   analyze:
     name: Analyze (${{ matrix.language }})
+    needs: precheck
+    if: needs.precheck.outputs.advanced-security-enabled == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -42,3 +62,13 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
+
+  skipped:
+    name: Skip CodeQL (Advanced Security disabled)
+    needs: precheck
+    if: needs.precheck.outputs.advanced-security-enabled != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "GitHub Advanced Security is not enabled for this repository; skipping CodeQL scan."
+          echo "Enable Advanced Security under Settings → Code security and analysis to activate CodeQL checks."
