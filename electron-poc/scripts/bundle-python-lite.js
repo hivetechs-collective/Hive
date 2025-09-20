@@ -306,7 +306,12 @@ async function main() {
   console.log('🐍 Lightweight Python Bundler for Hive Consensus');
   console.log(`📍 Platform: ${PLATFORM}-${ARCH}`);
   console.log('');
-  
+
+  if (process.env.ALLOW_MISSING_DEPS === '1' || process.env.ALLOW_MISSING_DEPS === 'true') {
+    console.log('⚠️  ALLOW_MISSING_DEPS set; skipping python bundling.');
+    return;
+  }
+
   const platformKey = `${PLATFORM}-${ARCH}`;
   const pythonUrl = PYTHON_URLS[platformKey];
   
