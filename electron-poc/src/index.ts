@@ -2971,8 +2971,18 @@ const initializeProcessManager = () => {
       }) || "python3";
   }
 
-  // Always register the backend - ProcessManager will handle errors gracefully
-  registerWebSocketBackend();
+  const SKIP_BACKEND =
+    process.env.ALLOW_MISSING_DEPS === "1" ||
+    process.env.ALLOW_MISSING_DEPS === "true";
+
+  if (SKIP_BACKEND) {
+    logger.warn(
+      "[ProcessManager] ALLOW_MISSING_DEPS set; skipping consensus backend startup",
+    );
+  } else {
+    // Always register the backend - ProcessManager will handle errors gracefully
+    registerWebSocketBackend();
+  }
 
   function registerWebSocketBackend() {
     logger.info(
