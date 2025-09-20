@@ -40,11 +40,13 @@ jobs:
             const { owner, repo } = context.repo;
             const { data } = await github.rest.repos.get({ owner, repo });
             const analysis = data.security_and_analysis || {};
-            const status = analysis.advanced_security?.status
-              || analysis.code_scanning?.status
-              || analysis.code_security?.status
-              || 'disabled';
-            const enabled = status === 'enabled';
+            const statuses = [
+              analysis.advanced_security?.status,
+              analysis.code_scanning?.status,
+              analysis.code_security?.status,
+            ].filter(status => typeof status === 'string');
+            const enabled = statuses.includes('enabled') || statuses.length === 0;
+            const status = statuses[0] || (statuses.length === 0 ? 'unknown (defaulting to enabled)' : 'disabled');
             core.info(`Code scanning/advanced security status: ${status}`);
             return { enabled: enabled ? 'true' : 'false' };
 
