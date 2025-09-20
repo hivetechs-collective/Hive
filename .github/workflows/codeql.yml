@@ -6,11 +6,11 @@ on:
   pull_request:
     branches: [ main, master ]
   schedule:
-    - cron: '0 6 * * 1'
+    - cron: '18 22 * * 6'
 
 permissions:
-  actions: read
   contents: read
+  actions: read
   security-events: write
 
 jobs:
@@ -40,28 +40,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript-typescript', 'python' ]
+        include:
+          - language: javascript-typescript
+            working-directory: electron-poc
+          - language: python
+            working-directory: .
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node dependencies
+        if: matrix.language == 'javascript-typescript'
+        working-directory: ${{ matrix.working-directory }}
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Install Python dependencies
+        if: matrix.language == 'python' && hashFiles('python/requirements.txt') != ''
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r python/requirements.txt
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
 
-      - name: Install dependencies (TypeScript)
-        if: matrix.language == 'javascript-typescript'
-        run: |
-          if [ -d electron-poc ]; then
-            cd electron-poc
-            npm ci --prefer-offline --no-audit
-          fi
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
 
   skipped:
     name: Skip CodeQL (Advanced Security disabled)
