@@ -39,9 +39,14 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const { data } = await github.rest.repos.get({ owner, repo });
-            const status = data.security_and_analysis?.advanced_security?.status || 'disabled';
-            core.info(`Advanced security status: ${status}`);
-            return { enabled: status === 'enabled' ? 'true' : 'false' };
+            const analysis = data.security_and_analysis || {};
+            const status = analysis.advanced_security?.status
+              || analysis.code_scanning?.status
+              || analysis.code_security?.status
+              || 'disabled';
+            const enabled = status === 'enabled';
+            core.info(`Code scanning/advanced security status: ${status}`);
+            return { enabled: enabled ? 'true' : 'false' };
 
   analyze:
     name: Analyze (${{ matrix.language }})
