@@ -12,36 +12,30 @@ use hive_ai::consensus::{
     pipeline::ConsensusPipeline,
     types::{ConsensusConfig, ConsensusProfile},
 };
-use tokio::runtime::Runtime;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 
 /// Benchmark token processing throughput
 fn bench_token_processing(c: &mut Criterion) {
     let mut group = c.benchmark_group("token_processing");
-    
+
     // Test different token batch sizes
     for size in [10, 100, 1000, 10000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
-        
-        group.bench_with_input(
-            BenchmarkId::new("batch_size", size),
-            size,
-            |b, &size| {
-                b.iter(|| {
-                    // Simulate token processing
-                    let tokens: Vec<String> = (0..size)
-                        .map(|i| format!("token_{}", i))
-                        .collect();
-                    
-                    // Process tokens (this would be the actual processing logic)
-                    for token in tokens {
-                        black_box(token.len());
-                    }
-                });
-            },
-        );
+
+        group.bench_with_input(BenchmarkId::new("batch_size", size), size, |b, &size| {
+            b.iter(|| {
+                // Simulate token processing
+                let tokens: Vec<String> = (0..size).map(|i| format!("token_{}", i)).collect();
+
+                // Process tokens (this would be the actual processing logic)
+                for token in tokens {
+                    black_box(token.len());
+                }
+            });
+        });
     }
-    
+
     group.finish();
 }
 
