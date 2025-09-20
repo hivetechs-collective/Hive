@@ -3,18 +3,18 @@
 //! This module provides Claude Code-style trust prompts that ask users
 //! for permission before accessing files in new directories.
 
-use std::path::Path;
-use std::io::{self, Write};
 use anyhow::{Context, Result};
 use crossterm::{
+    cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
+    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
-    cursor::{Hide, Show, MoveTo},
-    style::{Color, Print, ResetColor, SetForegroundColor, SetBackgroundColor},
 };
-use tracing::{debug, info};
 use is_terminal::IsTerminal;
+use std::io::{self, Write};
+use std::path::Path;
+use tracing::{debug, info};
 
 use super::security::TrustDecision;
 
@@ -114,7 +114,8 @@ async fn show_dialog_impl(path: &Path) -> Result<TrustDecision> {
                     code: KeyCode::Esc,
                     modifiers: KeyModifiers::NONE,
                     ..
-                } | KeyEvent {
+                }
+                | KeyEvent {
                     code: KeyCode::Char('c'),
                     modifiers: KeyModifiers::CONTROL,
                     ..
@@ -153,13 +154,25 @@ async fn show_dialog_impl(path: &Path) -> Result<TrustDecision> {
 }
 
 /// Draw the main dialog box
-fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, display_path: &str) -> Result<()> {
+fn draw_dialog_box(
+    stdout: &mut io::Stdout,
+    start_row: u16,
+    start_col: u16,
+    display_path: &str,
+) -> Result<()> {
     // Set colors
-    execute!(stdout, SetForegroundColor(Color::White), SetBackgroundColor(Color::Black))?;
+    execute!(
+        stdout,
+        SetForegroundColor(Color::White),
+        SetBackgroundColor(Color::Black)
+    )?;
 
     // Top border
     execute!(stdout, MoveTo(start_col, start_row))?;
-    execute!(stdout, Print("┌──────────────────────────────────────────────────────┐"))?;
+    execute!(
+        stdout,
+        Print("┌──────────────────────────────────────────────────────┐")
+    )?;
 
     // Title
     execute!(stdout, MoveTo(start_col, start_row + 1))?;
@@ -171,7 +184,10 @@ fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, disp
 
     // Empty line
     execute!(stdout, MoveTo(start_col, start_row + 2))?;
-    execute!(stdout, Print("│                                                      │"))?;
+    execute!(
+        stdout,
+        Print("│                                                      │")
+    )?;
 
     // Path line
     execute!(stdout, MoveTo(start_col, start_row + 3))?;
@@ -183,7 +199,10 @@ fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, disp
 
     // Empty line
     execute!(stdout, MoveTo(start_col, start_row + 4))?;
-    execute!(stdout, Print("│                                                      │"))?;
+    execute!(
+        stdout,
+        Print("│                                                      │")
+    )?;
 
     // Warning text
     let warning_lines = [
@@ -207,29 +226,51 @@ fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, disp
 
     // Instructions
     execute!(stdout, MoveTo(start_col, start_row + 17))?;
-    execute!(stdout, Print("│ Use arrow keys to navigate, Enter to select, Esc to │"))?;
+    execute!(
+        stdout,
+        Print("│ Use arrow keys to navigate, Enter to select, Esc to │")
+    )?;
     execute!(stdout, MoveTo(start_col, start_row + 18))?;
-    execute!(stdout, Print("│ cancel, or press Y/N for quick selection.           │"))?;
+    execute!(
+        stdout,
+        Print("│ cancel, or press Y/N for quick selection.           │")
+    )?;
 
     // Bottom border
     execute!(stdout, MoveTo(start_col, start_row + 19))?;
-    execute!(stdout, Print("└──────────────────────────────────────────────────────┘"))?;
+    execute!(
+        stdout,
+        Print("└──────────────────────────────────────────────────────┘")
+    )?;
 
     execute!(stdout, ResetColor)?;
     Ok(())
 }
 
 /// Draw the selection buttons
-fn draw_selection_buttons(stdout: &mut io::Stdout, row: u16, start_col: u16, selected: usize) -> Result<()> {
+fn draw_selection_buttons(
+    stdout: &mut io::Stdout,
+    row: u16,
+    start_col: u16,
+    selected: usize,
+) -> Result<()> {
     execute!(stdout, MoveTo(start_col, row))?;
     execute!(stdout, Print("│ "))?;
 
     // Yes button
     if selected == 0 {
-        execute!(stdout, SetForegroundColor(Color::Black), SetBackgroundColor(Color::Green))?;
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Black),
+            SetBackgroundColor(Color::Green)
+        )?;
         execute!(stdout, Print(" Yes, proceed "))?;
     } else {
-        execute!(stdout, SetForegroundColor(Color::Green), SetBackgroundColor(Color::Black))?;
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Green),
+            SetBackgroundColor(Color::Black)
+        )?;
         execute!(stdout, Print(" Yes, proceed "))?;
     }
 
@@ -238,10 +279,18 @@ fn draw_selection_buttons(stdout: &mut io::Stdout, row: u16, start_col: u16, sel
 
     // No button
     if selected == 1 {
-        execute!(stdout, SetForegroundColor(Color::Black), SetBackgroundColor(Color::Red))?;
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Black),
+            SetBackgroundColor(Color::Red)
+        )?;
         execute!(stdout, Print(" No, exit "))?;
     } else {
-        execute!(stdout, SetForegroundColor(Color::Red), SetBackgroundColor(Color::Black))?;
+        execute!(
+            stdout,
+            SetForegroundColor(Color::Red),
+            SetBackgroundColor(Color::Black)
+        )?;
         execute!(stdout, Print(" No, exit "))?;
     }
 
@@ -319,7 +368,9 @@ mod tests {
         let short_path = PathBuf::from("/home/user/project");
         assert_eq!(format_path_for_display(&short_path), "/home/user/project");
 
-        let long_path = PathBuf::from("/very/long/path/that/exceeds/the/maximum/allowed/length/for/display/in/the/dialog/box");
+        let long_path = PathBuf::from(
+            "/very/long/path/that/exceeds/the/maximum/allowed/length/for/display/in/the/dialog/box",
+        );
         let formatted = format_path_for_display(&long_path);
         assert!(formatted.len() <= 50);
         assert!(formatted.contains("..."));

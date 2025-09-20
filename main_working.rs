@@ -69,19 +69,17 @@ async fn main() -> Result<()> {
         Some(Commands::Ask { question }) => {
             essential_commands::essential_ask(&question).await?;
         }
-        Some(Commands::Config { command }) => {
-            match command {
-                ConfigCommands::Show => {
-                    essential_commands::essential_config_show().await?;
-                }
-                ConfigCommands::Set { key, value } => {
-                    essential_commands::essential_config_set(&key, &value).await?;
-                }
-                ConfigCommands::Get { key } => {
-                    println!("Getting config key: {} (not yet implemented)", key);
-                }
+        Some(Commands::Config { command }) => match command {
+            ConfigCommands::Show => {
+                essential_commands::essential_config_show().await?;
             }
-        }
+            ConfigCommands::Set { key, value } => {
+                essential_commands::essential_config_set(&key, &value).await?;
+            }
+            ConfigCommands::Get { key } => {
+                println!("Getting config key: {} (not yet implemented)", key);
+            }
+        },
         None => {
             // Show banner
             show_banner().await?;
@@ -93,19 +91,35 @@ async fn main() -> Result<()> {
 
 async fn show_banner() -> Result<()> {
     println!("╭─────────────────────────────────────────────────────────────╮");
-    println!("│ {} Welcome to HiveTechs Consensus!                     │", style("🐝").bold().yellow());
+    println!(
+        "│ {} Welcome to HiveTechs Consensus!                     │",
+        style("🐝").bold().yellow()
+    );
     println!("│                                                             │");
     println!("│   Phase 1 Essential Functionality Working ✅               │");
     println!("│                                                             │");
-    println!("│   {} {}          │", style("cwd:").dim(), get_cwd_display());
+    println!(
+        "│   {} {}          │",
+        style("cwd:").dim(),
+        get_cwd_display()
+    );
     println!("╰─────────────────────────────────────────────────────────────╯");
     println!();
 
     println!(" {}:", style("Available commands").bold());
-    println!("   {} - Initialize Hive in current directory", style("hive init").cyan());
+    println!(
+        "   {} - Initialize Hive in current directory",
+        style("hive init").cyan()
+    );
     println!("   {} - Show system status", style("hive status").cyan());
-    println!("   {} - Show configuration", style("hive config show").cyan());
-    println!("   {} - Ask a question (demo)", style("hive ask \"<question>\"").cyan());
+    println!(
+        "   {} - Show configuration",
+        style("hive config show").cyan()
+    );
+    println!(
+        "   {} - Ask a question (demo)",
+        style("hive ask \"<question>\"").cyan()
+    );
     println!();
 
     println!(" {}:", style("Phase 1 Progress").bold());
@@ -125,7 +139,7 @@ fn get_cwd_display() -> String {
         .map(|p| {
             let display = p.display().to_string();
             if display.len() > 40 {
-                format!("...{}", &display[display.len()-37..])
+                format!("...{}", &display[display.len() - 37..])
             } else {
                 display
             }

@@ -5,21 +5,18 @@
 
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::{info, debug, warn, error};
+use tracing::{debug, error, info, warn};
 
 use crate::ai_helpers::{
-    AIHelperEcosystem,
-    AIHelperRollbackExecutor,
-    RollbackPlan, RollbackResult,
+    AIHelperEcosystem, AIHelperRollbackExecutor, RollbackPlan, RollbackResult,
 };
-use crate::consensus::rollback_planner_v2::{
-    ConsensusRollbackPlanner, RollbackPlanningConfig,
-    RollbackFeasibilityAnalysis,
-};
-use crate::consensus::rollback_planner::RollbackPlan as LegacyRollbackPlan;
-use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
 use crate::consensus::operation_history::OperationHistoryDatabase;
+use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
+use crate::consensus::rollback_planner::RollbackPlan as LegacyRollbackPlan;
+use crate::consensus::rollback_planner_v2::{
+    ConsensusRollbackPlanner, RollbackFeasibilityAnalysis, RollbackPlanningConfig,
+};
+use crate::consensus::stages::file_aware_curator::FileOperation;
 
 /// AI-powered consensus rollback executor that delegates to AI Helpers
 pub struct AIConsensusRollbackExecutor {
@@ -38,9 +35,9 @@ impl AIConsensusRollbackExecutor {
             history_database,
             RollbackPlanningConfig::default(),
         );
-        
+
         let ai_executor = AIHelperRollbackExecutor::new(ai_helpers);
-        
+
         Self {
             planner,
             ai_executor,
@@ -53,29 +50,36 @@ impl AIConsensusRollbackExecutor {
         failed_operations: Vec<FileOperation>,
         failure_context: &str,
     ) -> Result<RollbackResult> {
-        info!("🔄 Planning rollback for {} failed operations", failed_operations.len());
-        
+        info!(
+            "🔄 Planning rollback for {} failed operations",
+            failed_operations.len()
+        );
+
         // Step 1: Create rollback plan (consensus THINKS)
-        let plan = self.planner
+        let plan = self
+            .planner
             .create_rollback_plan(failed_operations, failure_context)
             .await?;
-        
-        info!("📋 Created rollback plan {} with {} operations", 
-              plan.plan_id, plan.operations.len());
-        
+
+        info!(
+            "📋 Created rollback plan {} with {} operations",
+            plan.plan_id,
+            plan.operations.len()
+        );
+
         // Step 2: Analyze feasibility
-        let feasibility = self.planner
-            .analyze_rollback_feasibility(&plan)
-            .await?;
-        
+        let feasibility = self.planner.analyze_rollback_feasibility(&plan).await?;
+
         if feasibility.feasibility_score < 0.5 {
-            warn!("⚠️ Rollback plan has low feasibility: {:.1}%", 
-                  feasibility.feasibility_score * 100.0);
+            warn!(
+                "⚠️ Rollback plan has low feasibility: {:.1}%",
+                feasibility.feasibility_score * 100.0
+            );
             for issue in &feasibility.issues {
                 warn!("  - {}", issue);
             }
         }
-        
+
         // Step 3: Execute plan via AI Helper (AI Helper DOES)
         info!("🤖 Delegating rollback execution to AI Helper");
         self.ai_executor.execute_rollback_plan(plan).await
@@ -87,13 +91,15 @@ impl AIConsensusRollbackExecutor {
         legacy_plan: LegacyRollbackPlan,
     ) -> Result<RollbackResult> {
         info!("🔄 Converting legacy rollback plan: {}", legacy_plan.id);
-        
+
         // Convert legacy plan to new format
         let plan = self.planner.convert_legacy_plan(legacy_plan)?;
-        
-        info!("📋 Converted to new plan format with {} operations", 
-              plan.operations.len());
-        
+
+        info!(
+            "📋 Converted to new plan format with {} operations",
+            plan.operations.len()
+        );
+
         // Execute via AI Helper
         self.ai_executor.execute_rollback_plan(plan).await
     }
@@ -126,12 +132,13 @@ impl AIConsensusRollbackExecutor {
     /// Dry run a rollback plan
     pub async fn dry_run_plan(&self, plan: RollbackPlan) -> Result<RollbackResult> {
         info!("🏃 Dry run rollback plan: {}", plan.plan_id);
-        
+
         // Create a dry-run executor
         let dry_run_executor = AIHelperRollbackExecutor::new(
-            AIHelperEcosystem::new_mock() // Use mock for dry run
-        ).dry_run(true);
-        
+            AIHelperEcosystem::new_mock(), // Use mock for dry run
+        )
+        .dry_run(true);
+
         dry_run_executor.execute_rollback_plan(plan).await
     }
 
@@ -147,21 +154,19 @@ impl AIConsensusRollbackExecutor {
     }
 
     /// Verify individual operations can be rolled back
-    pub async fn verify_operations(
-        &self,
-        plan: &RollbackPlan,
-    ) -> Result<Vec<(String, bool)>> {
+    pub async fn verify_operations(&self, plan: &RollbackPlan) -> Result<Vec<(String, bool)>> {
         let mut results = Vec::new();
-        
+
         for operation in &plan.operations {
-            let can_execute = self.ai_executor
+            let can_execute = self
+                .ai_executor
                 .verify_operation(operation)
                 .await
                 .unwrap_or(false);
-            
+
             results.push((operation.operation_id.clone(), can_execute));
         }
-        
+
         Ok(results)
     }
 }
@@ -198,20 +203,14 @@ mod tests {
     async fn test_rollback_planning() {
         let ai_helpers = AIHelperEcosystem::new_mock();
         let intelligence = Arc::new(OperationIntelligenceCoordinator::new_mock());
-        
-        let executor = AIConsensusRollbackExecutor::new(
-            ai_helpers,
-            intelligence,
-            None,
-        );
+
+        let executor = AIConsensusRollbackExecutor::new(ai_helpers, intelligence, None);
 
         // Test creating a rollback plan
-        let failed_ops = vec![
-            FileOperation::Create {
-                path: std::path::PathBuf::from("test.txt"),
-                content: "test content".to_string(),
-            }
-        ];
+        let failed_ops = vec![FileOperation::Create {
+            path: std::path::PathBuf::from("test.txt"),
+            content: "test content".to_string(),
+        }];
 
         let plan = executor
             .create_rollback_plan(failed_ops, "Test failure")
@@ -229,12 +228,8 @@ mod tests {
     async fn test_feasibility_analysis() {
         let ai_helpers = AIHelperEcosystem::new_mock();
         let intelligence = Arc::new(OperationIntelligenceCoordinator::new_mock());
-        
-        let executor = AIConsensusRollbackExecutor::new(
-            ai_helpers,
-            intelligence,
-            None,
-        );
+
+        let executor = AIConsensusRollbackExecutor::new(ai_helpers, intelligence, None);
 
         let plan = RollbackPlan {
             plan_id: "test-plan".to_string(),
@@ -244,10 +239,7 @@ mod tests {
             created_at: chrono::Utc::now(),
         };
 
-        let feasibility = executor
-            .analyze_feasibility(&plan)
-            .await
-            .unwrap();
+        let feasibility = executor.analyze_feasibility(&plan).await.unwrap();
 
         assert_eq!(feasibility.feasibility_score, 1.0); // Empty plan is 100% feasible
     }

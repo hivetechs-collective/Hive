@@ -3,9 +3,9 @@
 //! Handles running SQL migrations and initializing default data
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, Transaction, params, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use std::path::Path;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 use crate::database::schema;
 
@@ -33,11 +33,9 @@ pub async fn run_migrations(conn: &Connection) -> Result<()> {
 
     // Get current version
     let current_version: Option<i32> = conn
-        .query_row(
-            "SELECT MAX(version) FROM schema_migrations",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
         .optional()?;
 
     let current_version = current_version.unwrap_or(0);
@@ -50,7 +48,10 @@ pub async fn run_migrations(conn: &Connection) -> Result<()> {
     let mut applied_count = 0;
     for migration in migrations {
         if migration.version > current_version {
-            info!("Applying migration {}: {}", migration.version, migration.name);
+            info!(
+                "Applying migration {}: {}",
+                migration.version, migration.name
+            );
             apply_migration(conn, &migration)?;
             applied_count += 1;
         }
@@ -88,10 +89,7 @@ async fn load_migrations() -> Result<Vec<Migration>> {
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) == Some("sql") {
-            let filename = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+            let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
 
             // Extract version from filename (e.g., "001_initial_schema.sql" -> 1)
             let version: i32 = filename
@@ -113,11 +111,7 @@ async fn load_migrations() -> Result<Vec<Migration>> {
                     .map(|s| s.trim().to_string())
                     .unwrap_or_else(|| format!("migration_{}", version));
 
-                migrations.push(Migration {
-                    version,
-                    name,
-                    sql,
-                });
+                migrations.push(Migration { version, name, sql });
             }
         }
     }
@@ -192,7 +186,8 @@ fn apply_migration(conn: &Connection, migration: &Migration) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
 
     // Filter out metadata comments and empty lines
-    let clean_sql = migration.sql
+    let clean_sql = migration
+        .sql
         .lines()
         .filter(|line| {
             let trimmed = line.trim();
@@ -241,11 +236,9 @@ pub async fn needs_migration(conn: &Connection) -> Result<bool> {
 
     // Get current version
     let current_version: Option<i32> = conn
-        .query_row(
-            "SELECT MAX(version) FROM schema_migrations",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
         .optional()?;
 
     let current_version = current_version.unwrap_or(0);
@@ -294,11 +287,9 @@ mod tests {
         run_migrations(&conn).await?;
 
         // Check migrations were tracked
-        let count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM schema_migrations",
-            [],
-            |row| row.get(0),
-        )?;
+        let count: i32 = conn.query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })?;
         assert!(count > 0);
 
         // Run again - should be idempotent

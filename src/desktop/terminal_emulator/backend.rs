@@ -1,7 +1,5 @@
 //! Terminal backend using alacritty_terminal
 
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use alacritty_terminal::{
     event::{Event as TermEvent, EventListener, WindowSize},
     event_loop::{EventLoop, Msg, Notifier},
@@ -11,7 +9,9 @@ use alacritty_terminal::{
     tty::{self, Options as TtyOptions},
     Term as Terminal,
 };
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use super::config::TerminalConfig;
 
@@ -55,7 +55,9 @@ impl EventListener for EventProxy {
 
 impl TerminalBackend {
     /// Create a new terminal backend
-    pub fn new(config: TerminalConfig) -> Result<(Self, tokio::sync::mpsc::UnboundedReceiver<TermEvent>)> {
+    pub fn new(
+        config: TerminalConfig,
+    ) -> Result<(Self, tokio::sync::mpsc::UnboundedReceiver<TermEvent>)> {
         // Create event channel
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
         let event_proxy = EventProxy { sender: tx };
@@ -65,7 +67,7 @@ impl TerminalBackend {
             cols: config.cols,
             lines: config.rows,
         };
-        
+
         let window_size = WindowSize {
             num_lines: config.rows,
             num_cols: config.cols,
@@ -84,7 +86,7 @@ impl TerminalBackend {
         // Create PTY
         let mut pty = tty::new(&tty_options, window_size, 0)
             .map_err(|e| anyhow!("Failed to create PTY: {}", e))?;
-            
+
         // Get writer before moving pty
         let pty_writer = pty.take_writer();
 
@@ -125,17 +127,15 @@ impl TerminalBackend {
     /// Write data to the PTY
     pub fn write(&mut self, data: &[u8]) -> Result<()> {
         use std::io::Write;
-        self.pty_writer.write_all(data)
+        self.pty_writer
+            .write_all(data)
             .map_err(|e| anyhow!("Failed to write to PTY: {}", e))
     }
 
     /// Resize the terminal
     pub fn resize(&self, cols: u16, rows: u16) {
-        let terminal_size = TerminalSize {
-            cols,
-            lines: rows,
-        };
-        
+        let terminal_size = TerminalSize { cols, lines: rows };
+
         // Only resize the terminal, PTY resize would need to be handled differently
         let mut terminal = self.terminal.lock();
         terminal.resize(terminal_size);

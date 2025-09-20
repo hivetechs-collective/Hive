@@ -1,17 +1,17 @@
 // AI-Enhanced Operation Validation Pipeline
-use anyhow::{Result, anyhow, Context};
+use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, info, warn, error};
+use tracing::{debug, error, info, warn};
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_analysis::{OperationContext, OperationAnalysis};
-use crate::consensus::operation_parser::EnhancedFileOperation;
 use crate::ai_helpers::pattern_recognizer::PatternRecognizer;
 use crate::ai_helpers::quality_analyzer::QualityAnalyzer;
+use crate::consensus::operation_analysis::{OperationAnalysis, OperationContext};
+use crate::consensus::operation_parser::EnhancedFileOperation;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 
 /// Comprehensive validation pipeline for file operations
 #[derive(Debug, Clone)]
@@ -196,27 +196,19 @@ impl FileSystemValidator {
 
     pub async fn validate(&self, operation: &FileOperation) -> Result<ValidationCheck> {
         match operation {
-            FileOperation::Create { path, content } => {
-                self.validate_create(path, content).await
-            }
-            FileOperation::Update { path, .. } => {
-                self.validate_update(path).await
-            }
+            FileOperation::Create { path, content } => self.validate_create(path, content).await,
+            FileOperation::Update { path, .. } => self.validate_update(path).await,
             FileOperation::Append { path, .. } => {
                 self.validate_update(path).await // Treat append like update for validation
             }
-            FileOperation::Delete { path } => {
-                self.validate_delete(path).await
-            }
-            FileOperation::Rename { from, to } => {
-                self.validate_rename(from, to).await
-            }
+            FileOperation::Delete { path } => self.validate_delete(path).await,
+            FileOperation::Rename { from, to } => self.validate_rename(from, to).await,
         }
     }
 
     async fn validate_create(&self, path: &Path, content: &str) -> Result<ValidationCheck> {
         let full_path = self.workspace_root.join(path);
-        
+
         // Check if file already exists
         if tokio::fs::metadata(&full_path).await.is_ok() {
             return Ok(ValidationCheck {
@@ -263,7 +255,7 @@ impl FileSystemValidator {
 
     async fn validate_update(&self, path: &Path) -> Result<ValidationCheck> {
         let full_path = self.workspace_root.join(path);
-        
+
         // Check if file exists
         if tokio::fs::metadata(&full_path).await.is_err() {
             return Ok(ValidationCheck {
@@ -310,7 +302,7 @@ impl FileSystemValidator {
 
     async fn validate_delete(&self, path: &Path) -> Result<ValidationCheck> {
         let full_path = self.workspace_root.join(path);
-        
+
         // Check if file exists
         if tokio::fs::metadata(&full_path).await.is_err() {
             return Ok(ValidationCheck {
@@ -346,7 +338,7 @@ impl FileSystemValidator {
     async fn validate_rename(&self, from: &Path, to: &Path) -> Result<ValidationCheck> {
         let old_full = self.workspace_root.join(from);
         let new_full = self.workspace_root.join(to);
-        
+
         // Check source exists
         if tokio::fs::metadata(&old_full).await.is_err() {
             return Ok(ValidationCheck {
@@ -395,7 +387,8 @@ impl SecurityValidator {
     pub fn new() -> Self {
         Self {
             forbidden_patterns: vec![
-                regex::Regex::new(r#"(?i)(password|secret|key|token)\s*=\s*['"'][\w\-]+['"']"#).unwrap(),
+                regex::Regex::new(r#"(?i)(password|secret|key|token)\s*=\s*['"'][\w\-]+['"']"#)
+                    .unwrap(),
                 regex::Regex::new(r#"(?i)api[_-]?key\s*[:=]\s*[\w\-]+"#).unwrap(),
                 regex::Regex::new(r"-----BEGIN (RSA |EC )?PRIVATE KEY-----").unwrap(),
             ],
@@ -411,14 +404,14 @@ impl SecurityValidator {
         let mut checks = Vec::new();
 
         match operation {
-            FileOperation::Create { path, content } | 
-            FileOperation::Update { path, content, .. } => {
+            FileOperation::Create { path, content }
+            | FileOperation::Update { path, content, .. } => {
                 // Check for sensitive content
                 checks.push(self.check_sensitive_content(content)?);
-                
+
                 // Check sensitive file paths
                 checks.push(self.check_sensitive_path(path)?);
-                
+
                 // Check for potential security vulnerabilities
                 checks.push(self.check_security_vulnerabilities(content)?);
             }
@@ -464,7 +457,7 @@ impl SecurityValidator {
 
     fn check_sensitive_path(&self, path: &Path) -> Result<ValidationCheck> {
         let path_str = path.to_string_lossy();
-        
+
         if self.is_sensitive_file(path) {
             return Ok(ValidationCheck {
                 name: "Sensitive path check".to_string(),
@@ -516,7 +509,9 @@ impl SecurityValidator {
 
     fn is_sensitive_file(&self, path: &Path) -> bool {
         let path_str = path.to_string_lossy();
-        self.sensitive_file_patterns.iter().any(|p| p.is_match(&path_str))
+        self.sensitive_file_patterns
+            .iter()
+            .any(|p| p.is_match(&path_str))
     }
 }
 
@@ -529,13 +524,13 @@ pub struct SyntaxValidator {
 impl SyntaxValidator {
     pub fn new() -> Self {
         let mut validators: HashMap<String, Box<dyn LanguageValidator>> = HashMap::new();
-        
+
         // Add basic validators for common languages
         validators.insert("rs".to_string(), Box::new(RustValidator));
         validators.insert("js".to_string(), Box::new(JavaScriptValidator));
         validators.insert("ts".to_string(), Box::new(TypeScriptValidator));
         validators.insert("py".to_string(), Box::new(PythonValidator));
-        
+
         Self {
             language_validators: validators,
         }
@@ -557,9 +552,7 @@ impl SyntaxValidator {
         };
 
         // Determine language from file extension
-        let extension = path.extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         if let Some(validator) = self.language_validators.get(extension) {
             validator.validate(content).await
@@ -576,21 +569,28 @@ impl SyntaxValidator {
 }
 
 trait LanguageValidator: Send + Sync + std::fmt::Debug {
-    fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>>;
+    fn validate(
+        &self,
+        content: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>>;
 }
 
 #[derive(Debug)]
 struct RustValidator;
 
 impl LanguageValidator for RustValidator {
-    fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
+    fn validate(
+        &self,
+        content: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>>
+    {
         let content = content.to_string();
         Box::pin(async move {
             // Basic Rust syntax checks
             let mut brace_count = 0;
             let mut in_string = false;
             let mut in_comment = false;
-            
+
             for ch in content.chars() {
                 match ch {
                     '"' if !in_comment => in_string = !in_string,
@@ -624,7 +624,11 @@ impl LanguageValidator for RustValidator {
 #[derive(Debug)]
 struct JavaScriptValidator;
 impl LanguageValidator for JavaScriptValidator {
-    fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
+    fn validate(
+        &self,
+        content: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>>
+    {
         Box::pin(async move {
             // Basic JavaScript validation
             Ok(ValidationCheck {
@@ -641,7 +645,11 @@ impl LanguageValidator for JavaScriptValidator {
 #[derive(Debug)]
 struct TypeScriptValidator;
 impl LanguageValidator for TypeScriptValidator {
-    fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
+    fn validate(
+        &self,
+        content: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>>
+    {
         Box::pin(async move {
             Ok(ValidationCheck {
                 name: "TypeScript syntax check".to_string(),
@@ -657,13 +665,17 @@ impl LanguageValidator for TypeScriptValidator {
 #[derive(Debug)]
 struct PythonValidator;
 impl LanguageValidator for PythonValidator {
-    fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
+    fn validate(
+        &self,
+        content: &str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>>
+    {
         let content = content.to_string();
         Box::pin(async move {
             // Check indentation consistency
             let lines: Vec<&str> = content.lines().collect();
             let mut indent_style = None;
-            
+
             for line in &lines {
                 if line.starts_with(' ') || line.starts_with('\t') {
                     let uses_spaces = line.starts_with(' ');
@@ -703,7 +715,7 @@ impl OperationValidator {
         config: Option<ValidationConfig>,
     ) -> Self {
         let config = config.unwrap_or_default();
-        
+
         Self {
             pattern_recognizer,
             quality_analyzer,
@@ -722,7 +734,7 @@ impl OperationValidator {
         context: &OperationContext,
     ) -> Result<ValidationResult> {
         let cache_key = self.generate_cache_key(operations);
-        
+
         // Check cache
         if let Some(cached) = self.validation_cache.read().await.get(&cache_key) {
             debug!("Using cached validation result");
@@ -737,8 +749,10 @@ impl OperationValidator {
         // Validate each operation
         for (i, enhanced_op) in operations.iter().enumerate() {
             let _permit = self.validation_semaphore.acquire().await?;
-            
-            let op_result = self.validate_single_operation(&enhanced_op.operation, i).await?;
+
+            let op_result = self
+                .validate_single_operation(&enhanced_op.operation, i)
+                .await?;
             all_checks.extend(op_result.checks);
             all_errors.extend(op_result.errors);
             all_warnings.extend(op_result.warnings);
@@ -752,7 +766,8 @@ impl OperationValidator {
 
         // Use AI helpers for additional insights
         if let Some(pattern_recognizer) = &self.pattern_recognizer {
-            ai_insights.push("Pattern analysis complete - no dangerous patterns detected".to_string());
+            ai_insights
+                .push("Pattern analysis complete - no dangerous patterns detected".to_string());
         }
 
         // Generate risk assessment
@@ -785,7 +800,10 @@ impl OperationValidator {
         };
 
         // Cache the result
-        self.validation_cache.write().await.insert(cache_key, result.clone());
+        self.validation_cache
+            .write()
+            .await
+            .insert(cache_key, result.clone());
 
         Ok(result)
     }
@@ -926,7 +944,10 @@ impl OperationValidator {
         })
     }
 
-    async fn check_operation_conflicts(&self, operations: &[EnhancedFileOperation]) -> Result<Vec<ValidationCheck>> {
+    async fn check_operation_conflicts(
+        &self,
+        operations: &[EnhancedFileOperation],
+    ) -> Result<Vec<ValidationCheck>> {
         let mut checks = Vec::new();
         let mut file_operations: HashMap<PathBuf, Vec<usize>> = HashMap::new();
 
@@ -944,7 +965,11 @@ impl OperationValidator {
                     name: "Conflict check".to_string(),
                     category: CheckCategory::Conflicts,
                     status: CheckStatus::Warning,
-                    message: format!("Multiple operations on {}: indices {:?}", path.display(), indices),
+                    message: format!(
+                        "Multiple operations on {}: indices {:?}",
+                        path.display(),
+                        indices
+                    ),
                     severity: Severity::Warning,
                 });
             }
@@ -962,8 +987,14 @@ impl OperationValidator {
         let mut risk_score = 0;
 
         // Count failures and warnings
-        let failure_count = checks.iter().filter(|c| c.status == CheckStatus::Failed).count();
-        let warning_count = checks.iter().filter(|c| c.status == CheckStatus::Warning).count();
+        let failure_count = checks
+            .iter()
+            .filter(|c| c.status == CheckStatus::Failed)
+            .count();
+        let warning_count = checks
+            .iter()
+            .filter(|c| c.status == CheckStatus::Warning)
+            .count();
         let error_count = errors.len();
 
         if error_count > 0 {
@@ -982,10 +1013,13 @@ impl OperationValidator {
         }
 
         // Check for security issues
-        let security_issues = checks.iter()
-            .filter(|c| matches!(c.category, CheckCategory::Security) && c.status != CheckStatus::Passed)
+        let security_issues = checks
+            .iter()
+            .filter(|c| {
+                matches!(c.category, CheckCategory::Security) && c.status != CheckStatus::Passed
+            })
             .count();
-        
+
         if security_issues > 0 {
             risk_score += security_issues * 40;
             risk_factors.push("Security concerns detected".to_string());
@@ -1020,7 +1054,8 @@ impl OperationValidator {
                     if error.message.contains("does not exist") {
                         fixes.push(SuggestedFix {
                             issue: error.message.clone(),
-                            fix_description: "Create the missing parent directories first".to_string(),
+                            fix_description: "Create the missing parent directories first"
+                                .to_string(),
                             automated: true,
                             confidence: 0.9,
                         });
@@ -1029,7 +1064,8 @@ impl OperationValidator {
                 "SEC001" => {
                     fixes.push(SuggestedFix {
                         issue: error.message.clone(),
-                        fix_description: "Remove or encrypt sensitive content before committing".to_string(),
+                        fix_description: "Remove or encrypt sensitive content before committing"
+                            .to_string(),
                         automated: false,
                         confidence: 0.8,
                     });
@@ -1037,7 +1073,8 @@ impl OperationValidator {
                 "SYN001" => {
                     fixes.push(SuggestedFix {
                         issue: error.message.clone(),
-                        fix_description: "Fix syntax errors using language-specific linter".to_string(),
+                        fix_description: "Fix syntax errors using language-specific linter"
+                            .to_string(),
                         automated: true,
                         confidence: 0.7,
                     });
@@ -1051,23 +1088,23 @@ impl OperationValidator {
 
     fn get_operation_path(&self, operation: &FileOperation) -> Option<PathBuf> {
         match operation {
-            FileOperation::Create { path, .. } |
-            FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } |
-            FileOperation::Append { path, .. } => Some(path.clone()),
+            FileOperation::Create { path, .. }
+            | FileOperation::Update { path, .. }
+            | FileOperation::Delete { path }
+            | FileOperation::Append { path, .. } => Some(path.clone()),
             FileOperation::Rename { to, .. } => Some(to.clone()),
         }
     }
 
     fn generate_cache_key(&self, operations: &[EnhancedFileOperation]) -> String {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
+        use std::hash::{Hash, Hasher};
+
         let mut hasher = DefaultHasher::new();
         for op in operations {
             format!("{:?}", op.operation).hash(&mut hasher);
         }
-        
+
         format!("validation_{:x}", hasher.finish())
     }
 
@@ -1080,18 +1117,18 @@ impl OperationValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_file_system_validation() {
         let temp_dir = tempfile::tempdir().unwrap();
         let validator = FileSystemValidator::new(temp_dir.path().to_path_buf());
-        
+
         // Test create validation
         let op = FileOperation::Create {
             path: PathBuf::from("test.txt"),
             content: "Hello".to_string(),
         };
-        
+
         let result = validator.validate(&op).await.unwrap();
         assert_eq!(result.status, CheckStatus::Passed);
     }
@@ -1099,13 +1136,13 @@ mod tests {
     #[tokio::test]
     async fn test_security_validation() {
         let validator = SecurityValidator::new();
-        
+
         // Test with sensitive content
         let op = FileOperation::Create {
             path: PathBuf::from("config.js"),
             content: "const API_KEY = 'secret-key-12345'".to_string(),
         };
-        
+
         let results = validator.validate(&op).await.unwrap();
         assert!(results.iter().any(|c| c.status == CheckStatus::Failed));
     }
@@ -1113,22 +1150,22 @@ mod tests {
     #[tokio::test]
     async fn test_syntax_validation() {
         let validator = SyntaxValidator::new();
-        
+
         // Test Rust syntax
         let op = FileOperation::Create {
             path: PathBuf::from("test.rs"),
             content: "fn main() { println!(\"Hello\"); }".to_string(),
         };
-        
+
         let result = validator.validate(&op).await.unwrap();
         assert_eq!(result.status, CheckStatus::Passed);
-        
+
         // Test unbalanced braces
         let bad_op = FileOperation::Create {
             path: PathBuf::from("bad.rs"),
             content: "fn main() { println!(\"Hello\");".to_string(),
         };
-        
+
         let bad_result = validator.validate(&bad_op).await.unwrap();
         assert_eq!(bad_result.status, CheckStatus::Failed);
     }

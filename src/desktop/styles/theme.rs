@@ -83,7 +83,7 @@ impl ThemeColors {
             border: "#474747".to_string(),
         }
     }
-    
+
     pub fn light_theme() -> Self {
         Self {
             background: "#ffffff".to_string(),
@@ -98,7 +98,7 @@ impl ThemeColors {
             border: "#d4d4d4".to_string(),
         }
     }
-    
+
     pub fn high_contrast_theme() -> Self {
         Self {
             background: "#000000".to_string(),
@@ -113,7 +113,7 @@ impl ThemeColors {
             border: "#6fc3df".to_string(),
         }
     }
-    
+
     pub fn from_theme(theme: Theme) -> Self {
         match theme {
             Theme::Dark => Self::dark_theme(),

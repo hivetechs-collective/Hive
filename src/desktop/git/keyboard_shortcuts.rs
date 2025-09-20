@@ -1,19 +1,19 @@
 //! Keyboard shortcuts for diff actions
-//! 
+//!
 //! Provides VS Code-style keyboard shortcuts for staging, reverting, and managing diffs
 
+use crate::desktop::git::{DiffAction, DiffHunk, DiffLine};
 use dioxus::prelude::*;
 use dioxus_signals::Signal;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use crate::desktop::git::{DiffAction, DiffHunk, DiffLine};
 
 /// Keyboard shortcut configuration
 #[derive(Debug, Clone)]
 pub struct ShortcutConfig {
     /// Alt+S: Stage hunk/line
     pub stage: KeyCombination,
-    /// Alt+U: Unstage hunk/line  
+    /// Alt+U: Unstage hunk/line
     pub unstage: KeyCombination,
     /// Alt+R: Revert hunk/line
     pub revert: KeyCombination,
@@ -100,27 +100,35 @@ impl KeyCombination {
         // For now, just return false as a placeholder
         false
     }
-    
+
     /// Get human-readable representation
     pub fn to_string(&self) -> String {
         let mut parts = Vec::new();
-        
-        if self.ctrl { parts.push("Ctrl"); }
-        if self.alt { parts.push("Alt"); }
-        if self.shift { parts.push("Shift"); }
-        if self.meta { parts.push("Cmd"); }
-        
+
+        if self.ctrl {
+            parts.push("Ctrl");
+        }
+        if self.alt {
+            parts.push("Alt");
+        }
+        if self.shift {
+            parts.push("Shift");
+        }
+        if self.meta {
+            parts.push("Cmd");
+        }
+
         // Convert key code to readable name
         let key_name = match self.key.as_str() {
             "KeyA" => "A",
-            "KeyS" => "S", 
+            "KeyS" => "S",
             "KeyU" => "U",
             "KeyR" => "R",
             "Escape" => "Esc",
             "F1" => "F1",
             other => other,
         };
-        
+
         parts.push(key_name);
         parts.join("+")
     }
@@ -177,14 +185,14 @@ impl ShortcutManager {
             action_handlers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
-    
+
     /// Update action context
     pub fn update_context(&self, context: ActionContext) {
         if let Ok(mut ctx) = self.context.lock() {
             *ctx = Some(context);
         }
     }
-    
+
     /// Register action handler
     pub fn register_handler<F>(&self, id: String, handler: F)
     where
@@ -194,7 +202,7 @@ impl ShortcutManager {
             handlers.insert(id, Box::new(handler));
         }
     }
-    
+
     /// Handle keyboard event (placeholder for desktop)
     pub fn handle_key_event(&self, event: &str) -> bool {
         let action = if self.config.stage.matches(event) {
@@ -214,7 +222,7 @@ impl ShortcutManager {
         } else {
             None
         };
-        
+
         if let Some(action) = action {
             self.execute_action(action);
             true
@@ -222,7 +230,7 @@ impl ShortcutManager {
             false
         }
     }
-    
+
     /// Execute shortcut action
     fn execute_action(&self, action: ShortcutAction) {
         if let Ok(handlers) = self.action_handlers.lock() {
@@ -231,16 +239,34 @@ impl ShortcutManager {
             }
         }
     }
-    
+
     /// Get all shortcut descriptions for help
     pub fn get_shortcuts_help(&self) -> Vec<(String, String)> {
         vec![
-            (self.config.stage.to_string(), "Stage hunk or line".to_string()),
-            (self.config.unstage.to_string(), "Unstage hunk or line".to_string()),
-            (self.config.revert.to_string(), "Revert hunk or line".to_string()),
-            (self.config.stage_all.to_string(), "Stage all changes".to_string()),
-            (self.config.unstage_all.to_string(), "Unstage all changes".to_string()),
-            (self.config.cancel.to_string(), "Cancel operation".to_string()),
+            (
+                self.config.stage.to_string(),
+                "Stage hunk or line".to_string(),
+            ),
+            (
+                self.config.unstage.to_string(),
+                "Unstage hunk or line".to_string(),
+            ),
+            (
+                self.config.revert.to_string(),
+                "Revert hunk or line".to_string(),
+            ),
+            (
+                self.config.stage_all.to_string(),
+                "Stage all changes".to_string(),
+            ),
+            (
+                self.config.unstage_all.to_string(),
+                "Unstage all changes".to_string(),
+            ),
+            (
+                self.config.cancel.to_string(),
+                "Cancel operation".to_string(),
+            ),
             (self.config.help.to_string(), "Show help".to_string()),
         ]
     }
@@ -252,7 +278,7 @@ pub fn GlobalShortcutHandler(props: GlobalShortcutHandlerProps) -> Element {
     // For desktop apps, keyboard handling might be different
     // This is a placeholder implementation
     rsx! {
-        div { 
+        div {
             style: "display: none;",
             // Desktop keyboard shortcut handling would be implemented here
         }
@@ -273,14 +299,14 @@ pub fn ShortcutHelpDialog(props: ShortcutHelpDialogProps) -> Element {
     // Try to use context, but provide a default if not available
     let manager = match try_consume_context::<Signal<Arc<ShortcutManager>>>() {
         Some(signal) => signal.read().clone(),
-        None => Arc::new(ShortcutManager::new(ShortcutConfig::default()))
+        None => Arc::new(ShortcutManager::new(ShortcutConfig::default())),
     };
     let shortcuts = manager.get_shortcuts_help();
-    
+
     if !props.visible {
         return rsx! { div {} };
     }
-    
+
     rsx! {
         div {
             class: "shortcut-help-overlay",
@@ -290,21 +316,21 @@ pub fn ShortcutHelpDialog(props: ShortcutHelpDialogProps) -> Element {
                     handler.call(());
                 }
             },
-            
+
             div {
                 class: "shortcut-help-dialog",
                 style: "background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 24px; max-width: 500px; width: 90%;",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;",
-                    
+
                     h3 {
                         style: "color: #cccccc; margin: 0; font-size: 16px; font-weight: 600;",
                         "Keyboard Shortcuts"
                     }
-                    
+
                     button {
                         style: "background: none; border: none; color: #cccccc; font-size: 18px; cursor: pointer; padding: 4px;",
                         onclick: move |_| {
@@ -315,21 +341,21 @@ pub fn ShortcutHelpDialog(props: ShortcutHelpDialogProps) -> Element {
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "shortcuts-list",
                     style: "display: flex; flex-direction: column; gap: 12px;",
-                    
+
                     for (shortcut, description) in shortcuts {
                         div {
                             class: "shortcut-item",
                             style: "display: flex; justify-content: space-between; align-items: center; padding: 8px 0;",
-                            
+
                             span {
                                 style: "color: #cccccc; font-size: 14px;",
                                 "{description}"
                             }
-                            
+
                             span {
                                 class: "shortcut-key",
                                 style: "background: #3e3e42; color: #cccccc; padding: 4px 8px; border-radius: 3px; font-family: monospace; font-size: 12px;",
@@ -338,11 +364,11 @@ pub fn ShortcutHelpDialog(props: ShortcutHelpDialogProps) -> Element {
                         }
                     }
                 }
-                
+
                 div {
                     class: "dialog-footer",
                     style: "margin-top: 20px; text-align: center;",
-                    
+
                     p {
                         style: "color: #8b949e; font-size: 12px; margin: 0;",
                         "Hover over hunks and lines to see available actions"
@@ -378,21 +404,21 @@ impl FocusManager {
             focused_line: Arc::new(Mutex::new(None)),
         }
     }
-    
+
     /// Set focused hunk
     pub fn set_focused_hunk(&self, hunk_id: Option<String>) {
         if let Ok(mut focused) = self.focused_hunk.lock() {
             *focused = hunk_id;
         }
     }
-    
+
     /// Set focused line
     pub fn set_focused_line(&self, line_id: Option<String>) {
         if let Ok(mut focused) = self.focused_line.lock() {
             *focused = line_id;
         }
     }
-    
+
     /// Get focused hunk
     pub fn get_focused_hunk(&self) -> Option<String> {
         if let Ok(focused) = self.focused_hunk.lock() {
@@ -401,7 +427,7 @@ impl FocusManager {
             None
         }
     }
-    
+
     /// Get focused line
     pub fn get_focused_line(&self) -> Option<String> {
         if let Ok(focused) = self.focused_line.lock() {
@@ -417,7 +443,7 @@ impl FocusManager {
 pub fn FocusableHunk(props: FocusableHunkProps) -> Element {
     let focus_manager = use_context::<Arc<FocusManager>>();
     let mut is_focused = use_signal(|| false);
-    
+
     // Clone values for closures
     let focus_manager_1 = focus_manager.clone();
     let focus_manager_2 = focus_manager.clone();
@@ -425,7 +451,7 @@ pub fn FocusableHunk(props: FocusableHunkProps) -> Element {
     let focus_manager_4 = focus_manager.clone();
     let hunk_id_1 = props.hunk_id.clone();
     let hunk_id_2 = props.hunk_id.clone();
-    
+
     rsx! {
         div {
             class: "focusable-hunk",
@@ -450,7 +476,7 @@ pub fn FocusableHunk(props: FocusableHunkProps) -> Element {
                     focus_manager_4.set_focused_hunk(None);
                 }
             },
-            
+
             {props.children}
         }
     }
@@ -470,7 +496,7 @@ pub struct FocusableHunkProps {
 pub fn FocusableLine(props: FocusableLineProps) -> Element {
     let focus_manager = use_context::<Arc<FocusManager>>();
     let mut is_focused = use_signal(|| false);
-    
+
     // Clone values for closures
     let focus_manager_1 = focus_manager.clone();
     let focus_manager_2 = focus_manager.clone();
@@ -478,7 +504,7 @@ pub fn FocusableLine(props: FocusableLineProps) -> Element {
     let focus_manager_4 = focus_manager.clone();
     let line_id_1 = props.line_id.clone();
     let line_id_2 = props.line_id.clone();
-    
+
     rsx! {
         div {
             class: "focusable-line",
@@ -503,7 +529,7 @@ pub fn FocusableLine(props: FocusableLineProps) -> Element {
                     focus_manager_4.set_focused_line(None);
                 }
             },
-            
+
             {props.children}
         }
     }

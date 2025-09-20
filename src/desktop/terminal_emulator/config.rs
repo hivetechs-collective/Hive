@@ -10,7 +10,7 @@ use alacritty_terminal::{
 pub struct TerminalConfig {
     /// Terminal columns
     pub cols: u16,
-    /// Terminal rows  
+    /// Terminal rows
     pub rows: u16,
     /// Scrollback buffer size
     pub scrollback_lines: u32,

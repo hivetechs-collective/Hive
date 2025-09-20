@@ -1,15 +1,15 @@
 //! Data provider for desktop application
 //! Fetches real system state for UI components
 
+use crate::consensus::engine::ConsensusEngine;
+use crate::core::{
+    config::get_config,
+    database::{get_database, DatabaseManager},
+};
+use crate::providers::openrouter::cost::{BudgetConfig, CostTracker};
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::core::{
-    database::{DatabaseManager, get_database},
-    config::get_config,
-};
-use crate::providers::openrouter::cost::{CostTracker, BudgetConfig};
-use crate::consensus::engine::ConsensusEngine;
 
 /// System data provider that fetches real state
 pub struct SystemDataProvider {
@@ -43,7 +43,7 @@ impl SystemDataProvider {
 
         // Initialize cost tracker with default budget config
         let budget_config = BudgetConfig {
-            daily_limit: None,  // TODO: Add budget configuration to config file
+            daily_limit: None, // TODO: Add budget configuration to config file
             monthly_limit: None,
             per_request_limit: None,
             alert_threshold: 0.8,
@@ -126,7 +126,7 @@ impl SystemDataProvider {
                          ORDER BY updated_at DESC
                          LIMIT 1",
                         [],
-                        |row| Ok((row.get(0)?, row.get(1)?))
+                        |row| Ok((row.get(0)?, row.get(1)?)),
                     );
 
                     match result {
@@ -141,9 +141,11 @@ impl SystemDataProvider {
                             };
 
                             // Get actual model context window from config
-                            let context_window = self.get_model_context_window().await.unwrap_or(8192);
+                            let context_window =
+                                self.get_model_context_window().await.unwrap_or(8192);
 
-                            let usage = ((estimated_tokens as f64 / context_window as f64) * 100.0) as u8;
+                            let usage =
+                                ((estimated_tokens as f64 / context_window as f64) * 100.0) as u8;
                             usage.min(100)
                         }
                         Err(_) => 15, // Default baseline usage
@@ -164,7 +166,11 @@ impl SystemDataProvider {
             Err(_) => return ConnectionStatus::Disconnected,
         };
 
-        let api_key = match config.openrouter.as_ref().and_then(|or| or.api_key.as_ref()) {
+        let api_key = match config
+            .openrouter
+            .as_ref()
+            .and_then(|or| or.api_key.as_ref())
+        {
             Some(key) => key,
             None => return ConnectionStatus::Disconnected,
         };
@@ -172,7 +178,8 @@ impl SystemDataProvider {
         let client = reqwest::Client::new();
         let url = "https://openrouter.ai/api/v1/models";
 
-        match client.get(url)
+        match client
+            .get(url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("HTTP-Referer", "https://github.com/hivetechs/hive")
             .header("X-Title", "Hive AI")
@@ -182,13 +189,16 @@ impl SystemDataProvider {
         {
             Ok(response) if response.status().is_success() => ConnectionStatus::Connected,
             Ok(response) => {
-                tracing::debug!("API connectivity check failed with status: {}", response.status());
+                tracing::debug!(
+                    "API connectivity check failed with status: {}",
+                    response.status()
+                );
                 ConnectionStatus::Disconnected
-            },
+            }
             Err(e) => {
                 tracing::debug!("API connectivity check failed with error: {}", e);
                 ConnectionStatus::Disconnected
-            },
+            }
         }
     }
 
@@ -245,12 +255,14 @@ impl SystemDataProvider {
             match db.get_connection() {
                 Ok(conn) => {
                     // Get total cost from consensus_costs table
-                    let total_cost: f64 = conn.query_row(
-                        "SELECT COALESCE(SUM(total_cost), 0.0) FROM consensus_costs
+                    let total_cost: f64 = conn
+                        .query_row(
+                            "SELECT COALESCE(SUM(total_cost), 0.0) FROM consensus_costs
                          WHERE datetime(created_at) > datetime('now', '-30 days')",
-                        [],
-                        |row| row.get(0)
-                    ).unwrap_or(0.0);
+                            [],
+                            |row| row.get(0),
+                        )
+                        .unwrap_or(0.0);
 
                     Ok(total_cost)
                 }

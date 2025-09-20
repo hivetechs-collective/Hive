@@ -88,21 +88,21 @@ pub fn ActivityBar(
     on_accounts_click: EventHandler<()>,
 ) -> Element {
     let bar_state = state.read();
-    
+
     rsx! {
         div {
             class: "activity-bar",
             role: "navigation",
             aria_label: "Activity Bar",
-            
+
             // Top section with main items
             div {
                 class: "activity-bar-content",
-                
+
                 ul {
                     class: "actions-container",
                     role: "list",
-                    
+
                     for item in &bar_state.items {
                         ActivityBarItemComponent {
                             item: item.clone(),
@@ -115,41 +115,41 @@ pub fn ActivityBar(
                     }
                 }
             }
-            
+
             // Bottom section with settings/accounts
             div {
                 class: "activity-bar-bottom",
-                
+
                 ul {
                     class: "actions-container",
                     role: "list",
-                    
+
                     // Accounts button
                     li {
                         class: "action-item",
                         role: "listitem",
-                        
+
                         button {
                             class: "action-label",
                             title: "Accounts",
                             onclick: move |_| on_accounts_click.call(()),
-                            
+
                             span {
                                 class: "codicon codicon-account",
                             }
                         }
                     }
-                    
+
                     // Settings button
                     li {
                         class: "action-item",
                         role: "listitem",
-                        
+
                         button {
                             class: "action-label",
                             title: "Manage (Ctrl+,)",
                             onclick: move |_| on_settings_click.call(()),
-                            
+
                             span {
                                 class: "codicon codicon-settings-gear",
                             }
@@ -173,13 +173,13 @@ fn ActivityBarItemComponent(
     } else {
         "action-item"
     };
-    
+
     let label_class = if item.enabled {
         "action-label"
     } else {
         "action-label disabled"
     };
-    
+
     // Map icon names to codicons
     let icon_class = match item.icon.as_str() {
         "files" => "codicon-files",
@@ -191,12 +191,12 @@ fn ActivityBarItemComponent(
         "debug" => "codicon-debug-alt",
         _ => "codicon-circle",
     };
-    
+
     rsx! {
         li {
             class: "{item_class}",
             role: "listitem",
-            
+
             button {
                 class: "{label_class}",
                 title: "{item.title}",
@@ -204,11 +204,11 @@ fn ActivityBarItemComponent(
                 aria_pressed: "{is_active}",
                 disabled: !item.enabled,
                 onclick: move |_| on_click.call(()),
-                
+
                 span {
                     class: "codicon {icon_class}",
                 }
-                
+
                 if let Some(badge) = &item.badge {
                     div {
                         class: "badge",

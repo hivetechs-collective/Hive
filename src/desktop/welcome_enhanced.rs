@@ -58,43 +58,43 @@ pub fn EnhancedWelcome(
     on_open_folder: EventHandler<()>,
 ) -> Element {
     let welcome_state = state.read();
-    
+
     rsx! {
         div {
             class: "welcome-container",
-            
+
             // Welcome header with HiveTechs branding
             div {
                 class: "welcome-header",
-                
+
                 div {
                     class: "welcome-branding",
-                    
+
                     div {
                         class: "hivetechs-logo",
                         "🐝"
                     }
-                    
+
                     div {
                         class: "welcome-title",
                         h1 { "HiveTechs Consensus" }
-                        p { 
+                        p {
                             class: "welcome-subtitle",
-                            "AI-Powered Development with 4-Stage Consensus Intelligence" 
+                            "AI-Powered Development with 4-Stage Consensus Intelligence"
                         }
                     }
                 }
-                
+
                 div {
                     class: "welcome-version",
                     "v2.0.0"
                 }
             }
-            
+
             // Navigation tabs
             div {
                 class: "welcome-nav",
-                
+
                 button {
                     class: if welcome_state.active_section == WelcomeSection::Start { "nav-button active" } else { "nav-button" },
                     onclick: move |_| {
@@ -102,7 +102,7 @@ pub fn EnhancedWelcome(
                     },
                     "Start"
                 }
-                
+
                 button {
                     class: if welcome_state.active_section == WelcomeSection::Recent { "nav-button active" } else { "nav-button" },
                     onclick: move |_| {
@@ -110,7 +110,7 @@ pub fn EnhancedWelcome(
                     },
                     "Recent"
                 }
-                
+
                 button {
                     class: if welcome_state.active_section == WelcomeSection::Walkthroughs { "nav-button active" } else { "nav-button" },
                     onclick: move |_| {
@@ -118,7 +118,7 @@ pub fn EnhancedWelcome(
                     },
                     "Walkthroughs"
                 }
-                
+
                 button {
                     class: if welcome_state.active_section == WelcomeSection::Help { "nav-button active" } else { "nav-button" },
                     onclick: move |_| {
@@ -127,11 +127,11 @@ pub fn EnhancedWelcome(
                     "Help"
                 }
             }
-            
+
             // Content area
             div {
                 class: "welcome-content",
-                
+
                 match welcome_state.active_section {
                     WelcomeSection::Start => rsx! {
                         StartSection {
@@ -170,81 +170,81 @@ fn StartSection(
     rsx! {
         div {
             class: "start-section",
-            
+
             h2 { "Start" }
-            
+
             div {
                 class: "start-grid",
-                
+
                 button {
                     class: "start-card",
                     onclick: move |_| on_new_file.call(()),
-                    
+
                     span { class: "codicon codicon-new-file" }
                     h3 { "New File" }
                     p { "Create a new file in the editor" }
                 }
-                
+
                 button {
                     class: "start-card",
                     onclick: move |_| on_new_project.call(()),
-                    
+
                     span { class: "codicon codicon-new-folder" }
                     h3 { "New Project" }
                     p { "Start a new Rust project with Hive" }
                 }
-                
+
                 button {
                     class: "start-card",
                     onclick: move |_| on_open_folder.call(()),
-                    
+
                     span { class: "codicon codicon-folder-opened" }
                     h3 { "Open Folder" }
                     p { "Open a project folder" }
                 }
-                
+
                 button {
                     class: "start-card",
                     onclick: move |_| {},
-                    
+
                     span { class: "codicon codicon-source-control" }
                     h3 { "Clone Repository" }
                     p { "Clone from GitHub, GitLab, etc." }
                 }
             }
-            
+
             div {
                 class: "quick-setup",
-                
+
                 h3 { "Quick Setup" }
-                
+
                 div {
                     class: "setup-item",
                     span { class: "codicon codicon-key" }
                     span { "Configure API Keys for Consensus Engine" }
-                    button { 
+                    button {
                         class: "setup-button",
-                        "Configure" 
+                        "Configure"
                     }
                 }
-                
+
                 div {
                     class: "setup-item",
                     span { class: "codicon codicon-color-mode" }
                     span { "Choose your theme" }
-                    button { 
+                    button {
                         class: "setup-button",
-                        "Select" 
+                        "Select"
                     }
                 }
-                
+
                 div {
                     class: "setup-item",
                     span { class: "codicon codicon-keyboard" }
                     span { "Configure keyboard shortcuts" }
-                    button { 
+                    button {
                         class: "setup-button",
-                        "Customize" 
+                        "Customize"
                     }
                 }
             }
@@ -254,16 +254,13 @@ fn StartSection(
 
 /// Recent projects section
 #[component]
-fn RecentSection(
-    projects: Vec<RecentProject>,
-    on_open: EventHandler<String>,
-) -> Element {
+fn RecentSection(projects: Vec<RecentProject>, on_open: EventHandler<String>) -> Element {
     rsx! {
         div {
             class: "recent-section",
-            
+
             h2 { "Recent Projects" }
-            
+
             if projects.is_empty() {
                 div {
                     class: "no-recent",
@@ -272,7 +269,7 @@ fn RecentSection(
             } else {
                 div {
                     class: "recent-list",
-                    
+
                     for project in projects {
                         button {
                             class: "recent-item",
@@ -280,26 +277,26 @@ fn RecentSection(
                                 let path = project.path.clone();
                                 move |_| on_open.call(path.clone())
                             },
-                            
-                            span { 
+
+                            span {
                                 class: "codicon codicon-folder",
                                 style: "font-size: 24px; color: var(--hivetechs-yellow);"
                             }
-                            
+
                             div {
                                 class: "recent-info",
-                                
-                                div { 
+
+                                div {
                                     class: "recent-name",
-                                    "{project.name}" 
+                                    "{project.name}"
                                 }
-                                div { 
+                                div {
                                     class: "recent-path",
-                                    "{project.path}" 
+                                    "{project.path}"
                                 }
-                                div { 
+                                div {
                                     class: "recent-time",
-                                    "{project.last_opened}" 
+                                    "{project.last_opened}"
                                 }
                             }
                         }
@@ -316,12 +313,12 @@ fn WalkthroughsSection(completed: Vec<String>) -> Element {
     rsx! {
         div {
             class: "walkthroughs-section",
-            
+
             h2 { "Interactive Walkthroughs" }
-            
+
             div {
                 class: "walkthrough-list",
-                
+
                 WalkthroughCard {
                     id: "consensus-basics",
                     title: "Consensus Engine Basics",
@@ -330,7 +327,7 @@ fn WalkthroughsSection(completed: Vec<String>) -> Element {
                     steps: 5,
                     completed: completed.contains(&"consensus-basics".to_string()),
                 }
-                
+
                 WalkthroughCard {
                     id: "first-query",
                     title: "Your First Query",
@@ -339,7 +336,7 @@ fn WalkthroughsSection(completed: Vec<String>) -> Element {
                     steps: 3,
                     completed: completed.contains(&"first-query".to_string()),
                 }
-                
+
                 WalkthroughCard {
                     id: "profiles",
                     title: "Consensus Profiles",
@@ -348,7 +345,7 @@ fn WalkthroughsSection(completed: Vec<String>) -> Element {
                     steps: 4,
                     completed: completed.contains(&"profiles".to_string()),
                 }
-                
+
                 WalkthroughCard {
                     id: "advanced",
                     title: "Advanced Features",
@@ -375,23 +372,23 @@ fn WalkthroughCard(
     rsx! {
         button {
             class: if completed { "walkthrough-card completed" } else { "walkthrough-card" },
-            
-            span { 
+
+            span {
                 class: "codicon codicon-{icon}",
                 style: "font-size: 32px;"
             }
-            
+
             div {
                 class: "walkthrough-info",
-                
+
                 h3 { "{title}" }
                 p { "{description}" }
-                
+
                 div {
                     class: "walkthrough-progress",
-                    
+
                     if completed {
-                        span { 
+                        span {
                             class: "codicon codicon-check",
                             style: "color: #4caf50;"
                         }
@@ -411,54 +408,54 @@ fn HelpSection() -> Element {
     rsx! {
         div {
             class: "help-section",
-            
+
             h2 { "Help & Resources" }
-            
+
             div {
                 class: "help-grid",
-                
+
                 a {
                     class: "help-item",
                     href: "https://hivetechs.ai/docs",
                     target: "_blank",
-                    
+
                     span { class: "codicon codicon-book" }
                     h3 { "Documentation" }
                     p { "Read the official docs" }
                 }
-                
+
                 a {
                     class: "help-item",
                     href: "https://hivetechs.ai/support",
                     target: "_blank",
-                    
+
                     span { class: "codicon codicon-comment-discussion" }
                     h3 { "Support" }
                     p { "Get help from the team" }
                 }
-                
+
                 button {
                     class: "help-item",
-                    
+
                     span { class: "codicon codicon-keyboard" }
                     h3 { "Keyboard Shortcuts" }
                     p { "View all shortcuts" }
                 }
-                
+
                 button {
                     class: "help-item",
-                    
+
                     span { class: "codicon codicon-info" }
                     h3 { "About" }
                     p { "Version and license info" }
                 }
             }
-            
+
             div {
                 class: "help-tips",
-                
+
                 h3 { "Tips & Tricks" }
-                
+
                 ul {
                     li { "Press Ctrl+Shift+P to open the command palette" }
                     li { "Use Ctrl+` to toggle the integrated terminal" }

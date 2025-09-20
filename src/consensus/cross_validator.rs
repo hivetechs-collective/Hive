@@ -3,12 +3,14 @@
 //! This module checks if consensus stages agree on basic facts and catches
 //! contradictions between different stages before finalizing results.
 
-use std::collections::HashMap;
-use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
-use crate::consensus::types::{Stage, ConsensusResult};
+use crate::consensus::fact_checker::{
+    ClaimType, Contradiction, FactChecker, FactClaim, ValidationResult,
+};
+use crate::consensus::types::{ConsensusResult, Stage};
 use crate::consensus::verification::RepositoryFacts;
-use crate::consensus::fact_checker::{FactChecker, FactClaim, ClaimType, ValidationResult, Contradiction};
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Output from a single consensus stage
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,18 +44,18 @@ pub struct StageDiscrepancy {
 /// Severity of stage discrepancy
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DiscrepancySeverity {
-    Critical,  // Completely contradictory claims
-    Major,     // Significantly different interpretations
-    Minor,     // Slight variations in details
+    Critical, // Completely contradictory claims
+    Major,    // Significantly different interpretations
+    Minor,    // Slight variations in details
 }
 
 /// Recommended action for compromised consensus
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RecommendedAction {
-    RejectAndRerun,           // Start over with enhanced context
-    RejectConflictingStages,  // Re-run only problematic stages
-    ManualReview,             // Human intervention required
-    AcceptWithWarning,        // Proceed but flag issues
+    RejectAndRerun,          // Start over with enhanced context
+    RejectConflictingStages, // Re-run only problematic stages
+    ManualReview,            // Human intervention required
+    AcceptWithWarning,       // Proceed but flag issues
 }
 
 /// Semantic claim extracted from stage output
@@ -89,17 +91,17 @@ pub struct SemanticContradiction {
 /// Types of contradictions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ContradictionType {
-    Logical,    // Directly contradictory statements
-    Temporal,   // Timeline or maturity inconsistencies
-    Scale,      // Number relationships that don't make sense
+    Logical,  // Directly contradictory statements
+    Temporal, // Timeline or maturity inconsistencies
+    Scale,    // Number relationships that don't make sense
 }
 
 /// Severity of semantic contradictions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ContradictionSeverity {
-    Critical,   // Fundamental disagreement
-    Major,      // Significant inconsistency
-    Minor,      // Small discrepancy
+    Critical, // Fundamental disagreement
+    Major,    // Significant inconsistency
+    Minor,    // Small discrepancy
 }
 
 /// Cross-validator that verifies agreement between consensus stages
@@ -118,49 +120,59 @@ impl CrossValidator {
             consensus_threshold: 0.8, // 80% agreement required for healthy consensus
         }
     }
-    
+
     /// Add stage output for cross-validation
-    pub fn add_stage_output(&mut self, stage: Stage, content: String, confidence: f64) -> Result<()> {
+    pub fn add_stage_output(
+        &mut self,
+        stage: Stage,
+        content: String,
+        confidence: f64,
+    ) -> Result<()> {
         tracing::debug!("Adding {:?} stage output for cross-validation", stage);
-        
+
         // Extract claims from the content
         let validation_result = self.fact_checker.validate_stage_output(stage, &content)?;
-        
+
         let claims = match validation_result {
-            ValidationResult::Passed { verified_claims, .. } => verified_claims,
+            ValidationResult::Passed {
+                verified_claims, ..
+            } => verified_claims,
             ValidationResult::Failed { contradictions, .. } => {
                 // Extract claims from contradictions
                 contradictions.into_iter().map(|c| c.claim).collect()
             }
         };
-        
+
         let stage_output = StageOutput {
             stage,
             content,
             confidence,
             claims,
         };
-        
+
         self.stage_outputs.insert(stage, stage_output);
         Ok(())
     }
-    
+
     /// Check if stages agree on basic facts
     pub fn verify_stage_consensus(&self) -> Result<ConsensusHealth> {
-        tracing::debug!("Verifying consensus across {} stages", self.stage_outputs.len());
-        
+        tracing::debug!(
+            "Verifying consensus across {} stages",
+            self.stage_outputs.len()
+        );
+
         if self.stage_outputs.len() < 2 {
             return Ok(ConsensusHealth::Healthy); // Can't cross-validate with less than 2 stages
         }
-        
+
         let discrepancies = self.find_all_discrepancies()?;
-        
+
         if discrepancies.is_empty() {
             Ok(ConsensusHealth::Healthy)
         } else {
             let conflicting_stages = self.identify_outliers(&discrepancies);
             let recommended_action = self.determine_action(&discrepancies);
-            
+
             Ok(ConsensusHealth::Compromised {
                 conflicting_stages,
                 recommended_action,
@@ -168,11 +180,11 @@ impl CrossValidator {
             })
         }
     }
-    
+
     /// Find all discrepancies between stages
     fn find_all_discrepancies(&self) -> Result<Vec<StageDiscrepancy>> {
         let mut discrepancies = Vec::new();
-        
+
         // Check each claim type for consistency across stages
         for claim_type in [
             ClaimType::ProjectName,
@@ -185,14 +197,14 @@ impl CrossValidator {
                 discrepancies.push(discrepancy);
             }
         }
-        
+
         Ok(discrepancies)
     }
-    
+
     /// Check consistency of a specific claim type across stages
     fn check_claim_consistency(&self, claim_type: ClaimType) -> Result<Option<StageDiscrepancy>> {
         let mut stage_claims: Vec<(Stage, String)> = Vec::new();
-        
+
         // Collect claims of this type from all stages
         for (stage, output) in &self.stage_outputs {
             for claim in &output.claims {
@@ -201,21 +213,22 @@ impl CrossValidator {
                 }
             }
         }
-        
+
         if stage_claims.len() < 2 {
             return Ok(None); // Not enough claims to compare
         }
-        
+
         // Check for contradictions
-        let unique_values: std::collections::HashSet<_> = stage_claims.iter()
+        let unique_values: std::collections::HashSet<_> = stage_claims
+            .iter()
             .map(|(_, value)| value.clone())
             .collect();
-        
+
         if unique_values.len() > 1 {
             // Found contradictions
             let severity = self.assess_discrepancy_severity(&claim_type, &stage_claims);
             let explanation = self.generate_discrepancy_explanation(&claim_type, &stage_claims);
-            
+
             Ok(Some(StageDiscrepancy {
                 claim_type,
                 conflicting_stages: stage_claims,
@@ -226,7 +239,7 @@ impl CrossValidator {
             Ok(None) // All stages agree
         }
     }
-    
+
     /// Assess severity of a discrepancy
     fn assess_discrepancy_severity(
         &self,
@@ -237,22 +250,23 @@ impl CrossValidator {
             ClaimType::ProjectName | ClaimType::ProjectComplexity => {
                 // These should never disagree - critical if they do
                 DiscrepancySeverity::Critical
-            },
+            }
             ClaimType::Version => {
                 // Version mismatches are major issues
                 DiscrepancySeverity::Major
-            },
+            }
             ClaimType::DependencyCount | ClaimType::ModuleCount => {
                 // Check if numbers are within reasonable tolerance
-                let numbers: Vec<usize> = stage_claims.iter()
+                let numbers: Vec<usize> = stage_claims
+                    .iter()
                     .filter_map(|(_, value)| value.parse().ok())
                     .collect();
-                
+
                 if numbers.len() >= 2 {
                     let min = *numbers.iter().min().unwrap();
                     let max = *numbers.iter().max().unwrap();
                     let tolerance = (min as f64 * 0.3) as usize; // 30% tolerance
-                    
+
                     if max.saturating_sub(min) > tolerance {
                         DiscrepancySeverity::Major
                     } else {
@@ -261,63 +275,67 @@ impl CrossValidator {
                 } else {
                     DiscrepancySeverity::Major
                 }
-            },
+            }
             _ => DiscrepancySeverity::Minor,
         }
     }
-    
+
     /// Generate explanation for discrepancy
     fn generate_discrepancy_explanation(
         &self,
         claim_type: &ClaimType,
         stage_claims: &[(Stage, String)],
     ) -> String {
-        let claims_text = stage_claims.iter()
+        let claims_text = stage_claims
+            .iter()
             .map(|(stage, value)| format!("{:?}: '{}'", stage, value))
             .collect::<Vec<_>>()
             .join(", ");
-        
+
         format!(
             "Consensus stages disagree on {:?}. Found conflicting claims: {}",
             claim_type, claims_text
         )
     }
-    
+
     /// Identify which stages are outliers
     fn identify_outliers(&self, discrepancies: &[StageDiscrepancy]) -> Vec<Stage> {
         let mut stage_error_counts: HashMap<Stage, usize> = HashMap::new();
-        
+
         // Count how many discrepancies each stage is involved in
         for discrepancy in discrepancies {
             for (stage, _) in &discrepancy.conflicting_stages {
                 *stage_error_counts.entry(*stage).or_insert(0) += 1;
             }
         }
-        
+
         // Identify stages with above-average error counts
         if stage_error_counts.is_empty() {
             return Vec::new();
         }
-        
+
         let total_errors: usize = stage_error_counts.values().sum();
         let average_errors = total_errors as f64 / stage_error_counts.len() as f64;
-        
-        stage_error_counts.into_iter()
+
+        stage_error_counts
+            .into_iter()
             .filter(|(_, count)| *count as f64 > average_errors)
             .map(|(stage, _)| stage)
             .collect()
     }
-    
+
     /// Determine recommended action based on discrepancies
     fn determine_action(&self, discrepancies: &[StageDiscrepancy]) -> RecommendedAction {
-        let critical_count = discrepancies.iter()
+        let critical_count = discrepancies
+            .iter()
             .filter(|d| matches!(d.severity, DiscrepancySeverity::Critical))
             .count();
-            
-        let major_count = discrepancies.iter()
+
+        let major_count = discrepancies
+            .iter()
             .filter(|d| matches!(d.severity, DiscrepancySeverity::Major))
             .count();
-        
+
         if critical_count > 0 {
             RecommendedAction::RejectAndRerun
         } else if major_count > 2 {
@@ -328,19 +346,21 @@ impl CrossValidator {
             RecommendedAction::AcceptWithWarning
         }
     }
-    
+
     /// Get detailed consensus report
     pub fn get_consensus_report(&self) -> Result<ConsensusReport> {
         let health = self.verify_stage_consensus()?;
         let stage_count = self.stage_outputs.len();
         let avg_confidence = if stage_count > 0 {
-            self.stage_outputs.values()
+            self.stage_outputs
+                .values()
                 .map(|output| output.confidence)
-                .sum::<f64>() / stage_count as f64
+                .sum::<f64>()
+                / stage_count as f64
         } else {
             0.0
         };
-        
+
         Ok(ConsensusReport {
             health,
             stage_count,
@@ -348,82 +368,84 @@ impl CrossValidator {
             agreement_score: self.calculate_agreement_score()?,
         })
     }
-    
+
     /// Calculate overall agreement score
     fn calculate_agreement_score(&self) -> Result<f64> {
         let discrepancies = self.find_all_discrepancies()?;
-        
+
         if discrepancies.is_empty() {
             return Ok(1.0); // Perfect agreement
         }
-        
+
         // Calculate score based on severity and count of discrepancies
-        let total_severity_score: f64 = discrepancies.iter().map(|d| {
-            match d.severity {
+        let total_severity_score: f64 = discrepancies
+            .iter()
+            .map(|d| match d.severity {
                 DiscrepancySeverity::Critical => 1.0,
                 DiscrepancySeverity::Major => 0.7,
                 DiscrepancySeverity::Minor => 0.3,
-            }
-        }).sum();
-        
+            })
+            .sum();
+
         let max_possible_score = discrepancies.len() as f64;
         let agreement_score = 1.0 - (total_severity_score / max_possible_score);
-        
+
         Ok(agreement_score.max(0.0))
     }
-    
+
     /// Advanced contradiction detection using semantic analysis
     pub fn detect_semantic_contradictions(&self) -> Result<Vec<SemanticContradiction>> {
         let mut contradictions = Vec::new();
-        
+
         // Extract semantic claims from each stage
         let stage_claims = self.extract_semantic_claims()?;
-        
+
         // Check for logical contradictions
         for logical_contradiction in self.find_logical_contradictions(&stage_claims)? {
             contradictions.push(logical_contradiction);
         }
-        
+
         // Check for temporal contradictions
         for temporal_contradiction in self.find_temporal_contradictions(&stage_claims)? {
             contradictions.push(temporal_contradiction);
         }
-        
+
         // Check for scale contradictions (numbers that don't make sense together)
         for scale_contradiction in self.find_scale_contradictions(&stage_claims)? {
             contradictions.push(scale_contradiction);
         }
-        
+
         Ok(contradictions)
     }
-    
+
     /// Extract semantic claims from stage outputs
     fn extract_semantic_claims(&self) -> Result<HashMap<Stage, Vec<SemanticClaim>>> {
         let mut claims_map = HashMap::new();
-        
+
         for (stage, output) in &self.stage_outputs {
             let mut claims = Vec::new();
-            
+
             // Extract explicit claims using patterns
             claims.extend(self.extract_explicit_claims(&output.content)?);
-            
+
             // Extract implicit claims using inference
             claims.extend(self.extract_implicit_claims(&output.content)?);
-            
+
             claims_map.insert(*stage, claims);
         }
-        
+
         Ok(claims_map)
     }
-    
+
     /// Extract explicit claims like "This project has X dependencies"
     fn extract_explicit_claims(&self, content: &str) -> Result<Vec<SemanticClaim>> {
         let mut claims = Vec::new();
-        
+
         // Pattern for explicit dependency claims
-        if let Some(captures) = regex::Regex::new(r"(?i)(?:has|contains|includes)\s+(\d+)\s+dependencies")
-            .unwrap()
-            .captures(content) 
+        if let Some(captures) =
+            regex::Regex::new(r"(?i)(?:has|contains|includes)\s+(\d+)\s+dependencies")
+                .unwrap()
+                .captures(content)
         {
             if let Ok(count) = captures[1].parse::<usize>() {
                 claims.push(SemanticClaim {
@@ -434,16 +456,20 @@ impl CrossValidator {
                 });
             }
         }
-        
+
         // Pattern for complexity claims
-        if content.to_lowercase().contains("enterprise") && content.to_lowercase().contains("complex") {
+        if content.to_lowercase().contains("enterprise")
+            && content.to_lowercase().contains("complex")
+        {
             claims.push(SemanticClaim {
                 claim_type: SemanticClaimType::Complexity,
                 value: "high".to_string(),
                 confidence: 0.8,
                 evidence: "Contains 'enterprise' and 'complex' keywords".to_string(),
             });
-        } else if content.to_lowercase().contains("simple") || content.to_lowercase().contains("minimal") {
+        } else if content.to_lowercase().contains("simple")
+            || content.to_lowercase().contains("minimal")
+        {
             claims.push(SemanticClaim {
                 claim_type: SemanticClaimType::Complexity,
                 value: "low".to_string(),
@@ -451,7 +477,7 @@ impl CrossValidator {
                 evidence: "Contains 'simple' or 'minimal' keywords".to_string(),
             });
         }
-        
+
         // Pattern for technology stack claims
         if content.to_lowercase().contains("rust") {
             claims.push(SemanticClaim {
@@ -461,38 +487,49 @@ impl CrossValidator {
                 evidence: "Mentions Rust programming language".to_string(),
             });
         }
-        
+
         Ok(claims)
     }
-    
+
     /// Extract implicit claims through inference
     fn extract_implicit_claims(&self, content: &str) -> Result<Vec<SemanticClaim>> {
         let mut claims = Vec::new();
-        
+
         // Infer complexity from description length and technical terms
-        let technical_terms = ["async", "parallel", "concurrent", "distributed", "microservice", "architecture"];
-        let tech_term_count = technical_terms.iter()
+        let technical_terms = [
+            "async",
+            "parallel",
+            "concurrent",
+            "distributed",
+            "microservice",
+            "architecture",
+        ];
+        let tech_term_count = technical_terms
+            .iter()
             .filter(|&term| content.to_lowercase().contains(term))
             .count();
-        
+
         if tech_term_count >= 3 {
             claims.push(SemanticClaim {
                 claim_type: SemanticClaimType::Complexity,
                 value: "high".to_string(),
                 confidence: 0.6,
-                evidence: format!("Contains {} technical terms indicating complexity", tech_term_count),
+                evidence: format!(
+                    "Contains {} technical terms indicating complexity",
+                    tech_term_count
+                ),
             });
         }
-        
+
         // Infer maturity from version patterns
         if let Some(captures) = regex::Regex::new(r"v?(\d+)\.(\d+)\.(\d+)")
             .unwrap()
-            .captures(content) 
+            .captures(content)
         {
             if let (Ok(major), Ok(minor), Ok(patch)) = (
                 captures[1].parse::<usize>(),
                 captures[2].parse::<usize>(),
-                captures[3].parse::<usize>()
+                captures[3].parse::<usize>(),
             ) {
                 let maturity = if major >= 2 || (major >= 1 && minor >= 5) {
                     "mature"
@@ -501,46 +538,55 @@ impl CrossValidator {
                 } else {
                     "early"
                 };
-                
+
                 claims.push(SemanticClaim {
                     claim_type: SemanticClaimType::Maturity,
                     value: maturity.to_string(),
                     confidence: 0.7,
-                    evidence: format!("Version {}.{}.{} indicates {} maturity", major, minor, patch, maturity),
+                    evidence: format!(
+                        "Version {}.{}.{} indicates {} maturity",
+                        major, minor, patch, maturity
+                    ),
                 });
             }
         }
-        
+
         Ok(claims)
     }
-    
+
     /// Find logical contradictions between claims
-    fn find_logical_contradictions(&self, stage_claims: &HashMap<Stage, Vec<SemanticClaim>>) -> Result<Vec<SemanticContradiction>> {
+    fn find_logical_contradictions(
+        &self,
+        stage_claims: &HashMap<Stage, Vec<SemanticClaim>>,
+    ) -> Result<Vec<SemanticContradiction>> {
         let mut contradictions = Vec::new();
-        
+
         // Check for complexity contradictions
-        let complexity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+        let complexity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims
+            .iter()
             .flat_map(|(stage, claims)| {
-                claims.iter()
+                claims
+                    .iter()
                     .filter(|claim| matches!(claim.claim_type, SemanticClaimType::Complexity))
                     .map(move |claim| (*stage, claim))
             })
             .collect();
-        
+
         if complexity_claims.len() >= 2 {
             for i in 0..complexity_claims.len() {
-                for j in i+1..complexity_claims.len() {
+                for j in i + 1..complexity_claims.len() {
                     let (stage1, claim1) = &complexity_claims[i];
                     let (stage2, claim2) = &complexity_claims[j];
-                    
+
                     if claim1.value != claim2.value {
-                        let severity = if (claim1.value == "high" && claim2.value == "low") ||
-                                         (claim1.value == "low" && claim2.value == "high") {
+                        let severity = if (claim1.value == "high" && claim2.value == "low")
+                            || (claim1.value == "low" && claim2.value == "high")
+                        {
                             ContradictionSeverity::Critical
                         } else {
                             ContradictionSeverity::Major
                         };
-                        
+
                         contradictions.push(SemanticContradiction {
                             contradiction_type: ContradictionType::Logical,
                             severity,
@@ -555,31 +601,38 @@ impl CrossValidator {
                 }
             }
         }
-        
+
         Ok(contradictions)
     }
-    
+
     /// Find temporal contradictions (timeline issues)
-    fn find_temporal_contradictions(&self, stage_claims: &HashMap<Stage, Vec<SemanticClaim>>) -> Result<Vec<SemanticContradiction>> {
+    fn find_temporal_contradictions(
+        &self,
+        stage_claims: &HashMap<Stage, Vec<SemanticClaim>>,
+    ) -> Result<Vec<SemanticContradiction>> {
         let mut contradictions = Vec::new();
-        
+
         // Check for maturity vs version contradictions
-        let maturity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+        let maturity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims
+            .iter()
             .flat_map(|(stage, claims)| {
-                claims.iter()
+                claims
+                    .iter()
                     .filter(|claim| matches!(claim.claim_type, SemanticClaimType::Maturity))
                     .map(move |claim| (*stage, claim))
             })
             .collect();
-            
-        let version_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+
+        let version_claims: Vec<(Stage, &SemanticClaim)> = stage_claims
+            .iter()
             .flat_map(|(stage, claims)| {
-                claims.iter()
+                claims
+                    .iter()
                     .filter(|claim| matches!(claim.claim_type, SemanticClaimType::Version))
                     .map(move |claim| (*stage, claim))
             })
             .collect();
-        
+
         // Check if maturity and version claims are consistent
         for (mat_stage, mat_claim) in &maturity_claims {
             for (ver_stage, ver_claim) in &version_claims {
@@ -591,7 +644,7 @@ impl CrossValidator {
                     } else {
                         "early"
                     };
-                    
+
                     if mat_claim.value != expected_maturity {
                         contradictions.push(SemanticContradiction {
                             contradiction_type: ContradictionType::Temporal,
@@ -607,31 +660,38 @@ impl CrossValidator {
                 }
             }
         }
-        
+
         Ok(contradictions)
     }
-    
+
     /// Find scale contradictions (numbers that don't make sense together)
-    fn find_scale_contradictions(&self, stage_claims: &HashMap<Stage, Vec<SemanticClaim>>) -> Result<Vec<SemanticContradiction>> {
+    fn find_scale_contradictions(
+        &self,
+        stage_claims: &HashMap<Stage, Vec<SemanticClaim>>,
+    ) -> Result<Vec<SemanticContradiction>> {
         let mut contradictions = Vec::new();
-        
+
         // Check dependency count vs complexity claims
-        let dep_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+        let dep_claims: Vec<(Stage, &SemanticClaim)> = stage_claims
+            .iter()
             .flat_map(|(stage, claims)| {
-                claims.iter()
+                claims
+                    .iter()
                     .filter(|claim| matches!(claim.claim_type, SemanticClaimType::DependencyCount))
                     .map(move |claim| (*stage, claim))
             })
             .collect();
-            
-        let complexity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+
+        let complexity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims
+            .iter()
             .flat_map(|(stage, claims)| {
-                claims.iter()
+                claims
+                    .iter()
                     .filter(|claim| matches!(claim.claim_type, SemanticClaimType::Complexity))
                     .map(move |claim| (*stage, claim))
             })
             .collect();
-        
+
         for (dep_stage, dep_claim) in &dep_claims {
             if let Ok(dep_count) = dep_claim.value.parse::<usize>() {
                 for (comp_stage, comp_claim) in &complexity_claims {
@@ -642,10 +702,11 @@ impl CrossValidator {
                     } else {
                         "low"
                     };
-                    
-                    if comp_claim.value != expected_complexity && 
-                       !((comp_claim.value == "medium" && expected_complexity == "high") || 
-                         (comp_claim.value == "high" && expected_complexity == "medium")) {
+
+                    if comp_claim.value != expected_complexity
+                        && !((comp_claim.value == "medium" && expected_complexity == "high")
+                            || (comp_claim.value == "high" && expected_complexity == "medium"))
+                    {
                         contradictions.push(SemanticContradiction {
                             contradiction_type: ContradictionType::Scale,
                             severity: ContradictionSeverity::Major,
@@ -660,7 +721,7 @@ impl CrossValidator {
                 }
             }
         }
-        
+
         Ok(contradictions)
     }
 }
@@ -679,7 +740,7 @@ mod tests {
     use super::*;
     use chrono::Utc;
     use std::path::PathBuf;
-    
+
     fn create_test_facts() -> RepositoryFacts {
         RepositoryFacts {
             name: "hive-ai".to_string(),
@@ -695,63 +756,72 @@ mod tests {
             major_directories: vec!["src".to_string()],
         }
     }
-    
+
     #[tokio::test]
     async fn test_healthy_consensus() {
         let facts = create_test_facts();
         let mut validator = CrossValidator::new(facts);
-        
+
         // Add consistent stage outputs
-        validator.add_stage_output(
-            Stage::Generator,
-            "This is the hive-ai project version 2.0.2 with 100 dependencies.".to_string(),
-            0.9
-        ).unwrap();
-        
-        validator.add_stage_output(
-            Stage::Validator,
-            "The hive-ai project (version 2.0.2) has 100 dependencies and is enterprise-grade.".to_string(),
-            0.85
-        ).unwrap();
-        
+        validator
+            .add_stage_output(
+                Stage::Generator,
+                "This is the hive-ai project version 2.0.2 with 100 dependencies.".to_string(),
+                0.9,
+            )
+            .unwrap();
+
+        validator
+            .add_stage_output(
+                Stage::Validator,
+                "The hive-ai project (version 2.0.2) has 100 dependencies and is enterprise-grade."
+                    .to_string(),
+                0.85,
+            )
+            .unwrap();
+
         let health = validator.verify_stage_consensus().unwrap();
         assert!(matches!(health, ConsensusHealth::Healthy));
     }
-    
+
     #[tokio::test]
     async fn test_compromised_consensus() {
         let facts = create_test_facts();
         let mut validator = CrossValidator::new(facts);
-        
+
         // Add contradictory stage outputs
-        validator.add_stage_output(
-            Stage::Generator,
-            "This is the hive-ai project version 2.0.2 with 100 dependencies.".to_string(),
-            0.9
-        ).unwrap();
-        
-        validator.add_stage_output(
-            Stage::Validator,
-            "This is a minimal project with version 0.1.0 and no dependencies.".to_string(),
-            0.8
-        ).unwrap();
-        
+        validator
+            .add_stage_output(
+                Stage::Generator,
+                "This is the hive-ai project version 2.0.2 with 100 dependencies.".to_string(),
+                0.9,
+            )
+            .unwrap();
+
+        validator
+            .add_stage_output(
+                Stage::Validator,
+                "This is a minimal project with version 0.1.0 and no dependencies.".to_string(),
+                0.8,
+            )
+            .unwrap();
+
         let health = validator.verify_stage_consensus().unwrap();
         match health {
             ConsensusHealth::Compromised { discrepancies, .. } => {
                 assert!(!discrepancies.is_empty());
-            },
+            }
             ConsensusHealth::Healthy => {
                 panic!("Expected compromised consensus for contradictory outputs");
             }
         }
     }
-    
+
     #[test]
     fn test_agreement_score_calculation() {
         let facts = create_test_facts();
         let validator = CrossValidator::new(facts);
-        
+
         // Test perfect agreement
         let score = validator.calculate_agreement_score().unwrap();
         assert_eq!(score, 1.0);

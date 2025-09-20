@@ -92,43 +92,43 @@ pub struct ProgressIndicatorProps {
     /// Progress value (0-100 for determinate, None for indeterminate)
     #[props(optional)]
     pub value: Option<f64>,
-    
+
     /// Type of progress indicator
     #[props(default)]
     pub progress_type: ProgressType,
-    
+
     /// Size of the indicator
     #[props(default)]
     pub size: ProgressSize,
-    
+
     /// Color scheme
     #[props(default)]
     pub color: ProgressColor,
-    
+
     /// Label to display
     #[props(optional)]
     pub label: Option<String>,
-    
+
     /// Whether to show the percentage value
     #[props(default = true)]
     pub show_value: bool,
-    
+
     /// Steps for step progress indicator
     #[props(default = vec![])]
     pub steps: Vec<ProgressStep>,
-    
+
     /// Whether to animate the progress
     #[props(default = true)]
     pub animated: bool,
-    
+
     /// Buffer value for buffered progress (e.g., video loading)
     #[props(optional)]
     pub buffer_value: Option<f64>,
-    
+
     /// Custom CSS class
     #[props(default = "progress-indicator".to_string())]
     pub class: String,
-    
+
     /// Thickness for linear and circular progress (in pixels)
     #[props(default = 4.0)]
     pub thickness: f64,
@@ -151,19 +151,19 @@ fn LinearProgress(props: ProgressIndicatorProps) -> Element {
     let is_indeterminate = props.value.is_none();
     let progress = props.value.unwrap_or(0.0).clamp(0.0, 100.0);
     let buffer = props.buffer_value.unwrap_or(100.0).clamp(0.0, 100.0);
-    
+
     rsx! {
         div {
             class: "{props.class} linear-progress {if is_indeterminate { \"indeterminate\" } else { \"\" }}",
-            
+
             if let Some(label) = &props.label {
                 div { class: "progress-label", "{label}" }
             }
-            
+
             div {
                 class: "progress-track",
                 style: format!("height: {}px;", props.thickness),
-                
+
                 // Buffer layer (for buffered progress)
                 if props.buffer_value.is_some() && !is_indeterminate {
                     div {
@@ -175,7 +175,7 @@ fn LinearProgress(props: ProgressIndicatorProps) -> Element {
                         ),
                     }
                 }
-                
+
                 // Progress fill
                 div {
                     class: format!("progress-fill {}", if props.animated { "animated" } else { "" }),
@@ -186,7 +186,7 @@ fn LinearProgress(props: ProgressIndicatorProps) -> Element {
                     ),
                 }
             }
-            
+
             if props.show_value && !is_indeterminate {
                 div {
                     class: "progress-value",
@@ -207,24 +207,24 @@ fn CircularProgress(props: ProgressIndicatorProps) -> Element {
     let radius = (size - props.thickness) / 2.0;
     let circumference = 2.0 * std::f64::consts::PI * radius;
     let stroke_dashoffset = circumference * (1.0 - progress / 100.0);
-    
+
     rsx! {
         div {
             class: "{props.class} circular-progress {if is_indeterminate { \"indeterminate\" } else { \"\" }}",
-            
+
             if let Some(label) = &props.label {
                 div { class: "progress-label", "{label}" }
             }
-            
+
             div {
                 class: "circular-container",
                 style: format!("width: {}px; height: {}px;", size, size),
-                
+
                 svg {
                     width: "{size}",
                     height: "{size}",
                     class: format!("{}", if props.animated { "animated" } else { "" }),
-                    
+
                     // Background circle
                     circle {
                         cx: "{center}",
@@ -234,7 +234,7 @@ fn CircularProgress(props: ProgressIndicatorProps) -> Element {
                         stroke: "var(--progress-track-bg, #e0e0e0)",
                         stroke_width: "{props.thickness}",
                     }
-                    
+
                     // Progress circle
                     circle {
                         cx: "{center}",
@@ -250,7 +250,7 @@ fn CircularProgress(props: ProgressIndicatorProps) -> Element {
                         class: if is_indeterminate { "indeterminate-rotation" } else { "" },
                     }
                 }
-                
+
                 if props.show_value && !is_indeterminate {
                     div {
                         class: "circular-value",
@@ -275,18 +275,18 @@ fn StepsProgress(props: ProgressIndicatorProps) -> Element {
     } else {
         0.0
     };
-    
+
     rsx! {
         div {
             class: "{props.class} steps-progress",
-            
+
             if let Some(label) = &props.label {
                 div { class: "progress-label", "{label}" }
             }
-            
+
             div {
                 class: "steps-container",
-                
+
                 for (index, step) in props.steps.iter().enumerate() {
                     div {
                         class: format!(
@@ -295,20 +295,20 @@ fn StepsProgress(props: ProgressIndicatorProps) -> Element {
                             if step.current { "current" } else { "" },
                             if step.error { "error" } else { "" }
                         ),
-                        
+
                         // Step indicator
                         div {
                             class: "step-indicator",
-                            style: format!("background-color: {};", 
-                                if step.error { 
-                                    ProgressColor::Error.to_css_var() 
+                            style: format!("background-color: {};",
+                                if step.error {
+                                    ProgressColor::Error.to_css_var()
                                 } else if step.completed || step.current {
                                     props.color.to_css_var()
                                 } else {
                                     "var(--step-inactive-bg, #e0e0e0)".to_string()
                                 }
                             ),
-                            
+
                             if step.error {
                                 "✕"
                             } else if step.completed {
@@ -317,7 +317,7 @@ fn StepsProgress(props: ProgressIndicatorProps) -> Element {
                                 "{index + 1}"
                             }
                         }
-                        
+
                         // Step content
                         div {
                             class: "step-content",
@@ -326,7 +326,7 @@ fn StepsProgress(props: ProgressIndicatorProps) -> Element {
                                 div { class: "step-description", "{desc}" }
                             }
                         }
-                        
+
                         // Connector line (not for last step)
                         if index < total_steps - 1 {
                             div {
@@ -344,7 +344,7 @@ fn StepsProgress(props: ProgressIndicatorProps) -> Element {
                     }
                 }
             }
-            
+
             if props.show_value {
                 div {
                     class: "progress-value",
@@ -360,18 +360,18 @@ fn StepsProgress(props: ProgressIndicatorProps) -> Element {
 fn DotsProgress(props: ProgressIndicatorProps) -> Element {
     let dot_count = 3;
     let size = props.size.to_pixels() / 3.0;
-    
+
     rsx! {
         div {
             class: "{props.class} dots-progress",
-            
+
             if let Some(label) = &props.label {
                 div { class: "progress-label", "{label}" }
             }
-            
+
             div {
                 class: "dots-container",
-                
+
                 for i in 0..dot_count {
                     div {
                         class: format!("dot {}", if props.animated { "animated" } else { "" }),

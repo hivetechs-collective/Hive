@@ -6,11 +6,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::broadcast;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
@@ -64,34 +60,27 @@ pub struct AppState {
     pub tx: broadcast::Sender<String>,
 }
 
-pub async fn start_web_server(port: u16, workspace_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_web_server(
+    port: u16,
+    workspace_path: PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
     let (tx, _) = broadcast::channel(1024);
 
-    let app_state = AppState {
-        workspace_path,
-        tx,
-    };
+    let app_state = AppState { workspace_path, tx };
 
     let app = Router::new()
         // Static files
         .route("/", get(serve_index))
         .route("/static/*path", get(serve_static))
-
         // API endpoints
         .route("/api/files", get(list_files))
         .route("/api/files/*path", get(get_file_content))
         .route("/api/chat", post(handle_chat))
-
         // WebSocket endpoint
         .route("/ws", get(websocket_handler))
-
         // Serve the main HTML page for any other route
         .fallback(serve_index)
-
-        .layer(
-            ServiceBuilder::new()
-                .layer(CorsLayer::permissive())
-        )
+        .layer(ServiceBuilder::new().layer(CorsLayer::permissive()))
         .with_state(Arc::new(app_state));
 
     info!("Starting web server on http://localhost:{}", port);

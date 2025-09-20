@@ -1,11 +1,11 @@
 // Learning System Monitoring and Control UI Components
-use dioxus::prelude::*;
 use crate::consensus::learning_system::{
-    LearningSystemStatus, LearningTrend, PendingImprovement, LearningCycleResult,
-    ExperimentRecommendation, ExperimentType, ExperimentStatus
+    ExperimentRecommendation, ExperimentStatus, ExperimentType, LearningCycleResult,
+    LearningSystemStatus, LearningTrend, PendingImprovement,
 };
-use crate::consensus::outcome_tracker::{AccuracyMetrics, HelperAccuracy, ErrorPattern};
+use crate::consensus::outcome_tracker::{AccuracyMetrics, ErrorPattern, HelperAccuracy};
 use chrono::{DateTime, Utc};
+use dioxus::prelude::*;
 use std::collections::HashMap;
 
 /// Main learning system monitoring dashboard
@@ -21,7 +21,7 @@ pub fn LearningSystemDashboard(
 ) -> Element {
     let show_details = use_signal(|| false);
     let selected_helper = use_signal(|| None::<String>);
-    
+
     rsx! {
         if show_dashboard() {
             div {
@@ -31,51 +31,51 @@ pub fn LearningSystemDashboard(
                         show_dashboard.set(false);
                     }
                 },
-                
+
                 div {
                     class: "learning-dashboard",
-                    
+
                     // Dashboard header
                     div {
                         class: "dashboard-header",
-                        
-                        h2 { 
+
+                        h2 {
                             class: "dashboard-title",
                             "🧠 AI Learning System"
                         }
-                        
+
                         if let Some(status) = learning_status() {
                             div {
                                 class: "system-status",
-                                
+
                                 div {
                                     class: "status-indicator {if status.is_active { \\\"active\\\" } else { \\\"inactive\\\" }}",
                                     {if status.is_active { "●" } else { "○" }}
                                 }
-                                
-                                span { 
+
+                                span {
                                     class: "status-text",
                                     {if status.is_active { "Active" } else { "Inactive" }}
                                 }
-                                
+
                                 div {
                                     class: "trend-indicator {get_trend_class(&status.learning_trend)}",
                                     "{get_trend_icon(&status.learning_trend)} {status.learning_trend:?}"
                                 }
                             }
                         }
-                        
+
                         button {
                             class: "close-button",
                             onclick: move |_| show_dashboard.set(false),
                             "×"
                         }
                     }
-                    
+
                     // Dashboard content
                     div {
                         class: "dashboard-content",
-                        
+
                         // System overview
                         if let Some(status) = learning_status() {
                             LearningSystemOverview {
@@ -84,7 +84,7 @@ pub fn LearningSystemDashboard(
                                 selected_helper: selected_helper
                             }
                         }
-                        
+
                         // Pending improvements section
                         if !pending_improvements().is_empty() {
                             PendingImprovementsSection {
@@ -93,7 +93,7 @@ pub fn LearningSystemDashboard(
                                 on_reject: on_reject_improvement
                             }
                         }
-                        
+
                         // Learning history
                         if !recent_cycles().is_empty() {
                             LearningHistorySection {
@@ -101,23 +101,23 @@ pub fn LearningSystemDashboard(
                             }
                         }
                     }
-                    
+
                     // Dashboard actions
                     div {
                         class: "dashboard-actions",
-                        
+
                         button {
                             class: "action-button secondary",
                             onclick: move |_| show_details.set(!show_details()),
                             "{if show_details() { \"Hide Details\" } else { \"Show Details\" }}"
                         }
-                        
+
                         button {
                             class: "action-button primary",
                             onclick: move |_| on_trigger_learning_cycle.call(()),
                             "🔄 Trigger Learning Cycle"
                         }
-                        
+
                         button {
                             class: "action-button secondary",
                             onclick: move |_| show_dashboard.set(false),
@@ -140,37 +140,37 @@ pub fn LearningSystemOverview(
     rsx! {
         div {
             class: "learning-system-overview",
-            
+
             // Key metrics
             div {
                 class: "metrics-section",
-                
+
                 h3 { "System Metrics" }
-                
+
                 div {
                     class: "metrics-grid",
-                    
+
                     MetricCard {
                         title: "Learning Cycles",
                         value: status.total_cycles.to_string(),
                         subtitle: format!("{} successful", status.successful_improvements),
                         trend: Some(calculate_success_rate(&status))
                     }
-                    
+
                     MetricCard {
                         title: "Overall Accuracy",
                         value: format!("{:.1}%", status.current_performance.overall_accuracy * 100.0),
                         subtitle: "Current performance",
                         trend: Some(get_accuracy_trend(&status.learning_trend))
                     }
-                    
+
                     MetricCard {
                         title: "Pending Improvements",
                         value: status.pending_improvements.to_string(),
                         subtitle: "Awaiting approval",
                         trend: None
                     }
-                    
+
                     MetricCard {
                         title: "Active Helpers",
                         value: status.current_weights.len().to_string(),
@@ -179,22 +179,22 @@ pub fn LearningSystemOverview(
                     }
                 }
             }
-            
+
             // Helper performance breakdown
             div {
                 class: "helpers-section",
-                
+
                 div {
                     class: "section-header",
                     onclick: move |_| show_details.set(!show_details()),
-                    
+
                     h3 { "AI Helper Performance" }
                     div {
                         class: "expand-icon {if show_details() { \\\"expanded\\\" } else { \\\"\\\" }}",
                         "▼"
                     }
                 }
-                
+
                 if show_details() {
                     div {
                         class: "helpers-grid",
@@ -210,7 +210,7 @@ pub fn LearningSystemOverview(
                     }
                 }
             }
-            
+
             // Selected helper details
             if let Some(ref helper) = selected_helper() {
                 if let Some(accuracy) = status.current_performance.by_helper.get(helper) {
@@ -228,16 +228,11 @@ pub fn LearningSystemOverview(
 
 /// Individual metric card
 #[component]
-pub fn MetricCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    trend: Option<f32>,
-) -> Element {
+pub fn MetricCard(title: String, value: String, subtitle: String, trend: Option<f32>) -> Element {
     rsx! {
         div {
             class: "metric-card",
-            
+
             div {
                 class: "metric-header",
                 h4 { "{title}" }
@@ -248,12 +243,12 @@ pub fn MetricCard(
                     }
                 }
             }
-            
+
             div {
                 class: "metric-value",
                 "{value}"
             }
-            
+
             div {
                 class: "metric-subtitle",
                 "{subtitle}"
@@ -273,36 +268,36 @@ pub fn HelperPerformanceCard(
 ) -> Element {
     let accuracy_percentage = accuracy.prediction_accuracy * 100.0;
     let accuracy_class = get_accuracy_class(accuracy.prediction_accuracy);
-    
+
     rsx! {
         div {
             class: "helper-performance-card {if is_selected { \\\"selected\\\" } else { \\\"\\\" }}",
             onclick: move |_| on_select.call(helper_name.clone()),
-            
+
             div {
                 class: "helper-header",
-                
+
                 div {
                     class: "helper-name",
                     "{get_helper_display_name(&helper_name)}"
                 }
-                
+
                 div {
                     class: "helper-weight",
                     "Weight: {current_weight:.2}x"
                 }
             }
-            
+
             div {
                 class: "accuracy-display",
-                
+
                 div {
                     class: "accuracy-circle {accuracy_class}",
-                    
+
                     svg {
                         class: "accuracy-svg",
                         viewBox: "0 0 42 42",
-                        
+
                         circle {
                             class: "accuracy-bg",
                             cx: "21",
@@ -313,7 +308,7 @@ pub fn HelperPerformanceCard(
                             stroke_width: "2",
                             opacity: "0.3"
                         }
-                        
+
                         circle {
                             class: "accuracy-progress",
                             cx: "21",
@@ -328,36 +323,36 @@ pub fn HelperPerformanceCard(
                             transform: "rotate(-90 21 21)"
                         }
                     }
-                    
+
                     div {
                         class: "accuracy-text",
                         "{accuracy_percentage:.0}%"
                     }
                 }
             }
-            
+
             div {
                 class: "helper-metrics",
-                
+
                 div {
                     class: "metric-item",
                     span { class: "metric-label", "False Positive:" }
                     span { class: "metric-value", "{accuracy.false_positive_rate:.1}%" }
                 }
-                
+
                 div {
                     class: "metric-item",
                     span { class: "metric-label", "False Negative:" }
                     span { class: "metric-value", "{accuracy.false_negative_rate:.1}%" }
                 }
-                
+
                 div {
                     class: "metric-item",
                     span { class: "metric-label", "Correlation:" }
                     span { class: "metric-value", "{accuracy.confidence_correlation:.2}" }
                 }
             }
-            
+
             div {
                 class: "trend-display",
                 if !accuracy.recent_trend.is_empty() {
@@ -381,91 +376,91 @@ pub fn HelperDetailPanel(
     rsx! {
         div {
             class: "helper-detail-panel",
-            
+
             div {
                 class: "panel-header",
-                
+
                 h3 { "{get_helper_display_name(&helper_name)} Details" }
-                
+
                 button {
                     class: "close-button",
                     onclick: move |_| on_close.call(()),
                     "×"
                 }
             }
-            
+
             div {
                 class: "panel-content",
-                
+
                 // Performance metrics
                 div {
                     class: "metrics-section",
-                    
+
                     h4 { "Performance Metrics" }
-                    
+
                     div {
                         class: "detailed-metrics",
-                        
+
                         div {
                             class: "metric-row",
                             span { class: "label", "Prediction Accuracy:" }
                             span { class: "value", "{accuracy.prediction_accuracy * 100.0:.1}%" }
                             div { class: "bar-container",
-                                div { 
+                                div {
                                     class: "bar-fill",
                                     style: "width: {accuracy.prediction_accuracy * 100.0}%; background: {get_accuracy_color(accuracy.prediction_accuracy)}"
                                 }
                             }
                         }
-                        
+
                         div {
                             class: "metric-row",
                             span { class: "label", "Confidence Correlation:" }
                             span { class: "value", "{accuracy.confidence_correlation:.2}" }
                             div { class: "bar-container",
-                                div { 
+                                div {
                                     class: "bar-fill",
                                     style: "width: {(accuracy.confidence_correlation + 1.0) * 50.0}%; background: {get_correlation_color(accuracy.confidence_correlation)}"
                                 }
                             }
                         }
-                        
+
                         div {
                             class: "metric-row",
                             span { class: "label", "False Positive Rate:" }
                             span { class: "value", "{accuracy.false_positive_rate:.1}%" }
                             div { class: "bar-container",
-                                div { 
+                                div {
                                     class: "bar-fill error",
                                     style: "width: {accuracy.false_positive_rate}%"
                                 }
                             }
                         }
-                        
+
                         div {
                             class: "metric-row",
                             span { class: "label", "False Negative Rate:" }
                             span { class: "value", "{accuracy.false_negative_rate:.1}%" }
                             div { class: "bar-container",
-                                div { 
+                                div {
                                     class: "bar-fill error",
                                     style: "width: {accuracy.false_negative_rate}%"
                                 }
                             }
                         }
-                        
+
                         div {
                             class: "metric-row",
                             span { class: "label", "Current Weight:" }
                             span { class: "value", "{current_weight:.2}x" }
                             div { class: "bar-container",
-                                div { 
+                                div {
                                     class: "bar-fill",
                                     style: "width: {(current_weight * 50.0).min(100.0)}%; background: {get_weight_color(current_weight)}"
                                 }
                             }
                         }
-                        
+
                         div {
                             class: "metric-row",
                             span { class: "label", "Suggested Adjustment:" }
@@ -477,13 +472,13 @@ pub fn HelperDetailPanel(
                         }
                     }
                 }
-                
+
                 // Performance trend
                 div {
                     class: "trend-section",
-                    
+
                     h4 { "Performance Trend" }
-                    
+
                     if !accuracy.recent_trend.is_empty() {
                         DetailedTrendChart {
                             data: accuracy.recent_trend.clone(),
@@ -496,13 +491,13 @@ pub fn HelperDetailPanel(
                         }
                     }
                 }
-                
+
                 // Helper description
                 div {
                     class: "description-section",
-                    
+
                     h4 { "Helper Description" }
-                    
+
                     p {
                         class: "helper-description",
                         "{get_helper_description(&helper_name)}"
@@ -521,23 +516,23 @@ pub fn PendingImprovementsSection(
     on_reject: EventHandler<String>,
 ) -> Element {
     let show_improvements = use_signal(|| true);
-    
+
     rsx! {
         div {
             class: "pending-improvements-section",
-            
+
             div {
                 class: "section-header",
                 onclick: move |_| show_improvements.set(!show_improvements()),
-                
+
                 h3 { "Pending Improvements ({improvements.len()})" }
-                
+
                 div {
                     class: "expand-icon {if show_improvements() { \\\"expanded\\\" } else { \\\"\\\" }}",
                     "▼"
                 }
             }
-            
+
             if show_improvements() {
                 div {
                     class: "improvements-list",
@@ -562,44 +557,44 @@ pub fn ImprovementCard(
     on_reject: EventHandler<String>,
 ) -> Element {
     let show_details = use_signal(|| false);
-    
+
     rsx! {
         div {
             class: "improvement-card",
-            
+
             div {
                 class: "improvement-header",
                 onclick: move |_| show_details.set(!show_details()),
-                
+
                 div {
                     class: "improvement-title",
                     "{improvement.description}"
                 }
-                
+
                 div {
                     class: "improvement-metrics",
-                    
+
                     div {
                         class: "expected-improvement",
                         "Expected: +{improvement.expected_improvement * 100.0:.1}%"
                     }
-                    
+
                     div {
                         class: "confidence-level",
                         "Confidence: {improvement.confidence * 100.0:.0}%"
                     }
                 }
-                
+
                 div {
                     class: "expand-icon {if show_details() { \\\"expanded\\\" } else { \\\"\\\" }}",
                     "▼"
                 }
             }
-            
+
             if show_details() {
                 div {
                     class: "improvement-details",
-                    
+
                     // Proposed changes
                     div {
                         class: "proposed-changes",
@@ -608,14 +603,14 @@ pub fn ImprovementCard(
                             div {
                                 class: "change-item",
                                 span { class: "helper-name", "{get_helper_display_name(helper)}" }
-                                span { 
+                                span {
                                     class: "adjustment {if *adjustment > 0.0 { \\\"increase\\\" } else { \\\"decrease\\\" }}",
                                     "{if *adjustment > 0.0 { \\\"+\\\" } else { \\\"\\\" }}{adjustment * 100.0:.1}%"
                                 }
                             }
                         }
                     }
-                    
+
                     // Recommendation
                     div {
                         class: "recommendation",
@@ -627,16 +622,16 @@ pub fn ImprovementCard(
                     }
                 }
             }
-            
+
             div {
                 class: "improvement-actions",
-                
+
                 button {
                     class: "action-button secondary",
                     onclick: move |_| on_reject.call(improvement.experiment_id.clone()),
                     "Reject"
                 }
-                
+
                 button {
                     class: "action-button primary",
                     onclick: move |_| on_approve.call(improvement.experiment_id.clone()),
@@ -651,23 +646,23 @@ pub fn ImprovementCard(
 #[component]
 pub fn LearningHistorySection(cycles: Vec<LearningCycleResult>) -> Element {
     let show_history = use_signal(|| false);
-    
+
     rsx! {
         div {
             class: "learning-history-section",
-            
+
             div {
                 class: "section-header",
                 onclick: move |_| show_history.set(!show_history()),
-                
+
                 h3 { "Learning History ({cycles.len()} cycles)" }
-                
+
                 div {
                     class: "expand-icon {if show_history() { \\\"expanded\\\" } else { \\\"\\\" }}",
                     "▼"
                 }
             }
-            
+
             if show_history() {
                 div {
                     class: "history-timeline",
@@ -688,53 +683,53 @@ pub fn LearningCycleCard(cycle: LearningCycleResult) -> Element {
     rsx! {
         div {
             class: "learning-cycle-card",
-            
+
             div {
                 class: "cycle-header",
-                
+
                 div {
                     class: "cycle-number",
                     "Cycle #{cycle.cycle_number}"
                 }
-                
+
                 div {
                     class: "cycle-timestamp",
                     "{cycle.timestamp.format(\"%Y-%m-%d %H:%M\")}"
                 }
-                
+
                 div {
                     class: "cycle-duration",
                     "{cycle.duration_ms}ms"
                 }
             }
-            
+
             div {
                 class: "cycle-metrics",
-                
+
                 div {
                     class: "experiments-count",
                     "🧪 {cycle.experiments_conducted.len()} experiments"
                 }
-                
+
                 div {
                     class: "improvements-count",
                     "✅ {cycle.improvements_applied.len()} improvements"
                 }
-                
+
                 div {
                     class: "performance-change {if cycle.performance_change > 0.0 { \\\"positive\\\" } else if cycle.performance_change < 0.0 { \\\"negative\\\" } else { \\\"neutral\\\" }}",
                     "{if cycle.performance_change > 0.0 { \\\"+\\\" } else { \\\"\\\" }}{cycle.performance_change * 100.0:.1}%"
                 }
             }
-            
+
             div {
                 class: "cycle-summary",
-                
+
                 div {
                     class: "success-rate",
                     "Success Rate: {cycle.insights.recent_success_rate * 100.0:.1}%"
                 }
-                
+
                 div {
                     class: "error-patterns",
                     "Error Patterns: {cycle.insights.error_patterns.len()}"
@@ -748,15 +743,15 @@ pub fn LearningCycleCard(cycle: LearningCycleResult) -> Element {
 #[component]
 pub fn MiniTrendChart(data: Vec<f32>) -> Element {
     let points = generate_trend_points(&data, 40, 20);
-    
+
     rsx! {
         div {
             class: "mini-trend-chart",
-            
+
             svg {
                 class: "trend-svg",
                 viewBox: "0 0 40 20",
-                
+
                 polyline {
                     class: "trend-line",
                     points: "{points}",
@@ -774,15 +769,15 @@ pub fn MiniTrendChart(data: Vec<f32>) -> Element {
 #[component]
 pub fn DetailedTrendChart(data: Vec<f32>, helper_name: String) -> Element {
     let points = generate_trend_points(&data, 300, 100);
-    
+
     rsx! {
         div {
             class: "detailed-trend-chart",
-            
+
             svg {
                 class: "detailed-trend-svg",
                 viewBox: "0 0 300 100",
-                
+
                 // Grid lines
                 for i in 0..=4 {
                     line {
@@ -795,7 +790,7 @@ pub fn DetailedTrendChart(data: Vec<f32>, helper_name: String) -> Element {
                         opacity: "0.3"
                     }
                 }
-                
+
                 for i in 0..=10 {
                     line {
                         x1: "{i * 30}",
@@ -807,7 +802,7 @@ pub fn DetailedTrendChart(data: Vec<f32>, helper_name: String) -> Element {
                         opacity: "0.3"
                     }
                 }
-                
+
                 // Trend line
                 polyline {
                     class: "detailed-trend-line",
@@ -816,7 +811,7 @@ pub fn DetailedTrendChart(data: Vec<f32>, helper_name: String) -> Element {
                     stroke: "#007ACC",
                     stroke_width: "2"
                 }
-                
+
                 // Data points
                 for (i, value) in data.iter().enumerate() {
                     circle {
@@ -827,7 +822,7 @@ pub fn DetailedTrendChart(data: Vec<f32>, helper_name: String) -> Element {
                     }
                 }
             }
-            
+
             div {
                 class: "chart-legend",
                 "Performance trend for {get_helper_display_name(&helper_name)}"
@@ -957,9 +952,13 @@ fn get_recommendation_class(recommendation: &ExperimentRecommendation) -> &'stat
 fn format_recommendation(recommendation: &ExperimentRecommendation) -> String {
     match recommendation {
         ExperimentRecommendation::Apply => "✅ Apply as proposed".to_string(),
-        ExperimentRecommendation::ApplyWithModifications(_) => "⚠️ Apply with modifications".to_string(),
+        ExperimentRecommendation::ApplyWithModifications(_) => {
+            "⚠️ Apply with modifications".to_string()
+        }
         ExperimentRecommendation::Reject => "❌ Reject - insufficient improvement".to_string(),
-        ExperimentRecommendation::ExtendExperiment => "🔄 Extend experiment for more data".to_string(),
+        ExperimentRecommendation::ExtendExperiment => {
+            "🔄 Extend experiment for more data".to_string()
+        }
     }
 }
 
@@ -967,14 +966,16 @@ fn generate_trend_points(data: &[f32], width: u32, height: u32) -> String {
     if data.is_empty() {
         return String::new();
     }
-    
-    let points: Vec<String> = data.iter().enumerate()
+
+    let points: Vec<String> = data
+        .iter()
+        .enumerate()
         .map(|(i, &value)| {
             let x = i as f32 * width as f32 / (data.len() - 1).max(1) as f32;
             let y = height as f32 - (value * height as f32);
             format!("{:.1},{:.1}", x, y)
         })
         .collect();
-    
+
     points.join(" ")
 }

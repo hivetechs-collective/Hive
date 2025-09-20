@@ -1,8 +1,8 @@
 //! VS Code-style context menu implementation
 //! Based on VS Code's context menu system architecture
 
-use dioxus::prelude::*;
 use dioxus::events::MouseEvent;
+use dioxus::prelude::*;
 use std::path::PathBuf;
 
 /// Menu item types matching VS Code's implementation
@@ -108,11 +108,11 @@ impl VSCodeContextMenuState {
         self.selected_index = None;
         self.submenu_open = None;
     }
-    
+
     pub fn set_clipboard(&mut self, path: PathBuf, is_cut: bool) {
         self.clipboard = Some(ClipboardItem { path, is_cut });
     }
-    
+
     pub fn clear_clipboard(&mut self) {
         self.clipboard = None;
     }
@@ -132,7 +132,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
             icon: Some("new-file".to_string()),
             when: None,
         });
-        
+
         items.push(MenuItem::Action {
             id: "explorer.newFolder".to_string(),
             label: "New Folder...".to_string(),
@@ -141,7 +141,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
             icon: Some("new-folder".to_string()),
             when: None,
         });
-        
+
         items.push(MenuItem::Separator);
     }
 
@@ -155,7 +155,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
             icon: Some("split-horizontal".to_string()),
             when: None,
         });
-        
+
         items.push(MenuItem::Submenu {
             id: "explorer.openWith".to_string(),
             label: "Open With...".to_string(),
@@ -180,7 +180,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
             ],
             icon: None,
         });
-        
+
         items.push(MenuItem::Separator);
     }
 
@@ -194,7 +194,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
             icon: Some("diff".to_string()),
             when: None,
         });
-        
+
         items.push(MenuItem::Separator);
     }
 
@@ -207,7 +207,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: Some("cut".to_string()),
         when: None,
     });
-    
+
     items.push(MenuItem::Action {
         id: "explorer.copy".to_string(),
         label: "Copy".to_string(),
@@ -216,7 +216,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: Some("copy".to_string()),
         when: None,
     });
-    
+
     items.push(MenuItem::Action {
         id: "explorer.paste".to_string(),
         label: "Paste".to_string(),
@@ -225,7 +225,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: Some("paste".to_string()),
         when: None,
     });
-    
+
     items.push(MenuItem::Separator);
 
     // CopyPath group
@@ -237,7 +237,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: None,
         when: None,
     });
-    
+
     items.push(MenuItem::Action {
         id: "explorer.copyRelativePath".to_string(),
         label: "Copy Relative Path".to_string(),
@@ -246,7 +246,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: None,
         when: None,
     });
-    
+
     items.push(MenuItem::Separator);
 
     // Search group (for directories)
@@ -259,7 +259,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
             icon: Some("search".to_string()),
             when: None,
         });
-        
+
         items.push(MenuItem::Separator);
     }
 
@@ -272,7 +272,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: Some("edit".to_string()),
         when: None,
     });
-    
+
     items.push(MenuItem::Action {
         id: "explorer.delete".to_string(),
         label: "Delete".to_string(),
@@ -281,7 +281,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: Some("trash".to_string()),
         when: None,
     });
-    
+
     items.push(MenuItem::Separator);
 
     // Terminal group
@@ -306,7 +306,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: Some("folder-opened".to_string()),
         when: None,
     });
-    
+
     #[cfg(target_os = "windows")]
     items.push(MenuItem::Action {
         id: "explorer.revealInExplorer".to_string(),
@@ -316,7 +316,7 @@ pub fn build_context_menu_items(context: &FileExplorerContext) -> Vec<MenuItem> 
         icon: Some("folder-opened".to_string()),
         when: None,
     });
-    
+
     #[cfg(target_os = "linux")]
     items.push(MenuItem::Action {
         id: "explorer.openContainingFolder".to_string(),
@@ -337,7 +337,7 @@ pub fn VSCodeContextMenu(
     on_action: EventHandler<String>, // Just pass action ID
 ) -> Element {
     let menu_state = state.read();
-    
+
     if !menu_state.visible || menu_state.context.is_none() {
         return rsx! { div {} };
     }
@@ -352,7 +352,7 @@ pub fn VSCodeContextMenu(
             onclick: move |_| {
                 state.write().hide();
             },
-            
+
             // The actual context menu
             div {
                 class: "monaco-menu",
@@ -360,14 +360,14 @@ pub fn VSCodeContextMenu(
                 onclick: move |e| {
                     e.stop_propagation();
                 },
-                
+
                 div {
                     class: "monaco-action-bar vertical",
-                    
+
                     ul {
                         class: "actions-container",
                         role: "menu",
-                        
+
                         for (index, item) in items.iter().enumerate() {
                             {render_menu_item(item, index, state, on_action)}
                         }
@@ -393,8 +393,15 @@ fn render_menu_item(
                 div { class: "monaco-action-bar-separator" }
             }
         },
-        
-        MenuItem::Action { id, label, enabled, keybinding, icon, .. } => {
+
+        MenuItem::Action {
+            id,
+            label,
+            enabled,
+            keybinding,
+            icon,
+            ..
+        } => {
             let is_selected = state.read().selected_index == Some(index);
             let item_class = if *enabled {
                 if is_selected {
@@ -405,15 +412,15 @@ fn render_menu_item(
             } else {
                 "action-menu-item disabled"
             };
-            
+
             let action_id = id.clone();
             let enabled_copy = *enabled;
-            
+
             rsx! {
                 li {
                     class: "action-item",
                     role: "presentation",
-                    
+
                     a {
                         class: item_class,
                         role: "menuitem",
@@ -435,18 +442,18 @@ fn render_menu_item(
                                 state.write().selected_index = Some(index);
                             }
                         },
-                        
+
                         if let Some(icon_name) = icon {
                             span {
                                 class: format!("codicon codicon-{}", icon_name),
                                 style: "margin-right: 8px;",
                             }
                         }
-                        
+
                         span { class: "action-label", "{label}" }
-                        
+
                         if let Some(kb) = keybinding {
-                            span { 
+                            span {
                                 class: "keybinding",
                                 style: "margin-left: auto; opacity: 0.7;",
                                 "{kb}"
@@ -455,17 +462,22 @@ fn render_menu_item(
                     }
                 }
             }
-        },
-        
-        MenuItem::Submenu { id, label, items, icon } => {
+        }
+
+        MenuItem::Submenu {
+            id,
+            label,
+            items,
+            icon,
+        } => {
             let is_selected = state.read().selected_index == Some(index);
             let is_open = state.read().submenu_open.as_ref() == Some(id);
-            
+
             rsx! {
                 li {
                     class: "action-item",
                     role: "presentation",
-                    
+
                     a {
                         class: if is_selected { "action-menu-item focused" } else { "action-menu-item" },
                         role: "menuitem",
@@ -481,35 +493,35 @@ fn render_menu_item(
                                 menu_state.submenu_open = Some(id.clone());
                             }
                         },
-                        
+
                         if let Some(icon_name) = icon {
                             span {
                                 class: format!("codicon codicon-{}", icon_name),
                                 style: "margin-right: 8px;",
                             }
                         }
-                        
+
                         span { class: "action-label", "{label}" }
-                        
-                        span { 
+
+                        span {
                             class: "submenu-indicator codicon codicon-chevron-right",
                             style: "margin-left: auto;",
                         }
                     }
-                    
+
                     // Render submenu if open
                     if is_open {
                         div {
                             class: "monaco-submenu",
                             style: "position: absolute; left: 100%; top: 0;",
-                            
+
                             div {
                                 class: "monaco-action-bar vertical",
-                                
+
                                 ul {
                                     class: "actions-container",
                                     role: "menu",
-                                    
+
                                     for sub_item in items {
                                         {render_submenu_item(sub_item, state, on_action)}
                                     }
@@ -519,9 +531,15 @@ fn render_menu_item(
                     }
                 }
             }
-        },
-        
-        MenuItem::Checkbox { id, label, checked, enabled, keybinding } => {
+        }
+
+        MenuItem::Checkbox {
+            id,
+            label,
+            checked,
+            enabled,
+            keybinding,
+        } => {
             let is_selected = state.read().selected_index == Some(index);
             let item_class = if *enabled {
                 if is_selected {
@@ -532,15 +550,15 @@ fn render_menu_item(
             } else {
                 "action-menu-item disabled"
             };
-            
+
             let action_id = id.clone();
             let enabled_copy = *enabled;
-            
+
             rsx! {
                 li {
                     class: "action-item",
                     role: "presentation",
-                    
+
                     a {
                         class: item_class,
                         role: "menuitemcheckbox",
@@ -563,16 +581,16 @@ fn render_menu_item(
                                 state.write().selected_index = Some(index);
                             }
                         },
-                        
+
                         span {
                             class: if *checked { "codicon codicon-check" } else { "" },
                             style: "width: 16px; margin-right: 8px; display: inline-block;",
                         }
-                        
+
                         span { class: "action-label", "{label}" }
-                        
+
                         if let Some(kb) = keybinding {
-                            span { 
+                            span {
                                 class: "keybinding",
                                 style: "margin-left: auto; opacity: 0.7;",
                                 "{kb}"
@@ -599,22 +617,29 @@ fn render_submenu_item(
                 div { class: "monaco-action-bar-separator" }
             }
         },
-        
-        MenuItem::Action { id, label, enabled, keybinding, icon, .. } => {
+
+        MenuItem::Action {
+            id,
+            label,
+            enabled,
+            keybinding,
+            icon,
+            ..
+        } => {
             let item_class = if *enabled {
                 "action-menu-item"
             } else {
                 "action-menu-item disabled"
             };
-            
+
             let action_id = id.clone();
             let enabled_copy = *enabled;
-            
+
             rsx! {
                 li {
                     class: "action-item",
                     role: "presentation",
-                    
+
                     a {
                         class: item_class,
                         role: "menuitem",
@@ -630,18 +655,18 @@ fn render_submenu_item(
                                 }
                             }
                         },
-                        
+
                         if let Some(icon_name) = icon {
                             span {
                                 class: format!("codicon codicon-{}", icon_name),
                                 style: "margin-right: 8px;",
                             }
                         }
-                        
+
                         span { class: "action-label", "{label}" }
-                        
+
                         if let Some(kb) = keybinding {
-                            span { 
+                            span {
                                 class: "keybinding",
                                 style: "margin-left: auto; opacity: 0.7;",
                                 "{kb}"
@@ -650,8 +675,8 @@ fn render_submenu_item(
                     }
                 }
             }
-        },
-        
-        _ => rsx! { div {} } // Nested submenus not supported yet
+        }
+
+        _ => rsx! { div {} }, // Nested submenus not supported yet
     }
 }

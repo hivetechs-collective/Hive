@@ -1,8 +1,8 @@
 //! Enhanced PTY manager for terminal emulator
 
+use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use anyhow::{Result, anyhow};
 
 /// PTY manager for handling process lifecycle
 pub struct PtyManager {
@@ -38,18 +38,18 @@ impl PtyManager {
             {
                 use nix::sys::signal::{self, Signal};
                 use nix::unistd::Pid;
-                
+
                 signal::kill(Pid::from_raw(pid as i32), Signal::SIGTERM)
                     .map_err(|e| anyhow!("Failed to kill process: {}", e))?;
             }
-            
+
             #[cfg(windows)]
             {
                 // Windows process termination
-                use winapi::um::processthreadsapi::TerminateProcess;
                 use winapi::um::processthreadsapi::OpenProcess;
+                use winapi::um::processthreadsapi::TerminateProcess;
                 use winapi::um::winnt::PROCESS_TERMINATE;
-                
+
                 unsafe {
                     let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
                     if !handle.is_null() {

@@ -1,7 +1,7 @@
 //! Dialog components for the desktop application
 
-use dioxus::prelude::*;
 use anyhow;
+use dioxus::prelude::*;
 
 /// Information about a consensus profile
 #[derive(Debug, Clone, PartialEq)]
@@ -266,10 +266,13 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
         ("Settings", "Ctrl+,"),
     ];
 
-    let filtered_commands: Vec<_> = COMMANDS.iter()
+    let filtered_commands: Vec<_> = COMMANDS
+        .iter()
         .filter(|(cmd, _)| {
-            (*search_query.read()).is_empty() ||
-            cmd.to_lowercase().contains(&(*search_query.read()).to_lowercase())
+            (*search_query.read()).is_empty()
+                || cmd
+                    .to_lowercase()
+                    .contains(&(*search_query.read()).to_lowercase())
         })
         .collect();
 
@@ -311,7 +314,11 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
 
 /// Settings Dialog Component
 #[component]
-pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String>, hive_key: Signal<String>) -> Element {
+pub fn SettingsDialog(
+    show_settings: Signal<bool>,
+    openrouter_key: Signal<String>,
+    hive_key: Signal<String>,
+) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
 
@@ -502,7 +509,12 @@ struct ProfileDisplayInfo {
 }
 
 #[component]
-fn ProfileOption(name: &'static str, description: &'static str, models: &'static str, is_selected: bool) -> Element {
+fn ProfileOption(
+    name: &'static str,
+    description: &'static str,
+    models: &'static str,
+    is_selected: bool,
+) -> Element {
     rsx! {
         div {
             class: if is_selected { "profile-option selected" } else { "profile-option" },
@@ -519,7 +531,7 @@ pub fn OnboardingDialog(
     mut show_onboarding: Signal<bool>,
     mut openrouter_key: Signal<String>,
     mut hive_key: Signal<String>,
-    mut current_step: Signal<i32>
+    mut current_step: Signal<i32>,
 ) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
@@ -572,7 +584,9 @@ pub fn OnboardingDialog(
 
                     if profiles.is_empty() {
                         // We have keys but no profiles, go directly to profile step
-                        tracing::info!("Keys exist but no profiles - starting at profile configuration step");
+                        tracing::info!(
+                            "Keys exist but no profiles - starting at profile configuration step"
+                        );
                         *current_step.write() = 4;
                     }
                     // Note: We don't close the dialog here even if profiles exist
@@ -1565,8 +1579,8 @@ struct LicenseValidationResult {
 
 /// Save just the Hive key to database - simple synchronous version
 fn save_hive_key_sync(hive_key: &str) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
     use rusqlite::params;
 
     let db_path = get_hive_config_dir().join("hive-ai.db");
@@ -1583,9 +1597,10 @@ fn save_hive_key_sync(hive_key: &str) -> anyhow::Result<()> {
     };
 
     // Use sync version
-    let db = std::sync::Arc::new(tokio::runtime::Handle::current().block_on(async {
-        DatabaseManager::new(db_config).await
-    })?);
+    let db = std::sync::Arc::new(
+        tokio::runtime::Handle::current()
+            .block_on(async { DatabaseManager::new(db_config).await })?,
+    );
 
     let conn = db.get_connection()?;
 
@@ -1600,8 +1615,8 @@ fn save_hive_key_sync(hive_key: &str) -> anyhow::Result<()> {
 
 /// Save OpenRouter key synchronously
 fn save_openrouter_key_sync(openrouter_key: &str) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
     use rusqlite::params;
 
     let db_path = get_hive_config_dir().join("hive-ai.db");
@@ -1617,9 +1632,10 @@ fn save_openrouter_key_sync(openrouter_key: &str) -> anyhow::Result<()> {
         journal_mode: "WAL".to_string(),
     };
 
-    let db = std::sync::Arc::new(tokio::runtime::Handle::current().block_on(async {
-        DatabaseManager::new(db_config).await
-    })?);
+    let db = std::sync::Arc::new(
+        tokio::runtime::Handle::current()
+            .block_on(async { DatabaseManager::new(db_config).await })?,
+    );
 
     let conn = db.get_connection()?;
 
@@ -1633,12 +1649,22 @@ fn save_openrouter_key_sync(openrouter_key: &str) -> anyhow::Result<()> {
 }
 
 /// Save API keys with validation and database storage
-async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<Option<LicenseValidationResult>> {
+async fn save_api_keys(
+    openrouter_key: &str,
+    hive_key: &str,
+) -> anyhow::Result<Option<LicenseValidationResult>> {
     use crate::core::api_keys::ApiKeyManager;
-    use crate::core::{license::LicenseManager, config::get_hive_config_dir};
+    use crate::core::{config::get_hive_config_dir, license::LicenseManager};
 
-    tracing::info!("save_api_keys called - OpenRouter: {} chars, Hive: {} chars",
-                 openrouter_key.len(), if hive_key.is_empty() { 0 } else { hive_key.len() });
+    tracing::info!(
+        "save_api_keys called - OpenRouter: {} chars, Hive: {} chars",
+        openrouter_key.len(),
+        if hive_key.is_empty() {
+            0
+        } else {
+            hive_key.len()
+        }
+    );
 
     let mut license_result = None;
 
@@ -1661,11 +1687,18 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
                         email: validation.email.clone(),
                     });
 
-                    tracing::info!("License validated - tier: {}, daily_limit: {}",
-                                 validation.tier, validation.daily_limit);
+                    tracing::info!(
+                        "License validated - tier: {}, daily_limit: {}",
+                        validation.tier,
+                        validation.daily_limit
+                    );
                 } else {
-                    return Err(anyhow::anyhow!("Invalid license key: {}",
-                        validation.message.unwrap_or_else(|| "Unknown error".to_string())));
+                    return Err(anyhow::anyhow!(
+                        "Invalid license key: {}",
+                        validation
+                            .message
+                            .unwrap_or_else(|| "Unknown error".to_string())
+                    ));
                 }
             }
             Err(e) => {
@@ -1721,8 +1754,8 @@ async fn save_profile_preference(profile: &str) -> anyhow::Result<()> {
 
 /// Load existing profiles from database
 pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
 
     let db_path = get_hive_config_dir().join("hive-ai.db");
     if !db_path.exists() {
@@ -1747,27 +1780,28 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, is_default, created_at
          FROM consensus_profiles
-         ORDER BY is_default DESC, created_at DESC"
+         ORDER BY is_default DESC, created_at DESC",
     )?;
 
-    let profiles = stmt.query_map([], |row| {
-        Ok(ProfileInfo {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            is_default: row.get(2)?,
-            created_at: row.get(3)?,
-        })
-    })?
-    .filter_map(Result::ok)
-    .collect();
+    let profiles = stmt
+        .query_map([], |row| {
+            Ok(ProfileInfo {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                is_default: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?
+        .filter_map(Result::ok)
+        .collect();
 
     Ok(profiles)
 }
 
 /// Create profile from expert template
 async fn create_profile_from_template(template_id: &str, profile_name: &str) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
     use crate::core::profiles::ExpertTemplateManager;
 
     let db_path = get_hive_config_dir().join("hive-ai.db");
@@ -1786,15 +1820,17 @@ async fn create_profile_from_template(template_id: &str, profile_name: &str) -> 
     let db = DatabaseManager::new(db_config).await?;
     let template_manager = ExpertTemplateManager::new(db);
 
-    template_manager.create_profile_from_template(template_id, profile_name, None).await?;
+    template_manager
+        .create_profile_from_template(template_id, profile_name, None)
+        .await?;
 
     Ok(())
 }
 
 /// Set a profile as default
 async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
 
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
@@ -1818,7 +1854,7 @@ async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
     // Then set the selected profile as default
     conn.execute(
         "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
-        [profile_id]
+        [profile_id],
     )?;
 
     Ok(())
@@ -1826,8 +1862,8 @@ async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
 
 /// Mark onboarding as complete in the database
 pub async fn mark_onboarding_complete() -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
 
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
@@ -1849,7 +1885,7 @@ pub async fn mark_onboarding_complete() -> anyhow::Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at)
          VALUES ('onboarding_completed', 'true', datetime('now'), datetime('now'))",
-        []
+        [],
     )?;
 
     Ok(())

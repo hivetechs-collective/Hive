@@ -1,12 +1,11 @@
 use anyhow::Result;
+use rusqlite::params;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use rusqlite::params;
 
 use crate::core::database::{
-    DatabaseConfig, DatabaseManager, initialize_database, get_database,
-    User, Conversation, Message, KnowledgeConversation, ConsensusProfile,
-    ActivityLog, execute_transaction
+    execute_transaction, get_database, initialize_database, ActivityLog, ConsensusProfile,
+    Conversation, DatabaseConfig, DatabaseManager, KnowledgeConversation, Message, User,
 };
 
 /// Integration test for complete database setup with migrations
@@ -116,11 +115,7 @@ async fn test_connection_pooling_stress() -> Result<()> {
 
     // Verify all records were inserted
     let conn = db.get_connection()?;
-    let count: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM test_table",
-        [],
-        |row| row.get(0),
-    )?;
+    let count: i32 = conn.query_row("SELECT COUNT(*) FROM test_table", [], |row| row.get(0))?;
 
     assert_eq!(count, 20);
 
@@ -167,10 +162,7 @@ async fn test_error_handling() -> Result<()> {
     )?;
 
     // This should fail due to foreign key constraint
-    let result = conn.execute(
-        "INSERT INTO child (id, parent_id) VALUES (1, 999)",
-        [],
-    );
+    let result = conn.execute("INSERT INTO child (id, parent_id) VALUES (1, 999)", []);
     assert!(result.is_err());
 
     // Database should still be healthy
@@ -197,18 +189,19 @@ async fn test_model_operations() -> Result<()> {
     let user = User::create(
         Some("test@example.com".to_string()),
         Some("license-123".to_string()),
-    ).await?;
+    )
+    .await?;
     assert!(!user.id.is_empty());
 
     let found_user = User::find_by_id(&user.id).await?;
     assert!(found_user.is_some());
-    assert_eq!(found_user.unwrap().email, Some("test@example.com".to_string()));
+    assert_eq!(
+        found_user.unwrap().email,
+        Some("test@example.com".to_string())
+    );
 
     // Test Conversation operations
-    let mut conversation = Conversation::create(
-        Some(user.id.clone()),
-        None,
-    ).await?;
+    let mut conversation = Conversation::create(Some(user.id.clone()), None).await?;
     assert!(!conversation.id.is_empty());
 
     // Update metrics
@@ -228,7 +221,8 @@ async fn test_model_operations() -> Result<()> {
         "What is Rust?".to_string(),
         None,
         None,
-    ).await?;
+    )
+    .await?;
 
     let msg2 = Message::create(
         conversation.id.clone(),
@@ -236,20 +230,26 @@ async fn test_model_operations() -> Result<()> {
         "Rust is a systems programming language.".to_string(),
         Some("generator".to_string()),
         Some("claude-3-opus".to_string()),
-    ).await?;
+    )
+    .await?;
 
     let messages = Message::find_by_conversation(&conversation.id).await?;
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0].content, "What is Rust?");
-    assert_eq!(messages[1].content, "Rust is a systems programming language.");
+    assert_eq!(
+        messages[1].content,
+        "Rust is a systems programming language."
+    );
 
     // Test Knowledge operations
     let knowledge = KnowledgeConversation::create(
         Some(conversation.id.clone()),
         "What is Rust?".to_string(),
-        "Rust is a modern systems programming language focused on safety and performance.".to_string(),
+        "Rust is a modern systems programming language focused on safety and performance."
+            .to_string(),
         "Rust documentation and common knowledge".to_string(),
-    ).await?;
+    )
+    .await?;
 
     let search_results = KnowledgeConversation::search("Rust", 10).await?;
     assert_eq!(search_results.len(), 1);
@@ -262,7 +262,8 @@ async fn test_model_operations() -> Result<()> {
         "gpt-4-turbo".to_string(),
         "claude-3-sonnet-20240229".to_string(),
         "gpt-4".to_string(),
-    ).await?;
+    )
+    .await?;
 
     let found_profile = ConsensusProfile::find_by_name("Test Profile").await?;
     assert!(found_profile.is_some());
@@ -281,7 +282,8 @@ async fn test_model_operations() -> Result<()> {
             "query": "What is Rust?",
             "profile": "Test Profile"
         })),
-    ).await?;
+    )
+    .await?;
 
     ActivityLog::log(
         "query_complete".to_string(),
@@ -289,7 +291,8 @@ async fn test_model_operations() -> Result<()> {
         Some(user.id.clone()),
         Some("curator".to_string()),
         None,
-    ).await?;
+    )
+    .await?;
 
     let activities = ActivityLog::get_recent(10).await?;
     assert_eq!(activities.len(), 2);
@@ -327,7 +330,8 @@ async fn test_transactions() -> Result<()> {
             params!["ENTERPRISE", &user2.id],
         )?;
         Ok(())
-    }).await;
+    })
+    .await;
     assert!(result.is_ok());
 
     // Verify changes were committed
@@ -344,7 +348,8 @@ async fn test_transactions() -> Result<()> {
         )?;
         // Force an error
         anyhow::bail!("Simulated transaction failure");
-    }).await;
+    })
+    .await;
     assert!(result.is_err());
 
     // Verify rollback - tier should still be PREMIUM
@@ -379,24 +384,48 @@ async fn test_migration_system() -> Result<()> {
     assert_eq!(table_exists, 1);
 
     // Check that migrations were applied
-    let migration_count: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM schema_migrations",
-        [],
-        |row| row.get(0),
-    )?;
-    assert!(migration_count > 0, "At least one migration should be applied");
+    let migration_count: i32 =
+        conn.query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })?;
+    assert!(
+        migration_count > 0,
+        "At least one migration should be applied"
+    );
 
     // Verify all expected tables exist
     let expected_tables = vec![
-        "users", "configurations", "openrouter_providers", "openrouter_models",
-        "pipeline_profiles", "consensus_profiles", "conversations", "messages",
-        "usage_records", "budget_limits", "sync_metadata", "settings",
-        "consensus_settings", "conversation_usage", "knowledge_conversations",
-        "curator_truths", "conversation_context", "conversation_topics",
-        "conversation_keywords", "improvement_patterns", "conversation_threads",
-        "pending_sync", "provider_performance", "model_rankings", "consensus_metrics",
-        "cost_analytics", "feature_usage", "profile_templates", "model_selection_history",
-        "performance_metrics", "activity_log"
+        "users",
+        "configurations",
+        "openrouter_providers",
+        "openrouter_models",
+        "pipeline_profiles",
+        "consensus_profiles",
+        "conversations",
+        "messages",
+        "usage_records",
+        "budget_limits",
+        "sync_metadata",
+        "settings",
+        "consensus_settings",
+        "conversation_usage",
+        "knowledge_conversations",
+        "curator_truths",
+        "conversation_context",
+        "conversation_topics",
+        "conversation_keywords",
+        "improvement_patterns",
+        "conversation_threads",
+        "pending_sync",
+        "provider_performance",
+        "model_rankings",
+        "consensus_metrics",
+        "cost_analytics",
+        "feature_usage",
+        "profile_templates",
+        "model_selection_history",
+        "performance_metrics",
+        "activity_log",
     ];
 
     for table in expected_tables {
@@ -443,12 +472,16 @@ async fn test_performance_metrics() -> Result<()> {
                 format!("Message {} in conversation {}", j, i),
                 None,
                 None,
-            ).await?;
+            )
+            .await?;
         }
     }
 
     let creation_time = start.elapsed();
-    println!("Created 100 conversations with 500 messages in {:?}", creation_time);
+    println!(
+        "Created 100 conversations with 500 messages in {:?}",
+        creation_time
+    );
 
     // Measure query performance
     let start = std::time::Instant::now();
@@ -483,12 +516,10 @@ async fn test_concurrent_writes() -> Result<()> {
     let mut handles = vec![];
 
     for i in 0..50 {
-        let handle = tokio::spawn(async move {
-            User::create(
-                Some(format!("user{}@test.com", i)),
-                None,
-            ).await
-        });
+        let handle =
+            tokio::spawn(
+                async move { User::create(Some(format!("user{}@test.com", i)), None).await },
+            );
         handles.push(handle);
     }
 
@@ -502,11 +533,7 @@ async fn test_concurrent_writes() -> Result<()> {
     // Verify all users were created
     let db = get_database().await?;
     let conn = db.get_connection()?;
-    let count: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM users",
-        [],
-        |row| row.get(0),
-    )?;
+    let count: i32 = conn.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
     assert_eq!(count, 50);
 
     Ok(())
@@ -534,7 +561,8 @@ async fn test_backup_restore() -> Result<()> {
         "model2".to_string(),
         "model3".to_string(),
         "model4".to_string(),
-    ).await?;
+    )
+    .await?;
 
     // Perform backup
     let db = get_database().await?;
@@ -548,18 +576,14 @@ async fn test_backup_restore() -> Result<()> {
 
     // Verify backup contains data
     let verify_conn = rusqlite::Connection::open(&backup_path)?;
-    let user_count: i32 = verify_conn.query_row(
-        "SELECT COUNT(*) FROM users",
-        [],
-        |row| row.get(0),
-    )?;
+    let user_count: i32 =
+        verify_conn.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
     assert_eq!(user_count, 1);
 
-    let profile_count: i32 = verify_conn.query_row(
-        "SELECT COUNT(*) FROM consensus_profiles",
-        [],
-        |row| row.get(0),
-    )?;
+    let profile_count: i32 =
+        verify_conn.query_row("SELECT COUNT(*) FROM consensus_profiles", [], |row| {
+            row.get(0)
+        })?;
     assert_eq!(profile_count, 1);
 
     Ok(())

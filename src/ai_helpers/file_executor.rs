@@ -4,15 +4,15 @@
 //! plans from the Curator or handle simple operations directly.
 
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
-use std::fs;
-use tokio::process::Command;
-use tracing::{info, warn, error, debug};
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
+use tokio::process::Command;
+use tracing::{debug, error, info, warn};
 
+use super::AIHelperEcosystem;
 use crate::consensus::file_operations::SecurityPolicy;
 use crate::consensus::safety_guardrails::SafetyGuardrailSystem;
-use super::AIHelperEcosystem;
 
 /// Execution plan from Curator or direct request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,7 +120,7 @@ impl AIHelperFileExecutor {
     /// Execute a complete plan
     pub async fn execute_plan(&self, plan: ExecutionPlan) -> Result<ExecutionReport> {
         info!("Executing plan: {}", plan.overview);
-        
+
         // Validate safety if system is available
         // TODO: Implement proper safety validation for ExecutionPlan
         // The SafetyGuardrailSystem expects EnhancedFileOperation, not ExecutionPlan
@@ -148,8 +148,10 @@ impl AIHelperFileExecutor {
                 }
                 Err(e) => {
                     error!("Operation {} failed: {}", operation.step, e);
-                    report.errors.push(format!("Step {}: {}", operation.step, e));
-                    
+                    report
+                        .errors
+                        .push(format!("Step {}: {}", operation.step, e));
+
                     // Stop on high safety level operations
                     if matches!(plan.safety_level, SafetyLevel::High) {
                         report.success = false;
@@ -164,7 +166,10 @@ impl AIHelperFileExecutor {
 
     /// Execute a single operation
     async fn execute_operation(&self, operation: &FileOperation) -> Result<ExecutionReport> {
-        info!("Executing step {}: {}", operation.step, operation.description);
+        info!(
+            "Executing step {}: {}",
+            operation.step, operation.description
+        );
 
         let mut report = ExecutionReport {
             success: true,
@@ -202,11 +207,22 @@ impl AIHelperFileExecutor {
                 report.files_deleted.push(from.clone());
                 report.files_created.push(to.clone());
             }
-            OperationType::RunCommand { command, args, working_dir } => {
-                self.run_command(command, args, working_dir.as_deref()).await?;
+            OperationType::RunCommand {
+                command,
+                args,
+                working_dir,
+            } => {
+                self.run_command(command, args, working_dir.as_deref())
+                    .await?;
             }
-            OperationType::SearchFiles { pattern, path, file_type } => {
-                let results = self.search_files(pattern, path.as_deref(), file_type.as_deref()).await?;
+            OperationType::SearchFiles {
+                pattern,
+                path,
+                file_type,
+            } => {
+                let results = self
+                    .search_files(pattern, path.as_deref(), file_type.as_deref())
+                    .await?;
                 info!("Search found {} results", results.len());
             }
         }
@@ -229,20 +245,19 @@ impl AIHelperFileExecutor {
             // Could use quality analyzer here
         }
 
-        fs::write(path, content)
-            .with_context(|| format!("Failed to write file {:?}", path))?;
-        
+        fs::write(path, content).with_context(|| format!("Failed to write file {:?}", path))?;
+
         info!("Created file: {:?}", path);
         Ok(())
     }
 
     /// Update a file with changes
     async fn update_file(&self, path: &Path, changes: &[FileChange]) -> Result<()> {
-        let content = fs::read_to_string(path)
-            .with_context(|| format!("Failed to read file {:?}", path))?;
+        let content =
+            fs::read_to_string(path).with_context(|| format!("Failed to read file {:?}", path))?;
 
         let mut updated = content.clone();
-        
+
         for change in changes {
             if change.all_occurrences {
                 updated = updated.replace(&change.find, &change.replace);
@@ -274,9 +289,8 @@ impl AIHelperFileExecutor {
             return Err(anyhow::anyhow!("Path traversal detected"));
         }
 
-        fs::remove_file(path)
-            .with_context(|| format!("Failed to delete file {:?}", path))?;
-        
+        fs::remove_file(path).with_context(|| format!("Failed to delete file {:?}", path))?;
+
         info!("Deleted file: {:?}", path);
         Ok(())
     }
@@ -285,7 +299,7 @@ impl AIHelperFileExecutor {
     async fn create_directory(&self, path: &Path) -> Result<()> {
         fs::create_dir_all(path)
             .with_context(|| format!("Failed to create directory {:?}", path))?;
-        
+
         info!("Created directory: {:?}", path);
         Ok(())
     }
@@ -297,23 +311,29 @@ impl AIHelperFileExecutor {
             fs::create_dir_all(parent)?;
         }
 
-        fs::rename(from, to)
-            .with_context(|| format!("Failed to move {:?} to {:?}", from, to))?;
-        
+        fs::rename(from, to).with_context(|| format!("Failed to move {:?} to {:?}", from, to))?;
+
         info!("Moved file from {:?} to {:?}", from, to);
         Ok(())
     }
 
     /// Run a command
-    async fn run_command(&self, command: &str, args: &[String], working_dir: Option<&Path>) -> Result<String> {
+    async fn run_command(
+        &self,
+        command: &str,
+        args: &[String],
+        working_dir: Option<&Path>,
+    ) -> Result<String> {
         let mut cmd = Command::new(command);
         cmd.args(args);
-        
+
         if let Some(dir) = working_dir {
             cmd.current_dir(dir);
         }
 
-        let output = cmd.output().await
+        let output = cmd
+            .output()
+            .await
             .with_context(|| format!("Failed to run command: {} {:?}", command, args))?;
 
         if !output.status.success() {
@@ -326,7 +346,12 @@ impl AIHelperFileExecutor {
     }
 
     /// Search files using ripgrep
-    async fn search_files(&self, pattern: &str, path: Option<&Path>, file_type: Option<&str>) -> Result<Vec<PathBuf>> {
+    async fn search_files(
+        &self,
+        pattern: &str,
+        path: Option<&Path>,
+        file_type: Option<&str>,
+    ) -> Result<Vec<PathBuf>> {
         let mut cmd = Command::new("rg");
         cmd.arg("--files-with-matches");
         cmd.arg(pattern);
@@ -341,7 +366,7 @@ impl AIHelperFileExecutor {
 
         let output = cmd.output().await?;
         let stdout = String::from_utf8_lossy(&output.stdout);
-        
+
         let files: Vec<PathBuf> = stdout
             .lines()
             .filter(|line| !line.is_empty())
@@ -355,9 +380,10 @@ impl AIHelperFileExecutor {
     pub async fn parse_request(&self, request: &str) -> Result<ExecutionPlan> {
         error!("🚫 Pattern matching is forbidden - AI Helpers must use intelligence");
         error!("This method should not be called. Use IntelligentExecutor instead.");
-        Err(anyhow::anyhow!("Pattern matching is not allowed. AI Helpers must understand context intelligently."))
+        Err(anyhow::anyhow!(
+            "Pattern matching is not allowed. AI Helpers must understand context intelligently."
+        ))
     }
-
 
     /// DEPRECATED: This pattern matching approach is forbidden
     #[deprecated(note = "Pattern matching is not allowed. Use IntelligentExecutor.")]
@@ -365,18 +391,20 @@ impl AIHelperFileExecutor {
         error!("🚫 parse_curator_style_output called - this is forbidden!");
         Err(anyhow::anyhow!("Pattern matching is not allowed"))
     }
-    
+
     #[allow(dead_code)]
     fn _old_parse_curator_style_output(&self, output: &str) -> Result<ExecutionPlan> {
         let mut operations = Vec::new();
         let mut current_file: Option<(String, Vec<String>)> = None;
         let mut in_code_block = false;
-        
+
         for line in output.lines() {
             // Check for operation markers (e.g., "Creating hello_world.py:")
-            if line.starts_with("Creating ") || line.starts_with("Updating ") || 
-               line.starts_with("Deleting ") || line.starts_with("Writing to ") {
-                
+            if line.starts_with("Creating ")
+                || line.starts_with("Updating ")
+                || line.starts_with("Deleting ")
+                || line.starts_with("Writing to ")
+            {
                 // Save previous file if any
                 if let Some((path, content_lines)) = current_file.take() {
                     operations.push(FileOperation {
@@ -388,7 +416,7 @@ impl AIHelperFileExecutor {
                         description: format!("Create file {}", path),
                     });
                 }
-                
+
                 // Extract filename (handles both "Creating `file.txt`:" and "Creating file.txt:")
                 let filename = if let Some(start) = line.find('`') {
                     // Backtick format
@@ -402,18 +430,18 @@ impl AIHelperFileExecutor {
                     let parts: Vec<&str> = line.split_whitespace().collect();
                     if parts.len() > 1 {
                         let mut filename_part = parts[1..].join(" ");
-                        
+
                         // Remove trailing colon if present
                         filename_part = filename_part.trim_end_matches(':').to_string();
-                        
+
                         // Clean up HTML artifacts if present
                         // Remove <code> tags
                         filename_part = filename_part.replace("<code>", "").replace("</code>", "");
-                        // Remove <p> tags  
+                        // Remove <p> tags
                         filename_part = filename_part.replace("<p>", "").replace("</p>", "");
                         // Remove any remaining HTML entities
                         filename_part = filename_part.replace("&lt;", "<").replace("&gt;", ">");
-                        
+
                         let clean_filename = filename_part.trim().to_string();
                         if !clean_filename.is_empty() {
                             Some(clean_filename)
@@ -424,7 +452,7 @@ impl AIHelperFileExecutor {
                         None
                     }
                 };
-                
+
                 if let Some(fname) = filename {
                     current_file = Some((fname, Vec::new()));
                 }
@@ -436,7 +464,7 @@ impl AIHelperFileExecutor {
                 }
             }
         }
-        
+
         // Save final file if any
         if let Some((path, content_lines)) = current_file {
             operations.push(FileOperation {
@@ -448,34 +476,40 @@ impl AIHelperFileExecutor {
                 description: format!("Create file {}", path),
             });
         }
-        
+
         if operations.is_empty() {
-            return Err(anyhow::anyhow!("No file operations found in Curator output"));
+            return Err(anyhow::anyhow!(
+                "No file operations found in Curator output"
+            ));
         }
-        
+
         Ok(ExecutionPlan {
             overview: "Execute Curator-identified file operations".to_string(),
             safety_level: SafetyLevel::Medium,
             operations,
         })
     }
-    
+
     /// DEPRECATED: This pattern matching approach is forbidden
     #[deprecated(note = "Pattern matching is not allowed. Use IntelligentExecutor.")]
     fn create_simple_plan(&self, request: &str) -> Result<ExecutionPlan> {
         error!("🚫 create_simple_plan called - this is forbidden!");
         Err(anyhow::anyhow!("Pattern matching is not allowed"))
     }
-    
+
     #[allow(dead_code)]
     fn _old_create_simple_plan(&self, request: &str) -> Result<ExecutionPlan> {
         let request_lower = request.to_lowercase();
 
         // Extract filename from request
-        let filename = self.extract_filename(request)
+        let filename = self
+            .extract_filename(request)
             .ok_or_else(|| anyhow::anyhow!("Could not extract filename from request"))?;
 
-        let operation = if request_lower.contains("create") || request_lower.contains("make") || request_lower.contains("new") {
+        let operation = if request_lower.contains("create")
+            || request_lower.contains("make")
+            || request_lower.contains("new")
+        {
             FileOperation {
                 step: 1,
                 action: OperationType::CreateFile {
@@ -501,12 +535,12 @@ impl AIHelperFileExecutor {
         error!("🚫 extract_filename called - this is forbidden!");
         None
     }
-    
+
     #[allow(dead_code)]
     fn _old_extract_filename(&self, request: &str) -> Option<String> {
         // Look for patterns like "file.txt", "hello.md", etc.
         let words: Vec<&str> = request.split_whitespace().collect();
-        
+
         for word in words {
             if word.contains('.') && !word.starts_with('.') {
                 return Some(word.to_string());
@@ -534,7 +568,7 @@ impl AIHelperFileExecutor {
         error!("🚫 generate_default_content called - this is forbidden!");
         String::new()
     }
-    
+
     #[allow(dead_code)]
     fn _old_generate_default_content(&self, filename: &str) -> String {
         let extension = Path::new(filename)
@@ -559,17 +593,17 @@ mod tests {
     #[test]
     fn test_extract_filename() {
         let executor = AIHelperFileExecutor::new(AIHelperEcosystem::new_mock());
-        
+
         assert_eq!(
             executor.extract_filename("create a file called test.rs"),
             Some("test.rs".to_string())
         );
-        
+
         assert_eq!(
             executor.extract_filename("make hello.txt"),
             Some("hello.txt".to_string())
         );
-        
+
         assert_eq!(
             executor.extract_filename("create a file called hello"),
             Some("hello.txt".to_string())

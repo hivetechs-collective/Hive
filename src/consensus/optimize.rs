@@ -4,13 +4,13 @@
 //! This module provides high-performance consensus processing with intelligent caching,
 //! request batching, and parallel execution.
 
+use anyhow::Result;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use std::collections::HashMap;
 use tokio::sync::{RwLock, Semaphore};
 use tokio::time::timeout;
 use tracing::debug;
-use anyhow::Result;
 
 use crate::consensus::{ConsensusRequest, ConsensusResponse};
 use crate::core::performance::{HotPathCache, PerfTimer};
@@ -87,8 +87,9 @@ impl OptimizedConsensusEngine {
         // Process with timeout
         let response = timeout(
             self.config.request_timeout,
-            self.process_with_optimizations(request.clone())
-        ).await??;
+            self.process_with_optimizations(request.clone()),
+        )
+        .await??;
 
         // Cache the response
         if self.config.enable_caching {
@@ -100,7 +101,10 @@ impl OptimizedConsensusEngine {
     }
 
     /// Process request with all performance optimizations
-    async fn process_with_optimizations(&self, request: ConsensusRequest) -> Result<ConsensusResponse> {
+    async fn process_with_optimizations(
+        &self,
+        request: ConsensusRequest,
+    ) -> Result<ConsensusResponse> {
         if self.config.enable_batching {
             self.batch_processor.add_request(request).await
         } else if self.config.enable_parallel_stages {
@@ -111,7 +115,10 @@ impl OptimizedConsensusEngine {
     }
 
     /// Process consensus stages in parallel where possible
-    async fn process_parallel_stages(&self, request: ConsensusRequest) -> Result<ConsensusResponse> {
+    async fn process_parallel_stages(
+        &self,
+        request: ConsensusRequest,
+    ) -> Result<ConsensusResponse> {
         let _timer = PerfTimer::new("parallel_stages");
 
         // Generator stage (must be first)
@@ -130,13 +137,18 @@ impl OptimizedConsensusEngine {
         )?;
 
         // Final curation step
-        let final_response = self.curate_stage_optimized(&request, &validated, &curated).await?;
+        let final_response = self
+            .curate_stage_optimized(&request, &validated, &curated)
+            .await?;
 
         Ok(final_response)
     }
 
     /// Sequential processing for comparison
-    async fn process_sequential_stages(&self, request: ConsensusRequest) -> Result<ConsensusResponse> {
+    async fn process_sequential_stages(
+        &self,
+        request: ConsensusRequest,
+    ) -> Result<ConsensusResponse> {
         let _timer = PerfTimer::new("sequential_stages");
 
         let generated = self.generate_stage(&request).await?;
@@ -177,7 +189,10 @@ impl OptimizedConsensusEngine {
     }
 
     /// Prepare validation context in parallel
-    async fn prepare_validation_context(&self, request: &ConsensusRequest) -> Result<ValidationContext> {
+    async fn prepare_validation_context(
+        &self,
+        request: &ConsensusRequest,
+    ) -> Result<ValidationContext> {
         let _timer = PerfTimer::new("prepare_validation");
 
         // Prepare validation rules and context in parallel with refinement
@@ -206,7 +221,11 @@ impl OptimizedConsensusEngine {
     }
 
     /// Prepare curation context
-    async fn prepare_curation_context(&self, request: &ConsensusRequest, refined: &str) -> Result<CurationContext> {
+    async fn prepare_curation_context(
+        &self,
+        request: &ConsensusRequest,
+        refined: &str,
+    ) -> Result<CurationContext> {
         let _timer = PerfTimer::new("prepare_curation");
 
         Ok(CurationContext {
@@ -248,17 +267,23 @@ impl OptimizedConsensusEngine {
     /// Sequential stage implementations for fallback
     async fn validate_stage(&self, request: &ConsensusRequest, refined: &str) -> Result<String> {
         let context = self.prepare_validation_context(request).await?;
-        self.validate_stage_optimized(request, refined, &context).await
+        self.validate_stage_optimized(request, refined, &context)
+            .await
     }
 
-    async fn curate_stage(&self, request: &ConsensusRequest, validated: &str) -> Result<ConsensusResponse> {
+    async fn curate_stage(
+        &self,
+        request: &ConsensusRequest,
+        validated: &str,
+    ) -> Result<ConsensusResponse> {
         let context = self.prepare_curation_context(request, validated).await?;
-        self.curate_stage_optimized(request, validated, &context).await
+        self.curate_stage_optimized(request, validated, &context)
+            .await
     }
 
     /// Generate cache key for request deduplication
     fn generate_cache_key(&self, request: &ConsensusRequest) -> String {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
 
         let mut hasher = Sha256::new();
         hasher.update(&request.query);
@@ -284,11 +309,14 @@ impl OptimizedConsensusEngine {
     }
 
     /// Create refinement prompt
-    fn create_refinement_prompt(&self, request: &ConsensusRequest, generated: &str) -> Result<String> {
+    fn create_refinement_prompt(
+        &self,
+        request: &ConsensusRequest,
+        generated: &str,
+    ) -> Result<String> {
         Ok(format!(
             "Refine this response for clarity and accuracy:\n\n{}\n\nOriginal query: {}",
-            generated,
-            request.query
+            generated, request.query
         ))
     }
 
@@ -301,9 +329,7 @@ impl OptimizedConsensusEngine {
     ) -> Result<String> {
         Ok(format!(
             "Validate this response:\n\n{}\n\nRules: {:?}\nContext: {:?}",
-            refined,
-            context.rules,
-            context.context
+            refined, context.rules, context.context
         ))
     }
 
@@ -316,9 +342,7 @@ impl OptimizedConsensusEngine {
     ) -> Result<String> {
         Ok(format!(
             "Final curation for response:\n\n{}\n\nQuality: {:.2}\nStyle: {:?}",
-            validated,
-            context.quality_metrics.overall_score,
-            context.style_preferences
+            validated, context.quality_metrics.overall_score, context.style_preferences
         ))
     }
 
@@ -478,21 +502,25 @@ impl BatchProcessor {
         if pending.len() >= self.config.batch_size {
             let batch = pending.drain(..).collect();
             drop(pending);
-            self.process_batch(batch).await?.into_iter().next().unwrap_or_else(|| {
-                Ok(ConsensusResponse {
-                    content: "Batch processing error".to_string(),
-                    metadata: crate::consensus::types::ResponseMetadata {
-                        total_tokens: 0,
-                        cost: 0.0,
-                        duration_ms: 0,
-                        models_used: vec![],
-                    },
-                    profile: Some(request.profile),
-                    latency: Duration::from_millis(0),
-                    model_usage: HashMap::new(),
-                    quality_score: 0.0,
+            self.process_batch(batch)
+                .await?
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| {
+                    Ok(ConsensusResponse {
+                        content: "Batch processing error".to_string(),
+                        metadata: crate::consensus::types::ResponseMetadata {
+                            total_tokens: 0,
+                            cost: 0.0,
+                            duration_ms: 0,
+                            models_used: vec![],
+                        },
+                        profile: Some(request.profile),
+                        latency: Duration::from_millis(0),
+                        model_usage: HashMap::new(),
+                        quality_score: 0.0,
+                    })
                 })
-            })
         } else {
             // Wait for batch timeout or process immediately for single requests
             tokio::time::sleep(self.config.batch_timeout).await;
@@ -500,9 +528,14 @@ impl BatchProcessor {
         }
     }
 
-    async fn process_batch(&self, requests: Vec<ConsensusRequest>) -> Result<Vec<Result<ConsensusResponse>>> {
+    async fn process_batch(
+        &self,
+        requests: Vec<ConsensusRequest>,
+    ) -> Result<Vec<Result<ConsensusResponse>>> {
         // Process batch of requests efficiently
-        let futures = requests.into_iter().map(|req| self.process_single_request(req));
+        let futures = requests
+            .into_iter()
+            .map(|req| self.process_single_request(req));
         Ok(futures::future::join_all(futures).await)
     }
 
@@ -605,14 +638,20 @@ mod tests {
         };
 
         let start = Instant::now();
-        let _parallel_response = parallel_engine.process_optimized(request.clone()).await.unwrap();
+        let _parallel_response = parallel_engine
+            .process_optimized(request.clone())
+            .await
+            .unwrap();
         let parallel_time = start.elapsed();
 
         let start = Instant::now();
         let _sequential_response = sequential_engine.process_optimized(request).await.unwrap();
         let sequential_time = start.elapsed();
 
-        println!("Parallel: {:?}, Sequential: {:?}", parallel_time, sequential_time);
+        println!(
+            "Parallel: {:?}, Sequential: {:?}",
+            parallel_time, sequential_time
+        );
 
         // Parallel should generally be faster
         // Note: In mock implementation, this may not always be true due to overhead

@@ -3,8 +3,8 @@
 //! This module extends the Generator stage to read actual file contents
 //! when analyzing repositories.
 
-use std::sync::Arc;
 use anyhow::Result;
+use std::sync::Arc;
 use tracing::{debug, info, instrument, warn};
 
 use crate::consensus::file_operations::{FileReader, SecurityPolicy};
@@ -48,21 +48,33 @@ impl EnhancedGeneratorStage {
             // Read key files to understand the project
             let key_files = self.identify_key_files_to_read(context, question).await?;
             info!("Identified {} key files to read", key_files.len());
-            
+
             if !key_files.is_empty() {
                 analysis.push_str("### Key Files Analyzed:\n\n");
-                
+
                 for file_path in key_files.iter().take(10) {
                     info!("Attempting to read file: {}", file_path.display());
                     match self.file_reader.read_file(file_path).await {
                         Ok(content) => {
-                            info!("Successfully read file: {} ({} bytes)", file_path.display(), content.size_bytes);
+                            info!(
+                                "Successfully read file: {} ({} bytes)",
+                                file_path.display(),
+                                content.size_bytes
+                            );
                             analysis.push_str(&format!("#### File: {}\n", file_path.display()));
-                            analysis.push_str(&format!("Language: {}\n", content.language.as_deref().unwrap_or("unknown")));
-                            analysis.push_str(&format!("Size: {} bytes, {} lines\n\n", content.size_bytes, content.lines));
-                            
+                            analysis.push_str(&format!(
+                                "Language: {}\n",
+                                content.language.as_deref().unwrap_or("unknown")
+                            ));
+                            analysis.push_str(&format!(
+                                "Size: {} bytes, {} lines\n\n",
+                                content.size_bytes, content.lines
+                            ));
+
                             // Include relevant excerpts based on the question
-                            if let Some(excerpt) = self.extract_relevant_excerpt(&content.content, question) {
+                            if let Some(excerpt) =
+                                self.extract_relevant_excerpt(&content.content, question)
+                            {
                                 analysis.push_str("**Actual code from this file:**\n");
                                 analysis.push_str("```");
                                 if let Some(lang) = &content.language {
@@ -84,14 +96,23 @@ impl EnhancedGeneratorStage {
             // Search for specific patterns if the question asks about something specific
             if let Some(search_terms) = self.extract_search_terms(question) {
                 analysis.push_str("### Search Results:\n\n");
-                
+
                 for term in search_terms {
                     let search_results = self.search_codebase(&term, root_path).await?;
                     if !search_results.is_empty() {
-                        analysis.push_str(&format!("Found {} matches for '{}'\n", search_results.len(), term));
-                        
+                        analysis.push_str(&format!(
+                            "Found {} matches for '{}'\n",
+                            search_results.len(),
+                            term
+                        ));
+
                         for (idx, result) in search_results.iter().take(5).enumerate() {
-                            analysis.push_str(&format!("\nMatch {}: {} (line {})\n", idx + 1, result.path.display(), result.line_number));
+                            analysis.push_str(&format!(
+                                "\nMatch {}: {} (line {})\n",
+                                idx + 1,
+                                result.path.display(),
+                                result.line_number
+                            ));
                             analysis.push_str(&format!("```\n{}\n```\n", result.line_content));
                         }
                     }
@@ -159,12 +180,16 @@ impl EnhancedGeneratorStage {
                     Ok(true) => {
                         info!("File exists: {}", file.display());
                         existing_files.push(file);
-                    },
+                    }
                     Ok(false) => {
                         warn!("File does not exist: {}", file.display());
-                    },
+                    }
                     Err(e) => {
-                        warn!("Error checking file existence for {}: {}", file.display(), e);
+                        warn!(
+                            "Error checking file existence for {}: {}",
+                            file.display(),
+                            e
+                        );
                     }
                 }
             }
@@ -182,7 +207,7 @@ impl EnhancedGeneratorStage {
     /// Extract relevant excerpt from file content based on question
     fn extract_relevant_excerpt(&self, content: &str, question: &str) -> Option<String> {
         let lines: Vec<&str> = content.lines().collect();
-        
+
         // If file is small, include it all
         if lines.len() <= 50 {
             return Some(content.to_string());
@@ -194,7 +219,7 @@ impl EnhancedGeneratorStage {
 
         for (idx, line) in lines.iter().enumerate() {
             let line_lower = line.to_lowercase();
-            
+
             // Check for relevant keywords from the question
             for word in question_lower.split_whitespace() {
                 if word.len() > 3 && line_lower.contains(word) {
@@ -223,7 +248,7 @@ impl EnhancedGeneratorStage {
         if !relevant_sections.is_empty() {
             relevant_sections.sort_by_key(|&(start, _)| start);
             let (start, mut end) = relevant_sections[0];
-            
+
             for &(s, e) in &relevant_sections[1..] {
                 if s <= end + 5 {
                     end = end.max(e);
@@ -242,7 +267,7 @@ impl EnhancedGeneratorStage {
     /// Extract search terms from the question
     fn extract_search_terms(&self, question: &str) -> Option<Vec<String>> {
         let question_lower = question.to_lowercase();
-        
+
         // Keywords that indicate search intent
         if question_lower.contains("where")
             || question_lower.contains("find")
@@ -252,18 +277,20 @@ impl EnhancedGeneratorStage {
             || question_lower.contains("implements")
         {
             // Extract meaningful terms (longer than 3 chars, not common words)
-            let common_words = vec!["the", "and", "for", "with", "that", "this", "from", "what", "where", "when", "how"];
+            let common_words = vec![
+                "the", "and", "for", "with", "that", "this", "from", "what", "where", "when", "how",
+            ];
             let terms: Vec<String> = question_lower
                 .split_whitespace()
                 .filter(|word| word.len() > 3 && !common_words.contains(word))
                 .map(String::from)
                 .collect();
-            
+
             if !terms.is_empty() {
                 return Some(terms);
             }
         }
-        
+
         None
     }
 
@@ -276,14 +303,14 @@ impl EnhancedGeneratorStage {
         // Find relevant files to search
         let pattern = format!("**/*.{{rs,ts,js,py,go,java,cs,cpp,c,h}}");
         let files = self.file_reader.glob_files(&pattern).await?;
-        
+
         // Limit search to reasonable number of files
         let search_files: Vec<_> = files
             .into_iter()
             .filter(|p| p.starts_with(root_path))
             .take(100)
             .collect();
-        
+
         // Search for the term
         self.file_reader.search_content(term, &search_files).await
     }
@@ -300,7 +327,9 @@ impl EnhancedGeneratorStage {
         if let Some(repo_context) = repository_context {
             if repo_context.root_path.is_some() {
                 info!("Analyzing repository with file reading for generator stage");
-                let analysis = self.analyze_repository_with_files(repo_context, question).await?;
+                let analysis = self
+                    .analyze_repository_with_files(repo_context, question)
+                    .await?;
                 info!("Generated {} bytes of file analysis", analysis.len());
                 enhanced_context.push_str(&analysis);
             } else {
@@ -330,6 +359,7 @@ impl ConsensusStage for EnhancedGeneratorStage {
         context: Option<&str>,
     ) -> Result<Vec<Message>> {
         // Use base generator's message building
-        self.base_generator.build_messages(question, previous_answer, context)
+        self.base_generator
+            .build_messages(question, previous_answer, context)
     }
 }

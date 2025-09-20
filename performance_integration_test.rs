@@ -1,6 +1,6 @@
 #!/usr/bin/env rust-script
 //! Test script to verify performance optimization integration
-//! 
+//!
 //! This script tests the key integration points of the performance optimization system
 
 use std::path::PathBuf;
@@ -10,12 +10,12 @@ use std::time::Instant;
 fn main() {
     println!("🚀 Testing Performance Optimization Integration");
     println!("===========================================");
-    
+
     test_performance_config();
     test_optimized_git_manager();
     test_performance_monitoring();
     test_ui_integration();
-    
+
     println!("\n✅ Performance Integration Test Complete");
     println!("📊 All core components successfully integrated");
 }

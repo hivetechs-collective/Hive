@@ -2,15 +2,16 @@
 //! This module provides basic functionality that can be tested immediately
 
 use anyhow::Result;
-use std::path::PathBuf;
 use console::style;
+use std::path::PathBuf;
 
 /// Essential init functionality
 pub async fn essential_init(path: Option<PathBuf>) -> Result<()> {
     let project_path = path.unwrap_or_else(|| PathBuf::from("."));
     let hive_dir = project_path.join(".hive");
 
-    println!("🐝 {} Hive in {}...",
+    println!(
+        "🐝 {} Hive in {}...",
         style("Initializing").bold(),
         style(project_path.display()).cyan()
     );
@@ -49,7 +50,10 @@ format = "pretty"
     std::fs::write(&db_path, "")?;
     println!("💾 Created {}", style("conversation database").dim());
 
-    println!("✅ {} Hive initialized successfully!", style("Success:").green().bold());
+    println!(
+        "✅ {} Hive initialized successfully!",
+        style("Success:").green().bold()
+    );
 
     Ok(())
 }
@@ -110,7 +114,8 @@ pub async fn essential_config_show() -> Result<()> {
 
 /// Essential config set functionality
 pub async fn essential_config_set(key: &str, value: &str) -> Result<()> {
-    println!("✏️  {} {} = {}",
+    println!(
+        "✏️  {} {} = {}",
         style("Setting").bold(),
         style(key).cyan(),
         style(value).yellow()
@@ -120,7 +125,10 @@ pub async fn essential_config_set(key: &str, value: &str) -> Result<()> {
 
     if config_path.exists() {
         // For Phase 1, just show the action - actual TOML editing would need toml_edit crate
-        println!("✅ {} Configuration would be updated", style("Success:").green().bold());
+        println!(
+            "✅ {} Configuration would be updated",
+            style("Success:").green().bold()
+        );
         println!("  (Full TOML editing in Phase 2)");
     } else {
         println!("❌ {} Configuration file not found", style("Error:").red());
@@ -136,7 +144,10 @@ pub async fn essential_ask(question: &str) -> Result<()> {
     println!("❓ {}", style(question).italic());
 
     // Simulate processing
-    println!("\n🧠 {} 4-stage consensus pipeline...", style("Running").bold());
+    println!(
+        "\n🧠 {} 4-stage consensus pipeline...",
+        style("Running").bold()
+    );
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     println!("✨ {} Response:", style("Consensus").bold().green());

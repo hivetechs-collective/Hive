@@ -1,15 +1,15 @@
 //! Enhanced Repository Dropdown Menu Component
-//! 
+//!
 //! A VS Code-style dropdown menu for repository selection with advanced features
 //! including search, filtering, status indicators, and rich metadata display.
 
 use dioxus::prelude::*;
-use std::path::PathBuf;
 use std::collections::HashMap;
-use tracing::{info, debug};
+use std::path::PathBuf;
+use tracing::{debug, info};
 
 use super::repository_selector::{RepositoryInfo, RepositorySelectorState, RepositoryStatus};
-use crate::desktop::workspace::repository_discovery::{RepositoryMetadata, ProjectType};
+use crate::desktop::workspace::repository_discovery::{ProjectType, RepositoryMetadata};
 
 /// Props for the enhanced repository dropdown component
 #[derive(Props, Clone, PartialEq)]
@@ -59,29 +59,35 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
     let mut filter_state = use_signal(FilterState::new);
     let mut loading = use_signal(|| false);
     let mut selected_index = use_signal(|| None::<usize>);
-    
+
     // Get current repository info
     let selector_state = props.selector_state.read();
     let current_repo = selector_state.current_repository();
-    
+
     // Filter repositories based on filter state
     let filtered_repos = use_memo(move || {
         let filter = filter_state.read();
         let selector = props.selector_state.read();
-        
-        selector.repositories
+
+        selector
+            .repositories
             .iter()
             .enumerate()
             .filter(|(_, repo)| {
                 // Search filter
                 if !filter.search_term.is_empty() {
                     let search_lower = filter.search_term.to_lowercase();
-                    if !repo.name.to_lowercase().contains(&search_lower) &&
-                       !repo.path.to_string_lossy().to_lowercase().contains(&search_lower) {
+                    if !repo.name.to_lowercase().contains(&search_lower)
+                        && !repo
+                            .path
+                            .to_string_lossy()
+                            .to_lowercase()
+                            .contains(&search_lower)
+                    {
                         return false;
                     }
                 }
-                
+
                 // Status filter
                 match &repo.status {
                     RepositoryStatus::Clean => filter.show_clean,
@@ -93,7 +99,7 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
             .map(|(idx, repo)| (idx, repo.clone()))
             .collect::<Vec<_>>()
     });
-    
+
     // Keyboard navigation
     use_effect(move || {
         if *props.visible.read() {
@@ -101,13 +107,13 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
             // This would require a proper focus management system
         }
     });
-    
+
     if !*props.visible.read() {
         return rsx! { div {} };
     }
-    
+
     let (x, y) = props.position;
-    
+
     rsx! {
         // Backdrop to capture clicks outside
         div {
@@ -117,7 +123,7 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                 props.visible.set(false);
             }
         }
-        
+
         // Main dropdown container
         div {
             class: "repository-dropdown",
@@ -132,16 +138,16 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
             onclick: move |evt| {
                 evt.stop_propagation();
             },
-            
+
             // Header with search
             div {
                 class: "dropdown-header",
                 style: "padding: 12px; border-bottom: 1px solid var(--vscode-widget-border, #454545);",
-                
+
                 // Title row
                 div {
                     style: "display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;",
-                    
+
                     div {
                         style: "font-weight: 600; display: flex; align-items: center; gap: 8px;",
                         span {
@@ -150,11 +156,11 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                         }
                         "Repository"
                     }
-                    
+
                     // Action buttons
                     div {
                         style: "display: flex; gap: 8px;",
-                        
+
                         // Refresh button
                         if let Some(on_refresh) = &props.on_refresh_requested {
                             button {
@@ -176,7 +182,7 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                                 }
                             }
                         }
-                        
+
                         // Settings button
                         if let Some(on_manage) = &props.on_manage_repositories {
                             button {
@@ -200,18 +206,18 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                         }
                     }
                 }
-                
+
                 // Search box
                 div {
                     class: "search-container",
                     style: "position: relative;",
-                    
+
                     span {
                         class: "codicon codicon-search",
                         style: "position: absolute; left: 10px; top: 50%; transform: translateY(-50%); \
                                 color: var(--vscode-input-placeholderForeground, #808080); font-size: 14px;",
                     }
-                    
+
                     input {
                         r#type: "text",
                         placeholder: "Search repositories...",
@@ -226,12 +232,12 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                         }
                     }
                 }
-                
+
                 // Filter chips
                 div {
                     class: "filter-chips",
                     style: "display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;",
-                    
+
                     FilterChip {
                         label: "Clean",
                         icon: "check",
@@ -241,7 +247,7 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                             filter_state.write().show_clean = active;
                         }
                     }
-                    
+
                     FilterChip {
                         label: "Modified",
                         icon: "circle-filled",
@@ -251,7 +257,7 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                             filter_state.write().show_modified = active;
                         }
                     }
-                    
+
                     FilterChip {
                         label: "Conflicts",
                         icon: "warning",
@@ -263,12 +269,12 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                     }
                 }
             }
-            
+
             // Repository list
             div {
                 class: "repository-list",
                 style: "flex: 1; overflow-y: auto; max-height: 400px;",
-                
+
                 if *loading.read() {
                     div {
                         style: "padding: 40px; text-align: center; color: var(--vscode-descriptionForeground, #808080);",
@@ -314,21 +320,21 @@ pub fn RepositoryDropdown(mut props: RepositoryDropdownProps) -> Element {
                     }
                 }
             }
-            
+
             // Footer with stats
             div {
                 class: "dropdown-footer",
                 style: "padding: 8px 12px; border-top: 1px solid var(--vscode-widget-border, #454545); \
                         font-size: 11px; color: var(--vscode-descriptionForeground, #808080);",
-                
+
                 if let Some(current) = current_repo {
                     div {
                         style: "display: flex; justify-content: space-between; align-items: center;",
-                        
+
                         span {
                             "Current: {current.name}"
                         }
-                        
+
                         span {
                             "{filtered_repos.read().len()} of {selector_state.repositories.len()} repositories"
                         }
@@ -348,7 +354,7 @@ fn FilterChip(
     icon: &'static str,
     active: bool,
     color: &'static str,
-    on_toggle: EventHandler<bool>
+    on_toggle: EventHandler<bool>,
 ) -> Element {
     rsx! {
         button {
@@ -363,7 +369,7 @@ fn FilterChip(
             onclick: move |_| {
                 on_toggle.call(!active);
             },
-            
+
             span {
                 class: format!("codicon codicon-{}", icon),
                 style: format!(
@@ -371,7 +377,7 @@ fn FilterChip(
                     if active { "white" } else { color }
                 ),
             }
-            
+
             span {
                 style: format!(
                     "color: {};",
@@ -391,7 +397,7 @@ fn RepositoryListItem(
     is_current: bool,
     is_selected: bool,
     on_click: EventHandler<()>,
-    on_double_click: EventHandler<()>
+    on_double_click: EventHandler<()>,
 ) -> Element {
     // Get project type icon
     let project_icon = if let Some(ref meta) = metadata {
@@ -416,7 +422,7 @@ fn RepositoryListItem(
     } else {
         "📁"
     };
-    
+
     rsx! {
         div {
             class: "repository-list-item",
@@ -437,7 +443,7 @@ fn RepositoryListItem(
             ondblclick: move |_| {
                 on_double_click.call(());
             },
-            
+
             // Status indicator
             span {
                 class: "repo-status-icon",
@@ -447,32 +453,32 @@ fn RepositoryListItem(
                 ),
                 "{repository.status_icon()}"
             }
-            
+
             // Project type icon
             span {
                 style: "font-size: 16px; flex-shrink: 0;",
                 "{project_icon}"
             }
-            
+
             // Repository info
             div {
                 style: "flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0;",
-                
+
                 // Name and branch
                 div {
                     style: "display: flex; align-items: center; gap: 8px;",
-                    
+
                     span {
-                        style: if is_current { 
-                            "font-weight: 600; color: var(--vscode-list-activeSelectionForeground, white);" 
-                        } else { 
-                            "font-weight: 500;" 
+                        style: if is_current {
+                            "font-weight: 600; color: var(--vscode-list-activeSelectionForeground, white);"
+                        } else {
+                            "font-weight: 500;"
                         },
                         class: "repo-name",
                         title: "{repository.path.display()}",
                         "{repository.name}"
                     }
-                    
+
                     if let Some(branch) = &repository.current_branch {
                         span {
                             style: "color: var(--vscode-descriptionForeground, #808080); font-size: 11px;",
@@ -480,7 +486,7 @@ fn RepositoryListItem(
                             " {branch}"
                         }
                     }
-                    
+
                     if is_current {
                         span {
                             style: "color: var(--vscode-charts-green, #4ec9b0); font-size: 11px; \
@@ -489,20 +495,20 @@ fn RepositoryListItem(
                         }
                     }
                 }
-                
+
                 // Additional metadata
                 if let Some(ref meta) = metadata {
                     div {
                         style: "font-size: 11px; color: var(--vscode-descriptionForeground, #808080); \
                                 display: flex; gap: 12px;",
-                        
+
                         // Project info
                         if let Some(ref project_info) = meta.project_info {
                             if let Some(ref version) = project_info.version {
                                 span { "v{version}" }
                             }
                         }
-                        
+
                         // Git status summary
                         if let Some(ref upstream) = meta.git_status.upstream {
                             if upstream.ahead > 0 || upstream.behind > 0 {
@@ -511,7 +517,7 @@ fn RepositoryListItem(
                                 }
                             }
                         }
-                        
+
                         // Working directory status
                         if meta.git_status.working_dir_status.modified_files > 0 {
                             span {
@@ -521,7 +527,7 @@ fn RepositoryListItem(
                     }
                 }
             }
-            
+
             // Upstream status
             if let Some(ref upstream) = repository.upstream_status {
                 if upstream.has_upstream && (upstream.ahead > 0 || upstream.behind > 0) {
@@ -529,7 +535,7 @@ fn RepositoryListItem(
                         style: "display: flex; align-items: center; gap: 4px; \
                                 color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d); \
                                 font-size: 11px;",
-                        
+
                         if upstream.behind > 0 {
                             span {
                                 class: "codicon codicon-arrow-down",
@@ -537,7 +543,7 @@ fn RepositoryListItem(
                                 "{upstream.behind}"
                             }
                         }
-                        
+
                         if upstream.ahead > 0 {
                             span {
                                 class: "codicon codicon-arrow-up",

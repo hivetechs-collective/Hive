@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{debug, info, warn, error};
+use tracing::{debug, error, info, warn};
 
 use super::database::{execute_query, fetch_all_query, fetch_optional_query, get_database};
 
@@ -85,17 +85,20 @@ impl MigrationManager {
 
         // Parse migration metadata from comments
         let (metadata, sql) = self.parse_migration_content(&content)?;
-        let version = metadata.get("version")
+        let version = metadata
+            .get("version")
             .or_else(|| filename.split('_').next())
             .context("Migration version not found")?
             .to_string();
 
-        let name = metadata.get("name")
+        let name = metadata
+            .get("name")
             .or_else(|| Some(filename))
             .unwrap()
             .to_string();
 
-        let description = metadata.get("description")
+        let description = metadata
+            .get("description")
             .unwrap_or(&"No description".to_string())
             .clone();
 
@@ -127,10 +130,7 @@ impl MigrationManager {
                 in_metadata = true;
                 let parts: Vec<&str> = trimmed[3..].splitn(2, ':').collect();
                 if parts.len() == 2 {
-                    metadata.insert(
-                        parts[0].trim().to_lowercase(),
-                        parts[1].trim().to_string(),
-                    );
+                    metadata.insert(parts[0].trim().to_lowercase(), parts[1].trim().to_string());
                 }
             } else if trimmed.starts_with("--") && !in_metadata {
                 // Regular comment, skip
@@ -172,7 +172,8 @@ impl MigrationManager {
         let rows = fetch_all_query(
             "SELECT version FROM schema_migrations ORDER BY executed_at",
             vec![],
-        ).await?;
+        )
+        .await?;
 
         let versions = rows
             .into_iter()
@@ -195,17 +196,25 @@ impl MigrationManager {
                 continue;
             }
 
-            info!("Applying migration: {} - {}", migration.version, migration.name);
+            info!(
+                "Applying migration: {} - {}",
+                migration.version, migration.name
+            );
             let result = self.apply_migration(migration).await;
 
             match &result {
                 Ok(mr) if mr.success => {
-                    info!("Migration {} completed successfully in {}ms",
-                          migration.version, mr.execution_time_ms);
+                    info!(
+                        "Migration {} completed successfully in {}ms",
+                        migration.version, mr.execution_time_ms
+                    );
                 }
                 Ok(mr) => {
-                    error!("Migration {} failed: {}",
-                           migration.version, mr.error.as_deref().unwrap_or("Unknown error"));
+                    error!(
+                        "Migration {} failed: {}",
+                        migration.version,
+                        mr.error.as_deref().unwrap_or("Unknown error")
+                    );
                 }
                 Err(e) => {
                     error!("Migration {} failed with error: {}", migration.version, e);
@@ -242,14 +251,17 @@ impl MigrationManager {
                 name: migration.name.clone(),
                 success: false,
                 execution_time_ms: 0,
-                error: Some("Migration checksum mismatch - file may have been modified".to_string()),
+                error: Some(
+                    "Migration checksum mismatch - file may have been modified".to_string(),
+                ),
             });
         }
 
         let result = match self.execute_migration_sql(&migration.sql).await {
             Ok(_) => {
                 // Record successful migration
-                self.record_migration(migration, start_time.elapsed().as_millis() as u64).await?;
+                self.record_migration(migration, start_time.elapsed().as_millis() as u64)
+                    .await?;
 
                 MigrationResult {
                     version: migration.version.clone(),
@@ -287,7 +299,9 @@ impl MigrationManager {
                 sqlx::query(statement)
                     .execute(db.pool())
                     .await
-                    .with_context(|| format!("Failed to execute migration statement: {}", statement))?;
+                    .with_context(|| {
+                        format!("Failed to execute migration statement: {}", statement)
+                    })?;
             }
         }
 
@@ -313,7 +327,8 @@ impl MigrationManager {
                 &(execution_time_ms as i64),
                 &migration.rollback_sql.as_deref().unwrap_or(""),
             ],
-        ).await?;
+        )
+        .await?;
 
         Ok(())
     }
@@ -323,7 +338,8 @@ impl MigrationManager {
         let migration_info = fetch_optional_query(
             "SELECT * FROM schema_migrations WHERE version = ?",
             vec![&version],
-        ).await?;
+        )
+        .await?;
 
         let migration_row = migration_info
             .ok_or_else(|| anyhow::anyhow!("Migration {} not found in database", version))?;
@@ -346,7 +362,8 @@ impl MigrationManager {
                 execute_query(
                     "DELETE FROM schema_migrations WHERE version = ?",
                     vec![&version],
-                ).await?;
+                )
+                .await?;
 
                 MigrationResult {
                     version: version.to_string(),
@@ -395,8 +412,15 @@ impl MigrationManager {
 
         // Check for missing migrations
         for applied_version in &applied_migrations {
-            if !self.migrations.iter().any(|m| &m.version == applied_version) {
-                issues.push(format!("Applied migration {} not found in migration files", applied_version));
+            if !self
+                .migrations
+                .iter()
+                .any(|m| &m.version == applied_version)
+            {
+                issues.push(format!(
+                    "Applied migration {} not found in migration files",
+                    applied_version
+                ));
             }
         }
 
@@ -406,7 +430,8 @@ impl MigrationManager {
                 let stored_checksum = fetch_optional_query(
                     "SELECT checksum FROM schema_migrations WHERE version = ?",
                     vec![&migration.version],
-                ).await?;
+                )
+                .await?;
 
                 if let Some(row) = stored_checksum {
                     let stored: String = row.get("checksum");
@@ -464,7 +489,12 @@ mod tests {
     use tempfile::TempDir;
     use tokio::fs;
 
-    async fn create_test_migration(dir: &PathBuf, version: &str, name: &str, sql: &str) -> Result<()> {
+    async fn create_test_migration(
+        dir: &PathBuf,
+        version: &str,
+        name: &str,
+        sql: &str,
+    ) -> Result<()> {
         let filename = format!("{}_{}.sql", version, name);
         let file_path = dir.join(filename);
 
@@ -493,14 +523,16 @@ mod tests {
             "001",
             "create_users",
             "CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT);",
-        ).await?;
+        )
+        .await?;
 
         create_test_migration(
             &migrations_dir,
             "002",
             "add_email_column",
             "ALTER TABLE users ADD COLUMN email TEXT;",
-        ).await?;
+        )
+        .await?;
 
         let mut manager = MigrationManager::new(migrations_dir);
         manager.load_migrations().await?;

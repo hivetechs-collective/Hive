@@ -3,7 +3,7 @@
 use crate::desktop::{
     consensus_integration::{use_consensus_with_version, DesktopConsensusManager},
     events::KeyboardEventUtils,
-    response_coordinator::{SendToClaudeButton, CopyResponseButton},
+    response_coordinator::{CopyResponseButton, SendToClaudeButton},
     state::*,
 };
 use dioxus::events::{KeyboardEvent, MouseEvent};
@@ -16,26 +16,30 @@ pub fn ChatInterface() -> Element {
     let state = app_state.read();
     let api_keys_version = use_context::<Signal<u32>>();
     let consensus_manager = use_consensus_with_version(*api_keys_version.read());
-    
+
     // Watch for repository context update trigger
     let repository_context_trigger = state.repository_context_update_trigger;
     let consensus_manager_for_effect = consensus_manager.clone();
     use_effect(move || {
         // Skip the initial trigger (0)
         if repository_context_trigger > 0 {
-            tracing::info!("Repository context update triggered: {}", repository_context_trigger);
+            tracing::info!(
+                "Repository context update triggered: {}",
+                repository_context_trigger
+            );
             if let Some(manager) = consensus_manager_for_effect.clone() {
                 dioxus::prelude::spawn(async move {
                     if let Err(e) = manager.update_repository_context().await {
                         tracing::warn!("Failed to update repository context: {}", e);
                     } else {
-                        tracing::info!("✅ Repository context updated successfully from file explorer");
+                        tracing::info!(
+                            "✅ Repository context updated successfully from file explorer"
+                        );
                     }
                 });
             }
         }
     });
-    
 
     rsx! {
         div {
@@ -57,7 +61,7 @@ pub fn ChatInterface() -> Element {
             if state.consensus.is_running {
                 div {
                     style: "display: flex; justify-content: center; padding: 12px; background: rgba(215, 58, 73, 0.05); border-top: 1px solid rgba(215, 58, 73, 0.2); border-bottom: 1px solid rgba(215, 58, 73, 0.2);",
-                    
+
                     button {
                         style: "background: #d73a49; border: none; color: white; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.2);",
                         onmouseover: move |_| {
@@ -148,7 +152,7 @@ fn WelcomeMessage() -> Element {
                                         if let Some(folder) = dialog.pick_folder().await {
                                             let path = folder.path().to_path_buf();
                                             tracing::info!("📁 User selected folder: {}", path.display());
-                                            
+
                                             // Load the project
                                             if let Err(e) = app_state.write().load_project(path.clone()).await {
                                                 tracing::error!("Failed to load project: {}", e);
@@ -230,12 +234,12 @@ fn ChatMessageItem(message: ChatMessage) -> Element {
                     div {
                         class: "message-actions",
                         style: "display: flex; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1);",
-                        
+
                         // Send to Claude button
                         SendToClaudeButton {
                             app_state: use_context::<Signal<AppState>>(),
                         }
-                        
+
                         // Copy button
                         CopyResponseButton {
                             content: message.content.clone(),
@@ -279,7 +283,6 @@ fn process_message(
     consensus_manager: &Option<DesktopConsensusManager>,
     show_onboarding: &mut Signal<bool>,
 ) {
-    
     // Check if we need to show onboarding (no profiles configured)
     if consensus_manager.is_none() {
         // Check if profiles exist
@@ -376,7 +379,7 @@ fn process_message(
                     {
                         show_onboarding_clone.set(true);
                     }
-                    
+
                     // Complete consensus on error
                     app_state_consensus.write().consensus.complete_consensus();
                 }
@@ -452,9 +455,18 @@ fn ChatInput() -> Element {
 
     // Read consensus state to trigger reactivity
     let is_consensus_running = app_state.read().consensus.is_running;
-    tracing::info!("🔍 ChatInput render - consensus.is_running: {}", is_consensus_running);
-    tracing::info!("🔍 ChatInput render - consensus.is_active: {}", app_state.read().consensus.is_active);
-    tracing::info!("🔍 ChatInput render - consensus.current_stage: {:?}", app_state.read().consensus.current_stage);
+    tracing::info!(
+        "🔍 ChatInput render - consensus.is_running: {}",
+        is_consensus_running
+    );
+    tracing::info!(
+        "🔍 ChatInput render - consensus.is_active: {}",
+        app_state.read().consensus.is_active
+    );
+    tracing::info!(
+        "🔍 ChatInput render - consensus.current_stage: {:?}",
+        app_state.read().consensus.current_stage
+    );
 
     rsx! {
         div {

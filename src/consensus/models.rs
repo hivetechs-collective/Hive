@@ -150,7 +150,7 @@ impl ModelManager {
             .connect_timeout(Duration::from_secs(10)) // 10 second connection timeout
             .build()
             .unwrap_or_else(|_| Client::new()); // Fallback to default if builder fails
-        
+
         Self {
             client,
             openrouter_api_key,

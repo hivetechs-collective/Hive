@@ -2,11 +2,11 @@
 //!
 //! This example shows how the Claude Code-style trust system works in Hive AI
 
-use anyhow::Result;
 use crate::core::{
     check_directory_access, check_read_access, check_write_access, get_security_context,
     initialize_security, TrustLevel,
 };
+use anyhow::Result;
 use std::path::PathBuf;
 
 #[tokio::main]

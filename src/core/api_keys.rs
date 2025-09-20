@@ -27,7 +27,9 @@ impl ApiKeyManager {
     pub fn validate_openrouter_format(api_key: &str) -> Result<()> {
         // OpenRouter keys can start with sk-or-v1- or sk-or-
         if !api_key.starts_with("sk-or-v1-") && !api_key.starts_with("sk-or-") {
-            return Err(anyhow!("OpenRouter API key must start with 'sk-or-v1-' or 'sk-or-'"));
+            return Err(anyhow!(
+                "OpenRouter API key must start with 'sk-or-v1-' or 'sk-or-'"
+            ));
         }
 
         if api_key.len() <= 10 {
@@ -296,7 +298,7 @@ impl ApiKeyManager {
                         });
                     }
                 }
-                
+
                 // No keys found in database
                 Ok(ApiKeyConfig {
                     openrouter_key: None,
@@ -306,10 +308,13 @@ impl ApiKeyManager {
             })
             .await
             .context("Failed to run blocking database task")?;
-            
+
             // Check if we got keys from the database
             if let Ok(config) = result {
-                if config.openrouter_key.is_some() || config.hive_key.is_some() || config.anthropic_key.is_some() {
+                if config.openrouter_key.is_some()
+                    || config.hive_key.is_some()
+                    || config.anthropic_key.is_some()
+                {
                     return Ok(config);
                 }
             }

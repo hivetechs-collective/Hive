@@ -1,18 +1,18 @@
 //! Example of integrating the repository dropdown with the status bar
-//! 
+//!
 //! This example shows how to use the enhanced repository dropdown menu
 //! in a VS Code-style interface.
 
 use dioxus::prelude::*;
 use hive::desktop::{
     git::{
-        RepositorySelectorState, RepositoryDropdown, RepositoryDropdownProps,
-        RepositoryInfo, RepositoryStatus, UpstreamStatus, REPOSITORY_DROPDOWN_STYLES,
+        RepositoryDropdown, RepositoryDropdownProps, RepositoryInfo, RepositorySelectorState,
+        RepositoryStatus, UpstreamStatus, REPOSITORY_DROPDOWN_STYLES,
     },
-    status_bar_enhanced::{EnhancedStatusBar, StatusBarState, StatusBarItem, StatusBarAlignment},
+    status_bar_enhanced::{EnhancedStatusBar, StatusBarAlignment, StatusBarItem, StatusBarState},
     workspace::repository_discovery::{
-        RepositoryMetadata, DiscoveryMetadata, GitStatusInfo, WorkingDirStatus,
-        ProjectInfo, ProjectType, RepositoryStats, DiscoveryMethod,
+        DiscoveryMetadata, DiscoveryMethod, GitStatusInfo, ProjectInfo, ProjectType,
+        RepositoryMetadata, RepositoryStats, WorkingDirStatus,
     },
 };
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ fn App() -> Element {
     // Repository selector state
     let mut selector_state = use_signal(|| {
         let mut state = RepositorySelectorState::default();
-        
+
         // Add some example repositories
         state.add_repository(RepositoryInfo {
             path: PathBuf::from("/Users/dev/projects/hive"),
@@ -41,7 +41,7 @@ fn App() -> Element {
                 has_upstream: true,
             }),
         });
-        
+
         state.add_repository(RepositoryInfo {
             path: PathBuf::from("/Users/dev/projects/rust-analyzer"),
             name: "rust-analyzer".to_string(),
@@ -53,7 +53,7 @@ fn App() -> Element {
                 has_upstream: true,
             }),
         });
-        
+
         state.add_repository(RepositoryInfo {
             path: PathBuf::from("/Users/dev/projects/dioxus"),
             name: "dioxus".to_string(),
@@ -61,14 +61,14 @@ fn App() -> Element {
             status: RepositoryStatus::HasConflicts,
             upstream_status: None,
         });
-        
+
         state
     });
-    
+
     // Extended metadata for repositories
     let repository_metadata = use_signal(|| {
         let mut metadata = HashMap::new();
-        
+
         // Hive metadata
         metadata.insert(
             PathBuf::from("/Users/dev/projects/hive"),
@@ -80,8 +80,14 @@ fn App() -> Element {
                     has_changes: true,
                 },
                 discovery: DiscoveryMetadata {
-                    discovered_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                    last_refreshed: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                    discovered_at: SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                    last_refreshed: SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
                     discovery_method: DiscoveryMethod::DirectScan,
                     confidence: 1.0,
                     is_accessible: true,
@@ -116,9 +122,9 @@ fn App() -> Element {
                     build_system: Some("Cargo".to_string()),
                     key_files: vec!["Cargo.toml".to_string()],
                 }),
-            }
+            },
         );
-        
+
         // Rust analyzer metadata
         metadata.insert(
             PathBuf::from("/Users/dev/projects/rust-analyzer"),
@@ -130,8 +136,14 @@ fn App() -> Element {
                     has_changes: false,
                 },
                 discovery: DiscoveryMetadata {
-                    discovered_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                    last_refreshed: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                    discovered_at: SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                    last_refreshed: SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
                     discovery_method: DiscoveryMethod::DirectScan,
                     confidence: 1.0,
                     is_accessible: true,
@@ -166,72 +178,74 @@ fn App() -> Element {
                     build_system: Some("Cargo".to_string()),
                     key_files: vec!["Cargo.toml".to_string()],
                 }),
-            }
+            },
         );
-        
+
         metadata
     });
-    
+
     // Dropdown visibility state
     let mut dropdown_visible = use_signal(|| false);
-    
+
     // Status bar state
     let mut status_bar_state = use_signal(StatusBarState::default);
-    
+
     // Update status bar with current repository info
     use_effect(move || {
         if let Some(current_repo) = selector_state.read().current_repository() {
             status_bar_state.write().update_git_branch(
-                current_repo.current_branch.as_deref().unwrap_or("no branch")
+                current_repo
+                    .current_branch
+                    .as_deref()
+                    .unwrap_or("no branch"),
             );
-            
+
             if let Some(upstream) = &current_repo.upstream_status {
-                status_bar_state.write().update_git_sync_status(
-                    upstream.ahead as u32,
-                    upstream.behind as u32
-                );
+                status_bar_state
+                    .write()
+                    .update_git_sync_status(upstream.ahead as u32, upstream.behind as u32);
             }
         }
     });
-    
+
     rsx! {
         div {
             class: "app-container",
             style: "display: flex; flex-direction: column; height: 100vh; \
                     background: var(--vscode-editor-background, #1e1e1e); \
                     color: var(--vscode-editor-foreground, #cccccc);",
-            
+
             // Add styles
             style { {REPOSITORY_DROPDOWN_STYLES} }
             style { {hive::desktop::status_bar_enhanced::STATUS_BAR_STYLES} }
             style { {CUSTOM_STYLES} }
-            
+
             // Main content area
             div {
                 class: "main-content",
                 style: "flex: 1; padding: 20px; overflow-y: auto;",
-                
+
                 h1 { "Repository Dropdown Example" }
-                
+
                 p {
                     "This example demonstrates the enhanced repository dropdown menu integrated with the status bar."
                 }
-                
+
                 div {
                     style: "margin-top: 20px;",
-                    
+
                     h2 { "Current Repository" }
-                    
+
                     if let Some(current) = selector_state.read().current_repository() {
                         div {
                             style: "background: var(--vscode-editor-inactiveSelectionBackground, #3a3d41); \
                                     padding: 15px; border-radius: 5px; margin-top: 10px;",
-                            
+
                             p { strong { "Name: " } "{current.name}" }
                             p { strong { "Path: " } "{current.path.display()}" }
                             p { strong { "Branch: " } "{current.current_branch.as_deref().unwrap_or(\"N/A\")}" }
-                            p { 
-                                strong { "Status: " } 
+                            p {
+                                strong { "Status: " }
                                 span {
                                     style: "color: {current.status_color()};",
                                     "{current.status_icon()} "
@@ -243,20 +257,20 @@ fn App() -> Element {
                         p { "No repository selected" }
                     }
                 }
-                
+
                 div {
                     style: "margin-top: 30px;",
-                    
+
                     h2 { "Available Repositories" }
-                    
+
                     div {
                         style: "display: flex; flex-direction: column; gap: 10px; margin-top: 10px;",
-                        
+
                         for repo in selector_state.read().repositories.iter() {
                             div {
                                 style: "background: var(--vscode-editor-inactiveSelectionBackground, #3a3d41); \
                                         padding: 10px; border-radius: 5px;",
-                                
+
                                 span {
                                     style: "color: {repo.status_color()}; margin-right: 10px;",
                                     "{repo.status_icon()}"
@@ -272,7 +286,7 @@ fn App() -> Element {
                     }
                 }
             }
-            
+
             // Repository dropdown (shown when visible)
             RepositoryDropdown {
                 selector_state: selector_state.clone(),
@@ -290,11 +304,11 @@ fn App() -> Element {
                     println!("Manage repositories requested");
                 }
             }
-            
+
             // Status bar at the bottom
             div {
                 style: "position: relative;",
-                
+
                 EnhancedStatusBar {
                     state: status_bar_state.clone(),
                     on_item_click: move |item_id: String| {

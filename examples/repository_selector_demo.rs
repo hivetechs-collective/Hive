@@ -1,10 +1,10 @@
 //! Repository Selector Demo
-//! 
+//!
 //! This example demonstrates how the repository selector works in the status bar
 
 use dioxus::prelude::*;
-use hive::desktop::status_bar_enhanced::{StatusBarState, EnhancedStatusBar, STATUS_BAR_STYLES};
-use hive::desktop::events::{EventBus, EventType, Event};
+use hive::desktop::events::{Event, EventBus, EventType};
+use hive::desktop::status_bar_enhanced::{EnhancedStatusBar, StatusBarState, STATUS_BAR_STYLES};
 use hive::desktop::workspace::WorkspaceState;
 use std::path::PathBuf;
 
@@ -48,7 +48,7 @@ fn App() -> Element {
         ws.active_repository = Some(PathBuf::from("/home/user/projects/hive"));
         ws
     });
-    
+
     // Update repository selector with current active repository
     use_effect(move || {
         let ws = workspace_state.read();
@@ -56,12 +56,12 @@ fn App() -> Element {
             status_bar_state.with_mut(|state| {
                 state.update_repository_selector(
                     &active_repo.name,
-                    &active_repo.path.to_string_lossy()
+                    &active_repo.path.to_string_lossy(),
                 );
             });
         }
     });
-    
+
     // Subscribe to repository change events
     use_effect(move || {
         let event_bus_clone = event_bus.clone();
@@ -74,16 +74,16 @@ fn App() -> Element {
             }
         });
     });
-    
+
     rsx! {
         style { {STATUS_BAR_STYLES} }
         style { {DEMO_STYLES} }
-        
+
         div {
             class: "demo-container",
-            
+
             h1 { "Repository Selector Demo" }
-            
+
             div {
                 class: "status-bar-container",
                 EnhancedStatusBar {
@@ -97,7 +97,7 @@ fn App() -> Element {
                             println!("Repository selector clicked!");
                             // Emit event for repository selector
                             event_bus.read().publish(Event::empty(EventType::RepositorySelectorRequested));
-                            
+
                             // In a real app, this would open a repository selector dialog/menu
                             // For demo, we'll just switch to the next repository
                             workspace_state.with_mut(|ws| {
@@ -109,7 +109,7 @@ fn App() -> Element {
                                         let next_idx = (idx + 1) % repos.len();
                                         let next_repo = &repos[next_idx];
                                         ws.active_repository = Some(next_repo.path.clone());
-                                        
+
                                         // Update status bar
                                         status_bar_state.with_mut(|state| {
                                             state.update_repository_selector(
@@ -119,7 +119,7 @@ fn App() -> Element {
                                             state.update_git_branch(&next_repo.current_branch);
                                             state.update_git_sync_status(next_repo.ahead, next_repo.behind);
                                         });
-                                        
+
                                         // Emit repository changed event
                                         event_bus.read().publish(Event::repository_changed(
                                             next_repo.path.clone(),
@@ -133,17 +133,17 @@ fn App() -> Element {
                     },
                 }
             }
-            
+
             div {
                 class: "info-panel",
                 h2 { "Workspace Information" }
-                
+
                 {
                     let ws = workspace_state.read();
                     rsx! {
                         p { "Root: {ws.root_path.display()}" }
                         p { "Repositories: {ws.repositories.len()}" }
-                        
+
                         if let Some(active) = ws.get_active_repository() {
                             div {
                                 class: "active-repo",
@@ -154,7 +154,7 @@ fn App() -> Element {
                                 p { "Changes: {active.modified_files} modified, {active.staged_files} staged" }
                             }
                         }
-                        
+
                         h3 { "All Repositories" }
                         ul {
                             for repo in &ws.repositories {
@@ -167,7 +167,7 @@ fn App() -> Element {
                     }
                 }
             }
-            
+
             p {
                 class: "help-text",
                 "Click on the repository name in the status bar to cycle through repositories"

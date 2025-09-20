@@ -1,9 +1,9 @@
 // Example: Beautiful Curator Result Display in TUI
 // Demonstrates the enhanced visual presentation of consensus results
 
-use chrono::Utc;
 use crate::consensus::formatted_result::*;
 use crate::consensus::types::*;
+use chrono::Utc;
 
 fn main() {
     // Create sample metadata (simulating a real consensus run)

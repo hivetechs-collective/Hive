@@ -120,20 +120,20 @@ fn FileTreeItem(file: FileItem) -> Element {
                     if is_directory {
                         // Toggle directory expansion
                         state.file_explorer.toggle_directory(&file_path_click);
-                        
+
                         // Also select this directory for repository context
                         state.file_explorer.select_directory(file_path_click.clone());
-                        
+
                         // Update current project to this directory
                         // This will be picked up by the repository context manager
                         let path = file_path_click.clone();
-                        
+
                         // Increment the trigger to notify consensus manager
                         state.repository_context_update_trigger += 1;
                         tracing::info!("Triggered repository context update for directory: {}", path.display());
-                        
+
                         drop(state); // Release the write lock before async operation
-                        
+
                         // Use Dioxus spawn instead of tokio::spawn for better integration
                         dioxus::prelude::spawn(async move {
                             if let Ok(project_info) = crate::desktop::state::ProjectInfo::from_path(path).await {
@@ -145,7 +145,7 @@ fn FileTreeItem(file: FileItem) -> Element {
                     } else {
                         // Select file
                         state.file_explorer.select_file(file_path_click.clone());
-                        
+
                         // Also trigger repository context update for file selection
                         state.repository_context_update_trigger += 1;
                         tracing::info!("Triggered repository context update for file: {}", file_path_click.display());

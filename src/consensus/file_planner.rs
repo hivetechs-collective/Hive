@@ -8,25 +8,25 @@
 //! - Consensus (OpenRouter) = THINKING: Analysis, planning, decision making
 //! - AI Helpers (Local AI) = DOING: Actual file operations and execution
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_analysis::{
-    OperationContext as ConsensusOperationContext, OperationAnalysis as ConsensusOperationAnalysis,
-    UnifiedScore, OperationGroups, ComponentScores, ScoringFactors
-};
-use crate::consensus::smart_decision_engine::{SmartDecisionEngine, ExecutionDecision};
-use crate::consensus::operation_intelligence::{
-    OperationIntelligenceCoordinator, OperationAnalysis as IntelligenceOperationAnalysis,
-    OperationContext as IntelligenceOperationContext
-};
 use crate::consensus::ai_operation_parser::{AIOperationParser, ParsedOperations};
-use crate::consensus::operation_preview_generator::{
-    OperationPreviewGenerator, PreviewConfig, OperationPreviewSet
+use crate::consensus::operation_analysis::{
+    ComponentScores, OperationAnalysis as ConsensusOperationAnalysis,
+    OperationContext as ConsensusOperationContext, OperationGroups, ScoringFactors, UnifiedScore,
 };
-use std::collections::HashMap;
+use crate::consensus::operation_intelligence::{
+    OperationAnalysis as IntelligenceOperationAnalysis,
+    OperationContext as IntelligenceOperationContext, OperationIntelligenceCoordinator,
+};
+use crate::consensus::operation_preview_generator::{
+    OperationPreviewGenerator, OperationPreviewSet, PreviewConfig,
+};
+use crate::consensus::smart_decision_engine::{ExecutionDecision, SmartDecisionEngine};
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::core::error::HiveError;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, Duration};
-use serde::{Serialize, Deserialize};
+use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 /// Execution plan for a single operation
@@ -116,13 +116,27 @@ impl Default for PlannerConfig {
             dry_run_mode: false,
             max_file_size: 10 * 1024 * 1024, // 10MB
             allowed_extensions: vec![
-                "rs".to_string(), "js".to_string(), "ts".to_string(),
-                "py".to_string(), "java".to_string(), "cpp".to_string(),
-                "c".to_string(), "h".to_string(), "hpp".to_string(),
-                "go".to_string(), "rb".to_string(), "php".to_string(),
-                "md".to_string(), "txt".to_string(), "json".to_string(),
-                "yaml".to_string(), "yml".to_string(), "toml".to_string(),
-                "html".to_string(), "css".to_string(), "scss".to_string(),
+                "rs".to_string(),
+                "js".to_string(),
+                "ts".to_string(),
+                "py".to_string(),
+                "java".to_string(),
+                "cpp".to_string(),
+                "c".to_string(),
+                "h".to_string(),
+                "hpp".to_string(),
+                "go".to_string(),
+                "rb".to_string(),
+                "php".to_string(),
+                "md".to_string(),
+                "txt".to_string(),
+                "json".to_string(),
+                "yaml".to_string(),
+                "yml".to_string(),
+                "toml".to_string(),
+                "html".to_string(),
+                "css".to_string(),
+                "scss".to_string(),
             ],
             forbidden_paths: vec![
                 PathBuf::from("/etc"),
@@ -236,7 +250,7 @@ impl FileOperationPlanner {
             collapse_unchanged: true,
             unified_diff: true,
         };
-        
+
         Self {
             config,
             decision_engine,
@@ -265,8 +279,9 @@ impl FileOperationPlanner {
             project_metadata: HashMap::new(), // Could be populated from project files
         };
 
-        // Step 2: AI-enhanced analysis  
-        let intelligence_analysis = self.intelligence_coordinator
+        // Step 2: AI-enhanced analysis
+        let intelligence_analysis = self
+            .intelligence_coordinator
             .analyze_operation(&operation, &intelligence_context)
             .await?;
 
@@ -278,15 +293,24 @@ impl FileOperationPlanner {
         );
 
         // Step 4: Smart decision making
-        let decision = self.decision_engine
+        let decision = self
+            .decision_engine
             .make_decision(&consensus_analysis)
             .await?;
 
         // Step 5: Create execution plan based on decision
         let plan = match decision {
-            ExecutionDecision::AutoExecute { reason, confidence, risk_level } => {
-                log::info!("Creating execution plan with {}% confidence, {}% risk: {}", 
-                          confidence, risk_level, reason);
+            ExecutionDecision::AutoExecute {
+                reason,
+                confidence,
+                risk_level,
+            } => {
+                log::info!(
+                    "Creating execution plan with {}% confidence, {}% risk: {}",
+                    confidence,
+                    risk_level,
+                    reason
+                );
                 OperationPlan {
                     operation_id,
                     operation: operation.clone(),
@@ -302,7 +326,11 @@ impl FileOperationPlanner {
                     created_at: start_time,
                 }
             }
-            ExecutionDecision::RequireConfirmation { warnings, suggestions, .. } => {
+            ExecutionDecision::RequireConfirmation {
+                warnings,
+                suggestions,
+                ..
+            } => {
                 log::warn!("Operation requires user confirmation: {:?}", warnings);
                 OperationPlan {
                     operation_id,
@@ -318,7 +346,9 @@ impl FileOperationPlanner {
                     created_at: start_time,
                 }
             }
-            ExecutionDecision::Block { critical_issues, .. } => {
+            ExecutionDecision::Block {
+                critical_issues, ..
+            } => {
                 log::error!("Operation blocked for safety: {:?}", critical_issues);
                 OperationPlan {
                     operation_id,
@@ -334,7 +364,7 @@ impl FileOperationPlanner {
                 }
             }
         };
-        
+
         Ok(plan)
     }
 
@@ -357,12 +387,14 @@ impl FileOperationPlanner {
         };
 
         // Analyze all operations first
-        let intelligence_analyses = self.intelligence_coordinator
+        let intelligence_analyses = self
+            .intelligence_coordinator
             .analyze_operations_batch(&operations, &intelligence_context)
             .await?;
 
         // Convert to consensus format
-        let consensus_analyses: Vec<_> = operations.iter()
+        let consensus_analyses: Vec<_> = operations
+            .iter()
             .zip(intelligence_analyses.into_iter())
             .map(|(op, intel_analysis)| {
                 convert_analysis(intel_analysis, vec![op.clone()], context.clone())
@@ -370,14 +402,20 @@ impl FileOperationPlanner {
             .collect();
 
         // Create plans for operations in dependency order
-        for (idx, (operation, analysis)) in operations.into_iter().zip(consensus_analyses.into_iter()).enumerate() {
-            let plan = self.plan_operation_with_analysis(operation, analysis, context).await?;
+        for (idx, (operation, analysis)) in operations
+            .into_iter()
+            .zip(consensus_analyses.into_iter())
+            .enumerate()
+        {
+            let plan = self
+                .plan_operation_with_analysis(operation, analysis, context)
+                .await?;
             operation_plans.push(plan);
         }
 
         // Determine execution order based on dependencies
         let execution_order = self.determine_execution_order(&operation_plans)?;
-        
+
         let total_operations = operation_plans.len();
         Ok(BatchOperationPlan {
             plans: operation_plans,
@@ -406,15 +444,28 @@ impl FileOperationPlanner {
             operation_id,
             operation: operation.clone(),
             decision: match decision {
-                ExecutionDecision::AutoExecute { reason, confidence, risk_level } => {
-                    ExecutionPlanDecision::Approved { confidence, risk_level, reason }
-                }
-                ExecutionDecision::RequireConfirmation { warnings, suggestions, .. } => {
-                    ExecutionPlanDecision::RequiresConfirmation { warnings, suggestions }
-                }
-                ExecutionDecision::Block { critical_issues, .. } => {
-                    ExecutionPlanDecision::Blocked { reasons: critical_issues }
-                }
+                ExecutionDecision::AutoExecute {
+                    reason,
+                    confidence,
+                    risk_level,
+                } => ExecutionPlanDecision::Approved {
+                    confidence,
+                    risk_level,
+                    reason,
+                },
+                ExecutionDecision::RequireConfirmation {
+                    warnings,
+                    suggestions,
+                    ..
+                } => ExecutionPlanDecision::RequiresConfirmation {
+                    warnings,
+                    suggestions,
+                },
+                ExecutionDecision::Block {
+                    critical_issues, ..
+                } => ExecutionPlanDecision::Blocked {
+                    reasons: critical_issues,
+                },
             },
             safety_checks: self.create_safety_checks(&operation),
             backup_required: self.config.create_backups,
@@ -422,50 +473,51 @@ impl FileOperationPlanner {
             analysis,
             created_at: start_time,
         };
-        
+
         Ok(plan)
     }
 
     /// Create safety checks for the operation
     fn create_safety_checks(&self, operation: &FileOperation) -> Vec<SafetyCheck> {
         let mut checks = Vec::new();
-        
+
         // Path validation
         checks.push(SafetyCheck::PathValidation {
             forbidden_paths: self.config.forbidden_paths.clone(),
             allowed_extensions: self.config.allowed_extensions.clone(),
         });
-        
+
         // Size limits
-        if let FileOperation::Create { content, .. } | 
-           FileOperation::Update { content, .. } | 
-           FileOperation::Append { content, .. } = operation {
+        if let FileOperation::Create { content, .. }
+        | FileOperation::Update { content, .. }
+        | FileOperation::Append { content, .. } = operation
+        {
             checks.push(SafetyCheck::SizeLimit {
                 max_size: self.config.max_file_size,
                 content_size: content.len() as u64,
             });
         }
-        
+
         // Backup requirement
         if self.config.create_backups {
             checks.push(SafetyCheck::BackupRequired);
         }
-        
+
         // Syntax validation
         if self.config.validate_syntax {
             checks.push(SafetyCheck::SyntaxValidation);
         }
-        
+
         checks
     }
 
     /// Validate operation safety before execution
     fn validate_operation_safety(&self, operation: &FileOperation) -> Result<(), HiveError> {
         let path = match operation {
-            FileOperation::Create { path, .. } |
-            FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } |
-            FileOperation::Append { path, .. } => path,
+            FileOperation::Create { path, .. }
+            | FileOperation::Update { path, .. }
+            | FileOperation::Delete { path }
+            | FileOperation::Append { path, .. } => path,
             FileOperation::Rename { from, .. } => from,
         };
 
@@ -474,15 +526,22 @@ impl FileOperationPlanner {
             if path.starts_with(forbidden) {
                 return Err(HiveError::OperationBlocked {
                     operation_id: Uuid::new_v4(),
-                    reasons: vec![format!("Path {} is in forbidden directory {}", 
-                                        path.display(), forbidden.display())],
+                    reasons: vec![format!(
+                        "Path {} is in forbidden directory {}",
+                        path.display(),
+                        forbidden.display()
+                    )],
                 });
             }
         }
 
         // Check file extension
         if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
-            if !self.config.allowed_extensions.contains(&extension.to_string()) {
+            if !self
+                .config
+                .allowed_extensions
+                .contains(&extension.to_string())
+            {
                 return Err(HiveError::OperationBlocked {
                     operation_id: Uuid::new_v4(),
                     reasons: vec![format!("File extension '{}' is not allowed", extension)],
@@ -499,7 +558,7 @@ impl FileOperationPlanner {
         // In future, could analyze dependencies and optimize
         Ok((0..plans.len()).collect())
     }
-    
+
     /// Parse operations from curator response without executing them
     pub async fn parse_operations_from_curator_response(
         &self,
@@ -509,7 +568,7 @@ impl FileOperationPlanner {
         // Use the existing parse_curator_response method
         self.parse_curator_response(curator_response, context).await
     }
-    
+
     /// Analyze a single operation and get the decision without executing
     pub async fn analyze_operation_decision(
         &self,
@@ -524,26 +583,27 @@ impl FileOperationPlanner {
             related_files: Vec::new(),
             project_metadata: HashMap::new(),
         };
-        
-        // AI-enhanced analysis  
-        let intelligence_analysis = self.intelligence_coordinator
+
+        // AI-enhanced analysis
+        let intelligence_analysis = self
+            .intelligence_coordinator
             .analyze_operation(operation, &intelligence_context)
             .await?;
-        
+
         // Convert to consensus format
         let consensus_analysis = convert_analysis(
             intelligence_analysis,
             vec![operation.clone()],
             context.clone(),
         );
-        
+
         // Get decision from smart decision engine
         self.decision_engine
             .make_decision(&consensus_analysis)
             .await
             .map_err(|e| HiveError::Internal {
                 context: "decision_engine".to_string(),
-                message: format!("Failed to make decision: {}", e)
+                message: format!("Failed to make decision: {}", e),
             })
     }
 
@@ -554,7 +614,7 @@ impl FileOperationPlanner {
         context: &ConsensusOperationContext,
     ) -> Result<ParsedOperationPlans, HiveError> {
         let start_time = SystemTime::now();
-        
+
         // Step 1: Convert context for AI parser
         let intelligence_context = IntelligenceOperationContext {
             repository_path: context.repository_path.clone(),
@@ -565,16 +625,20 @@ impl FileOperationPlanner {
         };
 
         // Step 2: Parse curator response using AI-enhanced parser
-        let parsed = self.ai_parser
+        let parsed = self
+            .ai_parser
             .parse_response(curator_response, &intelligence_context)
             .await
-            .map_err(|e| HiveError::Internal { 
+            .map_err(|e| HiveError::Internal {
                 context: "ai_parser".to_string(),
-                message: format!("Failed to parse curator response: {}", e)
+                message: format!("Failed to parse curator response: {}", e),
             })?;
 
-        log::info!("🤖 Parsed {} operations with {}% confidence", 
-                  parsed.operations.len(), parsed.confidence);
+        log::info!(
+            "🤖 Parsed {} operations with {}% confidence",
+            parsed.operations.len(),
+            parsed.confidence
+        );
 
         // Log warnings if any
         for warning in &parsed.warnings {
@@ -588,14 +652,14 @@ impl FileOperationPlanner {
                 message: format!(
                     "Parsing confidence too low: {:.0}%. Clarifications needed: {:?}",
                     parsed.confidence, parsed.clarifications
-                )
+                ),
             });
         }
 
         // Step 3: Extract operations in dependency order
         let mut operations_in_order = Vec::new();
         let mut processed = vec![false; parsed.operations.len()];
-        
+
         // First, add operations without dependencies
         for (idx, op_meta) in parsed.operations.iter().enumerate() {
             if op_meta.dependencies.is_empty() {
@@ -603,16 +667,18 @@ impl FileOperationPlanner {
                 processed[idx] = true;
             }
         }
-        
+
         // Then, add operations with satisfied dependencies
         while operations_in_order.len() < parsed.operations.len() {
             let mut added_any = false;
-            
+
             for (idx, op_meta) in parsed.operations.iter().enumerate() {
                 if !processed[idx] {
-                    let deps_satisfied = op_meta.dependencies.iter()
+                    let deps_satisfied = op_meta
+                        .dependencies
+                        .iter()
                         .all(|&dep_idx| processed[dep_idx]);
-                    
+
                     if deps_satisfied {
                         operations_in_order.push((idx, &op_meta.operation));
                         processed[idx] = true;
@@ -620,11 +686,11 @@ impl FileOperationPlanner {
                     }
                 }
             }
-            
+
             if !added_any {
                 return Err(HiveError::Internal {
                     context: "dependency_resolution".to_string(),
-                    message: "Circular dependencies detected in operations".to_string()
+                    message: "Circular dependencies detected in operations".to_string(),
                 });
             }
         }
@@ -633,8 +699,12 @@ impl FileOperationPlanner {
         let mut plans = Vec::new();
 
         for (idx, operation) in operations_in_order {
-            log::info!("Planning operation {} of {}: {:?}", 
-                      idx + 1, parsed.operations.len(), operation);
+            log::info!(
+                "Planning operation {} of {}: {:?}",
+                idx + 1,
+                parsed.operations.len(),
+                operation
+            );
 
             match self.plan_operation(operation.clone(), context).await {
                 Ok(plan) => {
@@ -642,7 +712,7 @@ impl FileOperationPlanner {
                 }
                 Err(e) => {
                     log::error!("❌ Operation planning error: {}", e);
-                    
+
                     // Create error plan
                     plans.push(OperationPlan {
                         operation_id: Uuid::new_v4(),
@@ -656,7 +726,10 @@ impl FileOperationPlanner {
                         analysis: ConsensusOperationAnalysis {
                             operations: vec![operation.clone()],
                             context: context.clone(),
-                            unified_score: UnifiedScore { confidence: 0.0, risk: 1.0 },
+                            unified_score: UnifiedScore {
+                                confidence: 0.0,
+                                risk: 1.0,
+                            },
                             recommendations: vec![],
                             groups: OperationGroups::default(),
                             component_scores: ComponentScores::default(),
@@ -706,7 +779,7 @@ impl FileOperationPlanner {
             .await
             .map_err(|e| HiveError::Internal {
                 context: "ai_parser".to_string(),
-                message: format!("Failed to parse curator response: {}", e)
+                message: format!("Failed to parse curator response: {}", e),
             })
     }
 
@@ -722,7 +795,7 @@ impl FileOperationPlanner {
             .await
             .map_err(|e| HiveError::Internal {
                 context: "preview_generator".to_string(),
-                message: format!("Failed to generate operation previews: {}", e)
+                message: format!("Failed to generate operation previews: {}", e),
             })
     }
 }

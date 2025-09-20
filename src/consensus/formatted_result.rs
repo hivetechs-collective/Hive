@@ -187,9 +187,12 @@ impl FormattedConsensusResult {
 
         for line in content.lines() {
             let lower = line.to_lowercase();
-            if (lower.contains("you can") || lower.contains("you should") ||
-                lower.contains("recommend") || lower.contains("suggest")) &&
-                (line.contains('-') || line.contains('•')) {
+            if (lower.contains("you can")
+                || lower.contains("you should")
+                || lower.contains("recommend")
+                || lower.contains("suggest"))
+                && (line.contains('-') || line.contains('•'))
+            {
                 items.push(line.trim_start_matches(&['-', '•', ' ']).to_string());
             }
         }
@@ -224,7 +227,8 @@ impl FormattedConsensusResult {
         metadata: &crate::consensus::types::ResponseMetadata,
         stages: &[crate::consensus::types::StageResult],
     ) -> PerformanceMetrics {
-        let stage_timings: Vec<(String, f64)> = stages.iter()
+        let stage_timings: Vec<(String, f64)> = stages
+            .iter()
             .filter_map(|s| s.analytics.as_ref())
             .map(|a| (a.provider.clone(), a.duration))
             .collect();
@@ -242,7 +246,8 @@ impl FormattedConsensusResult {
         metadata: &crate::consensus::types::ResponseMetadata,
         stages: &[crate::consensus::types::StageResult],
     ) -> CostBreakdown {
-        let stage_costs: Vec<(String, f64)> = stages.iter()
+        let stage_costs: Vec<(String, f64)> = stages
+            .iter()
             .filter_map(|s| s.analytics.as_ref().map(|a| (s.stage_name.clone(), a.cost)))
             .collect();
 
@@ -266,21 +271,30 @@ impl FormattedConsensusResult {
 
         // Factor 1: All stages completed successfully
         let all_completed = stages.len() == 4;
-        factors.push(("Pipeline Completion".to_string(), if all_completed { 1.0 } else { 0.7 }));
+        factors.push((
+            "Pipeline Completion".to_string(),
+            if all_completed { 1.0 } else { 0.7 },
+        ));
         total_score += if all_completed { 0.25 } else { 0.175 };
 
         // Factor 2: Quality scores from analytics
-        let avg_quality = stages.iter()
+        let avg_quality = stages
+            .iter()
             .filter_map(|s| s.analytics.as_ref())
             .map(|a| a.quality_score)
-            .sum::<f64>() / stages.len() as f64;
+            .sum::<f64>()
+            / stages.len() as f64;
         factors.push(("Average Quality".to_string(), avg_quality));
         total_score += avg_quality * 0.25;
 
         // Factor 3: No errors or retries
-        let no_errors = stages.iter()
+        let no_errors = stages
+            .iter()
             .all(|s| s.analytics.as_ref().map_or(true, |a| a.error_count == 0));
-        factors.push(("Error-Free Execution".to_string(), if no_errors { 1.0 } else { 0.6 }));
+        factors.push((
+            "Error-Free Execution".to_string(),
+            if no_errors { 1.0 } else { 0.6 },
+        ));
         total_score += if no_errors { 0.25 } else { 0.15 };
 
         // Factor 4: Response consistency
@@ -296,25 +310,34 @@ impl FormattedConsensusResult {
 
     /// Build stage journey visualization
     fn build_stage_journey(stages: &[crate::consensus::types::StageResult]) -> StageJourney {
-        let stage_infos = stages.iter().map(|stage| {
-            let status = if stage.analytics.as_ref().map_or(false, |a| a.features.optimization_applied.unwrap_or(false)) {
-                StageStatus::Optimized
-            } else if stage.analytics.as_ref().map_or(0.0, |a| a.quality_score) > 0.9 {
-                StageStatus::Enhanced
-            } else {
-                StageStatus::Complete
-            };
+        let stage_infos = stages
+            .iter()
+            .map(|stage| {
+                let status = if stage
+                    .analytics
+                    .as_ref()
+                    .map_or(false, |a| a.features.optimization_applied.unwrap_or(false))
+                {
+                    StageStatus::Optimized
+                } else if stage.analytics.as_ref().map_or(0.0, |a| a.quality_score) > 0.9 {
+                    StageStatus::Enhanced
+                } else {
+                    StageStatus::Complete
+                };
 
-            StageInfo {
-                name: stage.stage_name.clone(),
-                model: stage.model.clone(),
-                tokens: stage.usage.as_ref().map_or(0, |u| u.total_tokens),
-                duration: stage.analytics.as_ref().map_or(0.0, |a| a.duration),
-                status,
-            }
-        }).collect();
+                StageInfo {
+                    name: stage.stage_name.clone(),
+                    model: stage.model.clone(),
+                    tokens: stage.usage.as_ref().map_or(0, |u| u.total_tokens),
+                    duration: stage.analytics.as_ref().map_or(0.0, |a| a.duration),
+                    status,
+                }
+            })
+            .collect();
 
-        StageJourney { stages: stage_infos }
+        StageJourney {
+            stages: stage_infos,
+        }
     }
 
     /// Format the result as a beautiful string for display
@@ -343,12 +366,20 @@ impl FormattedConsensusResult {
     fn format_executive_summary(&self) -> String {
         let mut output = String::new();
 
-        output.push_str("╔═══════════════════════════════════════════════════════════════════════╗\n");
-        output.push_str("║                          EXECUTIVE SUMMARY                             ║\n");
-        output.push_str("╠═══════════════════════════════════════════════════════════════════════╣\n");
+        output.push_str(
+            "╔═══════════════════════════════════════════════════════════════════════╗\n",
+        );
+        output.push_str(
+            "║                          EXECUTIVE SUMMARY                             ║\n",
+        );
+        output.push_str(
+            "╠═══════════════════════════════════════════════════════════════════════╣\n",
+        );
 
         if !self.executive_summary.key_points.is_empty() {
-            output.push_str("║ 📌 Key Points:                                                        ║\n");
+            output.push_str(
+                "║ 📌 Key Points:                                                        ║\n",
+            );
             for point in &self.executive_summary.key_points {
                 let formatted = format!("║   • {:<65} ║", Self::truncate_string(point, 65));
                 output.push_str(&formatted);
@@ -357,8 +388,12 @@ impl FormattedConsensusResult {
         }
 
         if !self.executive_summary.action_items.is_empty() {
-            output.push_str("║                                                                       ║\n");
-            output.push_str("║ 🎯 Action Items:                                                      ║\n");
+            output.push_str(
+                "║                                                                       ║\n",
+            );
+            output.push_str(
+                "║ 🎯 Action Items:                                                      ║\n",
+            );
             for item in &self.executive_summary.action_items {
                 let formatted = format!("║   ✓ {:<65} ║", Self::truncate_string(item, 65));
                 output.push_str(&formatted);
@@ -366,7 +401,8 @@ impl FormattedConsensusResult {
             }
         }
 
-        output.push_str("╚═══════════════════════════════════════════════════════════════════════╝");
+        output
+            .push_str("╚═══════════════════════════════════════════════════════════════════════╝");
 
         output
     }
@@ -382,7 +418,12 @@ impl FormattedConsensusResult {
                 EmphasisLevel::Normal => "·",
             };
 
-            output.push_str(&format!("{} {} {}\n", finding.icon, finding.title, border.repeat(50 - finding.title.len())));
+            output.push_str(&format!(
+                "{} {} {}\n",
+                finding.icon,
+                finding.title,
+                border.repeat(50 - finding.title.len())
+            ));
             output.push_str(&finding.content);
             output.push_str("\n\n");
         }
@@ -395,7 +436,9 @@ impl FormattedConsensusResult {
         let mut output = String::new();
 
         output.push_str("🚀 Consensus Journey\n");
-        output.push_str("═══════════════════════════════════════════════════════════════════════\n\n");
+        output.push_str(
+            "═══════════════════════════════════════════════════════════════════════\n\n",
+        );
 
         for (i, stage) in self.stage_journey.stages.iter().enumerate() {
             let status_icon = match stage.status {
@@ -404,15 +447,15 @@ impl FormattedConsensusResult {
                 StageStatus::Enhanced => "✨",
             };
 
-            let arrow = if i < self.stage_journey.stages.len() - 1 { " → " } else { "" };
+            let arrow = if i < self.stage_journey.stages.len() - 1 {
+                " → "
+            } else {
+                ""
+            };
 
             output.push_str(&format!(
                 "{} {} ({}ms, {} tokens){}",
-                status_icon,
-                stage.name,
-                stage.duration as u64,
-                stage.tokens,
-                arrow
+                status_icon, stage.name, stage.duration as u64, stage.tokens, arrow
             ));
         }
 
@@ -424,27 +467,35 @@ impl FormattedConsensusResult {
         let mut output = String::new();
 
         // Performance Box
-        output.push_str("┌─────────────────────────┬─────────────────────────────────────────────┐\n");
-        output.push_str("│  PERFORMANCE METRICS    │  COST BREAKDOWN                             │\n");
-        output.push_str("├─────────────────────────┼─────────────────────────────────────────────┤\n");
+        output.push_str(
+            "┌─────────────────────────┬─────────────────────────────────────────────┐\n",
+        );
+        output.push_str(
+            "│  PERFORMANCE METRICS    │  COST BREAKDOWN                             │\n",
+        );
+        output.push_str(
+            "├─────────────────────────┼─────────────────────────────────────────────┤\n",
+        );
 
         // Performance data
-        output.push_str(&format!("│ Total Duration: {:.2}s   │ Total Cost: ${:.4}                        │\n",
-            self.performance_metrics.total_duration,
-            self.cost_breakdown.total_cost
+        output.push_str(&format!(
+            "│ Total Duration: {:.2}s   │ Total Cost: ${:.4}                        │\n",
+            self.performance_metrics.total_duration, self.cost_breakdown.total_cost
         ));
 
-        output.push_str(&format!("│ Total Tokens: {:>8}  │ Cost/Token: ${:.6}                     │\n",
-            self.performance_metrics.tokens_used,
-            self.cost_breakdown.cost_per_token
+        output.push_str(&format!(
+            "│ Total Tokens: {:>8}  │ Cost/Token: ${:.6}                     │\n",
+            self.performance_metrics.tokens_used, self.cost_breakdown.cost_per_token
         ));
 
-        output.push_str(&format!("│ Models Used: {:>10} │ Confidence: {}                    │\n",
+        output.push_str(&format!(
+            "│ Models Used: {:>10} │ Confidence: {}                    │\n",
             self.performance_metrics.models_accessed,
             self.format_confidence_bar()
         ));
 
-        output.push_str("└─────────────────────────┴─────────────────────────────────────────────┘");
+        output
+            .push_str("└─────────────────────────┴─────────────────────────────────────────────┘");
 
         output
     }
@@ -455,7 +506,12 @@ impl FormattedConsensusResult {
         let filled = (self.confidence.score * 20.0) as usize;
         let empty = 20 - filled;
 
-        format!("{}{} {}%", "█".repeat(filled), "░".repeat(empty), percentage)
+        format!(
+            "{}{} {}%",
+            "█".repeat(filled),
+            "░".repeat(empty),
+            percentage
+        )
     }
 
     /// Truncate string to fit within width

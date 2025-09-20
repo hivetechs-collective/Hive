@@ -5,14 +5,14 @@
 //! expert profile templates, and complete database initialization.
 
 use crate::core::{
-    config::{HiveConfig, LicenseConfig, OpenRouterConfig, get_hive_config_dir},
-    license::{LicenseManager, LicenseWizard, LicenseStatus},
-    openrouter::{ModelSyncManager, OpenRouterClient, ModelQuery},
-    profiles::{ExpertTemplateManager, ExpertLevel},
-    schema::{initialize_schema, check_schema_version, migrate_schema, health_check},
+    config::{get_hive_config_dir, HiveConfig, LicenseConfig, OpenRouterConfig},
+    license::{LicenseManager, LicenseStatus, LicenseWizard},
+    openrouter::{ModelQuery, ModelSyncManager, OpenRouterClient},
+    profiles::{ExpertLevel, ExpertTemplateManager},
+    schema::{check_schema_version, health_check, initialize_schema, migrate_schema},
     DatabaseManager,
 };
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use colored::Colorize;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -48,8 +48,14 @@ pub async fn handle_quickstart(options: QuickstartOptions) -> Result<()> {
         let config_status = check_configuration_status().await?;
 
         if config_status.fully_configured {
-            println!("{} Already configured! All components are set up.", "✅".green());
-            println!("{} Use --force to reconfigure or individual commands for specific setup.", "💡".yellow());
+            println!(
+                "{} Already configured! All components are set up.",
+                "✅".green()
+            );
+            println!(
+                "{} Use --force to reconfigure or individual commands for specific setup.",
+                "💡".yellow()
+            );
 
             // Ask if user wants to switch accounts
             if config_status.has_license {
@@ -86,10 +92,10 @@ async fn is_first_time_user() -> Result<bool> {
             match toml::from_str::<HiveConfig>(&contents) {
                 Ok(config) => {
                     // Check if essential fields are configured
-                    let has_license = config.license.is_some() &&
-                                    config.license.as_ref().unwrap().key.is_some();
-                    let has_openrouter = config.openrouter.is_some() &&
-                                       config.openrouter.as_ref().unwrap().api_key.is_some();
+                    let has_license =
+                        config.license.is_some() && config.license.as_ref().unwrap().key.is_some();
+                    let has_openrouter = config.openrouter.is_some()
+                        && config.openrouter.as_ref().unwrap().api_key.is_some();
 
                     Ok(!(has_license && has_openrouter))
                 }
@@ -104,14 +110,26 @@ async fn is_first_time_user() -> Result<bool> {
 fn show_first_time_welcome() {
     println!("\n{}", "🐝 Welcome to Hive AI!".cyan().bold());
     println!("{}", "━".repeat(50).cyan());
-    println!("\n{}", "Let's get you set up with a comprehensive 6-phase process:".white());
-    println!("  {} License validation with HiveTechs servers", "1.".cyan());
+    println!(
+        "\n{}",
+        "Let's get you set up with a comprehensive 6-phase process:".white()
+    );
+    println!(
+        "  {} License validation with HiveTechs servers",
+        "1.".cyan()
+    );
     println!("  {} Complete database initialization", "2.".cyan());
-    println!("  {} OpenRouter model synchronization (300+ models)", "3.".cyan());
+    println!(
+        "  {} OpenRouter model synchronization (300+ models)",
+        "3.".cyan()
+    );
     println!("  {} Expert profile templates creation", "4.".cyan());
     println!("  {} IDE integration setup", "5.".cyan());
     println!("  {} MCP server configuration", "6.".cyan());
-    println!("\n{}", "This wizard will guide you through each step.".white());
+    println!(
+        "\n{}",
+        "This wizard will guide you through each step.".white()
+    );
     println!("{}", "━".repeat(50).cyan());
     println!();
 }
@@ -137,10 +155,9 @@ async fn check_configuration_status() -> Result<ConfigStatus> {
         HiveConfig::default()
     };
 
-    let has_license = config.license.is_some() &&
-                     config.license.as_ref().unwrap().key.is_some();
-    let has_openrouter = config.openrouter.is_some() &&
-                        config.openrouter.as_ref().unwrap().api_key.is_some();
+    let has_license = config.license.is_some() && config.license.as_ref().unwrap().key.is_some();
+    let has_openrouter =
+        config.openrouter.is_some() && config.openrouter.as_ref().unwrap().api_key.is_some();
     let has_ide_config = false; // TODO: Check IDE config when implemented
 
     Ok(ConfigStatus {
@@ -207,8 +224,17 @@ impl CompleteSetupSystem {
 
     /// Phase 1: Setup license validation system
     async fn setup_license_system(&self) -> Result<LicenseStatus> {
-        println!("{} {}", "🔑".cyan(), "Phase 1: License Validation System".white().bold());
-        println!("{}", "Setting up license validation with HiveTechs servers...".white().dimmed());
+        println!(
+            "{} {}",
+            "🔑".cyan(),
+            "Phase 1: License Validation System".white().bold()
+        );
+        println!(
+            "{}",
+            "Setting up license validation with HiveTechs servers..."
+                .white()
+                .dimmed()
+        );
         println!();
 
         let license_wizard = LicenseWizard::new(self.config_dir.clone());
@@ -230,15 +256,24 @@ impl CompleteSetupSystem {
 
     /// Phase 2: Initialize complete database with all TypeScript schema tables
     async fn initialize_complete_database(&self) -> Result<()> {
-        println!("{} {}", "🗄️".cyan(), "Phase 2: Complete Database Initialization".white().bold());
-        println!("{}", "Setting up database with all TypeScript schema tables...".white().dimmed());
+        println!(
+            "{} {}",
+            "🗄️".cyan(),
+            "Phase 2: Complete Database Initialization".white().bold()
+        );
+        println!(
+            "{}",
+            "Setting up database with all TypeScript schema tables..."
+                .white()
+                .dimmed()
+        );
         println!();
 
         let pb = ProgressBar::new_spinner();
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.green} {msg}")
-                .unwrap()
+                .unwrap(),
         );
         pb.set_message("Initializing database...");
         pb.enable_steady_tick(Duration::from_millis(100));
@@ -280,7 +315,10 @@ impl CompleteSetupSystem {
             println!("🔧 All indexes and foreign keys configured");
             println!("🛡️ Security and trust system enabled");
         } else {
-            println!("⚠️ Database initialized with {} warnings:", health_issues.len());
+            println!(
+                "⚠️ Database initialized with {} warnings:",
+                health_issues.len()
+            );
             for issue in health_issues {
                 println!("   • {}", issue);
             }
@@ -292,8 +330,17 @@ impl CompleteSetupSystem {
 
     /// Phase 3: Setup OpenRouter model synchronization
     async fn setup_openrouter_sync(&self) -> Result<bool> {
-        println!("{} {}", "🌐".cyan(), "Phase 3: OpenRouter Model Synchronization".white().bold());
-        println!("{}", "Syncing 300+ models from OpenRouter API...".white().dimmed());
+        println!(
+            "{} {}",
+            "🌐".cyan(),
+            "Phase 3: OpenRouter Model Synchronization".white().bold()
+        );
+        println!(
+            "{}",
+            "Syncing 300+ models from OpenRouter API..."
+                .white()
+                .dimmed()
+        );
         println!();
 
         // Check if API key is already configured
@@ -315,7 +362,10 @@ impl CompleteSetupSystem {
         // Get API key if not configured
         if api_key.is_empty() {
             println!("OpenRouter API key required for model access:");
-            println!("1. Visit: {}", "https://openrouter.ai/keys".cyan().underline());
+            println!(
+                "1. Visit: {}",
+                "https://openrouter.ai/keys".cyan().underline()
+            );
             println!("2. Copy your API key (starts with sk-or-)");
             println!();
 
@@ -340,7 +390,7 @@ impl CompleteSetupSystem {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.green} {msg}")
-                .unwrap()
+                .unwrap(),
         );
         pb.set_message("Testing OpenRouter connection...");
         pb.enable_steady_tick(Duration::from_millis(100));
@@ -393,8 +443,17 @@ impl CompleteSetupSystem {
 
     /// Phase 4: Setup expert profile templates
     async fn setup_expert_profiles(&self) -> Result<()> {
-        println!("{} {}", "🎯".cyan(), "Phase 4: Expert Profile Templates".white().bold());
-        println!("{}", "Creating 10+ pre-built consensus profiles...".white().dimmed());
+        println!(
+            "{} {}",
+            "🎯".cyan(),
+            "Phase 4: Expert Profile Templates".white().bold()
+        );
+        println!(
+            "{}",
+            "Creating 10+ pre-built consensus profiles..."
+                .white()
+                .dimmed()
+        );
         println!();
 
         let db_path = self.config_dir.join("hive-ai.db");
@@ -451,7 +510,10 @@ impl CompleteSetupSystem {
                     pb.set_message(format!("Creating {}", template.name));
 
                     let profile_name = format!("{} Profile", template.name);
-                    match template_manager.create_profile_from_template(&template.id, &profile_name, None).await {
+                    match template_manager
+                        .create_profile_from_template(&template.id, &profile_name, None)
+                        .await
+                    {
                         Ok(_) => {
                             created_count += 1;
                         }
@@ -485,8 +547,17 @@ impl CompleteSetupSystem {
 
     /// Configure IDE integration
     async fn configure_ide_integration(&self) -> Result<()> {
-        println!("{} {}", "🖥️".cyan(), "Phase 5: IDE Integration".white().bold());
-        println!("{}", "Configure development environment integration...".white().dimmed());
+        println!(
+            "{} {}",
+            "🖥️".cyan(),
+            "Phase 5: IDE Integration".white().bold()
+        );
+        println!(
+            "{}",
+            "Configure development environment integration..."
+                .white()
+                .dimmed()
+        );
         println!();
 
         // TODO: Implement IDE configuration
@@ -503,8 +574,17 @@ impl CompleteSetupSystem {
 
     /// Configure MCP server
     async fn configure_mcp_server(&self) -> Result<()> {
-        println!("{} {}", "🌐".cyan(), "Phase 6: MCP Server Configuration".white().bold());
-        println!("{}", "Model Context Protocol for IDE integration...".white().dimmed());
+        println!(
+            "{} {}",
+            "🌐".cyan(),
+            "Phase 6: MCP Server Configuration".white().bold()
+        );
+        println!(
+            "{}",
+            "Model Context Protocol for IDE integration..."
+                .white()
+                .dimmed()
+        );
         println!();
 
         // TODO: Implement MCP server configuration
@@ -522,14 +602,22 @@ impl CompleteSetupSystem {
     /// Show completion summary
     async fn show_completion_summary(&self, license_status: &LicenseStatus) -> Result<()> {
         println!("{}", "━".repeat(50).green());
-        println!("{} {}", "🎉".green(), "Hive AI Setup Complete!".green().bold());
+        println!(
+            "{} {}",
+            "🎉".green(),
+            "Hive AI Setup Complete!".green().bold()
+        );
         println!("{}", "━".repeat(50).green());
         println!();
 
         // Show configuration summary
         println!("{}", "📊 Configuration Summary:".white().bold());
         if license_status.is_valid {
-            println!("  {} License: {} tier configured", "✅".green(), license_status.tier);
+            println!(
+                "  {} License: {} tier configured",
+                "✅".green(),
+                license_status.tier
+            );
             if let Some(user_id) = &license_status.user_id {
                 println!("  {} User: {}", "👤".cyan(), user_id);
             }
@@ -540,7 +628,10 @@ impl CompleteSetupSystem {
         // Check database status
         let db_path = self.config_dir.join("hive-ai.db");
         if db_path.exists() {
-            println!("  {} Database: Complete schema with 17 tables", "✅".green());
+            println!(
+                "  {} Database: Complete schema with 17 tables",
+                "✅".green()
+            );
         }
 
         // Check for models
@@ -570,13 +661,34 @@ impl CompleteSetupSystem {
 
         println!();
         println!("{}", "💡 Next steps:".yellow().bold());
-        println!("  {} Run {} to see all commands", "•".yellow(), "hive help".cyan());
-        println!("  {} Run {} for terminal interface", "•".yellow(), "hive tui".cyan());
-        println!("  {} Visit {} for documentation", "•".yellow(), "https://docs.hivetechs.com".cyan().underline());
-        println!("  {} Join {} for community support", "•".yellow(), "https://discord.gg/hive".cyan().underline());
+        println!(
+            "  {} Run {} to see all commands",
+            "•".yellow(),
+            "hive help".cyan()
+        );
+        println!(
+            "  {} Run {} for terminal interface",
+            "•".yellow(),
+            "hive tui".cyan()
+        );
+        println!(
+            "  {} Visit {} for documentation",
+            "•".yellow(),
+            "https://docs.hivetechs.com".cyan().underline()
+        );
+        println!(
+            "  {} Join {} for community support",
+            "•".yellow(),
+            "https://discord.gg/hive".cyan().underline()
+        );
 
         println!();
-        println!("{}", "Welcome to the future of AI-powered development! 🐝".cyan().italic());
+        println!(
+            "{}",
+            "Welcome to the future of AI-powered development! 🐝"
+                .cyan()
+                .italic()
+        );
 
         Ok(())
     }
@@ -586,7 +698,8 @@ impl CompleteSetupSystem {
         let config_path = self.config_dir.join("config.toml");
 
         // Ensure config directory exists
-        tokio::fs::create_dir_all(&self.config_dir).await
+        tokio::fs::create_dir_all(&self.config_dir)
+            .await
             .context("Failed to create config directory")?;
 
         // Load existing config or create new one
@@ -610,9 +723,9 @@ impl CompleteSetupSystem {
         }
 
         // Save config
-        let toml_string = toml::to_string_pretty(&config)
-            .context("Failed to serialize config")?;
-        tokio::fs::write(&config_path, toml_string).await
+        let toml_string = toml::to_string_pretty(&config).context("Failed to serialize config")?;
+        tokio::fs::write(&config_path, toml_string)
+            .await
             .context("Failed to write config file")?;
 
         Ok(())

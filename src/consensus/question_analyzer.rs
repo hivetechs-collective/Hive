@@ -4,8 +4,8 @@
 //! This helps the consensus pipeline decide when to inject repository context.
 
 use anyhow::Result;
-use tracing::{debug, info};
 use std::sync::Arc;
+use tracing::{debug, info};
 
 /// Categories of questions
 #[derive(Debug, Clone, PartialEq)]
@@ -34,31 +34,92 @@ impl QuestionAnalyzer {
     pub fn new() -> Self {
         Self {
             repo_keywords: vec![
-                "this code", "this project", "this repo", "this repository",
-                "this file", "this function", "this class", "this method",
-                "my code", "my project", "my repo", "my repository",
-                "our code", "our project", "our repo", "our repository",
-                "current code", "current project", "current repo", "current repository",
-                "@codebase", "in this", "here", "this implementation",
-                "analyze this", "review this", "check this", "fix this",
-                "update this", "modify this", "change this", "improve this",
-                "the code", "the project", "the repo", "the repository",
+                "this code",
+                "this project",
+                "this repo",
+                "this repository",
+                "this file",
+                "this function",
+                "this class",
+                "this method",
+                "my code",
+                "my project",
+                "my repo",
+                "my repository",
+                "our code",
+                "our project",
+                "our repo",
+                "our repository",
+                "current code",
+                "current project",
+                "current repo",
+                "current repository",
+                "@codebase",
+                "in this",
+                "here",
+                "this implementation",
+                "analyze this",
+                "review this",
+                "check this",
+                "fix this",
+                "update this",
+                "modify this",
+                "change this",
+                "improve this",
+                "the code",
+                "the project",
+                "the repo",
+                "the repository",
             ],
             general_keywords: vec![
-                "difference between", "compare", "versus", "vs", "or",
-                "what is", "how does", "explain", "when to use",
-                "best practice", "which is better", "pros and cons",
-                "advantages", "disadvantages", "tell me about",
-                "angular", "vue", "react", "svelte", "ember",
-                "python", "rust", "javascript", "typescript", "java",
-                "design pattern", "algorithm", "data structure",
-                "performance", "optimization", "security",
+                "difference between",
+                "compare",
+                "versus",
+                "vs",
+                "or",
+                "what is",
+                "how does",
+                "explain",
+                "when to use",
+                "best practice",
+                "which is better",
+                "pros and cons",
+                "advantages",
+                "disadvantages",
+                "tell me about",
+                "angular",
+                "vue",
+                "react",
+                "svelte",
+                "ember",
+                "python",
+                "rust",
+                "javascript",
+                "typescript",
+                "java",
+                "design pattern",
+                "algorithm",
+                "data structure",
+                "performance",
+                "optimization",
+                "security",
             ],
             ai_keywords: vec![
-                "ai", "ml", "machine learning", "artificial intelligence",
-                "llm", "large language model", "neural network",
-                "deep learning", "transformer", "gpt", "claude",
-                "consensus", "ai assistant", "chatbot", "nlp",
+                "ai",
+                "ml",
+                "machine learning",
+                "artificial intelligence",
+                "llm",
+                "large language model",
+                "neural network",
+                "deep learning",
+                "transformer",
+                "gpt",
+                "claude",
+                "consensus",
+                "ai assistant",
+                "chatbot",
+                "nlp",
             ],
             ai_helpers,
         }
@@ -68,18 +129,24 @@ impl QuestionAnalyzer {
     pub async fn analyze(&self, question: &str) -> QuestionCategory {
         // First try AI-powered semantic analysis if available
         if let Some(ref ai_helpers) = self.ai_helpers {
-            match ai_helpers.intelligent_orchestrator
+            match ai_helpers
+                .intelligent_orchestrator
                 .make_intelligent_context_decision(question, true)
-                .await {
+                .await
+            {
                 Ok(decision) => {
-                    info!("🤖 AI semantic analysis: category={:?}, confidence={:.2}, should_use_repo={}", 
+                    info!("🤖 AI semantic analysis: category={:?}, confidence={:.2}, should_use_repo={}",
                         decision.primary_category, decision.confidence, decision.should_use_repo);
-                    
+
                     // Map AI decision to our categories
                     use crate::ai_helpers::intelligent_context_orchestrator::QuestionCategory as AICategory;
                     match decision.primary_category {
-                        AICategory::RepositorySpecific => return QuestionCategory::RepositorySpecific,
-                        AICategory::GeneralProgramming => return QuestionCategory::GeneralProgramming,
+                        AICategory::RepositorySpecific => {
+                            return QuestionCategory::RepositorySpecific
+                        }
+                        AICategory::GeneralProgramming => {
+                            return QuestionCategory::GeneralProgramming
+                        }
                         AICategory::ComputerScience => return QuestionCategory::GeneralProgramming,
                         AICategory::AcademicKnowledge => return QuestionCategory::General,
                         AICategory::GeneralKnowledge => return QuestionCategory::General,
@@ -92,29 +159,32 @@ impl QuestionAnalyzer {
                     }
                 }
                 Err(e) => {
-                    debug!("AI semantic analysis failed: {}, falling back to keywords", e);
+                    debug!(
+                        "AI semantic analysis failed: {}, falling back to keywords",
+                        e
+                    );
                 }
             }
         }
-        
+
         // Fallback to keyword-based analysis
         self.analyze_with_keywords(question)
     }
-    
+
     /// Keyword-based analysis (fallback when AI is unavailable)
     fn analyze_with_keywords(&self, question: &str) -> QuestionCategory {
         let question_lower = question.to_lowercase();
-        
+
         // Count keyword matches for each category
         let repo_score = self.calculate_score(&question_lower, &self.repo_keywords);
         let general_score = self.calculate_score(&question_lower, &self.general_keywords);
         let ai_score = self.calculate_score(&question_lower, &self.ai_keywords);
-        
+
         debug!(
             "Question analysis scores - Repo: {}, General: {}, AI: {}",
             repo_score, general_score, ai_score
         );
-        
+
         // Determine category based on scores
         if repo_score > 0 && repo_score >= general_score {
             // Repository-specific takes precedence if mentioned
@@ -133,17 +203,14 @@ impl QuestionAnalyzer {
 
     /// Calculate keyword match score
     fn calculate_score(&self, text: &str, keywords: &[&str]) -> u32 {
-        keywords.iter()
+        keywords
+            .iter()
             .filter(|keyword| text.contains(*keyword))
             .count() as u32
     }
 
     /// Check if repository context should be used
-    pub fn should_use_repository_context(
-        &self,
-        question: &str,
-        has_open_repository: bool,
-    ) -> bool {
+    pub fn should_use_repository_context(&self, question: &str, has_open_repository: bool) -> bool {
         // If no repository is open, never use repository context
         if !has_open_repository {
             info!("No repository open, skipping repository context");
@@ -151,7 +218,7 @@ impl QuestionAnalyzer {
         }
 
         let category = self.analyze(question);
-        
+
         match category {
             QuestionCategory::RepositorySpecific => {
                 info!("Question is repository-specific, using repository context");
@@ -159,10 +226,10 @@ impl QuestionAnalyzer {
             }
             QuestionCategory::GeneralProgramming => {
                 // For general programming questions, check if they might benefit from examples
-                let might_benefit = question.to_lowercase().contains("example") ||
-                                  question.to_lowercase().contains("implement") ||
-                                  question.to_lowercase().contains("how to");
-                
+                let might_benefit = question.to_lowercase().contains("example")
+                    || question.to_lowercase().contains("implement")
+                    || question.to_lowercase().contains("how to");
+
                 if might_benefit {
                     info!("General programming question might benefit from repository examples");
                     true
@@ -172,7 +239,10 @@ impl QuestionAnalyzer {
                 }
             }
             _ => {
-                info!("Question category {:?}, skipping repository context", category);
+                info!(
+                    "Question category {:?}, skipping repository context",
+                    category
+                );
                 false
             }
         }
@@ -210,17 +280,17 @@ mod tests {
     #[test]
     fn test_repository_specific_detection() {
         let analyzer = QuestionAnalyzer::new();
-        
+
         assert_eq!(
             analyzer.analyze("analyze this code and tell me what it does"),
             QuestionCategory::RepositorySpecific
         );
-        
+
         assert_eq!(
             analyzer.analyze("what's wrong with my implementation?"),
             QuestionCategory::RepositorySpecific
         );
-        
+
         assert_eq!(
             analyzer.analyze("review the current project structure"),
             QuestionCategory::RepositorySpecific
@@ -230,17 +300,17 @@ mod tests {
     #[test]
     fn test_general_programming_detection() {
         let analyzer = QuestionAnalyzer::new();
-        
+
         assert_eq!(
             analyzer.analyze("what's the difference between angular and vue?"),
             QuestionCategory::GeneralProgramming
         );
-        
+
         assert_eq!(
             analyzer.analyze("explain async/await in javascript"),
             QuestionCategory::GeneralProgramming
         );
-        
+
         assert_eq!(
             analyzer.analyze("compare react hooks vs class components"),
             QuestionCategory::GeneralProgramming
@@ -250,12 +320,12 @@ mod tests {
     #[test]
     fn test_ai_detection() {
         let analyzer = QuestionAnalyzer::new();
-        
+
         assert_eq!(
             analyzer.analyze("how does the consensus AI pipeline work?"),
             QuestionCategory::AIRelated
         );
-        
+
         assert_eq!(
             analyzer.analyze("explain transformer architecture"),
             QuestionCategory::AIRelated
@@ -265,22 +335,14 @@ mod tests {
     #[test]
     fn test_repository_context_usage() {
         let analyzer = QuestionAnalyzer::new();
-        
+
         // With repository open
-        assert!(analyzer.should_use_repository_context(
-            "analyze this code",
-            true
-        ));
-        
-        assert!(!analyzer.should_use_repository_context(
-            "what's the difference between angular and vue?",
-            true
-        ));
-        
+        assert!(analyzer.should_use_repository_context("analyze this code", true));
+
+        assert!(!analyzer
+            .should_use_repository_context("what's the difference between angular and vue?", true));
+
         // Without repository open
-        assert!(!analyzer.should_use_repository_context(
-            "analyze this code",
-            false
-        ));
+        assert!(!analyzer.should_use_repository_context("analyze this code", false));
     }
 }

@@ -1,13 +1,13 @@
 //! Zero-downtime migration system for seamless TypeScript to Rust transition
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
-use std::fs;
-use tokio::fs as afs;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::fs as afs;
 use tokio::sync::RwLock;
 
 /// Zero-downtime migration manager
@@ -200,10 +200,10 @@ impl Default for MigrationConfig {
             step_delay: std::time::Duration::from_secs(300), // 5 minutes between steps
             max_downtime: std::time::Duration::from_secs(30), // 30 seconds max
             rollback_triggers: RollbackTriggers {
-                max_error_rate: 0.05, // 5% error rate
+                max_error_rate: 0.05,      // 5% error rate
                 max_latency_increase: 2.0, // 2x latency increase
-                max_memory_usage: 0.9, // 90% memory usage
-                max_cpu_usage: 0.8, // 80% CPU usage
+                max_memory_usage: 0.9,     // 90% memory usage
+                max_cpu_usage: 0.8,        // 80% CPU usage
             },
             health_checks: HealthCheckConfig {
                 interval: std::time::Duration::from_secs(30),
@@ -276,7 +276,12 @@ impl ZeroDowntimeMigrator {
         self.run_cleanup_phase().await?;
 
         // Mark as completed
-        self.update_state(MigrationPhase::Completed, 1.0, "Migration completed successfully").await?;
+        self.update_state(
+            MigrationPhase::Completed,
+            1.0,
+            "Migration completed successfully",
+        )
+        .await?;
 
         println!("✅ Zero-downtime migration completed successfully!");
 
@@ -285,7 +290,12 @@ impl ZeroDowntimeMigrator {
 
     /// Phase 1: Preparation
     async fn run_preparation_phase(&self) -> Result<()> {
-        self.update_state(MigrationPhase::Preparation, 0.0, "Preparing migration environment").await?;
+        self.update_state(
+            MigrationPhase::Preparation,
+            0.0,
+            "Preparing migration environment",
+        )
+        .await?;
 
         // Validate source installation
         self.validate_source_installation().await?;
@@ -306,7 +316,12 @@ impl ZeroDowntimeMigrator {
 
     /// Phase 2: Replication setup
     async fn run_replication_phase(&self) -> Result<()> {
-        self.update_state(MigrationPhase::Replication, 0.1, "Setting up data replication").await?;
+        self.update_state(
+            MigrationPhase::Replication,
+            0.1,
+            "Setting up data replication",
+        )
+        .await?;
 
         // Set up database replication
         self.setup_database_replication().await?;
@@ -327,7 +342,8 @@ impl ZeroDowntimeMigrator {
 
     /// Phase 3: Hot standby configuration
     async fn run_hot_standby_phase(&self) -> Result<()> {
-        self.update_state(MigrationPhase::HotStandby, 0.2, "Configuring hot standby").await?;
+        self.update_state(MigrationPhase::HotStandby, 0.2, "Configuring hot standby")
+            .await?;
 
         if self.config.hot_standby {
             // Start Rust instance in standby mode
@@ -347,7 +363,12 @@ impl ZeroDowntimeMigrator {
 
     /// Phase 4: Traffic mirroring
     async fn run_traffic_mirroring_phase(&self) -> Result<()> {
-        self.update_state(MigrationPhase::TrafficMirroring, 0.3, "Starting traffic mirroring").await?;
+        self.update_state(
+            MigrationPhase::TrafficMirroring,
+            0.3,
+            "Starting traffic mirroring",
+        )
+        .await?;
 
         // Configure traffic mirroring
         self.configure_traffic_mirroring().await?;
@@ -368,7 +389,12 @@ impl ZeroDowntimeMigrator {
 
     /// Phase 5: Gradual traffic switching
     async fn run_gradual_switch_phase(&self) -> Result<()> {
-        self.update_state(MigrationPhase::GradualSwitch, 0.5, "Starting gradual traffic switch").await?;
+        self.update_state(
+            MigrationPhase::GradualSwitch,
+            0.5,
+            "Starting gradual traffic switch",
+        )
+        .await?;
 
         let mut current_percentage = 0.0;
 
@@ -388,7 +414,8 @@ impl ZeroDowntimeMigrator {
             let health_ok = self.perform_health_check().await?;
             if !health_ok {
                 // Rollback if health check fails
-                self.trigger_rollback("Health check failed during gradual switch").await?;
+                self.trigger_rollback("Health check failed during gradual switch")
+                    .await?;
                 return Err(anyhow::anyhow!("Health check failed, rollback initiated"));
             }
 
@@ -404,7 +431,8 @@ impl ZeroDowntimeMigrator {
 
     /// Phase 6: Full traffic switch
     async fn run_full_switch_phase(&self) -> Result<()> {
-        self.update_state(MigrationPhase::FullSwitch, 0.8, "Switching to full traffic").await?;
+        self.update_state(MigrationPhase::FullSwitch, 0.8, "Switching to full traffic")
+            .await?;
 
         // Final health check before full switch
         let health_ok = self.perform_health_check().await?;
@@ -429,7 +457,12 @@ impl ZeroDowntimeMigrator {
 
     /// Phase 7: Cleanup
     async fn run_cleanup_phase(&self) -> Result<()> {
-        self.update_state(MigrationPhase::Cleanup, 0.9, "Cleaning up migration artifacts").await?;
+        self.update_state(
+            MigrationPhase::Cleanup,
+            0.9,
+            "Cleaning up migration artifacts",
+        )
+        .await?;
 
         // Clean up replication
         self.cleanup_replication().await?;
@@ -485,9 +518,10 @@ impl ZeroDowntimeMigrator {
 
     /// Create backup
     async fn create_backup(&self) -> Result<()> {
-        let backup_path = self.source_path.parent()
-            .unwrap()
-            .join(format!("hive_backup_{}", Utc::now().format("%Y%m%d_%H%M%S")));
+        let backup_path = self.source_path.parent().unwrap().join(format!(
+            "hive_backup_{}",
+            Utc::now().format("%Y%m%d_%H%M%S")
+        ));
 
         // Copy source installation
         self.copy_directory(&self.source_path, &backup_path).await?;
@@ -562,7 +596,10 @@ impl ZeroDowntimeMigrator {
 
     /// Switch traffic percentage
     async fn switch_traffic_percentage(&self, percentage: f64) -> Result<()> {
-        println!("🔄 Switching {}% traffic to Rust implementation...", (percentage * 100.0) as u32);
+        println!(
+            "🔄 Switching {}% traffic to Rust implementation...",
+            (percentage * 100.0) as u32
+        );
 
         // Configure load balancer to route traffic
         self.configure_traffic_routing(percentage).await?;
@@ -577,7 +614,12 @@ impl ZeroDowntimeMigrator {
     async fn trigger_rollback(&self, reason: &str) -> Result<()> {
         println!("⚠️ Triggering rollback: {}", reason);
 
-        self.update_state(MigrationPhase::RollingBack, 0.0, &format!("Rolling back: {}", reason)).await?;
+        self.update_state(
+            MigrationPhase::RollingBack,
+            0.0,
+            &format!("Rolling back: {}", reason),
+        )
+        .await?;
 
         // Switch traffic back to TypeScript
         self.switch_traffic_percentage(0.0).await?;
@@ -588,7 +630,8 @@ impl ZeroDowntimeMigrator {
         // Restore original configuration
         self.restore_original_configuration().await?;
 
-        self.update_state(MigrationPhase::RolledBack, 0.0, "Rollback completed").await?;
+        self.update_state(MigrationPhase::RolledBack, 0.0, "Rollback completed")
+            .await?;
 
         Ok(())
     }
@@ -605,7 +648,8 @@ impl ZeroDowntimeMigrator {
 
             // Check rollback triggers
             if self.should_rollback(&metrics).await? {
-                self.trigger_rollback("Metrics exceeded rollback thresholds").await?;
+                self.trigger_rollback("Metrics exceeded rollback thresholds")
+                    .await?;
                 return Err(anyhow::anyhow!("Rollback triggered due to poor metrics"));
             }
 
@@ -636,18 +680,23 @@ impl ZeroDowntimeMigrator {
         // Implement actual metrics collection
         // This is a placeholder
         Ok(MigrationMetrics {
-            transfer_rate: 1024.0 * 1024.0, // 1 MB/s
-            error_rate: 0.01, // 1% error rate
-            success_rate: 99.0, // 99% success rate
-            average_latency: 100.0, // 100ms
+            transfer_rate: 1024.0 * 1024.0,  // 1 MB/s
+            error_rate: 0.01,                // 1% error rate
+            success_rate: 99.0,              // 99% success rate
+            average_latency: 100.0,          // 100ms
             memory_usage: 512 * 1024 * 1024, // 512MB
-            cpu_usage: 0.3, // 30% CPU
-            sync_lag: 10.0, // 10ms sync lag
+            cpu_usage: 0.3,                  // 30% CPU
+            sync_lag: 10.0,                  // 10ms sync lag
         })
     }
 
     /// Update migration state
-    async fn update_state(&self, phase: MigrationPhase, progress: f64, operation: &str) -> Result<()> {
+    async fn update_state(
+        &self,
+        phase: MigrationPhase,
+        progress: f64,
+        operation: &str,
+    ) -> Result<()> {
         let mut state = self.state.write().await;
         state.phase = phase;
         state.progress = progress;
@@ -658,7 +707,8 @@ impl ZeroDowntimeMigrator {
             let elapsed = Utc::now().signed_duration_since(state.started_at);
             let total_estimated = elapsed.num_seconds() as f64 / progress;
             let remaining = total_estimated - elapsed.num_seconds() as f64;
-            state.estimated_completion = Some(Utc::now() + chrono::Duration::seconds(remaining as i64));
+            state.estimated_completion =
+                Some(Utc::now() + chrono::Duration::seconds(remaining as i64));
         }
 
         println!("📊 Migration: {:.1}% - {}", progress * 100.0, operation);
@@ -679,38 +729,102 @@ impl ZeroDowntimeMigrator {
     }
 
     /// Placeholder implementations for specific operations
-    async fn verify_source_database(&self) -> Result<()> { Ok(()) }
-    async fn install_rust_binary(&self) -> Result<()> { Ok(()) }
-    async fn create_initial_configuration(&self) -> Result<()> { Ok(()) }
-    async fn initialize_target_database(&self) -> Result<()> { Ok(()) }
-    async fn copy_directory(&self, _src: &PathBuf, _dst: &PathBuf) -> Result<()> { Ok(()) }
-    async fn create_backup_manifest(&self, _path: &PathBuf) -> Result<()> { Ok(()) }
-    async fn setup_performance_monitoring(&self) -> Result<()> { Ok(()) }
-    async fn setup_error_monitoring(&self) -> Result<()> { Ok(()) }
-    async fn setup_health_monitoring(&self) -> Result<()> { Ok(()) }
-    async fn configure_database_sync(&self) -> Result<()> { Ok(()) }
-    async fn start_initial_data_transfer(&self) -> Result<()> { Ok(()) }
-    async fn setup_continuous_sync(&self) -> Result<()> { Ok(()) }
-    async fn setup_config_sync(&self) -> Result<()> { Ok(()) }
-    async fn convert_configuration(&self) -> Result<()> { Ok(()) }
-    async fn setup_file_replication(&self) -> Result<()> { Ok(()) }
-    async fn verify_replication(&self) -> Result<()> { Ok(()) }
-    async fn start_standby_instance(&self) -> Result<()> { Ok(()) }
-    async fn configure_load_balancer(&self) -> Result<()> { Ok(()) }
-    async fn verify_standby_health(&self) -> Result<()> { Ok(()) }
-    async fn configure_traffic_mirroring(&self) -> Result<()> { Ok(()) }
-    async fn start_mirror_monitoring(&self) -> Result<()> { Ok(()) }
-    async fn increase_mirror_traffic(&self) -> Result<()> { Ok(()) }
-    async fn validate_mirror_performance(&self) -> Result<()> { Ok(()) }
-    async fn configure_traffic_routing(&self, _percentage: f64) -> Result<()> { Ok(()) }
-    async fn update_traffic_monitoring(&self, _percentage: f64) -> Result<()> { Ok(()) }
-    async fn stop_typescript_instance(&self) -> Result<()> { Ok(()) }
-    async fn stop_rust_instance(&self) -> Result<()> { Ok(()) }
-    async fn restore_original_configuration(&self) -> Result<()> { Ok(()) }
-    async fn cleanup_replication(&self) -> Result<()> { Ok(()) }
-    async fn cleanup_monitoring(&self) -> Result<()> { Ok(()) }
-    async fn cleanup_temporary_files(&self) -> Result<()> { Ok(()) }
-    async fn update_system_configuration(&self) -> Result<()> { Ok(()) }
+    async fn verify_source_database(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn install_rust_binary(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn create_initial_configuration(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn initialize_target_database(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn copy_directory(&self, _src: &PathBuf, _dst: &PathBuf) -> Result<()> {
+        Ok(())
+    }
+    async fn create_backup_manifest(&self, _path: &PathBuf) -> Result<()> {
+        Ok(())
+    }
+    async fn setup_performance_monitoring(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn setup_error_monitoring(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn setup_health_monitoring(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn configure_database_sync(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn start_initial_data_transfer(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn setup_continuous_sync(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn setup_config_sync(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn convert_configuration(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn setup_file_replication(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn verify_replication(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn start_standby_instance(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn configure_load_balancer(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn verify_standby_health(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn configure_traffic_mirroring(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn start_mirror_monitoring(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn increase_mirror_traffic(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn validate_mirror_performance(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn configure_traffic_routing(&self, _percentage: f64) -> Result<()> {
+        Ok(())
+    }
+    async fn update_traffic_monitoring(&self, _percentage: f64) -> Result<()> {
+        Ok(())
+    }
+    async fn stop_typescript_instance(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn stop_rust_instance(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn restore_original_configuration(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn cleanup_replication(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn cleanup_monitoring(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn cleanup_temporary_files(&self) -> Result<()> {
+        Ok(())
+    }
+    async fn update_system_configuration(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Live migration status API

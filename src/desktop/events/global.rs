@@ -38,10 +38,10 @@ mod tests {
         // Get another reference to the global bus
         let bus2 = event_bus();
         let event = Event::empty(EventType::FileChanged);
-        
+
         // Publish through the second reference
         bus2.publish(event).await.unwrap();
-        
+
         // Should have been received by the subscriber
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }

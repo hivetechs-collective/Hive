@@ -1,12 +1,12 @@
 //! Terminal output buffer to store full conversation history
-//! 
+//!
 //! Since VT100 only gives us the visible screen, we need to store
 //! the full output separately for features like Send to Consensus
 
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 /// Maximum lines to store per terminal
 const MAX_BUFFER_LINES: usize = 50000;
@@ -25,80 +25,82 @@ impl TerminalBuffer {
             max_lines: MAX_BUFFER_LINES,
         }
     }
-    
+
     /// Add output to the buffer
     pub fn add_output(&mut self, text: &str) {
         for line in text.lines() {
             self.lines.push_back(line.to_string());
-            
+
             // Remove old lines if we exceed the limit
             while self.lines.len() > self.max_lines {
                 self.lines.pop_front();
             }
         }
     }
-    
+
     /// Get all buffered content
     pub fn get_all_content(&self) -> String {
-        self.lines.iter()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n")
+        self.lines.iter().cloned().collect::<Vec<_>>().join("\n")
     }
-    
+
     /// Get cleaned content without escape sequences
     pub fn get_cleaned_content(&self) -> String {
         use regex::Regex;
-        
+
         // Simple approach: just remove ANSI escape sequences
         let ansi_regex = Regex::new(
             r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\[[\d;]+m|\[\d+[A-Z]|\[\d+;\d+[Hf]|\[\??\d+[lh]"
         ).unwrap();
-        
+
         let mut result = String::new();
-        
+
         for line in &self.lines {
             // Remove ANSI escape sequences
             let cleaned = ansi_regex.replace_all(line, "").to_string();
-            
+
             // Skip empty lines and pure UI lines
             let trimmed = cleaned.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            
+
             // Skip lines that are just box drawing
-            if trimmed.chars().all(|c| "╭─╮│╰╯┴┬├┤┼━┃┏┓┗┛┣┫┳┻╋┠┨┯┷┿╂┝┥┰┸║═╔╗╚╝".contains(c)) {
+            if trimmed
+                .chars()
+                .all(|c| "╭─╮│╰╯┴┬├┤┼━┃┏┓┗┛┣┫┳┻╋┠┨┯┷┿╂┝┥┰┸║═╔╗╚╝".contains(c))
+            {
                 continue;
             }
-            
+
             // Skip Claude Code UI status lines
-            if trimmed == "? for shortcuts" ||
-               trimmed == "esc to interrupt" ||
-               trimmed.starts_with("tokens:") ||
-               trimmed.contains("Thinking...") ||
-               trimmed.contains("Processing") ||
-               trimmed.contains("Analyzing") {
+            if trimmed == "? for shortcuts"
+                || trimmed == "esc to interrupt"
+                || trimmed.starts_with("tokens:")
+                || trimmed.contains("Thinking...")
+                || trimmed.contains("Processing")
+                || trimmed.contains("Analyzing")
+            {
                 continue;
             }
-            
+
             result.push_str(trimmed);
             result.push('\n');
         }
-        
+
         result.trim().to_string()
     }
-    
+
     /// Get recent content (last N lines)
     pub fn get_recent_content(&self, num_lines: usize) -> String {
         let start = self.lines.len().saturating_sub(num_lines);
-        self.lines.iter()
+        self.lines
+            .iter()
             .skip(start)
             .cloned()
             .collect::<Vec<_>>()
             .join("\n")
     }
-    
+
     /// Clear the buffer
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -106,7 +108,7 @@ impl TerminalBuffer {
 }
 
 /// Global terminal buffers registry
-pub static TERMINAL_BUFFERS: Lazy<Arc<Mutex<HashMap<String, TerminalBuffer>>>> = 
+pub static TERMINAL_BUFFERS: Lazy<Arc<Mutex<HashMap<String, TerminalBuffer>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 /// Register a new terminal buffer

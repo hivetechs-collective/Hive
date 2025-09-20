@@ -216,7 +216,7 @@ impl OpenRouterClient {
                 std::future::pending::<bool>().await
             }
         };
-        
+
         // Pin the cancellation future so we can use it in select!
         tokio::pin!(cancellation_future);
 
@@ -233,7 +233,7 @@ impl OpenRouterClient {
                     drop(response);
                     return Err(anyhow::anyhow!("Streaming cancelled by user"));
                 }
-                
+
                 // Read next chunk
                 chunk_result = response.chunk() => {
                     match chunk_result {

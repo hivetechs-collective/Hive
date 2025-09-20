@@ -6,7 +6,7 @@
 //! - Real-time model updates and rankings
 //! - Cost and performance tracking
 
-use crate::core::{HiveError, Result, DatabaseManager};
+use crate::core::{DatabaseManager, HiveError, Result};
 use anyhow::Context;
 use reqwest;
 use serde::{Deserialize, Serialize};
@@ -116,7 +116,8 @@ impl OpenRouterClient {
     pub async fn test_connection(&self) -> Result<bool> {
         let url = format!("{}/auth/key", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("HTTP-Referer", "https://github.com/hivetechs/hive")
@@ -132,7 +133,8 @@ impl OpenRouterClient {
     pub async fn fetch_models(&self) -> Result<Vec<OpenRouterModel>> {
         let url = format!("{}/models", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("HTTP-Referer", "https://github.com/hivetechs/hive")
@@ -144,7 +146,10 @@ impl OpenRouterClient {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            return Err(HiveError::Internal { context: "openrouter".to_string(), message: format!("OpenRouter API error: {} - {}", status, error_text) });
+            return Err(HiveError::Internal {
+                context: "openrouter".to_string(),
+                message: format!("OpenRouter API error: {} - {}", status, error_text),
+            });
         }
 
         let models_response: ModelsResponse = response
@@ -175,10 +180,7 @@ impl ModelSyncManager {
     pub fn new(db: DatabaseManager, api_key: String) -> Self {
         let client = OpenRouterClient::new(api_key);
 
-        Self {
-            db,
-            client,
-        }
+        Self { db, client }
     }
 
     /// Sync all models from OpenRouter
@@ -187,12 +189,18 @@ impl ModelSyncManager {
 
         // Test connection first
         if !self.client.test_connection().await? {
-            return Err(HiveError::AuthenticationFailed { service: "OpenRouter".to_string(), message: "Invalid OpenRouter API key".to_string() });
+            return Err(HiveError::AuthenticationFailed {
+                service: "OpenRouter".to_string(),
+                message: "Invalid OpenRouter API key".to_string(),
+            });
         }
 
         // Fetch models from OpenRouter
         let openrouter_models = self.client.fetch_models().await?;
-        println!("📥 Fetched {} models from OpenRouter", openrouter_models.len());
+        println!(
+            "📥 Fetched {} models from OpenRouter",
+            openrouter_models.len()
+        );
 
         // Process and store models
         let mut sync_result = ModelSyncResult {
@@ -225,15 +233,21 @@ impl ModelSyncManager {
             match existing_models.get(&model.id) {
                 Some(existing) => {
                     // Update existing model
-                    let needs_update =
-                        existing.name != model.name ||
-                        existing.description != model.description ||
-                        existing.context_window != model.context_window ||
-                        (existing.pricing_input - pricing_input).abs() > f64::EPSILON ||
-                        (existing.pricing_output - pricing_output).abs() > f64::EPSILON;
+                    let needs_update = existing.name != model.name
+                        || existing.description != model.description
+                        || existing.context_window != model.context_window
+                        || (existing.pricing_input - pricing_input).abs() > f64::EPSILON
+                        || (existing.pricing_output - pricing_output).abs() > f64::EPSILON;
 
                     if needs_update {
-                        self.update_model(&tx, &model, existing.internal_id, &provider_name, pricing_input, pricing_output)?;
+                        self.update_model(
+                            &tx,
+                            &model,
+                            existing.internal_id,
+                            &provider_name,
+                            pricing_input,
+                            pricing_output,
+                        )?;
                         sync_result.updated_models += 1;
                     }
                 }
@@ -265,24 +279,36 @@ impl ModelSyncManager {
         println!("   📊 Total models: {}", sync_result.total_fetched);
         println!("   🆕 New models: {}", sync_result.new_models);
         println!("   🔄 Updated models: {}", sync_result.updated_models);
-        println!("   ❌ Deactivated models: {}", sync_result.deactivated_models);
+        println!(
+            "   ❌ Deactivated models: {}",
+            sync_result.deactivated_models
+        );
         println!("   🏢 Providers: {}", sync_result.providers.len());
 
         Ok(sync_result)
     }
 
     /// Get existing models from database
-    fn get_existing_models(&self, conn: &rusqlite::Connection) -> Result<HashMap<String, StoredModel>> {
+    fn get_existing_models(
+        &self,
+        conn: &rusqlite::Connection,
+    ) -> Result<HashMap<String, StoredModel>> {
         let mut stmt = conn.prepare(
             "SELECT internal_id, openrouter_id, name, provider_name, description,
                     context_window, pricing_input, pricing_output, is_active, last_updated
-             FROM openrouter_models"
+             FROM openrouter_models",
         )?;
 
         let model_iter = stmt.query_map([], |row| {
             let last_updated_str: String = row.get(9)?;
             let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
-                .map_err(|_| rusqlite::Error::InvalidColumnType(9, "last_updated".to_string(), rusqlite::types::Type::Text))?
+                .map_err(|_| {
+                    rusqlite::Error::InvalidColumnType(
+                        9,
+                        "last_updated".to_string(),
+                        rusqlite::types::Type::Text,
+                    )
+                })?
                 .with_timezone(&chrono::Utc);
 
             Ok(StoredModel {
@@ -393,7 +419,10 @@ impl ModelSyncManager {
         let tx = conn.unchecked_transaction()?;
 
         // Clear existing rankings
-        tx.execute("DELETE FROM model_rankings WHERE ranking_source = 'openrouter_general'", [])?;
+        tx.execute(
+            "DELETE FROM model_rankings WHERE ranking_source = 'openrouter_general'",
+            [],
+        )?;
 
         // Insert new rankings
         for (model_id, rank) in rankings {
@@ -415,8 +444,8 @@ impl ModelSyncManager {
                      (model_internal_id, ranking_source, rank_position, usage_percentage, period_start, period_end, collected_at)
                      VALUES (?1, 'openrouter_general', ?2, ?3, ?4, ?5, ?6)",
                     rusqlite::params![
-                        internal_id, 
-                        rank, 
+                        internal_id,
+                        rank,
                         0.0, // usage_percentage - default for general rankings
                         now.clone(), // period_start
                         now.clone(), // period_end
@@ -442,11 +471,10 @@ impl ModelSyncManager {
     /// Parse pricing string to float
     fn parse_pricing(&self, pricing_str: &str) -> Result<f64> {
         // OpenRouter pricing is typically in format like "0.000001" (per token)
-        pricing_str.parse::<f64>()
-            .map_err(|_| HiveError::Internal {
-                context: "pricing".to_string(),
-                message: format!("Invalid pricing format: {}", pricing_str)
-            })
+        pricing_str.parse::<f64>().map_err(|_| HiveError::Internal {
+            context: "pricing".to_string(),
+            message: format!("Invalid pricing format: {}", pricing_str),
+        })
     }
 }
 
@@ -478,13 +506,19 @@ impl ModelQuery {
                     context_window, pricing_input, pricing_output, is_active, last_updated
              FROM openrouter_models
              WHERE is_active = 1
-             ORDER BY provider_name, name"
+             ORDER BY provider_name, name",
         )?;
 
         let model_iter = stmt.query_map([], |row| {
             let last_updated_str: String = row.get(9)?;
             let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
-                .map_err(|_| rusqlite::Error::InvalidColumnType(9, "last_updated".to_string(), rusqlite::types::Type::Text))?
+                .map_err(|_| {
+                    rusqlite::Error::InvalidColumnType(
+                        9,
+                        "last_updated".to_string(),
+                        rusqlite::types::Type::Text,
+                    )
+                })?
                 .with_timezone(&chrono::Utc);
 
             Ok(StoredModel {
@@ -517,13 +551,19 @@ impl ModelQuery {
                     context_window, pricing_input, pricing_output, is_active, last_updated
              FROM openrouter_models
              WHERE is_active = 1 AND provider_name = ?1
-             ORDER BY name"
+             ORDER BY name",
         )?;
 
         let model_iter = stmt.query_map([provider], |row| {
             let last_updated_str: String = row.get(9)?;
             let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
-                .map_err(|_| rusqlite::Error::InvalidColumnType(9, "last_updated".to_string(), rusqlite::types::Type::Text))?
+                .map_err(|_| {
+                    rusqlite::Error::InvalidColumnType(
+                        9,
+                        "last_updated".to_string(),
+                        rusqlite::types::Type::Text,
+                    )
+                })?
                 .with_timezone(&chrono::Utc);
 
             Ok(StoredModel {
@@ -560,7 +600,7 @@ impl ModelQuery {
              FROM openrouter_models
              WHERE is_active = 1
              GROUP BY provider_name
-             ORDER BY provider_name"
+             ORDER BY provider_name",
         )?;
 
         let provider_iter = stmt.query_map([], |row| {
@@ -593,7 +633,13 @@ impl ModelQuery {
             |row| {
                 let last_updated_str: String = row.get(9)?;
                 let last_updated = chrono::DateTime::parse_from_rfc3339(&last_updated_str)
-                    .map_err(|_| rusqlite::Error::InvalidColumnType(9, "last_updated".to_string(), rusqlite::types::Type::Text))?
+                    .map_err(|_| {
+                        rusqlite::Error::InvalidColumnType(
+                            9,
+                            "last_updated".to_string(),
+                            rusqlite::types::Type::Text,
+                        )
+                    })?
                     .with_timezone(&chrono::Utc);
 
                 Ok(StoredModel {
@@ -608,7 +654,7 @@ impl ModelQuery {
                     is_active: row.get(8)?,
                     last_updated,
                 })
-            }
+            },
         ) {
             Ok(model) => Some(model),
             Err(rusqlite::Error::QueryReturnedNoRows) => None,
@@ -641,7 +687,10 @@ mod tests {
         let sync_manager = ModelSyncManager::new(db, "test-key".to_string());
 
         assert_eq!(sync_manager.extract_provider_name("openai/gpt-4"), "openai");
-        assert_eq!(sync_manager.extract_provider_name("anthropic/claude-3"), "anthropic");
+        assert_eq!(
+            sync_manager.extract_provider_name("anthropic/claude-3"),
+            "anthropic"
+        );
         assert_eq!(sync_manager.extract_provider_name("invalid"), "unknown");
     }
 

@@ -1,16 +1,16 @@
 //! Model Downloader for AI Helpers
-//! 
+//!
 //! This module handles downloading and setting up AI models on first run,
 //! ensuring all required models are available locally.
 
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use anyhow::{Result, Context};
-use tokio::io::AsyncWriteExt;
-use tokio::sync::{Mutex, mpsc};
-use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
+use anyhow::{Context, Result};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::{mpsc, Mutex};
 
 /// Model registry with information about available models
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,10 +27,22 @@ pub struct ModelInfo {
 /// Download progress event
 #[derive(Debug, Clone)]
 pub enum DownloadEvent {
-    Started { model: String, size: u64 },
-    Progress { model: String, downloaded: u64, total: u64 },
-    Completed { model: String },
-    Failed { model: String, error: String },
+    Started {
+        model: String,
+        size: u64,
+    },
+    Progress {
+        model: String,
+        downloaded: u64,
+        total: u64,
+    },
+    Completed {
+        model: String,
+    },
+    Failed {
+        model: String,
+        error: String,
+    },
 }
 
 /// Model downloader configuration
@@ -38,13 +50,13 @@ pub enum DownloadEvent {
 pub struct DownloaderConfig {
     /// Base directory for models
     pub models_dir: PathBuf,
-    
+
     /// Maximum concurrent downloads
     pub max_concurrent: usize,
-    
+
     /// Timeout for downloads
     pub timeout: std::time::Duration,
-    
+
     /// Whether to verify checksums
     pub verify_checksums: bool,
 }
@@ -75,16 +87,15 @@ impl ModelDownloader {
     /// Create a new model downloader
     pub async fn new(config: DownloaderConfig) -> Result<Self> {
         // Ensure models directory exists
-        tokio::fs::create_dir_all(&config.models_dir).await
+        tokio::fs::create_dir_all(&config.models_dir)
+            .await
             .context("Failed to create models directory")?;
-        
-        let client = Client::builder()
-            .timeout(config.timeout)
-            .build()?;
-        
+
+        let client = Client::builder().timeout(config.timeout).build()?;
+
         let models_registry = Self::load_models_registry();
         let progress = Arc::new(Mutex::new(MultiProgress::new()));
-        
+
         Ok(Self {
             config,
             client,
@@ -92,7 +103,7 @@ impl ModelDownloader {
             progress,
         })
     }
-    
+
     /// Load the models registry
     fn load_models_registry() -> Vec<ModelInfo> {
         vec![
@@ -143,65 +154,66 @@ impl ModelDownloader {
             },
         ]
     }
-    
+
     /// Check which models need to be downloaded
     pub async fn check_missing_models(&self) -> Vec<ModelInfo> {
         let mut missing = Vec::new();
-        
+
         for model in &self.models_registry {
             let model_path = self.get_model_path(&model.model_id);
             if !model_path.exists() {
                 missing.push(model.clone());
             }
         }
-        
+
         missing
     }
-    
+
     /// Download all missing required models
     pub async fn download_required_models(
         &self,
         event_sender: mpsc::Sender<DownloadEvent>,
     ) -> Result<()> {
         let missing = self.check_missing_models().await;
-        let required_missing: Vec<_> = missing.into_iter()
-            .filter(|m| m.required)
-            .collect();
-        
+        let required_missing: Vec<_> = missing.into_iter().filter(|m| m.required).collect();
+
         if required_missing.is_empty() {
             tracing::info!("All required models are already downloaded");
             return Ok(());
         }
-        
-        tracing::info!("Need to download {} required models", required_missing.len());
-        
+
+        tracing::info!(
+            "Need to download {} required models",
+            required_missing.len()
+        );
+
         // Download models with limited concurrency
         let semaphore = Arc::new(tokio::sync::Semaphore::new(self.config.max_concurrent));
         let mut handles = Vec::new();
-        
+
         for model in required_missing {
             let semaphore = semaphore.clone();
             let client = self.client.clone();
             let config = self.config.clone();
             let sender = event_sender.clone();
             let progress = self.progress.clone();
-            
+
             let handle = tokio::spawn(async move {
                 let _permit = semaphore.acquire().await?;
                 Self::download_model(model, client, config, sender, progress).await
             });
-            
+
             handles.push(handle);
         }
-        
+
         // Wait for all downloads to complete
         for handle in handles {
             handle.await??;
         }
-        
+
         Ok(())
     }
-    
+
     /// Download a single model
     async fn download_model(
         model: ModelInfo,
@@ -211,18 +223,20 @@ impl ModelDownloader {
         multi_progress: Arc<Mutex<MultiProgress>>,
     ) -> Result<()> {
         let model_path = config.models_dir.join(&model.model_id);
-        
+
         // Create model directory
         if let Some(parent) = model_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        
+
         // Send start event
-        event_sender.send(DownloadEvent::Started {
-            model: model.name.clone(),
-            size: model.size_mb * 1024 * 1024,
-        }).await?;
-        
+        event_sender
+            .send(DownloadEvent::Started {
+                model: model.name.clone(),
+                size: model.size_mb * 1024 * 1024,
+            })
+            .await?;
+
         // Create progress bar
         let pb = {
             let mp = multi_progress.lock().await;
@@ -231,76 +245,90 @@ impl ModelDownloader {
                 ProgressStyle::default_bar()
                     .template("[{elapsed_precise}] {bar:40.cyan/blue} {bytes}/{total_bytes} {msg}")
                     .unwrap()
-                    .progress_chars("##-")
+                    .progress_chars("##-"),
             );
             pb.set_message(format!("Downloading {}", model.name));
             pb
         };
-        
+
         // Download with progress
         let response = client.get(&model.download_url).send().await?;
-        let total_size = response.content_length().unwrap_or(model.size_mb * 1024 * 1024);
-        
+        let total_size = response
+            .content_length()
+            .unwrap_or(model.size_mb * 1024 * 1024);
+
         let temp_path = model_path.with_extension("tmp");
         let mut file = tokio::fs::File::create(&temp_path).await?;
         let mut stream = response.bytes_stream();
         let mut downloaded: u64 = 0;
-        
+
         use futures::StreamExt;
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
             file.write_all(&chunk).await?;
-            
+
             downloaded += chunk.len() as u64;
             pb.set_position(downloaded);
-            
+
             // Send progress event
-            event_sender.send(DownloadEvent::Progress {
-                model: model.name.clone(),
-                downloaded,
-                total: total_size,
-            }).await?;
+            event_sender
+                .send(DownloadEvent::Progress {
+                    model: model.name.clone(),
+                    downloaded,
+                    total: total_size,
+                })
+                .await?;
         }
-        
+
         file.flush().await?;
         drop(file);
-        
+
         // Verify checksum if enabled
         if config.verify_checksums {
             // TODO: Implement actual checksum verification
             tracing::debug!("Checksum verification not yet implemented");
         }
-        
+
         // Move temp file to final location
         tokio::fs::rename(temp_path, model_path).await?;
-        
+
         pb.finish_with_message(format!("{} downloaded successfully", model.name));
-        
+
         // Send completion event
-        event_sender.send(DownloadEvent::Completed {
-            model: model.name.clone(),
-        }).await?;
-        
+        event_sender
+            .send(DownloadEvent::Completed {
+                model: model.name.clone(),
+            })
+            .await?;
+
         Ok(())
     }
-    
+
     /// Get the path where a model should be stored
     fn get_model_path(&self, model_id: &str) -> PathBuf {
         self.config.models_dir.join(model_id)
     }
-    
+
     /// Initialize models (download if needed)
     pub async fn initialize_models(&self) -> Result<()> {
         let (tx, mut rx) = mpsc::channel(100);
-        
+
         // Spawn task to handle events
         let event_task = tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
                 match event {
                     DownloadEvent::Started { model, size } => {
-                        tracing::info!("Starting download of {} ({:.1} MB)", model, size as f64 / 1_048_576.0);
+                        tracing::info!(
+                            "Starting download of {} ({:.1} MB)",
+                            model,
+                            size as f64 / 1_048_576.0
+                        );
                     }
-                    DownloadEvent::Progress { model, downloaded, total } => {
+                    DownloadEvent::Progress {
+                        model,
+                        downloaded,
+                        total,
+                    } => {
                         let percent = (downloaded as f64 / total as f64) * 100.0;
                         tracing::debug!("{}: {:.1}%", model, percent);
                     }
@@ -313,26 +341,26 @@ impl ModelDownloader {
                 }
             }
         });
-        
+
         // Download required models
         self.download_required_models(tx).await?;
-        
+
         event_task.await?;
-        
+
         Ok(())
     }
-    
+
     /// Get paths to all downloaded models
     pub async fn get_model_paths(&self) -> Result<std::collections::HashMap<String, PathBuf>> {
         let mut paths = std::collections::HashMap::new();
-        
+
         for model in &self.models_registry {
             let path = self.get_model_path(&model.model_id);
             if path.exists() {
                 paths.insert(model.model_id.clone(), path);
             }
         }
-        
+
         Ok(paths)
     }
 }
@@ -340,7 +368,7 @@ impl ModelDownloader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_model_registry() {
         let config = DownloaderConfig::default();

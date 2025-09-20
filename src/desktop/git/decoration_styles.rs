@@ -20,9 +20,11 @@ pub fn GitDecorationStyles() -> Element {
 }
 
 /// CSS variables for git decoration colors that can be customized
-pub fn get_git_decoration_css_variables(config: &crate::desktop::git::decorations::GitDecorationConfig) -> String {
+pub fn get_git_decoration_css_variables(
+    config: &crate::desktop::git::decorations::GitDecorationConfig,
+) -> String {
     let styles = &config.styles;
-    
+
     format!(
         r#"
         :root {{
@@ -54,10 +56,10 @@ pub fn get_git_decoration_css_variables(config: &crate::desktop::git::decoration
 /// Component that injects dynamic CSS variables based on configuration
 #[component]
 pub fn GitDecorationDynamicStyles(
-    config: crate::desktop::git::decorations::GitDecorationConfig
+    config: crate::desktop::git::decorations::GitDecorationConfig,
 ) -> Element {
     let css_variables = get_git_decoration_css_variables(&config);
-    
+
     rsx! {
         style {
             dangerous_inner_html: "{css_variables}"
@@ -86,9 +88,7 @@ pub fn get_inline_git_status_style(
 
     format!(
         "color: {}; opacity: {}; font-weight: {};",
-        color,
-        config.styles.opacity,
-        config.styles.status_font_weight
+        color, config.styles.opacity, config.styles.status_font_weight
     )
 }
 
@@ -136,7 +136,7 @@ pub fn get_file_git_classes(
 pub fn get_vscode_git_theme_styles() -> &'static str {
     r#"
     /* VS Code theme integration for git decorations */
-    
+
     /* Light theme */
     [data-vscode-theme-kind="vscode-light"] {
         --git-modified-color: #e2c08d;
@@ -148,7 +148,7 @@ pub fn get_vscode_git_theme_styles() -> &'static str {
         --git-renamed-color: #75beff;
         --git-copied-color: #73c991;
     }
-    
+
     /* Dark theme */
     [data-vscode-theme-kind="vscode-dark"] {
         --git-modified-color: #e2c08d;
@@ -160,7 +160,7 @@ pub fn get_vscode_git_theme_styles() -> &'static str {
         --git-renamed-color: #75beff;
         --git-copied-color: #73c991;
     }
-    
+
     /* High contrast theme */
     [data-vscode-theme-kind="vscode-high-contrast"] {
         --git-modified-color: #ffff00;
@@ -192,7 +192,10 @@ mod tests {
 
     #[test]
     fn test_git_status_class() {
-        assert_eq!(get_git_status_class(&GitFileStatus::Modified), "git-modified");
+        assert_eq!(
+            get_git_status_class(&GitFileStatus::Modified),
+            "git-modified"
+        );
         assert_eq!(get_git_status_class(&GitFileStatus::Added), "git-added");
         assert_eq!(get_git_status_class(&GitFileStatus::Deleted), "git-deleted");
     }

@@ -3,12 +3,12 @@
 //! This module handles security policy configuration, trust management
 //! settings, and enterprise security controls.
 
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use anyhow::{Context, Result};
 use tokio::fs;
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 use super::security::{SecurityPolicy, TrustLevel};
 
@@ -311,7 +311,8 @@ impl SecurityConfigManager {
 
         // Ensure config directory exists
         if !config_dir.exists() {
-            fs::create_dir_all(config_dir).await
+            fs::create_dir_all(config_dir)
+                .await
                 .context("Failed to create config directory")?;
         }
 
@@ -331,11 +332,12 @@ impl SecurityConfigManager {
 
     /// Load security configuration from file
     async fn load_config(path: &Path) -> Result<SecurityConfig> {
-        let content = fs::read_to_string(path).await
+        let content = fs::read_to_string(path)
+            .await
             .with_context(|| format!("Failed to read security config: {}", path.display()))?;
 
-        let config: SecurityConfig = toml::from_str(&content)
-            .context("Failed to parse security configuration")?;
+        let config: SecurityConfig =
+            toml::from_str(&content).context("Failed to parse security configuration")?;
 
         info!("Loaded security configuration from: {}", path.display());
         Ok(config)
@@ -343,10 +345,11 @@ impl SecurityConfigManager {
 
     /// Save security configuration to file
     async fn save_config(path: &Path, config: &SecurityConfig) -> Result<()> {
-        let content = toml::to_string_pretty(config)
-            .context("Failed to serialize security configuration")?;
+        let content =
+            toml::to_string_pretty(config).context("Failed to serialize security configuration")?;
 
-        fs::write(path, content).await
+        fs::write(path, content)
+            .await
             .with_context(|| format!("Failed to write security config: {}", path.display()))?;
 
         debug!("Saved security configuration to: {}", path.display());
@@ -386,7 +389,10 @@ impl SecurityConfigManager {
     pub async fn set_enterprise_mode(&mut self, enabled: bool) -> Result<()> {
         self.config.enterprise.enabled = enabled;
         Self::save_config(&self.config_path, &self.config).await?;
-        info!("Enterprise mode {}", if enabled { "enabled" } else { "disabled" });
+        info!(
+            "Enterprise mode {}",
+            if enabled { "enabled" } else { "disabled" }
+        );
         Ok(())
     }
 
@@ -396,12 +402,15 @@ impl SecurityConfigManager {
 
         // Check if trust prompts are disabled (dangerous)
         if !self.config.policy.trust_prompts_enabled {
-            warnings.push("Trust prompts are disabled - this is dangerous in production".to_string());
+            warnings
+                .push("Trust prompts are disabled - this is dangerous in production".to_string());
         }
 
         // Check if audit logging is disabled
         if !self.config.audit_config.enabled {
-            warnings.push("Audit logging is disabled - security events will not be recorded".to_string());
+            warnings.push(
+                "Audit logging is disabled - security events will not be recorded".to_string(),
+            );
         }
 
         // Check for overly permissive network settings
@@ -411,12 +420,16 @@ impl SecurityConfigManager {
 
         // Check resource limits
         if self.config.execution.resource_limits.max_memory_mb > 8192 {
-            warnings.push("Memory limit is very high (>8GB) - consider reducing for security".to_string());
+            warnings.push(
+                "Memory limit is very high (>8GB) - consider reducing for security".to_string(),
+            );
         }
 
         // Check for empty allowed commands
         if self.config.execution.allowed_commands.is_empty() {
-            warnings.push("No commands are allowed for execution - functionality may be limited".to_string());
+            warnings.push(
+                "No commands are allowed for execution - functionality may be limited".to_string(),
+            );
         }
 
         if warnings.is_empty() {
@@ -440,14 +453,13 @@ impl SecurityConfigManager {
 
     /// Export configuration as JSON for backup/sharing
     pub fn export_as_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(&self.config)
-            .context("Failed to serialize config as JSON")
+        serde_json::to_string_pretty(&self.config).context("Failed to serialize config as JSON")
     }
 
     /// Import configuration from JSON
     pub async fn import_from_json(&mut self, json: &str) -> Result<()> {
-        let config: SecurityConfig = serde_json::from_str(json)
-            .context("Failed to parse JSON configuration")?;
+        let config: SecurityConfig =
+            serde_json::from_str(json).context("Failed to parse JSON configuration")?;
 
         // Validate the imported configuration
         let temp_manager = SecurityConfigManager {

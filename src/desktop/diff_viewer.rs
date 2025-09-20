@@ -1,16 +1,18 @@
 //! Diff viewer component
-//! 
+//!
 //! Displays file changes in side-by-side or inline view with syntax highlighting and inline actions
 
-use dioxus::prelude::*;
-use crate::desktop::git::{DiffResult, DiffViewMode, DiffLineType, DiffAction, DiffActionState};
-use crate::desktop::git::inline_actions::{EnhancedDiffHunk, HunkInlineActions, LineInlineActions};
-use crate::desktop::git::keyboard_shortcuts::{GlobalShortcutHandler, ShortcutHelpDialog, FocusManager, ShortcutManager, ShortcutConfig};
 use crate::desktop::git::action_processor::{DiffActionProcessor, ExecutionResult};
+use crate::desktop::git::inline_actions::{EnhancedDiffHunk, HunkInlineActions, LineInlineActions};
+use crate::desktop::git::keyboard_shortcuts::{
+    FocusManager, GlobalShortcutHandler, ShortcutConfig, ShortcutHelpDialog, ShortcutManager,
+};
+use crate::desktop::git::{DiffAction, DiffActionState, DiffLineType, DiffResult, DiffViewMode};
+use anyhow::Result;
+use dioxus::prelude::*;
 use std::path::PathBuf;
 use std::sync::Arc;
-use anyhow::Result;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Props for the diff viewer component
 #[derive(Props, Clone, PartialEq)]
@@ -45,34 +47,35 @@ pub struct DiffViewerProps {
 pub fn DiffViewer(props: DiffViewerProps) -> Element {
     let diff = props.diff;
     let view_mode = props.view_mode;
-    
+
     // Clone string props to avoid borrow checker issues
     let file_path_str = props.file_path.clone();
     let repo_path_str = props.repo_path.clone();
-    
+
     // Initialize action processor and managers
     let action_processor = use_signal({
         let file_path_str = &props.file_path;
         let repo_path_str = &props.repo_path;
         move || {
-            DiffActionProcessor::new(&PathBuf::from(&repo_path_str), PathBuf::from(&file_path_str))
-                .unwrap_or_else(|_| {
-                    // Create a dummy processor if git operations fail
-                    DiffActionProcessor::new(&PathBuf::from("."), PathBuf::from(&file_path_str))
-                        .expect("Failed to create action processor")
-                })
+            DiffActionProcessor::new(
+                &PathBuf::from(&repo_path_str),
+                PathBuf::from(&file_path_str),
+            )
+            .unwrap_or_else(|_| {
+                // Create a dummy processor if git operations fail
+                DiffActionProcessor::new(&PathBuf::from("."), PathBuf::from(&file_path_str))
+                    .expect("Failed to create action processor")
+            })
         }
     });
-    
+
     let focus_manager = use_signal(|| Arc::new(FocusManager::new()));
-    let shortcut_manager = use_signal(|| {
-        Arc::new(ShortcutManager::new(ShortcutConfig::default()))
-    });
-    
+    let shortcut_manager = use_signal(|| Arc::new(ShortcutManager::new(ShortcutConfig::default())));
+
     // State for UI feedback
     let mut show_help = use_signal(|| false);
     let processing_actions = use_signal(|| std::collections::HashSet::<String>::new());
-    
+
     // Provide contexts
     use_context_provider({
         let fm = focus_manager;
@@ -82,42 +85,46 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
         let sm = shortcut_manager;
         move || sm
     });
-    
+
     // Handle diff actions with thread-safe approach
     let handle_diff_action = {
         let action_processor_signal = action_processor;
         let file_path = PathBuf::from(file_path_str.as_str());
         let processing_actions_signal = processing_actions;
         let on_diff_action = props.on_diff_action.clone();
-        
+
         move |action: DiffAction| {
             let action_processor = action_processor_signal.clone();
             let file_path = file_path.clone();
             let mut processing_actions = processing_actions_signal.clone();
             let on_diff_action = on_diff_action.clone();
-            
+
             // Add to processing set
             let action_id = format!("{:?}", action);
             processing_actions.write().insert(action_id.clone());
-            
+
             // Execute action
             spawn(async move {
-                match action_processor.read().execute_immediate(action.clone(), &file_path).await {
+                match action_processor
+                    .read()
+                    .execute_immediate(action.clone(), &file_path)
+                    .await
+                {
                     Ok(result) => {
                         if result.success {
                             info!("Action completed successfully: {}", result.message);
                         } else {
                             warn!("Action failed: {}", result.message);
                         }
-                    },
+                    }
                     Err(e) => {
                         error!("Action execution error: {}", e);
                     }
                 }
-                
+
                 // Remove from processing set
                 processing_actions.write().remove(&action_id);
-                
+
                 // Notify parent component
                 if let Some(handler) = &on_diff_action {
                     handler.call(action);
@@ -125,48 +132,52 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
             });
         }
     };
-    
+
     // Register shortcut handlers with thread-safe closure
     use_effect(move || {
         let manager = shortcut_manager.clone();
         let focus_mgr = focus_manager.clone();
         let show_help_signal = show_help;
-        
+
         // Create thread-safe handler that doesn't capture non-Send types
         let diff_action_handler = {
             let action_processor_signal = action_processor;
             let file_path = PathBuf::from(file_path_str.as_str());
             let processing_actions_signal = processing_actions;
             let on_diff_action = props.on_diff_action.clone();
-            
+
             Arc::new(move |action: DiffAction| {
                 let action_processor = action_processor_signal.clone();
                 let file_path = file_path.clone();
                 let mut processing_actions = processing_actions_signal.clone();
                 let on_diff_action = on_diff_action.clone();
-                
+
                 // Add to processing set
                 let action_id = format!("{:?}", action);
                 processing_actions.write().insert(action_id.clone());
-                
+
                 // Execute action
                 spawn(async move {
-                    match action_processor.read().execute_immediate(action.clone(), &file_path).await {
+                    match action_processor
+                        .read()
+                        .execute_immediate(action.clone(), &file_path)
+                        .await
+                    {
                         Ok(result) => {
                             if result.success {
                                 info!("Action completed successfully: {}", result.message);
                             } else {
                                 warn!("Action failed: {}", result.message);
                             }
-                        },
+                        }
                         Err(e) => {
                             error!("Action execution error: {}", e);
                         }
                     }
-                    
+
                     // Remove from processing set
                     processing_actions.write().remove(&action_id);
-                    
+
                     // Notify parent component
                     if let Some(handler) = &on_diff_action {
                         handler.call(action);
@@ -174,7 +185,7 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
                 });
             })
         };
-        
+
         // Extract focus manager methods to avoid capturing non-Send types
         let get_focused_hunk = {
             let focus_mgr = focus_mgr.clone();
@@ -184,11 +195,11 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
             let focus_mgr = focus_mgr.clone();
             Arc::new(move || focus_mgr.read().get_focused_line())
         };
-        
+
         // TODO: Fix thread safety issue with register_handler
         // manager.read().register_handler("diff_viewer".to_string(), move |shortcut_action| {
-            // Temporarily disabled to fix compilation issues
-            /*
+        // Temporarily disabled to fix compilation issues
+        /*
             match shortcut_action {
                 crate::desktop::git::keyboard_shortcuts::ShortcutAction::Stage => {
                     if let Some(hunk_id) = get_focused_hunk() {
@@ -219,38 +230,38 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
         });
         */
     });
-    
+
     rsx! {
         div {
             class: "diff-viewer",
             style: "width: 100%; height: 100%; overflow: hidden; display: flex; flex-direction: column; background: #1e1e1e; position: relative;",
-            
+
             // Global keyboard shortcut handler
             if props.keyboard_shortcuts_enabled {
                 GlobalShortcutHandler {
                     enabled: true,
                 }
             }
-            
+
             // Shortcut help dialog
             ShortcutHelpDialog {
                 visible: show_help(),
                 on_close: move |_| show_help.set(false),
             }
-            
+
             // Diff viewer toolbar
             div {
                 class: "diff-toolbar",
                 style: "display: flex; align-items: center; justify-content: space-between; padding: 8px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
-                
+
                 div {
                     style: "display: flex; gap: 8px;",
-                    
+
                     button {
-                        style: if view_mode == DiffViewMode::SideBySide { 
-                            "padding: 4px 12px; background: #094771; color: white; border: none; border-radius: 3px; cursor: pointer;" 
-                        } else { 
-                            "padding: 4px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer;" 
+                        style: if view_mode == DiffViewMode::SideBySide {
+                            "padding: 4px 12px; background: #094771; color: white; border: none; border-radius: 3px; cursor: pointer;"
+                        } else {
+                            "padding: 4px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer;"
                         },
                         onclick: move |_| {
                             if let Some(handler) = &props.on_view_mode_change {
@@ -259,12 +270,12 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
                         },
                         "Side by Side"
                     }
-                    
+
                     button {
-                        style: if view_mode == DiffViewMode::Inline { 
-                            "padding: 4px 12px; background: #094771; color: white; border: none; border-radius: 3px; cursor: pointer;" 
-                        } else { 
-                            "padding: 4px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer;" 
+                        style: if view_mode == DiffViewMode::Inline {
+                            "padding: 4px 12px; background: #094771; color: white; border: none; border-radius: 3px; cursor: pointer;"
+                        } else {
+                            "padding: 4px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer;"
                         },
                         onclick: move |_| {
                             if let Some(handler) = &props.on_view_mode_change {
@@ -274,21 +285,21 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
                         "Inline"
                     }
                 }
-                
+
                 div {
                     style: "color: #cccccc; font-size: 12px;",
                     "{diff.hunks.len()} changes"
                 }
             }
-            
+
             // Diff content area
             div {
                 class: "diff-content",
                 style: "flex: 1; overflow: auto; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px;",
-                
+
                 if view_mode == DiffViewMode::SideBySide {
                     if props.inline_actions_enabled {
-                        EnhancedSideBySideDiff { 
+                        EnhancedSideBySideDiff {
                             diff: diff.clone(),
                             file_path: &props.file_path,
                             repo_path: &props.repo_path,
@@ -299,7 +310,7 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
                     }
                 } else {
                     if props.inline_actions_enabled {
-                        EnhancedInlineDiff { 
+                        EnhancedInlineDiff {
                             diff: diff.clone(),
                             file_path: &props.file_path,
                             repo_path: &props.repo_path,
@@ -320,24 +331,24 @@ fn SideBySideDiff(diff: DiffResult) -> Element {
     rsx! {
         div {
             style: "display: flex; width: 100%; height: 100%;",
-            
+
             // Original (left side)
             div {
                 style: "flex: 1; overflow: auto; border-right: 1px solid #3e3e42;",
-                
+
                 div {
                     style: "padding: 8px; background: #252526; color: #d4d4d4; font-size: 11px; font-weight: 600; border-bottom: 1px solid #3e3e42;",
                     "Original"
                 }
-                
+
                 div {
                     style: "padding: 12px;",
-                    
+
                     for hunk in &diff.hunks {
                         div {
                             class: "diff-hunk",
                             style: "margin-bottom: 16px;",
-                            
+
                             for line in &hunk.lines {
                                 if line.line_type == DiffLineType::Deleted || line.line_type == DiffLineType::Unchanged {
                                     div {
@@ -349,7 +360,7 @@ fn SideBySideDiff(diff: DiffResult) -> Element {
                                                 ""
                                             }
                                         ),
-                                        
+
                                         // Line number
                                         span {
                                             style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
@@ -357,7 +368,7 @@ fn SideBySideDiff(diff: DiffResult) -> Element {
                                                 "{num}"
                                             }
                                         }
-                                        
+
                                         // Line content
                                         span {
                                             style: "flex: 1; white-space: pre;",
@@ -370,24 +381,24 @@ fn SideBySideDiff(diff: DiffResult) -> Element {
                     }
                 }
             }
-            
+
             // Modified (right side)
             div {
                 style: "flex: 1; overflow: auto;",
-                
+
                 div {
                     style: "padding: 8px; background: #252526; color: #d4d4d4; font-size: 11px; font-weight: 600; border-bottom: 1px solid #3e3e42;",
                     "Modified"
                 }
-                
+
                 div {
                     style: "padding: 12px;",
-                    
+
                     for hunk in &diff.hunks {
                         div {
                             class: "diff-hunk",
                             style: "margin-bottom: 16px;",
-                            
+
                             for line in &hunk.lines {
                                 if line.line_type == DiffLineType::Added || line.line_type == DiffLineType::Unchanged {
                                     div {
@@ -399,7 +410,7 @@ fn SideBySideDiff(diff: DiffResult) -> Element {
                                                 ""
                                             }
                                         ),
-                                        
+
                                         // Line number
                                         span {
                                             style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
@@ -407,7 +418,7 @@ fn SideBySideDiff(diff: DiffResult) -> Element {
                                                 "{num}"
                                             }
                                         }
-                                        
+
                                         // Line content
                                         span {
                                             style: "flex: 1; white-space: pre;",
@@ -430,18 +441,18 @@ fn InlineDiff(diff: DiffResult) -> Element {
     rsx! {
         div {
             style: "padding: 12px;",
-            
+
             for hunk in &diff.hunks {
                 div {
                     class: "diff-hunk",
                     style: "margin-bottom: 16px;",
-                    
+
                     // Hunk header
                     div {
                         style: "color: #3794ff; background: #2d2d30; padding: 4px 8px; margin-bottom: 8px; font-size: 11px;",
                         "@@ -{hunk.original_start},{hunk.original_count} +{hunk.modified_start},{hunk.modified_count} @@"
                     }
-                    
+
                     for line in &hunk.lines {
                         div {
                             style: format!(
@@ -453,7 +464,7 @@ fn InlineDiff(diff: DiffResult) -> Element {
                                     DiffLineType::Unchanged => "",
                                 }
                             ),
-                            
+
                             // Line type indicator
                             span {
                                 style: format!(
@@ -470,7 +481,7 @@ fn InlineDiff(diff: DiffResult) -> Element {
                                     _ => " ",
                                 }
                             }
-                            
+
                             // Line numbers
                             span {
                                 style: "color: #858585; width: 40px; text-align: right; padding-right: 8px; user-select: none;",
@@ -480,7 +491,7 @@ fn InlineDiff(diff: DiffResult) -> Element {
                                     ""
                                 }
                             }
-                            
+
                             span {
                                 style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
                                 if let Some(num) = line.modified_line_number {
@@ -489,7 +500,7 @@ fn InlineDiff(diff: DiffResult) -> Element {
                                     ""
                                 }
                             }
-                            
+
                             // Line content
                             span {
                                 style: "flex: 1; white-space: pre;",
@@ -526,7 +537,7 @@ fn EnhancedInlineDiff(props: EnhancedDiffProps) -> Element {
     rsx! {
         div {
             style: "padding: 12px;",
-            
+
             for hunk in &props.diff.hunks {
                 EnhancedDiffHunk {
                     key: "{hunk.hunk_id}",
@@ -541,31 +552,31 @@ fn EnhancedInlineDiff(props: EnhancedDiffProps) -> Element {
     }
 }
 
-/// Enhanced side-by-side diff view with action support  
+/// Enhanced side-by-side diff view with action support
 #[component]
 fn EnhancedSideBySideDiff(props: EnhancedDiffProps) -> Element {
     rsx! {
         div {
             style: "display: flex; width: 100%; height: 100%;",
-            
+
             // Original (left side)
             div {
                 style: "flex: 1; overflow: auto; border-right: 1px solid #3e3e42;",
-                
+
                 div {
                     style: "padding: 8px; background: #252526; color: #d4d4d4; font-size: 11px; font-weight: 600; border-bottom: 1px solid #3e3e42;",
                     "Original"
                 }
-                
+
                 div {
                     style: "padding: 12px;",
-                    
+
                     for hunk in &props.diff.hunks {
                         div {
                             key: "{hunk.hunk_id}",
                             class: "enhanced-side-by-side-hunk",
                             style: "position: relative; margin-bottom: 16px;",
-                            
+
                             // Hunk actions (positioned on left side)
                             HunkInlineActions {
                                 hunk: hunk.clone(),
@@ -574,7 +585,7 @@ fn EnhancedSideBySideDiff(props: EnhancedDiffProps) -> Element {
                                 on_action: props.on_diff_action.clone(),
                                 show_on_hover: true,
                             }
-                            
+
                             for line in &hunk.lines {
                                 if line.line_type == DiffLineType::Deleted || line.line_type == DiffLineType::Unchanged {
                                     div {
@@ -587,7 +598,7 @@ fn EnhancedSideBySideDiff(props: EnhancedDiffProps) -> Element {
                                                 ""
                                             }
                                         ),
-                                        
+
                                         // Line number
                                         span {
                                             style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
@@ -595,13 +606,13 @@ fn EnhancedSideBySideDiff(props: EnhancedDiffProps) -> Element {
                                                 "{num}"
                                             }
                                         }
-                                        
+
                                         // Line content
                                         span {
                                             style: "flex: 1; white-space: pre; padding-right: 60px;",
                                             "{line.content}"
                                         }
-                                        
+
                                         // Line actions for deleted lines
                                         if line.line_type == DiffLineType::Deleted {
                                             LineInlineActions {
@@ -618,25 +629,25 @@ fn EnhancedSideBySideDiff(props: EnhancedDiffProps) -> Element {
                     }
                 }
             }
-            
+
             // Modified (right side)
             div {
                 style: "flex: 1; overflow: auto;",
-                
+
                 div {
                     style: "padding: 8px; background: #252526; color: #d4d4d4; font-size: 11px; font-weight: 600; border-bottom: 1px solid #3e3e42;",
                     "Modified"
                 }
-                
+
                 div {
                     style: "padding: 12px;",
-                    
+
                     for hunk in &props.diff.hunks {
                         div {
                             key: "{hunk.hunk_id}_mod",
                             class: "enhanced-side-by-side-hunk-right",
                             style: "margin-bottom: 16px;",
-                            
+
                             for line in &hunk.lines {
                                 if line.line_type == DiffLineType::Added || line.line_type == DiffLineType::Unchanged {
                                     div {
@@ -649,7 +660,7 @@ fn EnhancedSideBySideDiff(props: EnhancedDiffProps) -> Element {
                                                 ""
                                             }
                                         ),
-                                        
+
                                         // Line number
                                         span {
                                             style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
@@ -657,13 +668,13 @@ fn EnhancedSideBySideDiff(props: EnhancedDiffProps) -> Element {
                                                 "{num}"
                                             }
                                         }
-                                        
+
                                         // Line content
                                         span {
                                             style: "flex: 1; white-space: pre; padding-right: 60px;",
                                             "{line.content}"
                                         }
-                                        
+
                                         // Line actions for added lines
                                         if line.line_type == DiffLineType::Added {
                                             LineInlineActions {

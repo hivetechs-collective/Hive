@@ -1,8 +1,8 @@
 use super::*;
 use axum::extract::Query;
+use chrono::{DateTime, Utc};
 use std::fs;
 use std::path::Path;
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Deserialize)]
 pub struct FileQuery {
@@ -33,7 +33,8 @@ pub async fn list_files(
                     let path = entry.path();
                     let metadata = entry.metadata().ok();
 
-                    let relative_path = path.strip_prefix(base_path)
+                    let relative_path = path
+                        .strip_prefix(base_path)
                         .unwrap_or(&path)
                         .to_string_lossy()
                         .to_string();
@@ -45,7 +46,10 @@ pub async fn list_files(
                         size: metadata.as_ref().map(|m| m.len()),
                         modified: metadata.as_ref().and_then(|m| {
                             m.modified().ok().and_then(|t| {
-                                DateTime::<Utc>::from(t).format("%Y-%m-%d %H:%M:%S").to_string().into()
+                                DateTime::<Utc>::from(t)
+                                    .format("%Y-%m-%d %H:%M:%S")
+                                    .to_string()
+                                    .into()
                             })
                         }),
                         extension: path.extension().map(|e| e.to_string_lossy().to_string()),
@@ -59,12 +63,10 @@ pub async fn list_files(
     }
 
     // Sort directories first, then files
-    entries.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
 
     Ok(Json(entries))
@@ -110,7 +112,9 @@ pub async fn handle_chat(
     };
 
     // Send to WebSocket clients
-    let _ = state.tx.send(serde_json::to_string(&response).unwrap_or_default());
+    let _ = state
+        .tx
+        .send(serde_json::to_string(&response).unwrap_or_default());
 
     Ok(Json(response))
 }
@@ -118,12 +122,44 @@ pub async fn handle_chat(
 fn is_binary_file(path: &Path) -> bool {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) => {
-            matches!(ext.to_lowercase().as_str(),
-                "exe" | "bin" | "so" | "dll" | "dylib" | "a" | "o" | "obj" |
-                "jpg" | "jpeg" | "png" | "gif" | "bmp" | "ico" | "webp" |
-                "mp3" | "wav" | "ogg" | "flac" | "mp4" | "avi" | "mkv" |
-                "zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar" |
-                "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx"
+            matches!(
+                ext.to_lowercase().as_str(),
+                "exe"
+                    | "bin"
+                    | "so"
+                    | "dll"
+                    | "dylib"
+                    | "a"
+                    | "o"
+                    | "obj"
+                    | "jpg"
+                    | "jpeg"
+                    | "png"
+                    | "gif"
+                    | "bmp"
+                    | "ico"
+                    | "webp"
+                    | "mp3"
+                    | "wav"
+                    | "ogg"
+                    | "flac"
+                    | "mp4"
+                    | "avi"
+                    | "mkv"
+                    | "zip"
+                    | "tar"
+                    | "gz"
+                    | "bz2"
+                    | "xz"
+                    | "7z"
+                    | "rar"
+                    | "pdf"
+                    | "doc"
+                    | "docx"
+                    | "xls"
+                    | "xlsx"
+                    | "ppt"
+                    | "pptx"
             )
         }
         None => {

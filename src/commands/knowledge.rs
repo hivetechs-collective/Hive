@@ -15,12 +15,12 @@ use tokio::fs;
 use walkdir::WalkDir;
 
 use crate::{
-    memory::{
-        get_intelligence, initialize_intelligence,
-        knowledge_graph::{Entity, EntityType, Relationship, RelationType},
-        embeddings::EmbeddingEngine,
-    },
     analytics::get_advanced_analytics,
+    memory::{
+        embeddings::EmbeddingEngine,
+        get_intelligence, initialize_intelligence,
+        knowledge_graph::{Entity, EntityType, RelationType, Relationship},
+    },
 };
 
 /// Knowledge base commands
@@ -183,27 +183,38 @@ pub async fn execute(cmd: KnowledgeCommand) -> Result<()> {
     initialize_intelligence().await.ok();
 
     match cmd {
-        KnowledgeCommand::Seed { source, include, exclude, force } => {
-            seed_knowledge_base(source, include, exclude, force).await
-        }
-        KnowledgeCommand::Search { query, limit, threshold } => {
-            search_knowledge_base(&query, limit, threshold).await
-        }
-        KnowledgeCommand::Stats => {
-            show_knowledge_stats().await
-        }
+        KnowledgeCommand::Seed {
+            source,
+            include,
+            exclude,
+            force,
+        } => seed_knowledge_base(source, include, exclude, force).await,
+        KnowledgeCommand::Search {
+            query,
+            limit,
+            threshold,
+        } => search_knowledge_base(&query, limit, threshold).await,
+        KnowledgeCommand::Stats => show_knowledge_stats().await,
         KnowledgeCommand::Export { format, output } => {
             export_knowledge_graph(&format, output).await
         }
-        KnowledgeCommand::AddEntity { id, entity_type, label, confidence } => {
-            add_entity(&id, entity_type.into(), &label, confidence).await
-        }
-        KnowledgeCommand::AddRelationship { source, target, relation, weight } => {
-            add_relationship(&source, &target, relation.into(), weight).await
-        }
-        KnowledgeCommand::IntegrateMcp { server, tool, analytics } => {
-            integrate_mcp_tool(&server, &tool, analytics).await
-        }
+        KnowledgeCommand::AddEntity {
+            id,
+            entity_type,
+            label,
+            confidence,
+        } => add_entity(&id, entity_type.into(), &label, confidence).await,
+        KnowledgeCommand::AddRelationship {
+            source,
+            target,
+            relation,
+            weight,
+        } => add_relationship(&source, &target, relation.into(), weight).await,
+        KnowledgeCommand::IntegrateMcp {
+            server,
+            tool,
+            analytics,
+        } => integrate_mcp_tool(&server, &tool, analytics).await,
         KnowledgeCommand::Update { from_activities } => {
             update_knowledge_base(from_activities).await
         }
@@ -237,7 +248,7 @@ async fn seed_knowledge_base(
         ProgressStyle::default_bar()
             .template("{spinner:.cyan} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
             .unwrap()
-            .progress_chars("#>-")
+            .progress_chars("#>-"),
     );
 
     let intelligence = get_intelligence().await?;
@@ -245,7 +256,10 @@ async fn seed_knowledge_base(
     let mut indexed = 0;
 
     for file_path in files {
-        pb.set_message(format!("Processing {}", file_path.file_name().unwrap_or_default().to_string_lossy()));
+        pb.set_message(format!(
+            "Processing {}",
+            file_path.file_name().unwrap_or_default().to_string_lossy()
+        ));
 
         match process_documentation_file(&file_path, &intelligence, force).await {
             Ok(was_indexed) => {
@@ -267,9 +281,17 @@ async fn seed_knowledge_base(
     // Build knowledge graph from processed documents
     pb.set_message("Building knowledge graph...");
     let memory_system = crate::core::memory::get_memory_system().await?;
-    intelligence.graph.write().await.build_from_memories(&memory_system).await?;
+    intelligence
+        .graph
+        .write()
+        .await
+        .build_from_memories(&memory_system)
+        .await?;
 
-    println!("{} Knowledge base seeded successfully", style("✓").green().bold());
+    println!(
+        "{} Knowledge base seeded successfully",
+        style("✓").green().bold()
+    );
     println!("  {} files processed", processed);
     println!("  {} files indexed", indexed);
 
@@ -298,13 +320,19 @@ fn collect_documentation_files(
         let path_str = path.to_string_lossy().to_lowercase();
 
         // Check exclusions
-        if exclude.iter().any(|pattern| path_str.contains(&pattern.to_lowercase())) {
+        if exclude
+            .iter()
+            .any(|pattern| path_str.contains(&pattern.to_lowercase()))
+        {
             continue;
         }
 
         // Check inclusions (if specified)
         if !include.is_empty() {
-            if !include.iter().any(|pattern| path_str.contains(&pattern.to_lowercase())) {
+            if !include
+                .iter()
+                .any(|pattern| path_str.contains(&pattern.to_lowercase()))
+            {
                 continue;
             }
         } else {
@@ -323,7 +351,14 @@ fn collect_documentation_files(
 /// Check if file is a documentation file
 fn is_documentation_file(path: &str) -> bool {
     let extensions = [".md", ".txt", ".rst", ".adoc", ".org"];
-    let patterns = ["readme", "docs", "documentation", "guide", "tutorial", "manual"];
+    let patterns = [
+        "readme",
+        "docs",
+        "documentation",
+        "guide",
+        "tutorial",
+        "manual",
+    ];
 
     // Check file extension
     if extensions.iter().any(|ext| path.ends_with(ext)) {
@@ -340,7 +375,8 @@ async fn process_documentation_file(
     intelligence: &crate::memory::MemoryIntelligence,
     force: bool,
 ) -> Result<bool> {
-    let content = fs::read_to_string(file_path).await
+    let content = fs::read_to_string(file_path)
+        .await
         .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
     if content.trim().is_empty() {
@@ -348,22 +384,29 @@ async fn process_documentation_file(
     }
 
     // Extract title from file
-    let title = extract_title(&content)
-        .unwrap_or_else(|| file_path.file_stem()
+    let title = extract_title(&content).unwrap_or_else(|| {
+        file_path
+            .file_stem()
             .unwrap_or_default()
             .to_string_lossy()
-            .to_string());
+            .to_string()
+    });
 
     // Create unique ID for the document
-    let doc_id = format!("doc_{}",
-        file_path.to_string_lossy()
+    let doc_id = format!(
+        "doc_{}",
+        file_path
+            .to_string_lossy()
             .replace(['/', '\\', ' '], "_")
             .to_lowercase()
     );
 
     // Store document with embeddings
     let mut metadata = std::collections::HashMap::new();
-    metadata.insert("file_path".to_string(), file_path.to_string_lossy().to_string());
+    metadata.insert(
+        "file_path".to_string(),
+        file_path.to_string_lossy().to_string(),
+    );
     metadata.insert("title".to_string(), title.clone());
     metadata.insert("type".to_string(), "documentation".to_string());
 
@@ -419,11 +462,32 @@ async fn extract_and_create_entities(
 
     // Extract technology mentions
     let tech_patterns = [
-        "Rust", "TypeScript", "JavaScript", "Python", "Go", "Java", "C++",
-        "React", "Vue", "Angular", "Node.js", "Django", "Flask",
-        "Docker", "Kubernetes", "AWS", "Azure", "GCP",
-        "PostgreSQL", "MySQL", "MongoDB", "Redis",
-        "Git", "GitHub", "GitLab", "CI/CD",
+        "Rust",
+        "TypeScript",
+        "JavaScript",
+        "Python",
+        "Go",
+        "Java",
+        "C++",
+        "React",
+        "Vue",
+        "Angular",
+        "Node.js",
+        "Django",
+        "Flask",
+        "Docker",
+        "Kubernetes",
+        "AWS",
+        "Azure",
+        "GCP",
+        "PostgreSQL",
+        "MySQL",
+        "MongoDB",
+        "Redis",
+        "Git",
+        "GitHub",
+        "GitLab",
+        "CI/CD",
     ];
 
     for tech in tech_patterns {
@@ -452,10 +516,22 @@ async fn extract_and_create_entities(
 
     // Extract concept mentions
     let concept_patterns = [
-        "API", "REST", "GraphQL", "microservices", "architecture",
-        "authentication", "authorization", "security", "performance",
-        "scalability", "monitoring", "logging", "testing",
-        "design patterns", "best practices", "optimization",
+        "API",
+        "REST",
+        "GraphQL",
+        "microservices",
+        "architecture",
+        "authentication",
+        "authorization",
+        "security",
+        "performance",
+        "scalability",
+        "monitoring",
+        "logging",
+        "testing",
+        "design patterns",
+        "best practices",
+        "optimization",
     ];
 
     for concept in concept_patterns {
@@ -486,15 +562,20 @@ async fn extract_and_create_entities(
 
 /// Search knowledge base
 async fn search_knowledge_base(query: &str, limit: usize, threshold: f32) -> Result<()> {
-    println!("{}", style(&format!("🔍 Searching: {}", query)).cyan().bold());
+    println!(
+        "{}",
+        style(&format!("🔍 Searching: {}", query)).cyan().bold()
+    );
 
     let intelligence = get_intelligence().await?;
 
-    let results = intelligence.search(
-        query,
-        crate::memory::retrieval::RetrievalStrategy::Semantic,
-        limit,
-    ).await?;
+    let results = intelligence
+        .search(
+            query,
+            crate::memory::retrieval::RetrievalStrategy::Semantic,
+            limit,
+        )
+        .await?;
 
     if results.is_empty() {
         println!("{}", style("No results found").yellow());
@@ -505,7 +586,8 @@ async fn search_knowledge_base(query: &str, limit: usize, threshold: f32) -> Res
 
     for (i, result) in results.iter().enumerate() {
         if result.similarity_score >= threshold {
-            println!("{}. {} (score: {:.3})",
+            println!(
+                "{}. {} (score: {:.3})",
                 style(i + 1).cyan().bold(),
                 style(&result.question).green(),
                 result.similarity_score
@@ -576,7 +658,12 @@ async fn show_knowledge_stats() -> Result<()> {
 
 /// Export knowledge graph
 async fn export_knowledge_graph(format: &str, output: Option<PathBuf>) -> Result<()> {
-    println!("{}", style(&format!("📤 Exporting knowledge graph as {}...", format)).cyan().bold());
+    println!(
+        "{}",
+        style(&format!("📤 Exporting knowledge graph as {}...", format))
+            .cyan()
+            .bold()
+    );
 
     let intelligence = get_intelligence().await?;
     let graph = intelligence.graph.read().await;
@@ -602,7 +689,8 @@ async fn export_knowledge_graph(format: &str, output: Option<PathBuf>) -> Result
 
     if let Some(output_path) = output {
         fs::write(&output_path, content).await?;
-        println!("{} Exported to {}",
+        println!(
+            "{} Exported to {}",
             style("✓").green().bold(),
             style(output_path.display()).cyan()
         );
@@ -614,13 +702,11 @@ async fn export_knowledge_graph(format: &str, output: Option<PathBuf>) -> Result
 }
 
 /// Add entity to knowledge graph
-async fn add_entity(
-    id: &str,
-    entity_type: EntityType,
-    label: &str,
-    confidence: f32,
-) -> Result<()> {
-    println!("{}", style(&format!("➕ Adding entity: {}", label)).cyan().bold());
+async fn add_entity(id: &str, entity_type: EntityType, label: &str, confidence: f32) -> Result<()> {
+    println!(
+        "{}",
+        style(&format!("➕ Adding entity: {}", label)).cyan().bold()
+    );
 
     let intelligence = get_intelligence().await?;
     let mut graph = intelligence.graph.write().await;
@@ -647,9 +733,14 @@ async fn add_relationship(
     relation_type: RelationType,
     weight: f32,
 ) -> Result<()> {
-    println!("{}",
-        style(&format!("🔗 Adding relationship: {} {} {}", source, relation_type, target))
-        .cyan().bold()
+    println!(
+        "{}",
+        style(&format!(
+            "🔗 Adding relationship: {} {} {}",
+            source, relation_type, target
+        ))
+        .cyan()
+        .bold()
     );
 
     let intelligence = get_intelligence().await?;
@@ -665,16 +756,21 @@ async fn add_relationship(
 
     graph.add_relationship(relationship)?;
 
-    println!("{} Relationship added successfully", style("✓").green().bold());
+    println!(
+        "{} Relationship added successfully",
+        style("✓").green().bold()
+    );
 
     Ok(())
 }
 
 /// Integrate MCP tool
 async fn integrate_mcp_tool(server: &str, tool: &str, analytics: bool) -> Result<()> {
-    println!("{}",
+    println!(
+        "{}",
         style(&format!("🔌 Integrating MCP tool: {}/{}", server, tool))
-        .cyan().bold()
+            .cyan()
+            .bold()
     );
 
     if analytics {
@@ -683,7 +779,10 @@ async fn integrate_mcp_tool(server: &str, tool: &str, analytics: bool) -> Result
 
         // Create a placeholder MCP integration
         println!("  {} Connected to analytics engine", style("✓").green());
-        println!("  {} Tool available for real-time metrics", style("✓").green());
+        println!(
+            "  {} Tool available for real-time metrics",
+            style("✓").green()
+        );
 
         // In a real implementation, this would:
         // 1. Connect to the MCP server
@@ -692,7 +791,10 @@ async fn integrate_mcp_tool(server: &str, tool: &str, analytics: bool) -> Result
         // 4. Configure alert conditions
     }
 
-    println!("{} MCP tool integrated successfully", style("✓").green().bold());
+    println!(
+        "{} MCP tool integrated successfully",
+        style("✓").green().bold()
+    );
 
     Ok(())
 }
@@ -706,22 +808,36 @@ async fn update_knowledge_base(from_activities: bool) -> Result<()> {
     if from_activities {
         // Update from recent conversation activities
         let memory_system = crate::core::memory::get_memory_system().await?;
-        intelligence.graph.write().await.build_from_memories(&memory_system).await?;
+        intelligence
+            .graph
+            .write()
+            .await
+            .build_from_memories(&memory_system)
+            .await?;
 
         println!("{} Updated from recent activities", style("✓").green());
     }
 
     // Learn new patterns
     let patterns = intelligence.learn_patterns().await?;
-    println!("{} Learned {} new patterns", style("✓").green(), patterns.len());
+    println!(
+        "{} Learned {} new patterns",
+        style("✓").green(),
+        patterns.len()
+    );
 
     // Generate insights
     let insights = intelligence.generate_insights().await?;
-    println!("{} Generated {} insights", style("✓").green(), insights.len());
+    println!(
+        "{} Generated {} insights",
+        style("✓").green(),
+        insights.len()
+    );
 
     // Update metrics
     let metrics = intelligence.get_metrics().await?;
-    println!("{} Updated metrics (total memories: {})",
+    println!(
+        "{} Updated metrics (total memories: {})",
         style("✓").green(),
         metrics.total_memories
     );

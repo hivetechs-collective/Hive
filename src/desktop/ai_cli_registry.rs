@@ -1,9 +1,9 @@
 //! AI CLI tool registry and configurations
-//! 
+//!
 //! This module defines all available AI CLI tools and their configurations.
 
 use crate::desktop::ai_cli_updater::{
-    CliToolConfig, InstallMethod, InstallScript, Platform, ToolDependency, AuthStatus,
+    AuthStatus, CliToolConfig, InstallMethod, InstallScript, Platform, ToolDependency,
 };
 
 /// Get the complete list of AI CLI tools
@@ -25,7 +25,7 @@ pub fn get_all_ai_tools() -> Vec<CliToolConfig> {
             },
             sync_type: "claude_cli_update".to_string(),
         },
-        
+
         // Tier 2: Popular tools
         CliToolConfig {
             id: "gh-copilot".to_string(),
@@ -48,7 +48,7 @@ pub fn get_all_ai_tools() -> Vec<CliToolConfig> {
             },
             sync_type: "gh_copilot_cli_update".to_string(),
         },
-        
+
         CliToolConfig {
             id: "openai".to_string(),
             name: "OpenAI CLI".to_string(),
@@ -64,7 +64,7 @@ pub fn get_all_ai_tools() -> Vec<CliToolConfig> {
             },
             sync_type: "openai_cli_update".to_string(),
         },
-        
+
         // Additional tools can be added here as we expand support
     ]
 }
@@ -86,7 +86,5 @@ pub fn get_tool_by_id(tool_id: &str) -> Option<CliToolConfig> {
 
 /// Check if a tool is currently enabled
 pub fn is_tool_enabled(tool_id: &str) -> bool {
-    get_enabled_ai_tools()
-        .iter()
-        .any(|tool| tool.id == tool_id)
+    get_enabled_ai_tools().iter().any(|tool| tool.id == tool_id)
 }

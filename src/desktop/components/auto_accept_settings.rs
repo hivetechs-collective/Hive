@@ -1,21 +1,21 @@
 // Auto-Accept Settings Panel Component
 // Provides UI for configuring auto-accept behavior and preferences
 
-use dioxus::prelude::*;
-use crate::consensus::smart_decision_engine::{UserPreferences, CustomRule, RuleAction};
 use crate::consensus::operation_analysis::AutoAcceptMode;
+use crate::consensus::smart_decision_engine::{CustomRule, RuleAction, UserPreferences};
+use crate::desktop::components::common::{Button, Input, Select, Toggle};
 use crate::desktop::styles::theme::ThemeColors;
-use crate::desktop::components::common::{Button, Toggle, Select, Input};
+use dioxus::prelude::*;
 
 /// Auto-accept settings panel props
 #[derive(Props, Clone, PartialEq)]
 pub struct AutoAcceptSettingsProps {
     /// Current user preferences
     pub preferences: UserPreferences,
-    
+
     /// Callback when preferences change
     pub on_preferences_change: EventHandler<UserPreferences>,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
 }
@@ -27,23 +27,23 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
     let mut show_custom_rules = use_signal(|| false);
     let mut new_rule_pattern = use_signal(|| String::new());
     let mut new_rule_reason = use_signal(|| String::new());
-    
+
     // Update parent when preferences change
     use_effect(move || {
         props.on_preferences_change.call(preferences());
     });
-    
+
     rsx! {
         div {
             class: "auto-accept-settings",
             style: "padding: 20px; max-width: 800px; margin: 0 auto;",
-            
+
             // Header
             h2 {
                 style: "color: {props.theme.text}; margin-bottom: 24px;",
                 "🤖 Auto-Accept Settings"
             }
-            
+
             // Mode Selection
             div {
                 style: "
@@ -54,7 +54,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
                     margin-bottom: 16px;
                 ",
-                
+
                 h3 {
                     style: "
                         margin: 0 0 16px;
@@ -64,11 +64,11 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     ",
                     "Auto-Accept Mode"
                 }
-                
+
                 div {
                     class: "mode-selection",
                     style: "display: flex; flex-direction: column; gap: 12px;",
-                        
+
                         ModeOption {
                             mode: AutoAcceptMode::Manual,
                             current_mode: preferences().preferred_mode,
@@ -82,7 +82,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                 preferences.set(prefs);
                             }
                         }
-                        
+
                         ModeOption {
                             mode: AutoAcceptMode::Conservative,
                             current_mode: preferences().preferred_mode,
@@ -96,7 +96,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                 preferences.set(prefs);
                             }
                         }
-                        
+
                         ModeOption {
                             mode: AutoAcceptMode::Balanced,
                             current_mode: preferences().preferred_mode,
@@ -110,7 +110,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                 preferences.set(prefs);
                             }
                         }
-                        
+
                         ModeOption {
                             mode: AutoAcceptMode::Aggressive,
                             current_mode: preferences().preferred_mode,
@@ -124,7 +124,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                 preferences.set(prefs);
                             }
                         }
-                        
+
                         ModeOption {
                             mode: AutoAcceptMode::Plan,
                             current_mode: preferences().preferred_mode,
@@ -141,7 +141,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     }
                 }
             }
-            
+
             // Risk Settings
             div {
                 style: "
@@ -152,7 +152,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
                     margin-bottom: 16px;
                 ",
-                
+
                 h3 {
                     style: "
                         margin: 0 0 16px;
@@ -162,11 +162,11 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     ",
                     "Risk Settings"
                 }
-                
+
                 div {
                         class: "risk-settings",
                         style: "display: flex; flex-direction: column; gap: 16px;",
-                        
+
                         // Risk Tolerance Slider
                         div {
                             label {
@@ -194,7 +194,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                 span { "Aggressive" }
                             }
                         }
-                        
+
                         // AI Trust Level
                         div {
                             label {
@@ -218,7 +218,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                         }
                 }
             }
-            
+
             // Safety Options
             div {
                 style: "
@@ -229,7 +229,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
                     margin-bottom: 16px;
                 ",
-                
+
                 h3 {
                     style: "
                         margin: 0 0 16px;
@@ -239,11 +239,11 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     ",
                     "Safety Options"
                 }
-                
+
                 div {
                     class: "safety-options",
                     style: "display: flex; flex-direction: column; gap: 12px;",
-                        
+
                         Toggle {
                             label: "Auto-create backups",
                             checked: preferences().auto_backup,
@@ -254,7 +254,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                 preferences.set(prefs);
                             }
                         }
-                        
+
                         Toggle {
                             label: "Require confirmation for deletions",
                             checked: preferences().require_confirmation_for_deletions,
@@ -265,7 +265,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                 preferences.set(prefs);
                             }
                         }
-                        
+
                         Toggle {
                             label: "Require confirmation for mass updates",
                             checked: preferences().require_confirmation_for_mass_updates,
@@ -278,7 +278,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                         }
                 }
             }
-            
+
             // Custom Rules
             div {
                 style: "
@@ -289,7 +289,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
                     margin-bottom: 16px;
                 ",
-                
+
                 h3 {
                     style: "
                         margin: 0 0 16px;
@@ -299,10 +299,10 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                     ",
                     "Custom Rules"
                 }
-                
+
                 div {
                     class: "custom-rules",
-                    
+
                     // Existing rules
                     if !preferences().custom_rules.is_empty() {
                         div {
@@ -320,19 +320,19 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                             }
                         }
                     }
-                    
+
                     // Add new rule
                     if show_custom_rules() {
                         div {
                             style: "border: 1px solid {props.theme.border}; padding: 16px; border-radius: 8px; margin-top: 12px;",
-                            
+
                             Input {
                                 placeholder: "File pattern (regex)",
                                 value: new_rule_pattern(),
                                 theme: props.theme.clone(),
                                 on_change: move |val| new_rule_pattern.set(val),
                             }
-                            
+
                             Select {
                                 options: vec![
                                     ("always_accept", "Always Accept"),
@@ -344,17 +344,17 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                     // TODO: Handle select change
                                 },
                             }
-                            
+
                             Input {
                                 placeholder: "Reason",
                                 value: new_rule_reason(),
                                 theme: props.theme.clone(),
                                 on_change: move |val| new_rule_reason.set(val),
                             }
-                            
+
                             div {
                                 style: "display: flex; gap: 8px; margin-top: 12px;",
-                                
+
                                 Button {
                                     label: "Add Rule",
                                     variant: "primary",
@@ -374,7 +374,7 @@ pub fn AutoAcceptSettings(props: AutoAcceptSettingsProps) -> Element {
                                         }
                                     }
                                 }
-                                
+
                                 Button {
                                     label: "Cancel",
                                     variant: "secondary",
@@ -415,9 +415,17 @@ struct ModeOptionProps {
 #[component]
 fn ModeOption(props: ModeOptionProps) -> Element {
     let is_selected = props.mode == props.current_mode;
-    let background_color = if is_selected { format!("{}10", props.theme.primary) } else { "transparent".to_string() };
-    let border_color = if is_selected { props.theme.primary.clone() } else { props.theme.border.clone() };
-    
+    let background_color = if is_selected {
+        format!("{}10", props.theme.primary)
+    } else {
+        "transparent".to_string()
+    };
+    let border_color = if is_selected {
+        props.theme.primary.clone()
+    } else {
+        props.theme.border.clone()
+    };
+
     rsx! {
         div {
             class: "mode-option",
@@ -432,26 +440,26 @@ fn ModeOption(props: ModeOptionProps) -> Element {
                 background: {background_color};
             ",
             onclick: move |_| props.on_select.call(props.mode),
-            
+
             span {
                 style: "font-size: 24px; margin-right: 16px;",
                 "{props.icon}"
             }
-            
+
             div {
                 style: "flex: 1;",
-                
+
                 h4 {
                     style: "margin: 0; color: {props.theme.text}; font-size: 16px;",
                     "{props.label}"
                 }
-                
+
                 p {
                     style: "margin: 4px 0 0; color: {props.theme.text_secondary}; font-size: 14px;",
                     "{props.description}"
                 }
             }
-            
+
             if is_selected {
                 span {
                     style: "color: {props.theme.primary}; font-size: 20px;",
@@ -482,20 +490,20 @@ fn CustomRuleItem(props: CustomRuleItemProps) -> Element {
                 border-radius: 6px;
                 margin-bottom: 8px;
             ",
-            
+
             div {
                 style: "flex: 1;",
-                
+
                 code {
                     style: "color: {props.theme.primary}; font-family: monospace;",
                     "{props.rule.pattern}"
                 }
-                
+
                 span {
                     style: "color: {props.theme.text_secondary}; margin: 0 8px;",
                     "→"
                 }
-                
+
                 span {
                     style: "color: {props.theme.text};",
                     match props.rule.action {
@@ -505,13 +513,13 @@ fn CustomRuleItem(props: CustomRuleItemProps) -> Element {
                         RuleAction::RequireBackup => "Require Backup",
                     }
                 }
-                
+
                 span {
                     style: "color: {props.theme.text_secondary}; margin-left: 12px; font-size: 14px;",
                     "({props.rule.reason})"
                 }
             }
-            
+
             button {
                 style: "
                     background: none;

@@ -1,16 +1,18 @@
 //! Terminal Tabs Component - VS Code-inspired multi-terminal management
-//! 
+//!
 //! This component provides a tabbed interface for multiple terminal instances,
 //! allowing users to create, switch between, and manage multiple terminals.
 
-use dioxus::prelude::*;
-use dioxus::document::eval;
-use std::collections::HashMap;
-use crate::desktop::state::AppState;
-use crate::desktop::consensus_integration::DesktopConsensusManager;
-use crate::desktop::ai_cli_updater::{AiCliUpdaterDB, AuthStatus};
+use crate::desktop::ai_cli_controller::{
+    AiCliController, AiCliEvent, ToolStatus as ControllerToolStatus,
+};
 use crate::desktop::ai_cli_registry::get_enabled_ai_tools;
-use crate::desktop::ai_cli_controller::{AiCliController, AiCliEvent, ToolStatus as ControllerToolStatus};
+use crate::desktop::ai_cli_updater::{AiCliUpdaterDB, AuthStatus};
+use crate::desktop::consensus_integration::DesktopConsensusManager;
+use crate::desktop::state::AppState;
+use dioxus::document::eval;
+use dioxus::prelude::*;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -39,12 +41,12 @@ pub struct AiToolTab {
 /// Tool status
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToolStatus {
-    Available,      // Can be installed
-    Installing,     // Currently installing
-    Ready,          // Installed and ready
-    Starting,       // Terminal starting
-    Running,        // Terminal active
-    Error(String),  // Installation/run error
+    Available,     // Can be installed
+    Installing,    // Currently installing
+    Ready,         // Installed and ready
+    Starting,      // Terminal starting
+    Running,       // Terminal active
+    Error(String), // Installation/run error
 }
 
 /// Terminal tabs manager component
@@ -54,23 +56,23 @@ pub fn TerminalTabs() -> Element {
     let mut terminals = use_signal(|| HashMap::<String, TerminalTab>::new());
     let mut active_terminal_id = use_signal(|| Option::<String>::None);
     let mut terminal_counter = use_signal(|| 1u32);
-    
+
     // Tab overflow management - matching editor tabs behavior
     let mut tab_scroll_offset = use_signal(|| 0usize);
     let max_visible_tabs = 6; // Maximum number of tabs to display before scrolling
-    
+
     // AI tools state
     let mut ai_tools = use_signal(|| Vec::<AiToolTab>::new());
     let mut ai_tools_expanded = use_signal(|| true);
     let ai_cli_controller = use_signal(|| Option::<Arc<AiCliController>>::None);
     let ai_event_rx = use_signal(|| Option::<mpsc::UnboundedReceiver<AiCliEvent>>::None);
-    
+
     // Initialize AI tools on component creation
     {
         // Create initial tool tabs immediately
         let tools = get_enabled_ai_tools();
         let mut tool_tabs = Vec::new();
-        
+
         for tool in tools {
             tool_tabs.push(AiToolTab {
                 id: tool.id,
@@ -82,58 +84,58 @@ pub fn TerminalTabs() -> Element {
                 auth_status: tool.auth_status,
             });
         }
-        
+
         ai_tools.set(tool_tabs);
     }
-    
+
     // Don't create initial terminal on mount - start with no terminals
     // This avoids the display bug with the first terminal
     use_effect({
         let terminals = terminals.clone();
-        
+
         move || {
             tracing::info!("🔍 TerminalTabs component mounted - checking terminals");
             if terminals.read().is_empty() {
-                tracing::info!("📝 Starting with no terminals - user can open with Ctrl+T or + button");
+                tracing::info!(
+                    "📝 Starting with no terminals - user can open with Ctrl+T or + button"
+                );
                 // Don't create any initial terminals
             } else {
                 tracing::info!("✅ Terminals already exist: {}", terminals.read().len());
             }
         }
     });
-    
+
     // Initialize AI CLI controller - separate effect
     use_effect({
         let ai_tools = ai_tools.clone();
         let ai_cli_controller = ai_cli_controller.clone();
         let ai_event_rx = ai_event_rx.clone();
-        
+
         move || {
             tracing::info!("🤖 Initializing AI CLI tools");
-            
+
             // Initialize AI CLI controller using Dioxus spawn
             let mut ai_tools_clone = ai_tools.clone();
             let mut ai_cli_controller_signal = ai_cli_controller.clone();
             let mut ai_event_rx_signal = ai_event_rx.clone();
-            
+
             dioxus::prelude::spawn(async move {
                 // Create event channel
                 let (event_tx, event_rx) = mpsc::unbounded_channel();
-                
+
                 // Store receiver first
                 ai_event_rx_signal.set(Some(event_rx));
-                
+
                 // Create controller
                 match AiCliController::new(event_tx).await {
                     Ok(controller) => {
                         let controller_arc = Arc::new(controller);
-                        
+
                         // Get initial tool status
-                        let tool_ids: Vec<String> = ai_tools_clone.read()
-                            .iter()
-                            .map(|t| t.id.clone())
-                            .collect();
-                        
+                        let tool_ids: Vec<String> =
+                            ai_tools_clone.read().iter().map(|t| t.id.clone()).collect();
+
                         // Check status of all tools
                         for tool_id in tool_ids {
                             if let Ok(status) = controller_arc.check_tool_status(&tool_id).await {
@@ -149,10 +151,10 @@ pub fn TerminalTabs() -> Element {
                                 }
                             }
                         }
-                        
+
                         // Store controller
                         ai_cli_controller_signal.set(Some(controller_arc));
-                        
+
                         tracing::info!("✅ AI CLI controller initialized");
                     }
                     Err(e) => {
@@ -162,43 +164,59 @@ pub fn TerminalTabs() -> Element {
             });
         }
     });
-    
+
     // Process AI CLI events - separate effect
     use_effect({
         let ai_tools = ai_tools.clone();
         let ai_event_rx = ai_event_rx.clone();
-        
+
         move || {
             let mut ai_tools = ai_tools.clone();
             let mut ai_event_rx = ai_event_rx.clone();
-            
+
             dioxus::prelude::spawn(async move {
                 if let Some(mut rx) = ai_event_rx.write().take() {
                     while let Some(event) = rx.recv().await {
-                    match event {
-                        AiCliEvent::ToolStatusChanged { tool_id, status } => {
-                            tracing::info!("📊 Tool status changed: {} -> {:?}", tool_id, status);
-                            
-                            let mut tools = ai_tools.write();
-                            if let Some(tool) = tools.iter_mut().find(|t| t.id == tool_id) {
-                                tool.status = match status {
-                                    ControllerToolStatus::Available => ToolStatus::Available,
-                                    ControllerToolStatus::Installing => ToolStatus::Installing,
-                                    ControllerToolStatus::Ready => ToolStatus::Ready,
-                                    ControllerToolStatus::Starting => ToolStatus::Starting,
-                                    ControllerToolStatus::Running => ToolStatus::Running,
-                                    ControllerToolStatus::Error(e) => ToolStatus::Error(e),
-                                };
+                        match event {
+                            AiCliEvent::ToolStatusChanged { tool_id, status } => {
+                                tracing::info!(
+                                    "📊 Tool status changed: {} -> {:?}",
+                                    tool_id,
+                                    status
+                                );
+
+                                let mut tools = ai_tools.write();
+                                if let Some(tool) = tools.iter_mut().find(|t| t.id == tool_id) {
+                                    tool.status = match status {
+                                        ControllerToolStatus::Available => ToolStatus::Available,
+                                        ControllerToolStatus::Installing => ToolStatus::Installing,
+                                        ControllerToolStatus::Ready => ToolStatus::Ready,
+                                        ControllerToolStatus::Starting => ToolStatus::Starting,
+                                        ControllerToolStatus::Running => ToolStatus::Running,
+                                        ControllerToolStatus::Error(e) => ToolStatus::Error(e),
+                                    };
+                                }
+                            }
+                            AiCliEvent::InstallationProgress { tool_id, message } => {
+                                tracing::info!(
+                                    "📦 Installation progress for {}: {}",
+                                    tool_id,
+                                    message
+                                );
+                            }
+                            AiCliEvent::InstallationComplete {
+                                tool_id,
+                                success,
+                                error,
+                            } => {
+                                tracing::info!(
+                                    "✅ Installation complete for {}: success={}, error={:?}",
+                                    tool_id,
+                                    success,
+                                    error
+                                );
                             }
                         }
-                        AiCliEvent::InstallationProgress { tool_id, message } => {
-                            tracing::info!("📦 Installation progress for {}: {}", tool_id, message);
-                        }
-                        AiCliEvent::InstallationComplete { tool_id, success, error } => {
-                            tracing::info!("✅ Installation complete for {}: success={}, error={:?}", 
-                                tool_id, success, error);
-                        }
-                    }
                     }
                 }
             });
@@ -215,7 +233,7 @@ pub fn TerminalTabs() -> Element {
         padding: 0 10px;
         gap: 2px;
     ";
-    
+
     // Scroll button style - matching editor tabs
     let scroll_btn_style = "
         background: rgba(255, 193, 7, 0.1);
@@ -233,8 +251,9 @@ pub fn TerminalTabs() -> Element {
         font-weight: bold;
     ";
 
-    let tab_style = |is_active: bool| format!(
-        "
+    let tab_style = |is_active: bool| {
+        format!(
+            "
         display: flex;
         align-items: center;
         padding: 0 12px;
@@ -248,9 +267,10 @@ pub fn TerminalTabs() -> Element {
         border-right: 1px solid #1e1e1e;
         gap: 6px;
         ",
-        if is_active { "#1e1e1e" } else { "transparent" },
-        if is_active { "#cccccc" } else { "#969696" }
-    );
+            if is_active { "#1e1e1e" } else { "transparent" },
+            if is_active { "#cccccc" } else { "#969696" }
+        )
+    };
 
     let tab_close_style = "
         margin-left: 4px;
@@ -286,13 +306,13 @@ pub fn TerminalTabs() -> Element {
         background: #1e1e1e;
         overflow: hidden;
     ";
-    
+
     let ai_tools_section_style = "
         background: #252526;
         border-bottom: 1px solid #1e1e1e;
         padding: 8px;
     ";
-    
+
     let ai_tools_header_style = "
         display: flex;
         align-items: center;
@@ -304,9 +324,10 @@ pub fn TerminalTabs() -> Element {
         user-select: none;
         margin-bottom: 8px;
     ";
-    
-    let ai_tool_button_style = |status: &ToolStatus| format!(
-        "
+
+    let ai_tool_button_style = |status: &ToolStatus| {
+        format!(
+            "
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -321,35 +342,39 @@ pub fn TerminalTabs() -> Element {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         transition: all 0.2s ease;
         ",
-        match status {
-            ToolStatus::Ready => "#007acc",
-            ToolStatus::Available => "#3c3c3c",
-            ToolStatus::Installing => "#d79922",
-            ToolStatus::Running => "#4ec9b0",
-            ToolStatus::Error(_) => "#f44747",
-            _ => "#3c3c3c",
-        },
-        match status {
-            ToolStatus::Error(_) => "#ffffff",
-            _ => "#cccccc",
-        },
-        match status {
-            ToolStatus::Ready => "#0098ff",
-            ToolStatus::Available => "#5a5a5a",
-            ToolStatus::Installing => "#f0ab00",
-            ToolStatus::Running => "#6edcd2",
-            ToolStatus::Error(_) => "#ff6b6b",
-            _ => "#5a5a5a",
-        },
-        match status {
-            ToolStatus::Installing => "wait",
-            _ => "pointer",
-        }
-    );
+            match status {
+                ToolStatus::Ready => "#007acc",
+                ToolStatus::Available => "#3c3c3c",
+                ToolStatus::Installing => "#d79922",
+                ToolStatus::Running => "#4ec9b0",
+                ToolStatus::Error(_) => "#f44747",
+                _ => "#3c3c3c",
+            },
+            match status {
+                ToolStatus::Error(_) => "#ffffff",
+                _ => "#cccccc",
+            },
+            match status {
+                ToolStatus::Ready => "#0098ff",
+                ToolStatus::Available => "#5a5a5a",
+                ToolStatus::Installing => "#f0ab00",
+                ToolStatus::Running => "#6edcd2",
+                ToolStatus::Error(_) => "#ff6b6b",
+                _ => "#5a5a5a",
+            },
+            match status {
+                ToolStatus::Installing => "wait",
+                _ => "pointer",
+            }
+        )
+    };
 
     // Debug log render
-    tracing::info!("🎨 TerminalTabs rendering with {} terminals", terminals.read().len());
-    
+    tracing::info!(
+        "🎨 TerminalTabs rendering with {} terminals",
+        terminals.read().len()
+    );
+
     rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%;",
@@ -358,7 +383,7 @@ pub fn TerminalTabs() -> Element {
             if ai_tools.read().len() > 0 {
                 div {
                     style: "{ai_tools_section_style}",
-                    
+
                     // Collapsible header
                     div {
                         style: "{ai_tools_header_style}",
@@ -366,32 +391,32 @@ pub fn TerminalTabs() -> Element {
                             let current = *ai_tools_expanded.read();
                             ai_tools_expanded.set(!current);
                         },
-                        
+
                         // Chevron icon
                         span {
                             style: "font-size: 10px; transition: transform 0.2s;",
-                            style: if *ai_tools_expanded.read() { 
-                                "transform: rotate(90deg);" 
-                            } else { 
-                                "transform: rotate(0deg);" 
+                            style: if *ai_tools_expanded.read() {
+                                "transform: rotate(90deg);"
+                            } else {
+                                "transform: rotate(0deg);"
                             },
                             "▶"
                         }
-                        
+
                         span { "AI CLI Tools" }
-                        
+
                         // Tool count
                         span {
                             style: "margin-left: auto; opacity: 0.6; font-size: 11px;",
                             "{ai_tools.read().len()}"
                         }
                     }
-                    
+
                     // Tool buttons (only show when expanded)
                     if *ai_tools_expanded.read() {
                         div {
                             style: "display: flex; flex-wrap: wrap;",
-                            
+
                             for tool in ai_tools.read().iter() {
                                 button {
                                     key: "{tool.id}",
@@ -418,13 +443,13 @@ pub fn TerminalTabs() -> Element {
                                             );
                                         }
                                     },
-                                    
+
                                     // Tool icon
                                     span { "{tool.icon}" }
-                                    
+
                                     // Tool name
                                     span { "{tool.name}" }
-                                    
+
                                     // Status indicator
                                     match &tool.status {
                                         ToolStatus::Installing => rsx! {
@@ -448,7 +473,7 @@ pub fn TerminalTabs() -> Element {
                                         },
                                         _ => rsx! {}
                                     }
-                                    
+
                                     // Auth status indicator
                                     match &tool.auth_status {
                                         AuthStatus::Required { instructions } => rsx! {
@@ -477,7 +502,7 @@ pub fn TerminalTabs() -> Element {
             // Tab bar with scroll controls
             div {
                 style: "{tab_bar_style}",
-                
+
                 // Left arrow button (only show if we can scroll left)
                 if tab_scroll_offset.read().clone() > 0 {
                     button {
@@ -491,11 +516,11 @@ pub fn TerminalTabs() -> Element {
                         "‹"
                     }
                 }
-                
+
                 // Tab container with overflow hidden
                 div {
                     style: "flex: 1; display: flex; align-items: center; overflow: hidden; max-width: calc(100vw - 450px);", // Reserve space for right panel
-                    
+
                     // Get terminal IDs in consistent order
                     {
                         let terminal_ids: Vec<String> = {
@@ -503,7 +528,7 @@ pub fn TerminalTabs() -> Element {
                             ids.sort(); // Ensure consistent ordering
                             ids
                         };
-                        
+
                         // Get visible tabs based on scroll offset
                         let visible_tabs: Vec<(String, TerminalTab)> = terminal_ids
                             .iter()
@@ -513,7 +538,7 @@ pub fn TerminalTabs() -> Element {
                                 terminals.read().get(id).map(|tab| (id.clone(), tab.clone()))
                             })
                             .collect();
-                        
+
                         rsx! {
                             // Render visible terminal tabs
                             for (id, tab) in visible_tabs {
@@ -556,7 +581,7 @@ pub fn TerminalTabs() -> Element {
                                                 move |evt: MouseEvent| {
                                                     evt.stop_propagation();
                                                     close_terminal(&mut terminals, &mut active_terminal_id, &id);
-                                                    
+
                                                     // Adjust scroll offset if necessary
                                                     let terminal_count = terminals.read().len();
                                                     let current_offset = tab_scroll_offset.read().clone();
@@ -579,7 +604,7 @@ pub fn TerminalTabs() -> Element {
                         }
                     }
                 }
-                
+
                 // Right arrow button (only show if there are more tabs to the right)
                 {
                     let terminal_count = terminals.read().len();
@@ -614,7 +639,7 @@ pub fn TerminalTabs() -> Element {
                         // Would set hover style in real implementation
                     },
                     onmouseout: |_| {
-                        // Would reset style in real implementation  
+                        // Would reset style in real implementation
                     },
                     title: "New Terminal",
                     "+"
@@ -623,9 +648,9 @@ pub fn TerminalTabs() -> Element {
                 // Terminal dropdown menu (VS Code style)
                 div {
                     style: "margin-left: auto; display: flex; gap: 4px; align-items: center;",
-                    
 
-                    // Kill terminal button  
+
+                    // Kill terminal button
                     button {
                         style: "{new_terminal_btn_style}",
                         title: "Kill Terminal",
@@ -636,7 +661,7 @@ pub fn TerminalTabs() -> Element {
                             move |_| {
                                 if let Some(active_id) = active_terminal_id_clone.read().as_ref() {
                                     let active_id = active_id.clone();
-                                    
+
                                     // Safely close terminal with error handling
                                     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                                         close_terminal(&mut terminals, &mut active_terminal_id_mut, &active_id);
@@ -658,7 +683,7 @@ pub fn TerminalTabs() -> Element {
             // Terminal content area - render all terminals but only show active
             div {
                 style: "{terminal_container_style}",
-                
+
                 // Render all terminals but only show the active one
                 for (id, terminal) in terminals.read().iter() {
                     div {
@@ -674,7 +699,7 @@ pub fn TerminalTabs() -> Element {
                         }
                     }
                 }
-                
+
                 // Show message if no terminals exist
                 if terminals.read().is_empty() {
                     div {
@@ -692,7 +717,7 @@ pub fn TerminalTabs() -> Element {
 fn TerminalInstance(terminal_id: String, working_directory: String) -> Element {
     // Import the xterm.js Terminal component
     use super::terminal_xterm_simple::TerminalXterm;
-    
+
     // Each terminal instance maintains its own state through the terminal_id
     rsx! {
         div {
@@ -719,9 +744,13 @@ fn create_new_terminal(
     let count = terminal_counter.peek().clone();
     // All terminals follow the same numbering pattern
     let (id, title, icon) = {
-        (format!("terminal-{}", count), format!("Terminal {}", count), "$".to_string())
+        (
+            format!("terminal-{}", count),
+            format!("Terminal {}", count),
+            "$".to_string(),
+        )
     };
-    
+
     let new_terminal = TerminalTab {
         id: id.clone(),
         title,
@@ -741,7 +770,7 @@ fn create_new_terminal(
     terminals.write().insert(id.clone(), new_terminal);
     active_terminal_id.set(Some(id));
     *terminal_counter.write() += 1;
-    
+
     // Scroll to show the new tab if necessary
     let terminal_count = terminals.read().len();
     if terminal_count > max_visible_tabs {
@@ -762,21 +791,22 @@ fn set_active_terminal(
     for (_, terminal) in terminals.write().iter_mut() {
         terminal.is_active = false;
     }
-    
+
     // Activate selected terminal
     if terminals.read().contains_key(terminal_id) {
         if let Some(terminal) = terminals.write().get_mut(terminal_id) {
             terminal.is_active = true;
         }
         active_terminal_id.set(Some(terminal_id.to_string()));
-        
+
         // Refresh the terminal to fix rendering issues when switching
         let terminal_id_refresh = terminal_id.to_string();
         spawn(async move {
             // Small delay to ensure DOM update completes
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            
-            let refresh_script = format!(r#"
+
+            let refresh_script = format!(
+                r#"
                 if (window.terminals && window.terminals['{}']) {{
                     const term = window.terminals['{}'];
                     // Force xterm.js to refresh its rendering
@@ -793,22 +823,24 @@ fn set_active_terminal(
                     term.scrollToBottom();
                     console.log('🔄 Refreshed terminal: {}');
                 }}
-            "#, terminal_id_refresh, terminal_id_refresh, terminal_id_refresh);
-            
+            "#,
+                terminal_id_refresh, terminal_id_refresh, terminal_id_refresh
+            );
+
             if let Err(e) = eval(&refresh_script).await {
                 tracing::warn!("Failed to refresh terminal {}: {}", terminal_id_refresh, e);
             }
         });
-        
+
         // Ensure active tab is visible
         let mut terminal_ids: Vec<String> = terminals.read().keys().cloned().collect();
         terminal_ids.sort(); // Ensure consistent ordering
-        
+
         if let Some(active_index) = terminal_ids.iter().position(|id| id == terminal_id) {
             let current_offset = tab_scroll_offset.read().clone();
             let visible_start = current_offset;
             let visible_end = current_offset + max_visible_tabs;
-            
+
             // If active tab is before visible range, scroll left
             if active_index < visible_start {
                 *tab_scroll_offset.write() = active_index;
@@ -832,22 +864,22 @@ fn close_terminal(
         tracing::warn!("⚠️ Cannot close the last terminal - at least one must remain open");
         return;
     }
-    
+
     // First, unregister from global terminal registry to prevent dangling references
-    use crate::desktop::terminal_registry::unregister_terminal;
     use crate::desktop::terminal_buffer::unregister_terminal_buffer;
+    use crate::desktop::terminal_registry::unregister_terminal;
     unregister_terminal(terminal_id);
     unregister_terminal_buffer(terminal_id);
     tracing::info!("🗑️ Closing terminal: {}", terminal_id);
-    
+
     let current_active = active_terminal_id.read().clone();
     terminals.write().remove(terminal_id);
-    
+
     // If we closed the active terminal, activate another one
     if current_active.as_deref() == Some(terminal_id) {
         let mut terminal_ids: Vec<String> = terminals.read().keys().cloned().collect();
         terminal_ids.sort(); // Ensure consistent ordering
-        
+
         if let Some(next_id) = terminal_ids.first() {
             // Note: We can't call set_active_terminal here because it requires tab_scroll_offset
             // So we'll just update the active state directly
@@ -876,24 +908,30 @@ fn activate_ai_tool(
     max_visible_tabs: usize,
 ) {
     tracing::info!("🚀 Activating AI tool: {}", tool_id);
-    
+
     // Find the tool
     let tool_index = ai_tools.read().iter().position(|t| t.id == tool_id);
     if tool_index.is_none() {
         tracing::error!("Tool not found: {}", tool_id);
         return;
     }
-    
+
     let tool = ai_tools.read()[tool_index.unwrap()].clone();
-    
+
     // If tool is already running, switch to its terminal
     if let ToolStatus::Running = tool.status {
         if let Some(terminal_id) = &tool.terminal_id {
-            set_active_terminal(terminals, active_terminal_id, terminal_id, tab_scroll_offset, max_visible_tabs);
+            set_active_terminal(
+                terminals,
+                active_terminal_id,
+                terminal_id,
+                tab_scroll_offset,
+                max_visible_tabs,
+            );
             return;
         }
     }
-    
+
     // If tool is not ready, install it first
     if !matches!(tool.status, ToolStatus::Ready) {
         // Get controller
@@ -902,27 +940,27 @@ fn activate_ai_tool(
             tracing::error!("AI CLI controller not initialized");
             return;
         }
-        
+
         let controller = controller.unwrap();
         let tool_id_clone = tool_id.to_string();
-        
+
         // Install tool using Dioxus spawn
         dioxus::prelude::spawn(async move {
             tracing::info!("📦 Starting installation for tool: {}", tool_id_clone);
-            
+
             if let Err(e) = controller.install_tool(tool_id_clone.clone()).await {
                 tracing::error!("❌ Failed to install tool {}: {}", tool_id_clone, e);
             }
         });
-        
+
         return;
     }
-    
+
     // Tool is ready, create a terminal for it
     let terminal_id = format!("ai-tool-{}", tool_id);
     let title = tool.name.clone();
     let icon = tool.icon.clone();
-    
+
     // Create new terminal tab
     let new_terminal = TerminalTab {
         id: terminal_id.clone(),
@@ -934,15 +972,15 @@ fn activate_ai_tool(
             .to_string_lossy()
             .to_string(),
     };
-    
+
     // Deactivate all other terminals
     for (_, terminal) in terminals.write().iter_mut() {
         terminal.is_active = false;
     }
-    
+
     terminals.write().insert(terminal_id.clone(), new_terminal);
     active_terminal_id.set(Some(terminal_id.clone()));
-    
+
     // Update tool status
     {
         let mut tools = ai_tools.write();
@@ -951,7 +989,7 @@ fn activate_ai_tool(
             tool.terminal_id = Some(terminal_id);
         }
     }
-    
+
     // Scroll to show the new tab if necessary
     let terminal_count = terminals.read().len();
     if terminal_count > max_visible_tabs {

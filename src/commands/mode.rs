@@ -3,13 +3,13 @@
 //! Provides commands for intelligent mode detection, switching,
 //! and preference management.
 
-use crate::core::error::HiveResult;
 use crate::consensus::ConsensusEngine;
+use crate::core::error::HiveResult;
+use crate::modes::{ContextPreservationLevel, ModeConfig, ModeManager};
 use crate::planning::{ModeType, PlanningContext};
-use crate::modes::{ModeManager, ModeConfig, ContextPreservationLevel};
 use clap::Subcommand;
-use std::sync::Arc;
 use crossterm::style::Stylize;
+use std::sync::Arc;
 
 /// Mode management commands
 #[derive(Debug, Subcommand)]
@@ -65,10 +65,7 @@ pub enum ModeCommands {
 }
 
 /// Execute mode commands
-pub async fn execute(
-    cmd: ModeCommands,
-    consensus_engine: Arc<ConsensusEngine>,
-) -> HiveResult<()> {
+pub async fn execute(cmd: ModeCommands, consensus_engine: Arc<ConsensusEngine>) -> HiveResult<()> {
     let mode_manager = Arc::new(ModeManager::new(consensus_engine.clone()).await?);
 
     match cmd {
@@ -76,7 +73,10 @@ pub async fn execute(
             show_status(&mode_manager).await?;
         }
 
-        ModeCommands::Switch { mode, preserve_context } => {
+        ModeCommands::Switch {
+            mode,
+            preserve_context,
+        } => {
             switch_mode(&mode_manager, &mode, preserve_context).await?;
         }
 
@@ -84,7 +84,11 @@ pub async fn execute(
             detect_mode(&mode_manager, &query, confidence).await?;
         }
 
-        ModeCommands::Preferences { show, learning, reset } => {
+        ModeCommands::Preferences {
+            show,
+            learning,
+            reset,
+        } => {
             manage_preferences(&mode_manager, show, learning, reset).await?;
         }
 
@@ -148,13 +152,15 @@ async fn show_status(manager: &Arc<ModeManager>) -> HiveResult<()> {
 async fn switch_mode(
     manager: &Arc<ModeManager>,
     mode_str: &str,
-    preserve_context: bool
+    preserve_context: bool,
 ) -> HiveResult<()> {
     let target_mode = parse_mode(mode_str)?;
 
     println!("Switching to {:?} mode...", target_mode);
 
-    let result = manager.switch_mode(target_mode.clone(), preserve_context).await?;
+    let result = manager
+        .switch_mode(target_mode.clone(), preserve_context)
+        .await?;
 
     if result.success {
         println!("\n{}", "✓ Mode switch successful!".green().bold());
@@ -166,7 +172,10 @@ async fn switch_mode(
             println!("  • Items preserved:   {}", ctx.items_preserved);
             println!("  • Items transformed: {}", ctx.items_transformed);
             println!("  • Items dropped:     {}", ctx.items_dropped);
-            println!("  • Quality:           {:.0}%", ctx.transformation_quality * 100.0);
+            println!(
+                "  • Quality:           {:.0}%",
+                ctx.transformation_quality * 100.0
+            );
         }
 
         if !result.recommendations.is_empty() {
@@ -193,7 +202,7 @@ async fn switch_mode(
 async fn detect_mode(
     manager: &Arc<ModeManager>,
     query: &str,
-    show_confidence: bool
+    show_confidence: bool,
 ) -> HiveResult<()> {
     println!("Analyzing query: \"{}\"", query.italic());
 
@@ -204,8 +213,14 @@ async fn detect_mode(
     println!("{}", "─".repeat(40));
 
     let mode_icon = get_mode_icon(&recommendation.recommended_mode);
-    println!("Recommended Mode: {} {:?}", mode_icon, recommendation.recommended_mode);
-    println!("Confidence:       {:.0}%", recommendation.confidence * 100.0);
+    println!(
+        "Recommended Mode: {} {:?}",
+        mode_icon, recommendation.recommended_mode
+    );
+    println!(
+        "Confidence:       {:.0}%",
+        recommendation.confidence * 100.0
+    );
 
     if !recommendation.reasoning.is_empty() {
         println!("Reasoning:        {}", recommendation.reasoning);
@@ -221,8 +236,10 @@ async fn detect_mode(
     }
 
     if recommendation.user_preference_weight > 0.0 {
-        println!("\nUser preference influence: {:.0}%",
-            recommendation.user_preference_weight * 100.0);
+        println!(
+            "\nUser preference influence: {:.0}%",
+            recommendation.user_preference_weight * 100.0
+        );
     }
 
     Ok(())
@@ -233,7 +250,7 @@ async fn manage_preferences(
     manager: &Arc<ModeManager>,
     show: bool,
     learning: Option<bool>,
-    reset: bool
+    reset: bool,
 ) -> HiveResult<()> {
     if reset {
         manager.reset_mode().await?;
@@ -278,17 +295,17 @@ async fn manage_preferences(
             }
         }
 
-        println!("\nPreference influence: {:.0}%", stats.preference_influence * 100.0);
+        println!(
+            "\nPreference influence: {:.0}%",
+            stats.preference_influence * 100.0
+        );
     }
 
     Ok(())
 }
 
 /// Set automatic mode switching
-async fn set_auto_mode(
-    _manager: &Arc<ModeManager>,
-    enabled: bool
-) -> HiveResult<()> {
+async fn set_auto_mode(_manager: &Arc<ModeManager>, enabled: bool) -> HiveResult<()> {
     // In real implementation, would update config
     if enabled {
         println!("{}", "✓ Automatic mode switching enabled".green());
@@ -310,9 +327,10 @@ fn parse_mode(mode_str: &str) -> HiveResult<ModeType> {
         "hybrid" | "h" => Ok(ModeType::Hybrid),
         "analysis" | "analyze" | "a" => Ok(ModeType::Analysis),
         "learning" | "learn" | "l" => Ok(ModeType::Learning),
-        _ => Err(crate::core::error::HiveError::Planning(
-            format!("Unknown mode: {}. Valid modes: planning, execution, hybrid, analysis, learning", mode_str)
-        )),
+        _ => Err(crate::core::error::HiveError::Planning(format!(
+            "Unknown mode: {}. Valid modes: planning, execution, hybrid, analysis, learning",
+            mode_str
+        ))),
     }
 }
 

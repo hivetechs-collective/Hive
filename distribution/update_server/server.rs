@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tokio::time::{Duration, interval};
+use tokio::time::{interval, Duration};
 use warp::{Filter, Reply};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -56,38 +56,30 @@ impl UpdateServer {
 
     pub async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
         // Health check endpoint
-        let health = warp::path("health")
-            .and(warp::get())
-            .map(|| {
-                warp::reply::json(&serde_json::json!({
-                    "status": "healthy",
-                    "timestamp": chrono::Utc::now().to_rfc3339(),
-                    "version": env!("CARGO_PKG_VERSION")
-                }))
-            });
+        let health = warp::path("health").and(warp::get()).map(|| {
+            warp::reply::json(&serde_json::json!({
+                "status": "healthy",
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "version": env!("CARGO_PKG_VERSION")
+            }))
+        });
 
         // Check for updates endpoint
         let check_updates = warp::path("check")
             .and(warp::post())
             .and(warp::body::json())
-            .and_then(|req: UpdateRequest| async move {
-                self.handle_update_check(req).await
-            });
+            .and_then(|req: UpdateRequest| async move { self.handle_update_check(req).await });
 
         // Rollback endpoint
         let rollback = warp::path("rollback")
             .and(warp::post())
             .and(warp::body::json())
-            .and_then(|req: RollbackRequest| async move {
-                self.handle_rollback(req).await
-            });
+            .and_then(|req: RollbackRequest| async move { self.handle_rollback(req).await });
 
         // Metrics endpoint
         let metrics = warp::path("metrics")
             .and(warp::get())
-            .map(|| {
-                self.metrics.export()
-            });
+            .map(|| self.metrics.export());
 
         let routes = health
             .or(check_updates)
@@ -106,7 +98,10 @@ impl UpdateServer {
         Ok(())
     }
 
-    async fn handle_update_check(&self, request: UpdateRequest) -> Result<impl Reply, warp::Rejection> {
+    async fn handle_update_check(
+        &self,
+        request: UpdateRequest,
+    ) -> Result<impl Reply, warp::Rejection> {
         self.metrics.increment_check_requests();
 
         // Validate request
@@ -120,7 +115,11 @@ impl UpdateServer {
         }
 
         // Get latest release info
-        let latest_release = match self.github_client.get_latest_release(&request.channel).await {
+        let latest_release = match self
+            .github_client
+            .get_latest_release(&request.channel)
+            .await
+        {
             Ok(release) => release,
             Err(e) => {
                 tracing::error!("Failed to fetch release info: {}", e);
@@ -157,7 +156,8 @@ impl UpdateServer {
         }
 
         // Get platform-specific download URL
-        let asset = latest_release.get_asset_for_platform(&request.platform)
+        let asset = latest_release
+            .get_asset_for_platform(&request.platform)
             .ok_or_else(|| warp::reject::custom(PlatformNotSupported))?;
 
         // Check for delta update
@@ -180,7 +180,10 @@ impl UpdateServer {
         Ok(warp::reply::json(&response))
     }
 
-    async fn handle_rollback(&self, request: RollbackRequest) -> Result<impl Reply, warp::Rejection> {
+    async fn handle_rollback(
+        &self,
+        request: RollbackRequest,
+    ) -> Result<impl Reply, warp::Rejection> {
         self.metrics.increment_rollback_requests();
 
         if !self.config.rollback.enabled {
@@ -207,16 +210,21 @@ impl UpdateServer {
             target
         } else {
             // Use most recent stable version
-            available_versions.first()
+            available_versions
+                .first()
                 .ok_or_else(|| warp::reject::custom(NoRollbackAvailable))?
                 .clone()
         };
 
         // Get rollback asset
-        let rollback_release = self.github_client.get_release(&target_version).await
+        let rollback_release = self
+            .github_client
+            .get_release(&target_version)
+            .await
             .map_err(|_| warp::reject::custom(RollbackFailed))?;
 
-        let asset = rollback_release.get_asset_for_platform(&request.platform)
+        let asset = rollback_release
+            .get_asset_for_platform(&request.platform)
             .ok_or_else(|| warp::reject::custom(PlatformNotSupported))?;
 
         // Log rollback request
@@ -233,10 +241,10 @@ impl UpdateServer {
             download_url: asset.download_url,
             checksum: asset.checksum,
             signature: asset.signature,
-            delta_url: None,  // No delta for rollbacks
+            delta_url: None, // No delta for rollbacks
             delta_checksum: None,
             release_notes: format!("Rollback to version {}", rollback_release.version),
-            force_update: true,  // Rollbacks are always forced
+            force_update: true, // Rollbacks are always forced
             rollback_available: false,
         };
 
@@ -246,7 +254,9 @@ impl UpdateServer {
 
     async fn start_background_tasks(&self) {
         // Health monitoring
-        let mut health_interval = interval(Duration::from_secs(self.config.monitoring.health_check_interval));
+        let mut health_interval = interval(Duration::from_secs(
+            self.config.monitoring.health_check_interval,
+        ));
         tokio::spawn(async move {
             loop {
                 health_interval.tick().await;
@@ -279,13 +289,19 @@ impl UpdateServer {
     }
 
     fn is_valid_platform(&self, platform: &str) -> bool {
-        self.config.releases.platforms.contains(&platform.to_string())
+        self.config
+            .releases
+            .platforms
+            .contains(&platform.to_string())
     }
 
-    fn is_force_update_required(&self, current: &semver::Version, latest: &semver::Version) -> bool {
+    fn is_force_update_required(
+        &self,
+        current: &semver::Version,
+        latest: &semver::Version,
+    ) -> bool {
         // Force update for major version changes or critical security updates
-        latest.major > current.major ||
-        self.is_security_update(latest)
+        latest.major > current.major || self.is_security_update(latest)
     }
 
     fn is_security_update(&self, version: &semver::Version) -> bool {
@@ -294,7 +310,11 @@ impl UpdateServer {
         false
     }
 
-    async fn get_delta_update(&self, request: &UpdateRequest, latest: &Release) -> Option<DeltaUpdate> {
+    async fn get_delta_update(
+        &self,
+        request: &UpdateRequest,
+        latest: &Release,
+    ) -> Option<DeltaUpdate> {
         if !self.config.delta_updates.enabled {
             return None;
         }
@@ -309,14 +329,20 @@ impl UpdateServer {
             return false;
         }
 
-        let versions = self.get_rollback_versions(request).await.unwrap_or_default();
+        let versions = self
+            .get_rollback_versions(request)
+            .await
+            .unwrap_or_default();
         !versions.is_empty()
     }
 
-    async fn get_rollback_versions(&self, request: &UpdateRequest) -> Result<Vec<String>, warp::Rejection> {
+    async fn get_rollback_versions(
+        &self,
+        request: &UpdateRequest,
+    ) -> Result<Vec<String>, warp::Rejection> {
         // Get list of stable versions available for rollback
         // Limited to max_rollback_versions
-        Ok(vec![])  // Placeholder implementation
+        Ok(vec![]) // Placeholder implementation
     }
 }
 
@@ -372,7 +398,10 @@ impl GithubClient {
         }
     }
 
-    async fn get_latest_release(&self, channel: &str) -> Result<Release, Box<dyn std::error::Error>> {
+    async fn get_latest_release(
+        &self,
+        channel: &str,
+    ) -> Result<Release, Box<dyn std::error::Error>> {
         // GitHub API implementation
         todo!("Implement GitHub API integration")
     }
@@ -406,19 +435,23 @@ impl Metrics {
     }
 
     fn increment_check_requests(&self) {
-        self.check_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.check_requests
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn increment_updates_served(&self) {
-        self.updates_served.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.updates_served
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn increment_rollback_requests(&self) {
-        self.rollback_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.rollback_requests
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn increment_rollbacks_served(&self) {
-        self.rollbacks_served.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.rollbacks_served
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn export(&self) -> impl Reply {

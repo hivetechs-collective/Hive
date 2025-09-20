@@ -13,23 +13,14 @@ use tracing::{info, Level};
 
 // Import the problems panel components
 use hive::desktop::problems::{
-    BuildSystemIntegration, 
-    BuildTool,
-    ProblemNavigationHandler,
-    ProblemsPanel,
-    ProblemsState,
-    ProblemsStatusBar,
-    ProblemsUpdateManager,
-    EditorIntegration,
-    UpdateEvent,
+    BuildSystemIntegration, BuildTool, EditorIntegration, ProblemNavigationHandler, ProblemsPanel,
+    ProblemsState, ProblemsStatusBar, ProblemsUpdateManager, UpdateEvent,
 };
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     info!("🚀 Starting Problems Panel Integration Example");
 
@@ -39,7 +30,7 @@ async fn main() -> Result<()> {
 
     // Initialize the integration components
     let example = ProblemsIntegrationExample::new(workspace_path).await?;
-    
+
     // Run the example
     example.run().await?;
 
@@ -75,7 +66,8 @@ impl ProblemsIntegrationExample {
             workspace_path.clone(),
             build_integration.clone(),
             navigation_handler.clone(),
-        ).await?;
+        )
+        .await?;
         update_manager.initialize().await?;
         let update_manager = Arc::new(RwLock::new(update_manager));
 
@@ -86,7 +78,12 @@ impl ProblemsIntegrationExample {
         let update_manager_clone = update_manager.clone();
         let problems_state_clone = problems_state.clone();
         tokio::spawn(async move {
-            Self::process_update_events(update_receiver, update_manager_clone, problems_state_clone).await;
+            Self::process_update_events(
+                update_receiver,
+                update_manager_clone,
+                problems_state_clone,
+            )
+            .await;
         });
 
         info!("✅ Problems Panel Integration initialized");
@@ -108,10 +105,19 @@ impl ProblemsIntegrationExample {
     ) {
         while let Some(event) = receiver.recv().await {
             match &event {
-                UpdateEvent::BuildCompleted { tool, problems, success, duration } => {
-                    info!("🔧 Build completed: {:?} - {} problems in {:?}", 
-                          tool, problems.len(), duration);
-                    
+                UpdateEvent::BuildCompleted {
+                    tool,
+                    problems,
+                    success,
+                    duration,
+                } => {
+                    info!(
+                        "🔧 Build completed: {:?} - {} problems in {:?}",
+                        tool,
+                        problems.len(),
+                        duration
+                    );
+
                     // Update problems state
                     {
                         let mut state = problems_state.write().await;
@@ -121,7 +127,11 @@ impl ProblemsIntegrationExample {
                     }
                 }
                 UpdateEvent::FileChanged { paths, change_type } => {
-                    info!("📝 Files changed: {:?} (type: {:?})", paths.len(), change_type);
+                    info!(
+                        "📝 Files changed: {:?} (type: {:?})",
+                        paths.len(),
+                        change_type
+                    );
                 }
                 _ => {}
             }
@@ -161,10 +171,10 @@ impl ProblemsIntegrationExample {
         info!("🔍 Demonstrating initial build check...");
 
         let mut build_integration = self.build_integration.write().await;
-        
+
         // Trigger builds for detected tools
         build_integration.refresh_all().await?;
-        
+
         // Display results
         let stats = build_integration.get_build_stats();
         info!("📊 Build Statistics:");
@@ -194,7 +204,10 @@ impl ProblemsIntegrationExample {
             info!("⚙️ Update Settings:");
             info!("  - Auto build on save: {}", settings.auto_build_on_save);
             info!("  - Auto refresh: {}", settings.auto_refresh_enabled);
-            info!("  - File debounce: {:?}", settings.frequency.file_watch_debounce);
+            info!(
+                "  - File debounce: {:?}",
+                settings.frequency.file_watch_debounce
+            );
         }
 
         Ok(())
@@ -206,14 +219,23 @@ impl ProblemsIntegrationExample {
 
         // Get current problems
         let problems_state = self.problems_state.read().await;
-        let all_problems: Vec<_> = problems_state.problems.values()
+        let all_problems: Vec<_> = problems_state
+            .problems
+            .values()
             .flat_map(|problems| problems.iter())
             .collect();
 
         if let Some(first_problem) = all_problems.first() {
-            info!("📍 Attempting to navigate to first problem: {}", first_problem.message);
-            
-            match self.navigation_handler.navigate_to_problem(first_problem).await {
+            info!(
+                "📍 Attempting to navigate to first problem: {}",
+                first_problem.message
+            );
+
+            match self
+                .navigation_handler
+                .navigate_to_problem(first_problem)
+                .await
+            {
                 Ok(result) => {
                     info!("✅ Navigation result: {:?}", result);
                 }
@@ -272,7 +294,7 @@ fn ProblemsIntegrationUI() -> Element {
                 div {
                     class: "code-area",
                     style: "flex: 1; background: #1e1e1e; color: #d4d4d4; padding: 16px;",
-                    
+
                     h3 { "Simulated Code Editor" }
                     p { "In a real application, this would be the code editor." }
                     p { "Problems panel integration would provide:" }
@@ -297,7 +319,7 @@ fn ProblemsIntegrationUI() -> Element {
                     div {
                         class: "problems-panel-container",
                         style: "width: 400px; border-left: 1px solid #454545;",
-                        
+
                         ProblemsPanel {
                             state: problems_state,
                             on_problem_select: move |problem_id: String| {
@@ -315,7 +337,7 @@ fn ProblemsIntegrationUI() -> Element {
             div {
                 class: "demo-status-bar",
                 style: "height: 24px; background: #007acc; color: white; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 12px;",
-                
+
                 div {
                     style: "display: flex; align-items: center; gap: 16px;",
                     span { "Ready" }
@@ -389,8 +411,9 @@ mod tests {
 name = "test-project"
 version = "0.1.0"
 edition = "2021"
-"#
-        ).unwrap();
+"#,
+        )
+        .unwrap();
 
         std::fs::write(
             workspace_path.join("src/main.rs"),
@@ -398,8 +421,9 @@ edition = "2021"
 fn main() {
     println!("Hello, world!");
 }
-"#
-        ).unwrap();
+"#,
+        )
+        .unwrap();
 
         let example = ProblemsIntegrationExample::new(workspace_path).await;
         assert!(example.is_ok());
@@ -418,8 +442,9 @@ fn main() {
 name = "test-project"
 version = "0.1.0"
 edition = "2021"
-"#
-        ).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut build_integration = BuildSystemIntegration::new(workspace_path);
         build_integration.initialize().await.unwrap();

@@ -5,22 +5,22 @@
 //! - Runs consensus on Tokio thread, UI updates via channels
 //! - Keeps ALL existing consensus logic intact
 
+use crate::consensus::cancellation::CancellationToken;
 use crate::consensus::engine::ConsensusEngine;
 use crate::consensus::pipeline::ConsensusPipeline;
-use crate::consensus::types::{ConsensusConfig, ConsensusProfile};
 use crate::consensus::repository_context::RepositoryContextManager;
 use crate::consensus::streaming::StreamingCallbacks;
-use crate::consensus::cancellation::CancellationToken;
+use crate::consensus::types::{ConsensusConfig, ConsensusProfile};
+use crate::core::api_keys::ApiKeyManager;
 use crate::desktop::consensus_integration::{ConsensusUIEvent, DesktopConsensusManager};
 use crate::desktop::state::AppState;
-use crate::core::api_keys::ApiKeyManager;
-use dioxus::prelude::*;
-use std::sync::Arc;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, mpsc, RwLock};
 use anyhow::Result;
-use tracing::{info, error, warn};
+use dioxus::prelude::*;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, Mutex, RwLock};
+use tracing::{error, info, warn};
 
 /// Wrapper that runs ConsensusEngine (Send) on Tokio thread
 #[derive(Clone)]
@@ -42,16 +42,16 @@ impl ConsensusThreadWrapper {
     /// Create wrapper and spawn ConsensusEngine on Tokio
     pub async fn new(_app_state: Signal<AppState>) -> Result<Self> {
         info!("🚀 Creating ConsensusThreadWrapper - extracting Send-able engine");
-        
+
         let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel();
-        
+
         // Get database for consensus engine
         let db = crate::core::database::get_database().await?;
-        
+
         // Spawn ConsensusEngine on Tokio thread (the key fix!)
         tokio::spawn(async move {
             info!("🎯 ConsensusEngine running on Tokio thread - UI stays responsive!");
-            
+
             // Create engine WITHOUT Signal<AppState> (which is non-Send)
             let mut engine = match ConsensusEngine::new(Some(db)).await {
                 Ok(e) => e,
@@ -60,7 +60,7 @@ impl ConsensusThreadWrapper {
                     return;
                 }
             };
-            
+
             let repository_context = match RepositoryContextManager::new().await {
                 Ok(r) => Arc::new(r),
                 Err(e) => {
@@ -68,37 +68,42 @@ impl ConsensusThreadWrapper {
                     return;
                 }
             };
-            
-            if let Err(e) = engine.set_repository_context(repository_context.clone()).await {
+
+            if let Err(e) = engine
+                .set_repository_context(repository_context.clone())
+                .await
+            {
                 error!("Failed to set repository context: {}", e);
                 return;
             }
-            
+
             let mut current_cancellation: Option<CancellationToken> = None;
-            
+
             info!("✅ Consensus thread ready, waiting for commands...");
-            
+
             while let Some(cmd) = cmd_rx.recv().await {
                 info!("📨 Received command in consensus thread");
                 match cmd {
                     ConsensusCommand::ProcessQuery { query, reply } => {
                         info!("📝 Processing query on Tokio: {}", query);
-                        
+
                         // Cancel any existing operation
                         if let Some(token) = current_cancellation.take() {
-                            token.cancel(crate::consensus::cancellation::CancellationReason::UserRequested);
+                            token.cancel(
+                                crate::consensus::cancellation::CancellationReason::UserRequested,
+                            );
                         }
-                        
+
                         // Create new cancellation token
                         let cancellation_token = CancellationToken::new();
                         current_cancellation = Some(cancellation_token.clone());
-                        
+
                         // Create event channel for this query
                         let (event_tx, event_rx) = mpsc::unbounded_channel();
-                        
+
                         // Clone event_tx for keeping it alive
                         let event_tx_keepalive = event_tx.clone();
-                        
+
                         // Process using the existing engine logic
                         info!("🔄 Calling run_consensus for query: {}", query);
                         let result = Self::run_consensus(
@@ -107,23 +112,27 @@ impl ConsensusThreadWrapper {
                             query,
                             event_tx.clone(),
                             cancellation_token,
-                        ).await;
+                        )
+                        .await;
                         info!("📝 run_consensus returned: {:?}", result.is_ok());
-                        
+
                         // Send both result and event receiver back
                         let response = match result {
                             Ok(res) => {
-                                info!("✅ Sending successful result back to UI: {} chars", res.len());
+                                info!(
+                                    "✅ Sending successful result back to UI: {} chars",
+                                    res.len()
+                                );
                                 Ok((res, event_rx))
-                            },
+                            }
                             Err(e) => {
                                 error!("❌ Consensus failed: {}", e);
                                 Err(e)
-                            },
+                            }
                         };
                         let _ = reply.send(response);
                         info!("📤 Response sent to UI thread");
-                        
+
                         // Keep the event channel alive for a bit to ensure all events are received
                         tokio::spawn(async move {
                             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
@@ -134,7 +143,9 @@ impl ConsensusThreadWrapper {
                     ConsensusCommand::Cancel(reason) => {
                         info!("🛑 Cancelling consensus: {}", reason);
                         if let Some(token) = current_cancellation.as_ref() {
-                            token.cancel(crate::consensus::cancellation::CancellationReason::UserRequested);
+                            token.cancel(
+                                crate::consensus::cancellation::CancellationReason::UserRequested,
+                            );
                         }
                     }
                     ConsensusCommand::Shutdown => {
@@ -143,43 +154,46 @@ impl ConsensusThreadWrapper {
                     }
                 }
             }
-            
+
             info!("✅ Consensus thread ended cleanly");
         });
-        
-        Ok(Self {
-            cmd_tx,
-        })
+
+        Ok(Self { cmd_tx })
     }
-    
+
     /// Process query - sends to Tokio thread
-    pub async fn process_query(&self, query: String) -> Result<(String, mpsc::UnboundedReceiver<ConsensusUIEvent>)> {
+    pub async fn process_query(
+        &self,
+        query: String,
+    ) -> Result<(String, mpsc::UnboundedReceiver<ConsensusUIEvent>)> {
         info!("🎯 Sending query to Tokio thread (UI stays responsive!)");
-        
+
         let (reply_tx, mut reply_rx) = mpsc::unbounded_channel();
-        
+
         info!("📤 Sending ProcessQuery command to consensus thread");
-        
+
         if self.cmd_tx.is_closed() {
             error!("❌ Command channel is already closed!");
             return Err(anyhow::anyhow!("Consensus thread not running"));
         }
-        
+
         self.cmd_tx.send(ConsensusCommand::ProcessQuery {
             query: query.clone(),
             reply: reply_tx,
         })?;
-        
+
         info!("⏳ Waiting for response from consensus thread...");
-        
+
         // Wait for result and event receiver from the Tokio thread
-        let (result, event_rx) = reply_rx.recv().await
+        let (result, event_rx) = reply_rx
+            .recv()
+            .await
             .ok_or_else(|| anyhow::anyhow!("Consensus thread disconnected"))??;
-        
+
         // Return result and the event receiver from the consensus thread
         Ok((result, event_rx))
     }
-    
+
     /// Run consensus on the Tokio thread - EXACTLY as it was in 2bd6753
     async fn run_consensus(
         engine: &mut ConsensusEngine,
@@ -190,13 +204,14 @@ impl ConsensusThreadWrapper {
     ) -> Result<String> {
         // This is the EXACT code from 2bd6753:src/desktop/consensus_integration.rs lines 1155-1263
         // We're just copying what worked before into our new thread architecture
-        
+
         // Create a new pipeline for this request to avoid lock contention
         // The engine only needs to be locked briefly to get configuration
-        let (api_key, profile, database, repo_context, ai_helpers) = engine.get_pipeline_config().await;
-        
+        let (api_key, profile, database, repo_context, ai_helpers) =
+            engine.get_pipeline_config().await;
+
         let api_key = api_key.ok_or_else(|| anyhow::anyhow!("No API key configured"))?;
-        
+
         // Send profile loaded event for UI
         let models = vec![
             profile.generator_model.clone(),
@@ -217,12 +232,9 @@ impl ConsensusThreadWrapper {
             retry_policy: crate::consensus::types::RetryPolicy::default(),
             context_injection: crate::consensus::types::ContextInjectionStrategy::Smart,
         };
-        
-        let mut pipeline = ConsensusPipeline::new(
-            config.clone(),
-            profile.clone(),
-            Some(api_key.clone()),
-        );
+
+        let mut pipeline =
+            ConsensusPipeline::new(config.clone(), profile.clone(), Some(api_key.clone()));
 
         // Configure the pipeline
         if let Some(ref db) = database {
@@ -244,7 +256,7 @@ impl ConsensusThreadWrapper {
         if let Err(e) = pipeline.initialize_consensus_memory().await {
             tracing::warn!("Failed to initialize consensus memory: {}", e);
         }
-        
+
         // Initialize mode detection for AI-based routing - EXACTLY as in 2bd6753
         pipeline = pipeline.with_mode_detection().await
             .unwrap_or_else(|e| {
@@ -255,19 +267,19 @@ impl ConsensusThreadWrapper {
         // Create complete callbacks from 2bd6753 - restored exactly as they were
         let auto_accept_enabled = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let conversation_id = crate::core::database::generate_id();
-        
+
         let desktop_callbacks = Arc::new(DesktopStreamingCallbacks::new(
             event_tx.clone(),
             auto_accept_enabled,
             conversation_id,
             query.clone(),
         ));
-        
+
         // Use batching to prevent CPU overload but with complete callbacks
         let batched_callbacks = Arc::new(BatchedUIEventCallbacks::new(desktop_callbacks));
-        
+
         info!("🎛️ Using batched callbacks (10 FPS) to prevent CPU overload");
-        
+
         // Now process without holding any locks - EXACTLY as in 2bd6753
         // Note: user_id should come from app_state but we don't have access here
         // For now use None like the database storage calls in the original code
@@ -282,8 +294,10 @@ impl ConsensusThreadWrapper {
                 info!("✅ Consensus pipeline completed successfully!");
                 // Only send completion event if consensus completed successfully
                 let _ = event_tx.send(ConsensusUIEvent::Completed);
-                
-                let response = r.result.unwrap_or_else(|| "No response received".to_string());
+
+                let response = r
+                    .result
+                    .unwrap_or_else(|| "No response received".to_string());
                 info!("📝 Consensus response length: {} chars", response.len());
                 Ok(response)
             }
@@ -295,9 +309,9 @@ impl ConsensusThreadWrapper {
                     let _ = event_tx.send(ConsensusUIEvent::Cancelled {
                         reason: "User cancelled".to_string(),
                     });
-                    
+
                     tracing::info!("Consensus was cancelled");
-                    
+
                     // Return empty result for cancelled consensus
                     Ok("".to_string())
                 } else {
@@ -307,13 +321,14 @@ impl ConsensusThreadWrapper {
             }
         }
     }
-    
+
     /// Cancel consensus
     pub async fn cancel_consensus(&self, reason: &str) -> Result<()> {
-        self.cmd_tx.send(ConsensusCommand::Cancel(reason.to_string()))?;
+        self.cmd_tx
+            .send(ConsensusCommand::Cancel(reason.to_string()))?;
         Ok(())
     }
-    
+
     /// Shutdown the consensus thread
     pub fn shutdown(&self) {
         info!("🔄 Sending shutdown command to consensus thread");
@@ -341,12 +356,12 @@ impl BatchedUIEventCallbacks {
             pending_content: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    
+
     async fn should_send_update(&self) -> bool {
         let last_update = self.last_update.read().await;
         last_update.elapsed() >= self.update_interval
     }
-    
+
     async fn mark_updated(&self) {
         let mut last_update = self.last_update.write().await;
         *last_update = Instant::now();
@@ -358,10 +373,15 @@ impl StreamingCallbacks for BatchedUIEventCallbacks {
         // Always send stage start immediately (not batched)
         self.inner.on_stage_start(stage, model)
     }
-    
-    fn on_stage_chunk(&self, stage: crate::consensus::types::Stage, chunk: &str, total: &str) -> Result<()> {
+
+    fn on_stage_chunk(
+        &self,
+        stage: crate::consensus::types::Stage,
+        chunk: &str,
+        total: &str,
+    ) -> Result<()> {
         // This is the critical fix - batch the chunk updates to prevent CPU overload!
-        
+
         // Update pending content
         let pending_content = self.pending_content.clone();
         let inner = self.inner.clone();
@@ -370,24 +390,24 @@ impl StreamingCallbacks for BatchedUIEventCallbacks {
         let stage_copy = stage;
         let chunk_str = chunk.to_string();
         let total_str = total.to_string();
-        
+
         tokio::spawn(async move {
             // Always update the accumulated content
             {
                 let mut pending = pending_content.write().await;
                 pending.insert(stage_copy, total_str.clone());
             }
-            
+
             // Only send UI update if enough time has passed (batching!)
             let should_update = {
                 let last = last_update.read().await;
                 last.elapsed() >= update_interval
             };
-            
+
             if should_update {
                 // Send the accumulated content
                 let _ = inner.on_stage_chunk(stage_copy, &chunk_str, &total_str);
-                
+
                 // Update timestamp
                 {
                     let mut last = last_update.write().await;
@@ -395,28 +415,36 @@ impl StreamingCallbacks for BatchedUIEventCallbacks {
                 }
             }
         });
-        
+
         Ok(())
     }
-    
-    fn on_stage_complete(&self, stage: crate::consensus::types::Stage, result: &crate::consensus::types::StageResult) -> Result<()> {
+
+    fn on_stage_complete(
+        &self,
+        stage: crate::consensus::types::Stage,
+        result: &crate::consensus::types::StageResult,
+    ) -> Result<()> {
         // Always send stage completion immediately (not batched)
         self.inner.on_stage_complete(stage, result)
     }
-    
+
     // Forward other methods without batching
     fn on_profile_loaded(&self, profile_name: &str, models: &[String]) -> Result<()> {
         self.inner.on_profile_loaded(profile_name, models)
     }
-    
-    fn on_stage_progress(&self, stage: crate::consensus::types::Stage, progress: crate::consensus::streaming::ProgressInfo) -> Result<()> {
+
+    fn on_stage_progress(
+        &self,
+        stage: crate::consensus::types::Stage,
+        progress: crate::consensus::streaming::ProgressInfo,
+    ) -> Result<()> {
         self.inner.on_stage_progress(stage, progress)
     }
-    
+
     fn on_error(&self, stage: crate::consensus::types::Stage, error: &anyhow::Error) -> Result<()> {
         self.inner.on_error(stage, error)
     }
-    
+
     fn on_d1_authorization(&self, conversations_remaining: u32) -> Result<()> {
         self.inner.on_d1_authorization(conversations_remaining)
     }
@@ -428,18 +456,25 @@ struct DesktopStreamingCallbacks {
     auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>,
     conversation_id: String,
     question: String,
-    stages_completed: Arc<Mutex<Vec<(crate::consensus::types::Stage, crate::consensus::types::StageResult)>>>,
+    stages_completed: Arc<
+        Mutex<
+            Vec<(
+                crate::consensus::types::Stage,
+                crate::consensus::types::StageResult,
+            )>,
+        >,
+    >,
 }
 
 impl DesktopStreamingCallbacks {
     pub fn new(
-        event_sender: mpsc::UnboundedSender<ConsensusUIEvent>, 
+        event_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
         auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>,
         conversation_id: String,
         question: String,
     ) -> Self {
-        Self { 
-            event_sender, 
+        Self {
+            event_sender,
             auto_accept_enabled,
             conversation_id,
             question,
@@ -450,23 +485,35 @@ impl DesktopStreamingCallbacks {
 
 impl StreamingCallbacks for DesktopStreamingCallbacks {
     fn on_profile_loaded(&self, profile_name: &str, models: &[String]) -> Result<()> {
-        tracing::info!("🎯 Profile loaded callback: {} with models {:?}", profile_name, models);
-        
+        tracing::info!(
+            "🎯 Profile loaded callback: {} with models {:?}",
+            profile_name,
+            models
+        );
+
         // Send profile loaded event to update UI
         let _ = self.event_sender.send(ConsensusUIEvent::ProfileLoaded {
             profile_name: profile_name.to_string(),
             models: models.to_vec(),
         });
-        
+
         Ok(())
     }
-    
+
     fn on_stage_start(&self, stage: crate::consensus::types::Stage, model: &str) -> Result<()> {
         let consensus_stage = match stage {
-            crate::consensus::types::Stage::Generator => crate::desktop::state::ConsensusStage::Generator,
-            crate::consensus::types::Stage::Refiner => crate::desktop::state::ConsensusStage::Refiner,
-            crate::consensus::types::Stage::Validator => crate::desktop::state::ConsensusStage::Validator,
-            crate::consensus::types::Stage::Curator => crate::desktop::state::ConsensusStage::Curator,
+            crate::consensus::types::Stage::Generator => {
+                crate::desktop::state::ConsensusStage::Generator
+            }
+            crate::consensus::types::Stage::Refiner => {
+                crate::desktop::state::ConsensusStage::Refiner
+            }
+            crate::consensus::types::Stage::Validator => {
+                crate::desktop::state::ConsensusStage::Validator
+            }
+            crate::consensus::types::Stage::Curator => {
+                crate::desktop::state::ConsensusStage::Curator
+            }
         };
 
         let _ = self.event_sender.send(ConsensusUIEvent::StageStarted {
@@ -491,12 +538,25 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         Ok(())
     }
 
-    fn on_stage_chunk(&self, stage: crate::consensus::types::Stage, chunk: &str, total_content: &str) -> Result<()> {
+    fn on_stage_chunk(
+        &self,
+        stage: crate::consensus::types::Stage,
+        chunk: &str,
+        total_content: &str,
+    ) -> Result<()> {
         let consensus_stage = match stage {
-            crate::consensus::types::Stage::Generator => crate::desktop::state::ConsensusStage::Generator,
-            crate::consensus::types::Stage::Refiner => crate::desktop::state::ConsensusStage::Refiner,
-            crate::consensus::types::Stage::Validator => crate::desktop::state::ConsensusStage::Validator,
-            crate::consensus::types::Stage::Curator => crate::desktop::state::ConsensusStage::Curator,
+            crate::consensus::types::Stage::Generator => {
+                crate::desktop::state::ConsensusStage::Generator
+            }
+            crate::consensus::types::Stage::Refiner => {
+                crate::desktop::state::ConsensusStage::Refiner
+            }
+            crate::consensus::types::Stage::Validator => {
+                crate::desktop::state::ConsensusStage::Validator
+            }
+            crate::consensus::types::Stage::Curator => {
+                crate::desktop::state::ConsensusStage::Curator
+            }
         };
 
         tracing::debug!(
@@ -525,12 +585,24 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         Ok(())
     }
 
-    fn on_stage_progress(&self, stage: crate::consensus::types::Stage, progress: crate::consensus::streaming::ProgressInfo) -> Result<()> {
+    fn on_stage_progress(
+        &self,
+        stage: crate::consensus::types::Stage,
+        progress: crate::consensus::streaming::ProgressInfo,
+    ) -> Result<()> {
         let consensus_stage = match stage {
-            crate::consensus::types::Stage::Generator => crate::desktop::state::ConsensusStage::Generator,
-            crate::consensus::types::Stage::Refiner => crate::desktop::state::ConsensusStage::Refiner,
-            crate::consensus::types::Stage::Validator => crate::desktop::state::ConsensusStage::Validator,
-            crate::consensus::types::Stage::Curator => crate::desktop::state::ConsensusStage::Curator,
+            crate::consensus::types::Stage::Generator => {
+                crate::desktop::state::ConsensusStage::Generator
+            }
+            crate::consensus::types::Stage::Refiner => {
+                crate::desktop::state::ConsensusStage::Refiner
+            }
+            crate::consensus::types::Stage::Validator => {
+                crate::desktop::state::ConsensusStage::Validator
+            }
+            crate::consensus::types::Stage::Curator => {
+                crate::desktop::state::ConsensusStage::Curator
+            }
         };
 
         let progress_percent = (progress.percentage * 100.0) as u8;
@@ -544,12 +616,24 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         Ok(())
     }
 
-    fn on_stage_complete(&self, stage: crate::consensus::types::Stage, result: &crate::consensus::types::StageResult) -> Result<()> {
+    fn on_stage_complete(
+        &self,
+        stage: crate::consensus::types::Stage,
+        result: &crate::consensus::types::StageResult,
+    ) -> Result<()> {
         let consensus_stage = match stage {
-            crate::consensus::types::Stage::Generator => crate::desktop::state::ConsensusStage::Generator,
-            crate::consensus::types::Stage::Refiner => crate::desktop::state::ConsensusStage::Refiner,
-            crate::consensus::types::Stage::Validator => crate::desktop::state::ConsensusStage::Validator,
-            crate::consensus::types::Stage::Curator => crate::desktop::state::ConsensusStage::Curator,
+            crate::consensus::types::Stage::Generator => {
+                crate::desktop::state::ConsensusStage::Generator
+            }
+            crate::consensus::types::Stage::Refiner => {
+                crate::desktop::state::ConsensusStage::Refiner
+            }
+            crate::consensus::types::Stage::Validator => {
+                crate::desktop::state::ConsensusStage::Validator
+            }
+            crate::consensus::types::Stage::Curator => {
+                crate::desktop::state::ConsensusStage::Curator
+            }
         };
 
         let cost = result.analytics.as_ref().map(|a| a.cost).unwrap_or(0.0);
@@ -564,10 +648,18 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
 
     fn on_error(&self, stage: crate::consensus::types::Stage, error: &anyhow::Error) -> Result<()> {
         let consensus_stage = match stage {
-            crate::consensus::types::Stage::Generator => crate::desktop::state::ConsensusStage::Generator,
-            crate::consensus::types::Stage::Refiner => crate::desktop::state::ConsensusStage::Refiner,
-            crate::consensus::types::Stage::Validator => crate::desktop::state::ConsensusStage::Validator,
-            crate::consensus::types::Stage::Curator => crate::desktop::state::ConsensusStage::Curator,
+            crate::consensus::types::Stage::Generator => {
+                crate::desktop::state::ConsensusStage::Generator
+            }
+            crate::consensus::types::Stage::Refiner => {
+                crate::desktop::state::ConsensusStage::Refiner
+            }
+            crate::consensus::types::Stage::Validator => {
+                crate::desktop::state::ConsensusStage::Validator
+            }
+            crate::consensus::types::Stage::Curator => {
+                crate::desktop::state::ConsensusStage::Curator
+            }
         };
 
         let _ = self.event_sender.send(ConsensusUIEvent::StageError {
@@ -580,20 +672,20 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
 }
 
 /// Create the wrapper (called from UI)
-pub async fn create_consensus_wrapper(app_state: Signal<AppState>) -> Option<ConsensusThreadWrapper> {
+pub async fn create_consensus_wrapper(
+    app_state: Signal<AppState>,
+) -> Option<ConsensusThreadWrapper> {
     match crate::core::api_keys::ApiKeyManager::has_valid_keys().await {
-        Ok(true) => {
-            match ConsensusThreadWrapper::new(app_state).await {
-                Ok(wrapper) => {
-                    info!("✅ Consensus wrapper created - engine runs on Tokio!");
-                    Some(wrapper)
-                }
-                Err(e) => {
-                    error!("Failed to create wrapper: {}", e);
-                    None
-                }
+        Ok(true) => match ConsensusThreadWrapper::new(app_state).await {
+            Ok(wrapper) => {
+                info!("✅ Consensus wrapper created - engine runs on Tokio!");
+                Some(wrapper)
             }
-        }
-        _ => None
+            Err(e) => {
+                error!("Failed to create wrapper: {}", e);
+                None
+            }
+        },
+        _ => None,
     }
 }

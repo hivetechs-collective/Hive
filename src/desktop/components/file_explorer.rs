@@ -2,13 +2,13 @@
 //!
 //! VS Code-style file tree with proper width and functionality
 
+use crate::desktop::git::{
+    use_git_decoration_manager, use_git_decoration_watcher, DecorationEvent, FileGitDecoration,
+    GitDecorationManager, GitDecorationWatcher,
+};
+use crate::desktop::state::{AppState, FileItem, FileType, GitFileStatus};
 use dioxus::prelude::*;
 use std::path::{Path, PathBuf};
-use crate::desktop::state::{AppState, FileItem, FileType, GitFileStatus};
-use crate::desktop::git::{
-    GitDecorationManager, FileGitDecoration, use_git_decoration_manager,
-    GitDecorationWatcher, use_git_decoration_watcher, DecorationEvent
-};
 
 /// File Explorer with proper VS Code styling
 #[component]
@@ -16,11 +16,11 @@ pub fn FileExplorer() -> Element {
     let mut app_state = use_context::<Signal<AppState>>();
     let mut search_query = use_signal(String::new);
     let mut show_hidden = use_signal(|| false);
-    
+
     // Initialize git decoration system
     let decoration_manager = use_git_decoration_manager();
     let decoration_watcher = use_git_decoration_watcher(decoration_manager.clone());
-    
+
     // Start watching for git changes if we have a project loaded
     use_effect(move || {
         if let Some(project) = &app_state.read().current_project {
@@ -223,15 +223,19 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
     let is_directory = file.is_directory;
 
     // Git status styling
-    let git_class = file.git_status.as_ref().map(|status| match status {
-        GitFileStatus::Modified => "git-modified",
-        GitFileStatus::Added => "git-added",
-        GitFileStatus::Deleted => "git-deleted",
-        GitFileStatus::Untracked => "git-untracked",
-        GitFileStatus::Renamed => "git-renamed",
-        GitFileStatus::Copied => "git-copied",
-        GitFileStatus::Ignored => "git-ignored",
-    }).unwrap_or("");
+    let git_class = file
+        .git_status
+        .as_ref()
+        .map(|status| match status {
+            GitFileStatus::Modified => "git-modified",
+            GitFileStatus::Added => "git-added",
+            GitFileStatus::Deleted => "git-deleted",
+            GitFileStatus::Untracked => "git-untracked",
+            GitFileStatus::Renamed => "git-renamed",
+            GitFileStatus::Copied => "git-copied",
+            GitFileStatus::Ignored => "git-ignored",
+        })
+        .unwrap_or("");
 
     rsx! {
         div {

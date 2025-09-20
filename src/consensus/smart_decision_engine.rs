@@ -1,20 +1,20 @@
 // Smart Decision Engine - Intelligent auto-accept decisions based on AI analysis
 use anyhow::Result;
-use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::operation_analysis::{
-    OperationAnalysis, AutoAcceptMode, ActionPriority, OperationContext,
-    UnifiedScore, OperationGroups, ComponentScores, ScoringFactors, AnalysisStatistics
+    ActionPriority, AnalysisStatistics, AutoAcceptMode, ComponentScores, OperationAnalysis,
+    OperationContext, OperationGroups, ScoringFactors, UnifiedScore,
 };
-use crate::consensus::operation_intelligence::OperationOutcome;
 use crate::consensus::operation_history::OperationHistoryDatabase;
+use crate::consensus::operation_intelligence::OperationOutcome;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ExecutionDecision {
@@ -42,7 +42,7 @@ impl ExecutionDecision {
     pub fn should_execute(&self) -> bool {
         matches!(self, ExecutionDecision::AutoExecute { .. })
     }
-    
+
     pub fn confidence(&self) -> f32 {
         match self {
             ExecutionDecision::AutoExecute { confidence, .. } => *confidence,
@@ -50,28 +50,36 @@ impl ExecutionDecision {
             ExecutionDecision::Block { .. } => 0.0,
         }
     }
-    
+
     pub fn primary_reasoning(&self) -> Vec<String> {
         match self {
             ExecutionDecision::AutoExecute { reason, .. } => vec![reason.clone()],
-            ExecutionDecision::RequireConfirmation { reason, warnings, .. } => {
+            ExecutionDecision::RequireConfirmation {
+                reason, warnings, ..
+            } => {
                 let mut reasons = vec![reason.clone()];
                 reasons.extend(warnings.clone());
                 reasons
             }
-            ExecutionDecision::Block { reason, critical_issues, .. } => {
+            ExecutionDecision::Block {
+                reason,
+                critical_issues,
+                ..
+            } => {
                 let mut reasons = vec![reason.clone()];
                 reasons.extend(critical_issues.clone());
                 reasons
             }
         }
     }
-    
+
     pub fn risk_factors(&self) -> Vec<String> {
         match self {
             ExecutionDecision::AutoExecute { .. } => vec![],
             ExecutionDecision::RequireConfirmation { warnings, .. } => warnings.clone(),
-            ExecutionDecision::Block { critical_issues, .. } => critical_issues.clone(),
+            ExecutionDecision::Block {
+                critical_issues, ..
+            } => critical_issues.clone(),
         }
     }
 }
@@ -167,15 +175,16 @@ impl SmartDecisionEngine {
     pub async fn make_decision(&self, analysis: &OperationAnalysis) -> Result<ExecutionDecision> {
         let mode = self.mode.read().await.clone();
         let prefs = self.user_preferences.read().await.clone();
-        
+
         // Update metrics
         {
             let mut metrics = self.metrics.write().await;
             metrics.total_decisions += 1;
-            
+
             // Update running average of confidence
-            let new_avg = (metrics.average_confidence * (metrics.total_decisions - 1) as f32 
-                + analysis.unified_score.confidence) / metrics.total_decisions as f32;
+            let new_avg = (metrics.average_confidence * (metrics.total_decisions - 1) as f32
+                + analysis.unified_score.confidence)
+                / metrics.total_decisions as f32;
             metrics.average_confidence = new_avg;
         }
 
@@ -187,7 +196,10 @@ impl SmartDecisionEngine {
         }
 
         // Apply custom rules first
-        if let Some(rule_decision) = self.apply_custom_rules(&analysis.operations, &prefs).await? {
+        if let Some(rule_decision) = self
+            .apply_custom_rules(&analysis.operations, &prefs)
+            .await?
+        {
             self.cache_decision(&cache_key, &rule_decision).await;
             return Ok(rule_decision);
         }
@@ -197,22 +209,20 @@ impl SmartDecisionEngine {
             AutoAcceptMode::Conservative => {
                 self.make_conservative_decision(analysis, &prefs).await?
             }
-            AutoAcceptMode::Balanced => {
-                self.make_balanced_decision(analysis, &prefs).await?
-            }
-            AutoAcceptMode::Aggressive => {
-                self.make_aggressive_decision(analysis, &prefs).await?
-            }
+            AutoAcceptMode::Balanced => self.make_balanced_decision(analysis, &prefs).await?,
+            AutoAcceptMode::Aggressive => self.make_aggressive_decision(analysis, &prefs).await?,
             AutoAcceptMode::Plan => {
                 // In plan mode, never auto-execute
                 ExecutionDecision::RequireConfirmation {
                     reason: "Plan mode active - review operations before execution".to_string(),
-                    warnings: analysis.recommendations
+                    warnings: analysis
+                        .recommendations
                         .iter()
                         .filter(|r| r.priority == ActionPriority::High)
                         .map(|r| r.description.clone())
                         .collect(),
-                    suggestions: analysis.recommendations
+                    suggestions: analysis
+                        .recommendations
                         .iter()
                         .filter(|r| r.priority == ActionPriority::Medium)
                         .map(|r| r.description.clone())
@@ -235,10 +245,10 @@ impl SmartDecisionEngine {
 
         // Update metrics based on decision
         self.update_metrics_for_decision(&decision).await;
-        
+
         // Cache the decision
         self.cache_decision(&cache_key, &decision).await;
-        
+
         Ok(decision)
     }
 
@@ -248,13 +258,16 @@ impl SmartDecisionEngine {
         prefs: &UserPreferences,
     ) -> Result<ExecutionDecision> {
         let score = &analysis.unified_score;
-        
+
         // Conservative mode: Very high confidence (>90%) and very low risk (<15%)
         if score.confidence > 90.0 && score.risk < 15.0 {
             // Additional checks for conservative mode
-            if self.has_dangerous_operations(&analysis.operations) && prefs.require_confirmation_for_deletions {
+            if self.has_dangerous_operations(&analysis.operations)
+                && prefs.require_confirmation_for_deletions
+            {
                 return Ok(ExecutionDecision::RequireConfirmation {
-                    reason: "Deletion operations always require confirmation in conservative mode".to_string(),
+                    reason: "Deletion operations always require confirmation in conservative mode"
+                        .to_string(),
                     warnings: vec!["Operation includes file deletions".to_string()],
                     suggestions: vec!["Consider creating backups first".to_string()],
                     confidence: score.confidence,
@@ -263,8 +276,10 @@ impl SmartDecisionEngine {
             }
 
             Ok(ExecutionDecision::AutoExecute {
-                reason: format!("High confidence ({:.1}%) with minimal risk ({:.1}%)", 
-                    score.confidence, score.risk),
+                reason: format!(
+                    "High confidence ({:.1}%) with minimal risk ({:.1}%)",
+                    score.confidence, score.risk
+                ),
                 confidence: score.confidence,
                 risk_level: score.risk,
             })
@@ -277,8 +292,10 @@ impl SmartDecisionEngine {
             })
         } else {
             Ok(ExecutionDecision::RequireConfirmation {
-                reason: format!("Confidence ({:.1}%) or risk ({:.1}%) outside conservative thresholds", 
-                    score.confidence, score.risk),
+                reason: format!(
+                    "Confidence ({:.1}%) or risk ({:.1}%) outside conservative thresholds",
+                    score.confidence, score.risk
+                ),
                 warnings: self.extract_warnings(analysis),
                 suggestions: self.extract_suggestions(analysis),
                 confidence: score.confidence,
@@ -293,14 +310,19 @@ impl SmartDecisionEngine {
         prefs: &UserPreferences,
     ) -> Result<ExecutionDecision> {
         let score = &analysis.unified_score;
-        
+
         // Balanced mode: Good confidence (>80%) and acceptable risk (<25%)
         if score.confidence > 80.0 && score.risk < 25.0 {
             // Check for special cases
-            if self.is_mass_update(&analysis.operations) && prefs.require_confirmation_for_mass_updates {
+            if self.is_mass_update(&analysis.operations)
+                && prefs.require_confirmation_for_mass_updates
+            {
                 return Ok(ExecutionDecision::RequireConfirmation {
                     reason: "Mass update operations require confirmation".to_string(),
-                    warnings: vec![format!("Operation affects {} files", analysis.operations.len())],
+                    warnings: vec![format!(
+                        "Operation affects {} files",
+                        analysis.operations.len()
+                    )],
                     suggestions: vec!["Consider executing in smaller batches".to_string()],
                     confidence: score.confidence,
                     risk_level: score.risk,
@@ -309,12 +331,16 @@ impl SmartDecisionEngine {
 
             // Use historical data to make smarter decisions
             if let Some(history_db) = &self.history_db {
-                let similar_success_rate = self.get_similar_operation_success_rate(analysis, history_db).await?;
-                
+                let similar_success_rate = self
+                    .get_similar_operation_success_rate(analysis, history_db)
+                    .await?;
+
                 if similar_success_rate < 0.7 {
                     return Ok(ExecutionDecision::RequireConfirmation {
-                        reason: format!("Similar operations have only {:.0}% success rate", 
-                            similar_success_rate * 100.0),
+                        reason: format!(
+                            "Similar operations have only {:.0}% success rate",
+                            similar_success_rate * 100.0
+                        ),
                         warnings: vec!["Historical data shows potential issues".to_string()],
                         suggestions: vec!["Review operation details carefully".to_string()],
                         confidence: score.confidence,
@@ -324,15 +350,17 @@ impl SmartDecisionEngine {
             }
 
             Ok(ExecutionDecision::AutoExecute {
-                reason: format!("Balanced analysis shows good confidence ({:.1}%) with acceptable risk ({:.1}%)", 
+                reason: format!("Balanced analysis shows good confidence ({:.1}%) with acceptable risk ({:.1}%)",
                     score.confidence, score.risk),
                 confidence: score.confidence,
                 risk_level: score.risk,
             })
         } else if score.risk > 60.0 || score.confidence < 40.0 {
             Ok(ExecutionDecision::Block {
-                reason: format!("Risk ({:.1}%) or confidence ({:.1}%) outside acceptable range", 
-                    score.risk, score.confidence),
+                reason: format!(
+                    "Risk ({:.1}%) or confidence ({:.1}%) outside acceptable range",
+                    score.risk, score.confidence
+                ),
                 critical_issues: self.extract_critical_issues(analysis),
                 alternatives: self.suggest_alternatives(analysis),
                 risk_level: score.risk,
@@ -354,7 +382,7 @@ impl SmartDecisionEngine {
         _prefs: &UserPreferences,
     ) -> Result<ExecutionDecision> {
         let score = &analysis.unified_score;
-        
+
         // Aggressive mode: Lower thresholds (>70% confidence, <40% risk)
         if score.risk > 80.0 {
             // Even aggressive mode blocks very high risk
@@ -366,8 +394,10 @@ impl SmartDecisionEngine {
             })
         } else if score.confidence > 70.0 && score.risk < 40.0 {
             Ok(ExecutionDecision::AutoExecute {
-                reason: format!("Aggressive mode accepts {:.1}% confidence with {:.1}% risk", 
-                    score.confidence, score.risk),
+                reason: format!(
+                    "Aggressive mode accepts {:.1}% confidence with {:.1}% risk",
+                    score.confidence, score.risk
+                ),
                 confidence: score.confidence,
                 risk_level: score.risk,
             })
@@ -385,7 +415,7 @@ impl SmartDecisionEngine {
     pub async fn learn_from_user_decision(&self, decision: &UserDecision) -> Result<()> {
         // Store the decision
         self.learning_data.write().await.push(decision.clone());
-        
+
         // Update operation history if available
         if let Some(history_db) = &self.history_db {
             let outcome = match &decision.decision {
@@ -414,59 +444,63 @@ impl SmartDecisionEngine {
                     post_operation_quality: None,
                 },
             };
-            
+
             // Record the outcome - need to parse operation_id as UUID
             if let Ok(uuid) = uuid::Uuid::parse_str(&decision.operation_id) {
                 history_db.update_outcome(uuid, &outcome)?;
             }
         }
-        
+
         // Analyze patterns in user decisions
         self.analyze_learning_patterns().await?;
-        
+
         Ok(())
     }
 
     async fn analyze_learning_patterns(&self) -> Result<()> {
         let learning_data = self.learning_data.read().await;
-        
+
         if learning_data.len() < 10 {
             return Ok(()); // Not enough data to learn from
         }
-        
+
         // Analyze user override patterns
         let mut override_patterns = HashMap::new();
-        
+
         for decision in learning_data.iter() {
             let was_auto_execute = matches!(
                 self.make_decision(&decision.analysis).await?,
                 ExecutionDecision::AutoExecute { .. }
             );
-            
+
             let user_executed = matches!(
                 decision.decision,
                 UserChoice::Execute | UserChoice::ModifyAndExecute { .. }
             );
-            
+
             if was_auto_execute != user_executed {
                 // User overrode our decision
-                let pattern_key = format!("{:.0}_{:.0}", 
+                let pattern_key = format!(
+                    "{:.0}_{:.0}",
                     decision.analysis.unified_score.confidence,
                     decision.analysis.unified_score.risk
                 );
-                
+
                 *override_patterns.entry(pattern_key).or_insert(0) += 1;
             }
         }
-        
+
         // If we see consistent overrides, adjust preferences
         for (pattern, count) in override_patterns {
             if count > 3 {
-                info!("Detected user override pattern: {} (count: {})", pattern, count);
+                info!(
+                    "Detected user override pattern: {} (count: {})",
+                    pattern, count
+                );
                 // TODO: Adjust risk tolerance or confidence thresholds based on patterns
             }
         }
-        
+
         Ok(())
     }
 
@@ -477,16 +511,16 @@ impl SmartDecisionEngine {
     ) -> Result<Option<ExecutionDecision>> {
         for rule in &prefs.custom_rules {
             let regex = regex::Regex::new(&rule.pattern)?;
-            
+
             for op in operations {
                 let path = match op {
-                    FileOperation::Create { path, .. } |
-                    FileOperation::Update { path, .. } |
-                    FileOperation::Append { path, .. } |
-                    FileOperation::Delete { path } |
-                    FileOperation::Rename { from: path, .. } => path,
+                    FileOperation::Create { path, .. }
+                    | FileOperation::Update { path, .. }
+                    | FileOperation::Append { path, .. }
+                    | FileOperation::Delete { path }
+                    | FileOperation::Rename { from: path, .. } => path,
                 };
-                
+
                 if regex.is_match(&path.to_string_lossy()) {
                     return Ok(Some(match rule.action {
                         RuleAction::AlwaysConfirm => ExecutionDecision::RequireConfirmation {
@@ -518,7 +552,7 @@ impl SmartDecisionEngine {
                 }
             }
         }
-        
+
         Ok(None)
     }
 
@@ -529,7 +563,7 @@ impl SmartDecisionEngine {
     ) -> Result<f32> {
         // Query historical data for similar operations
         let stats = history_db.get_statistics()?;
-        
+
         // Simple heuristic: if we have enough data, use success rate
         if stats.total_operations > 50 {
             Ok(stats.successful_operations as f32 / stats.total_operations as f32)
@@ -540,7 +574,9 @@ impl SmartDecisionEngine {
     }
 
     fn has_dangerous_operations(&self, operations: &[FileOperation]) -> bool {
-        operations.iter().any(|op| matches!(op, FileOperation::Delete { .. }))
+        operations
+            .iter()
+            .any(|op| matches!(op, FileOperation::Delete { .. }))
     }
 
     fn is_mass_update(&self, operations: &[FileOperation]) -> bool {
@@ -548,7 +584,8 @@ impl SmartDecisionEngine {
     }
 
     fn extract_critical_issues(&self, analysis: &OperationAnalysis) -> Vec<String> {
-        analysis.recommendations
+        analysis
+            .recommendations
             .iter()
             .filter(|r| r.priority == ActionPriority::Critical)
             .map(|r| r.description.clone())
@@ -556,7 +593,8 @@ impl SmartDecisionEngine {
     }
 
     fn extract_warnings(&self, analysis: &OperationAnalysis) -> Vec<String> {
-        analysis.recommendations
+        analysis
+            .recommendations
             .iter()
             .filter(|r| r.priority == ActionPriority::High)
             .map(|r| r.description.clone())
@@ -564,7 +602,8 @@ impl SmartDecisionEngine {
     }
 
     fn extract_suggestions(&self, analysis: &OperationAnalysis) -> Vec<String> {
-        analysis.recommendations
+        analysis
+            .recommendations
             .iter()
             .filter(|r| r.priority == ActionPriority::Medium)
             .map(|r| r.description.clone())
@@ -573,48 +612,54 @@ impl SmartDecisionEngine {
 
     fn suggest_alternatives(&self, analysis: &OperationAnalysis) -> Vec<String> {
         let mut alternatives = vec![];
-        
+
         // Suggest breaking down large operations
         if analysis.operations.len() > 10 {
             alternatives.push("Break operation into smaller batches".to_string());
         }
-        
+
         // Suggest backups for deletions
         if self.has_dangerous_operations(&analysis.operations) {
             alternatives.push("Create backups before deletion".to_string());
             alternatives.push("Consider archiving instead of deleting".to_string());
         }
-        
+
         // Add AI recommendations marked as alternatives
         alternatives.extend(
-            analysis.recommendations
+            analysis
+                .recommendations
                 .iter()
-                .filter(|r| r.description.contains("alternative") || r.description.contains("instead"))
-                .map(|r| r.description.clone())
+                .filter(|r| {
+                    r.description.contains("alternative") || r.description.contains("instead")
+                })
+                .map(|r| r.description.clone()),
         );
-        
+
         alternatives
     }
 
     fn generate_cache_key(&self, operations: &[FileOperation]) -> String {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
+        use std::hash::{Hash, Hasher};
+
         let mut hasher = DefaultHasher::new();
         for op in operations {
             format!("{:?}", op).hash(&mut hasher);
         }
-        
+
         format!("decision_{:x}", hasher.finish())
     }
 
     async fn cache_decision(&self, key: &str, decision: &ExecutionDecision) {
-        self.decision_cache.write().await.insert(key.to_string(), decision.clone());
+        self.decision_cache
+            .write()
+            .await
+            .insert(key.to_string(), decision.clone());
     }
 
     async fn update_metrics_for_decision(&self, decision: &ExecutionDecision) {
         let mut metrics = self.metrics.write().await;
-        
+
         match decision {
             ExecutionDecision::AutoExecute { .. } => metrics.auto_executed += 1,
             ExecutionDecision::RequireConfirmation { .. } => metrics.confirmations_required += 1,

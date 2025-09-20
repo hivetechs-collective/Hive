@@ -3,18 +3,16 @@
 //! This module provides trust-based file operations with comprehensive
 //! security controls and audit logging.
 
-use std::path::{Path, PathBuf};
+use anyhow::{Context, Result};
+use chrono::Utc;
 use std::fs::Metadata;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use anyhow::{Context, Result};
-use tracing::{debug, warn, error};
-use chrono::Utc;
+use tracing::{debug, error, warn};
 
-use super::security::{
-    TrustManager, TrustDecision, SecurityError, SecurityEvent, SecurityPolicy
-};
+use super::security::{SecurityError, SecurityEvent, SecurityPolicy, TrustDecision, TrustManager};
 
 /// Secure file access wrapper with trust-based controls
 #[derive(Debug)]
@@ -46,13 +44,19 @@ impl SecureFileAccess {
         self.verify_file_permissions(path).await?;
 
         // Read the file
-        let content = fs::read_to_string(path).await
+        let content = fs::read_to_string(path)
+            .await
             .with_context(|| format!("Failed to read file: {}", path.display()))?;
 
-        debug!("Successfully read file: {} ({} bytes)", path.display(), content.len());
+        debug!(
+            "Successfully read file: {} ({} bytes)",
+            path.display(),
+            content.len()
+        );
 
         // Log the access
-        self.log_file_access(path, FileOperation::Read, true).await?;
+        self.log_file_access(path, FileOperation::Read, true)
+            .await?;
 
         Ok(content)
     }
@@ -68,13 +72,19 @@ impl SecureFileAccess {
         self.verify_file_permissions(path).await?;
 
         // Read the file
-        let content = fs::read(path).await
+        let content = fs::read(path)
+            .await
             .with_context(|| format!("Failed to read file bytes: {}", path.display()))?;
 
-        debug!("Successfully read file bytes: {} ({} bytes)", path.display(), content.len());
+        debug!(
+            "Successfully read file bytes: {} ({} bytes)",
+            path.display(),
+            content.len()
+        );
 
         // Log the access
-        self.log_file_access(path, FileOperation::Read, true).await?;
+        self.log_file_access(path, FileOperation::Read, true)
+            .await?;
 
         Ok(content)
     }
@@ -91,19 +101,26 @@ impl SecureFileAccess {
         // Create parent directories if needed
         if let Some(parent) = path.parent() {
             if !parent.exists() {
-                fs::create_dir_all(parent).await
-                    .with_context(|| format!("Failed to create parent directory: {}", parent.display()))?;
+                fs::create_dir_all(parent).await.with_context(|| {
+                    format!("Failed to create parent directory: {}", parent.display())
+                })?;
             }
         }
 
         // Write the file
-        fs::write(path, content).await
+        fs::write(path, content)
+            .await
             .with_context(|| format!("Failed to write file: {}", path.display()))?;
 
-        debug!("Successfully wrote file: {} ({} bytes)", path.display(), content.len());
+        debug!(
+            "Successfully wrote file: {} ({} bytes)",
+            path.display(),
+            content.len()
+        );
 
         // Log the access
-        self.log_file_access(path, FileOperation::Write, true).await?;
+        self.log_file_access(path, FileOperation::Write, true)
+            .await?;
 
         Ok(())
     }
@@ -120,19 +137,26 @@ impl SecureFileAccess {
         // Create parent directories if needed
         if let Some(parent) = path.parent() {
             if !parent.exists() {
-                fs::create_dir_all(parent).await
-                    .with_context(|| format!("Failed to create parent directory: {}", parent.display()))?;
+                fs::create_dir_all(parent).await.with_context(|| {
+                    format!("Failed to create parent directory: {}", parent.display())
+                })?;
             }
         }
 
         // Write the file
-        fs::write(path, content).await
+        fs::write(path, content)
+            .await
             .with_context(|| format!("Failed to write file bytes: {}", path.display()))?;
 
-        debug!("Successfully wrote file bytes: {} ({} bytes)", path.display(), content.len());
+        debug!(
+            "Successfully wrote file bytes: {} ({} bytes)",
+            path.display(),
+            content.len()
+        );
 
         // Log the access
-        self.log_file_access(path, FileOperation::Write, true).await?;
+        self.log_file_access(path, FileOperation::Write, true)
+            .await?;
 
         Ok(())
     }
@@ -147,17 +171,23 @@ impl SecureFileAccess {
 
         // List directory contents
         let mut entries = Vec::new();
-        let mut dir = fs::read_dir(path).await
+        let mut dir = fs::read_dir(path)
+            .await
             .with_context(|| format!("Failed to read directory: {}", path.display()))?;
 
         while let Some(entry) = dir.next_entry().await? {
             entries.push(entry.path());
         }
 
-        debug!("Successfully listed directory: {} ({} entries)", path.display(), entries.len());
+        debug!(
+            "Successfully listed directory: {} ({} entries)",
+            path.display(),
+            entries.len()
+        );
 
         // Log the access
-        self.log_file_access(path, FileOperation::List, true).await?;
+        self.log_file_access(path, FileOperation::List, true)
+            .await?;
 
         Ok(entries)
     }
@@ -178,12 +208,14 @@ impl SecureFileAccess {
     /// Get file metadata with trust verification
     pub async fn get_metadata(&self, path: &Path) -> Result<Metadata> {
         // Verify trust before accessing metadata
-        self.verify_file_access(path, FileOperation::Metadata).await?;
+        self.verify_file_access(path, FileOperation::Metadata)
+            .await?;
 
         // Additional security checks
         self.verify_no_symlink_escape(path).await?;
 
-        let metadata = fs::metadata(path).await
+        let metadata = fs::metadata(path)
+            .await
             .with_context(|| format!("Failed to get metadata for: {}", path.display()))?;
 
         debug!("Successfully got metadata for: {}", path.display());
@@ -193,12 +225,14 @@ impl SecureFileAccess {
 
     /// Verify file access permissions based on trust and security policy
     async fn verify_file_access(&self, path: &Path, operation: FileOperation) -> Result<()> {
-        let canonical_path = path.canonicalize()
+        let canonical_path = path
+            .canonicalize()
             .with_context(|| format!("Failed to canonicalize path: {}", path.display()))?;
 
         // Get the directory containing the file
         let check_path = if canonical_path.is_file() {
-            canonical_path.parent()
+            canonical_path
+                .parent()
                 .ok_or_else(|| anyhow::anyhow!("File has no parent directory"))?
         } else {
             &canonical_path
@@ -206,7 +240,9 @@ impl SecureFileAccess {
 
         // Check trust through the trust manager
         let mut trust_manager = self.trust_manager.lock().await;
-        let decision = trust_manager.check_trust(check_path).await
+        let decision = trust_manager
+            .check_trust(check_path)
+            .await
             .with_context(|| format!("Failed to check trust for: {}", check_path.display()))?;
 
         match decision {
@@ -219,8 +255,13 @@ impl SecureFileAccess {
                 self.log_security_violation(
                     "File access denied by user".to_string(),
                     Some(canonical_path.clone()),
-                    format!("Operation: {:?}, Path: {}", operation, canonical_path.display()),
-                ).await?;
+                    format!(
+                        "Operation: {:?}, Path: {}",
+                        operation,
+                        canonical_path.display()
+                    ),
+                )
+                .await?;
 
                 Err(SecurityError::UntrustedPath(canonical_path).into())
             }
@@ -229,8 +270,13 @@ impl SecureFileAccess {
                 self.log_security_violation(
                     "File access blocked by policy".to_string(),
                     Some(canonical_path.clone()),
-                    format!("Operation: {:?}, Path: {}", operation, canonical_path.display()),
-                ).await?;
+                    format!(
+                        "Operation: {:?}, Path: {}",
+                        operation,
+                        canonical_path.display()
+                    ),
+                )
+                .await?;
 
                 Err(SecurityError::BlockedPath(canonical_path).into())
             }
@@ -239,24 +285,28 @@ impl SecureFileAccess {
 
     /// Verify that the path doesn't escape through symlinks
     async fn verify_no_symlink_escape(&self, path: &Path) -> Result<()> {
-        let canonical_path = path.canonicalize()
+        let canonical_path = path
+            .canonicalize()
             .with_context(|| format!("Failed to canonicalize path: {}", path.display()))?;
 
         // Check if the canonical path is within expected bounds
         // This helps prevent directory traversal attacks
-        let current_dir = std::env::current_dir()
-            .context("Failed to get current directory")?;
+        let current_dir = std::env::current_dir().context("Failed to get current directory")?;
 
         // For now, we'll be permissive but log suspicious paths
         if !canonical_path.starts_with(&current_dir) {
-            warn!("Path outside current directory: {}", canonical_path.display());
+            warn!(
+                "Path outside current directory: {}",
+                canonical_path.display()
+            );
 
             // Check if it's in a system directory (potential danger)
             let path_str = canonical_path.to_string_lossy();
-            if path_str.starts_with("/etc") ||
-               path_str.starts_with("/sys") ||
-               path_str.starts_with("/proc") ||
-               path_str.starts_with("/dev") {
+            if path_str.starts_with("/etc")
+                || path_str.starts_with("/sys")
+                || path_str.starts_with("/proc")
+                || path_str.starts_with("/dev")
+            {
                 return Err(SecurityError::SymlinkEscape(canonical_path).into());
             }
         }
@@ -268,13 +318,22 @@ impl SecureFileAccess {
     async fn verify_file_size_limit(&self, path: &Path) -> Result<()> {
         if let Ok(metadata) = fs::metadata(path).await {
             if metadata.len() > self.policy.max_file_size {
-                warn!("File too large: {} ({} bytes)", path.display(), metadata.len());
+                warn!(
+                    "File too large: {} ({} bytes)",
+                    path.display(),
+                    metadata.len()
+                );
 
                 self.log_security_violation(
                     "File size limit exceeded".to_string(),
                     Some(path.to_path_buf()),
-                    format!("Size: {} bytes, Limit: {} bytes", metadata.len(), self.policy.max_file_size),
-                ).await?;
+                    format!(
+                        "Size: {} bytes, Limit: {} bytes",
+                        metadata.len(),
+                        self.policy.max_file_size
+                    ),
+                )
+                .await?;
 
                 return Err(SecurityError::FileTooLarge.into());
             }
@@ -305,7 +364,10 @@ impl SecureFileAccess {
                     let temp_file = parent.join(".hive_write_test");
                     if let Err(e) = fs::write(&temp_file, "").await {
                         if e.kind() == std::io::ErrorKind::PermissionDenied {
-                            return Err(SecurityError::InsufficientPermissions(parent.to_path_buf()).into());
+                            return Err(SecurityError::InsufficientPermissions(
+                                parent.to_path_buf(),
+                            )
+                            .into());
                         }
                     } else {
                         // Clean up test file
@@ -319,8 +381,18 @@ impl SecureFileAccess {
     }
 
     /// Log file access events
-    async fn log_file_access(&self, path: &Path, operation: FileOperation, success: bool) -> Result<()> {
-        debug!("File access: {:?} on {} (success: {})", operation, path.display(), success);
+    async fn log_file_access(
+        &self,
+        path: &Path,
+        operation: FileOperation,
+        success: bool,
+    ) -> Result<()> {
+        debug!(
+            "File access: {:?} on {} (success: {})",
+            operation,
+            path.display(),
+            success
+        );
         Ok(())
     }
 
@@ -401,8 +473,8 @@ impl FileOperations {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::sync::Arc;
+    use tempfile::TempDir;
     use tokio::sync::Mutex;
 
     async fn create_test_trust_manager() -> Arc<Mutex<TrustManager>> {
@@ -430,7 +502,9 @@ mod tests {
 
         let temp_dir = TempDir::new().unwrap();
         let test_file = temp_dir.path().join("large_file.txt");
-        tokio::fs::write(&test_file, "This is definitely more than 10 bytes").await.unwrap();
+        tokio::fs::write(&test_file, "This is definitely more than 10 bytes")
+            .await
+            .unwrap();
 
         let result = file_access.verify_file_size_limit(&test_file).await;
         assert!(result.is_err());

@@ -1,12 +1,12 @@
 //! Consensus Cancellation System
-//! 
+//!
 //! Provides graceful cancellation support for long-running consensus operations.
 //! Users can interrupt the consensus pipeline at any stage without losing data.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::broadcast;
 use anyhow::Result;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::sync::broadcast;
 
 /// Cancellation token for consensus operations
 #[derive(Debug, Clone)]
@@ -72,7 +72,7 @@ impl CancellationToken {
     /// Create a child token that's cancelled when this token is cancelled
     pub fn child(&self) -> Self {
         let child = Self::new();
-        
+
         // If parent is already cancelled, cancel child immediately
         if self.is_cancelled() {
             child.cancel(CancellationReason::UserRequested);
@@ -86,7 +86,7 @@ impl CancellationToken {
                 }
             });
         }
-        
+
         child
     }
 }
@@ -184,10 +184,10 @@ mod tests {
         assert!(!child.is_cancelled());
 
         parent.cancel(CancellationReason::UserRequested);
-        
+
         // Give child token time to receive parent cancellation
         sleep(Duration::from_millis(10)).await;
-        
+
         assert!(parent.is_cancelled());
         assert!(child.is_cancelled());
     }

@@ -9,33 +9,38 @@ use tokio::io::AsyncWriteExt;
 pub async fn create_file(path: &Path, content: Option<&str>) -> Result<()> {
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await
+        tokio::fs::create_dir_all(parent)
+            .await
             .context("Failed to create parent directories")?;
     }
-    
+
     // Create the file
-    let mut file = tokio::fs::File::create(path).await
+    let mut file = tokio::fs::File::create(path)
+        .await
         .context("Failed to create file")?;
-    
+
     // Write initial content if provided
     if let Some(content) = content {
-        file.write_all(content.as_bytes()).await
+        file.write_all(content.as_bytes())
+            .await
             .context("Failed to write initial content")?;
     }
-    
+
     Ok(())
 }
 
 /// Create a new directory
 pub async fn create_folder(path: &Path) -> Result<()> {
-    tokio::fs::create_dir_all(path).await
+    tokio::fs::create_dir_all(path)
+        .await
         .context("Failed to create directory")?;
     Ok(())
 }
 
 /// Rename a file or directory
 pub async fn rename_item(old_path: &Path, new_path: &Path) -> Result<()> {
-    tokio::fs::rename(old_path, new_path).await
+    tokio::fs::rename(old_path, new_path)
+        .await
         .context("Failed to rename item")?;
     Ok(())
 }
@@ -43,10 +48,12 @@ pub async fn rename_item(old_path: &Path, new_path: &Path) -> Result<()> {
 /// Delete a file or directory
 pub async fn delete_item(path: &Path) -> Result<()> {
     if path.is_dir() {
-        tokio::fs::remove_dir_all(path).await
+        tokio::fs::remove_dir_all(path)
+            .await
             .context("Failed to remove directory")?;
     } else {
-        tokio::fs::remove_file(path).await
+        tokio::fs::remove_file(path)
+            .await
             .context("Failed to remove file")?;
     }
     Ok(())
@@ -61,7 +68,8 @@ pub async fn copy_item(src: &Path, dst: &Path) -> Result<()> {
         if let Some(parent) = dst.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        tokio::fs::copy(src, dst).await
+        tokio::fs::copy(src, dst)
+            .await
             .context("Failed to copy file")?;
     }
     Ok(())
@@ -73,7 +81,7 @@ pub async fn move_item(src: &Path, dst: &Path) -> Result<()> {
     if tokio::fs::rename(src, dst).await.is_ok() {
         return Ok(());
     }
-    
+
     // If rename fails (different filesystem), copy then delete
     copy_item(src, dst).await?;
     delete_item(src).await?;
@@ -90,7 +98,8 @@ pub async fn duplicate_item(path: &Path) -> Result<PathBuf> {
 /// Get file extension template content
 pub fn get_file_template(extension: &str) -> &'static str {
     match extension {
-        "rs" => r#"//! Module description
+        "rs" => {
+            r#"//! Module description
 
 use anyhow::Result;
 
@@ -107,24 +116,30 @@ mod tests {
     fn test_example() {
         assert!(example().is_err());
     }
-}"#,
-        "ts" | "tsx" => r#"/**
+}"#
+        }
+        "ts" | "tsx" => {
+            r#"/**
  * Module description
  */
 
 export function example(): void {
   // TODO: Implement me!
 }
-"#,
-        "js" | "jsx" => r#"/**
+"#
+        }
+        "js" | "jsx" => {
+            r#"/**
  * Module description
  */
 
 export function example() {
   // TODO: Implement me!
 }
-"#,
-        "py" => r#"#!/usr/bin/env python3
+"#
+        }
+        "py" => {
+            r#"#!/usr/bin/env python3
 """Module description."""
 
 
@@ -135,8 +150,10 @@ def example():
 
 if __name__ == "__main__":
     example()
-"#,
-        "go" => r#"package main
+"#
+        }
+        "go" => {
+            r#"package main
 
 import "fmt"
 
@@ -150,8 +167,10 @@ func main() {
         fmt.Printf("Error: %v\n", err)
     }
 }
-"#,
-        "html" => r#"<!DOCTYPE html>
+"#
+        }
+        "html" => {
+            r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -168,8 +187,10 @@ func main() {
 <body>
     <h1>Hello, World!</h1>
 </body>
-</html>"#,
-        "css" => r#"/* Styles */
+</html>"#
+        }
+        "css" => {
+            r#"/* Styles */
 * {
     box-sizing: border-box;
 }
@@ -178,28 +199,37 @@ body {
     margin: 0;
     padding: 0;
 }
-"#,
-        "json" => r#"{
+"#
+        }
+        "json" => {
+            r#"{
   "name": "example",
   "version": "1.0.0",
   "description": ""
-}"#,
-        "md" => r#"# Title
+}"#
+        }
+        "md" => {
+            r#"# Title
 
 ## Description
 
 Content goes here.
-"#,
-        "toml" => r#"[package]
+"#
+        }
+        "toml" => {
+            r#"[package]
 name = "example"
 version = "0.1.0"
 
 [dependencies]
-"#,
-        "yaml" | "yml" => r#"name: example
+"#
+        }
+        "yaml" | "yml" => {
+            r#"name: example
 version: 1.0.0
 description: ""
-"#,
+"#
+        }
         _ => "", // Empty file for unknown extensions
     }
 }
@@ -207,32 +237,29 @@ description: ""
 /// Copy a directory recursively
 async fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     tokio::fs::create_dir_all(dst).await?;
-    
+
     let mut entries = tokio::fs::read_dir(src).await?;
-    
+
     while let Some(entry) = entries.next_entry().await? {
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
-        
+
         if src_path.is_dir() {
             Box::pin(copy_dir_recursive(&src_path, &dst_path)).await?;
         } else {
             tokio::fs::copy(&src_path, &dst_path).await?;
         }
     }
-    
+
     Ok(())
 }
 
 /// Generate a unique name for duplicating a file/folder
 fn generate_duplicate_name(path: &Path) -> Result<PathBuf> {
     let parent = path.parent().unwrap_or(Path::new("."));
-    let file_stem = path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("file");
-    let extension = path.extension()
-        .and_then(|s| s.to_str());
-    
+    let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+    let extension = path.extension().and_then(|s| s.to_str());
+
     // Try different suffixes until we find one that doesn't exist
     for i in 1..1000 {
         let new_name = if let Some(ext) = extension {
@@ -240,13 +267,13 @@ fn generate_duplicate_name(path: &Path) -> Result<PathBuf> {
         } else {
             format!("{} copy {}", file_stem, i)
         };
-        
+
         let new_path = parent.join(new_name);
         if !new_path.exists() {
             return Ok(new_path);
         }
     }
-    
+
     anyhow::bail!("Could not generate unique name for duplicate")
 }
 
@@ -260,13 +287,13 @@ pub fn reveal_in_finder(path: &Path) -> Result<()> {
             .spawn()
             .context("Failed to open Finder")?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         // Try different file managers
         let managers = ["xdg-open", "nautilus", "dolphin", "thunar", "pcmanfm"];
         let mut success = false;
-        
+
         for manager in managers {
             if std::process::Command::new(manager)
                 .arg(path.parent().unwrap_or(path))
@@ -277,12 +304,12 @@ pub fn reveal_in_finder(path: &Path) -> Result<()> {
                 break;
             }
         }
-        
+
         if !success {
             anyhow::bail!("Could not find a file manager to open");
         }
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
@@ -291,14 +318,18 @@ pub fn reveal_in_finder(path: &Path) -> Result<()> {
             .spawn()
             .context("Failed to open Explorer")?;
     }
-    
+
     Ok(())
 }
 
 /// Open a terminal at the given directory
 pub fn open_in_terminal(path: &Path) -> Result<()> {
-    let dir = if path.is_dir() { path } else { path.parent().unwrap_or(Path::new(".")) };
-    
+    let dir = if path.is_dir() {
+        path
+    } else {
+        path.parent().unwrap_or(Path::new("."))
+    };
+
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
@@ -308,13 +339,13 @@ pub fn open_in_terminal(path: &Path) -> Result<()> {
             .spawn()
             .context("Failed to open Terminal")?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         // Try different terminals
         let terminals = ["gnome-terminal", "konsole", "xfce4-terminal", "xterm"];
         let mut success = false;
-        
+
         for terminal in terminals {
             if std::process::Command::new(terminal)
                 .current_dir(dir)
@@ -325,12 +356,12 @@ pub fn open_in_terminal(path: &Path) -> Result<()> {
                 break;
             }
         }
-        
+
         if !success {
             anyhow::bail!("Could not find a terminal emulator");
         }
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -341,19 +372,19 @@ pub fn open_in_terminal(path: &Path) -> Result<()> {
             .spawn()
             .context("Failed to open Command Prompt")?;
     }
-    
+
     Ok(())
 }
 
 /// Copy path to system clipboard
 pub fn copy_path_to_clipboard(path: &Path) -> Result<()> {
     let path_str = path.to_string_lossy().to_string();
-    
+
     // Use arboard for cross-platform clipboard support
-    let mut clipboard = arboard::Clipboard::new()
-        .context("Failed to access clipboard")?;
-    clipboard.set_text(path_str)
+    let mut clipboard = arboard::Clipboard::new().context("Failed to access clipboard")?;
+    clipboard
+        .set_text(path_str)
         .context("Failed to copy to clipboard")?;
-    
+
     Ok(())
 }

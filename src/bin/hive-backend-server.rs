@@ -1,24 +1,21 @@
 //! Hive Consensus Backend Server
-//! 
+//!
 //! Provides HTTP/WebSocket API for Electron frontend
 //! Day 0: Proof of concept for Electron + Rust architecture
 
 use axum::{
-    Router,
-    Json,
+    http::{HeaderValue, Method},
     routing::{get, post},
-    http::{Method, HeaderValue},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use tower_http::cors::CorsLayer;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error};
+use tower_http::cors::CorsLayer;
+use tracing::{error, info, warn};
 
 // Import the REAL Hive consensus engine
-use hive_ai::{
-    consensus::engine::ConsensusEngine,
-};
+use hive_ai::consensus::engine::ConsensusEngine;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TestRequest {
@@ -62,27 +59,22 @@ async fn main() -> anyhow::Result<()> {
     let consensus_engine = Arc::new(RwLock::new(None));
 
     // Create shared state
-    let state = Arc::new(AppState {
-        consensus_engine,
-    });
+    let state = Arc::new(AppState { consensus_engine });
 
     // Build the router
     let app = Router::new()
         // Test endpoint for Day 0 validation
         .route("/test", post(test_endpoint))
-        
         // Consensus endpoints
         .route("/api/consensus", post(run_consensus))
-        
         // Health check
         .route("/health", get(health_check))
-        
         // Add CORS support for Electron - allow any origin for testing
         .layer(
             CorsLayer::new()
                 .allow_origin(tower_http::cors::Any)
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers(tower_http::cors::Any)
+                .allow_headers(tower_http::cors::Any),
         )
         .with_state(state);
 
@@ -92,7 +84,7 @@ async fn main() -> anyhow::Result<()> {
     info!("📝 Test endpoint: POST http://{}/test", addr);
     info!("🧠 Consensus endpoint: POST http://{}/api/consensus", addr);
     info!("🌐 Also available at: http://localhost:8765 and http://127.0.0.1:8765");
-    
+
     axum::Server::bind(&addr.parse()?)
         .serve(app.into_make_service())
         .await?;
@@ -101,11 +93,9 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // Test endpoint for Day 0 validation
-async fn test_endpoint(
-    Json(req): Json<String>,
-) -> Json<TestResponse> {
+async fn test_endpoint(Json(req): Json<String>) -> Json<TestResponse> {
     info!("Test endpoint called with: {}", req);
-    
+
     Json(TestResponse {
         echo: format!("Echo: {}", req),
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -119,7 +109,7 @@ async fn run_consensus(
 ) -> Result<Json<ConsensusResponse>, String> {
     info!("Running consensus for query: {}", req.query);
     let start = std::time::Instant::now();
-    
+
     // Initialize engine on first use
     let mut engine_guard = state.consensus_engine.write().await;
     if engine_guard.is_none() {
@@ -141,14 +131,14 @@ async fn run_consensus(
             }
         }
     }
-    
+
     // Run consensus
     let engine = engine_guard.as_ref().unwrap();
     match engine.process(&req.query, None).await {
         Ok(result) => {
             let duration_ms = start.elapsed().as_millis();
             info!("✅ Consensus completed in {}ms", duration_ms);
-            
+
             Ok(Json(ConsensusResponse {
                 result: result.result.unwrap_or_else(|| "No result".to_string()),
                 duration_ms,

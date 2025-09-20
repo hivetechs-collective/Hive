@@ -4,12 +4,12 @@
 mod tests {
     use super::*;
     use crate::desktop::components::{
-        menu::{Menu, MenuProps, MenuItem, GenericMenuItem, MenuItemBuilder},
-        tooltip::{Tooltip, TooltipProps, TooltipPosition, TooltipTrigger},
+        menu::{GenericMenuItem, Menu, MenuItem, MenuItemBuilder, MenuProps},
         progress_indicator::{
-            ProgressIndicator, ProgressIndicatorProps, ProgressType, 
-            ProgressSize, ProgressColor, Spinner, LoadingDots
+            LoadingDots, ProgressColor, ProgressIndicator, ProgressIndicatorProps, ProgressSize,
+            ProgressType, Spinner,
         },
+        tooltip::{Tooltip, TooltipPosition, TooltipProps, TooltipTrigger},
     };
     use dioxus::prelude::*;
 
@@ -60,6 +60,9 @@ mod tests {
     fn test_progress_color_css() {
         assert_eq!(ProgressColor::Primary.to_css_var(), "var(--color-primary)");
         assert_eq!(ProgressColor::Success.to_css_var(), "var(--color-success)");
-        assert_eq!(ProgressColor::Custom("#FF0000".to_string()).to_css_var(), "#FF0000");
+        assert_eq!(
+            ProgressColor::Custom("#FF0000".to_string()).to_css_var(),
+            "#FF0000"
+        );
     }
 }

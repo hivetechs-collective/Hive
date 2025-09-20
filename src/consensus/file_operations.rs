@@ -33,18 +33,70 @@ impl Default for SecurityPolicy {
             max_file_size: 1024 * 1024, // 1MB
             max_files_per_request: 100,
             allowed_extensions: vec![
-                "rs", "toml", "md", "txt", "json", "yaml", "yml", "ts", "js", "jsx", "tsx",
-                "py", "go", "java", "cs", "cpp", "c", "h", "hpp", "css", "html", "xml",
-                "sql", "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd", "dockerfile",
-                "makefile", "cmake", "gradle", "pom", "sbt", "lock", "sum", "mod",
+                "rs",
+                "toml",
+                "md",
+                "txt",
+                "json",
+                "yaml",
+                "yml",
+                "ts",
+                "js",
+                "jsx",
+                "tsx",
+                "py",
+                "go",
+                "java",
+                "cs",
+                "cpp",
+                "c",
+                "h",
+                "hpp",
+                "css",
+                "html",
+                "xml",
+                "sql",
+                "sh",
+                "bash",
+                "zsh",
+                "fish",
+                "ps1",
+                "bat",
+                "cmd",
+                "dockerfile",
+                "makefile",
+                "cmake",
+                "gradle",
+                "pom",
+                "sbt",
+                "lock",
+                "sum",
+                "mod",
             ]
             .into_iter()
             .map(String::from)
             .collect(),
             denied_patterns: vec![
-                ".git", "node_modules", "target", "dist", "build", ".idea", ".vscode",
-                "__pycache__", ".pytest_cache", ".mypy_cache", ".tox", "venv", ".env",
-                "*.exe", "*.dll", "*.so", "*.dylib", "*.bin", "*.o", "*.a",
+                ".git",
+                "node_modules",
+                "target",
+                "dist",
+                "build",
+                ".idea",
+                ".vscode",
+                "__pycache__",
+                ".pytest_cache",
+                ".mypy_cache",
+                ".tox",
+                "venv",
+                ".env",
+                "*.exe",
+                "*.dll",
+                "*.so",
+                "*.dylib",
+                "*.bin",
+                "*.o",
+                "*.a",
             ]
             .into_iter()
             .map(String::from)
@@ -422,20 +474,18 @@ impl crate::consensus::repository_context::RepositoryContext {
             let canonical_root = root.canonicalize()?;
 
             if !canonical_path.starts_with(&canonical_root) {
-                return Err(crate::core::error::HiveError::Security { 
+                return Err(crate::core::error::HiveError::Security {
                     message: format!(
                         "Path {} is outside repository root {}",
                         path.display(),
                         root.display()
-                    )
-                }.into());
+                    ),
+                }
+                .into());
             }
         }
 
-        file_reader
-            .read_file(path)
-            .await
-            .map_err(|e| e.into())
+        file_reader.read_file(path).await.map_err(|e| e.into())
     }
 
     /// Read multiple files for comprehensive analysis
@@ -446,7 +496,10 @@ impl crate::consensus::repository_context::RepositoryContext {
     ) -> HiveResult<Vec<FileContent>> {
         let mut contents = Vec::new();
 
-        for path in paths.iter().take(file_reader.security_policy.max_files_per_request) {
+        for path in paths
+            .iter()
+            .take(file_reader.security_policy.max_files_per_request)
+        {
             match self.read_file_for_analysis(file_reader, path).await {
                 Ok(content) => contents.push(content),
                 Err(e) => warn!("Failed to read file {}: {}", path.display(), e),
@@ -475,14 +528,15 @@ mod tests {
 
         // Test allowed patterns
         assert!(reader.verify_path_allowed(Path::new("src/main.rs")).is_ok());
-        assert!(reader
-            .verify_path_allowed(Path::new("README.md"))
-            .is_ok());
+        assert!(reader.verify_path_allowed(Path::new("README.md")).is_ok());
     }
 
     #[test]
     fn test_language_detection() {
-        assert_eq!(detect_language(Path::new("main.rs")), Some("rust".to_string()));
+        assert_eq!(
+            detect_language(Path::new("main.rs")),
+            Some("rust".to_string())
+        );
         assert_eq!(
             detect_language(Path::new("app.ts")),
             Some("typescript".to_string())

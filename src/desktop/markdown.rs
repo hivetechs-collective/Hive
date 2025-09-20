@@ -6,11 +6,11 @@ use pulldown_cmark::{html, Parser};
 pub fn to_html(markdown: &str) -> String {
     // Parse markdown
     let parser = Parser::new(markdown);
-    
+
     // Convert to HTML
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
-    
+
     // Wrap in a div for consistent styling
     format!(r#"<div class="markdown-content">{}</div>"#, html_output)
 }

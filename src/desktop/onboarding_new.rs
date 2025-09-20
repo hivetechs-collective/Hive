@@ -8,7 +8,7 @@ pub fn OnboardingDialog(
     show_onboarding: Signal<bool>,
     openrouter_key: Signal<String>,
     hive_key: Signal<String>,
-    current_step: Signal<i32>
+    current_step: Signal<i32>,
 ) -> Element {
     // CRITICAL: Check visibility inside the component and return None if hidden
     let visible = show_onboarding();

@@ -2,17 +2,17 @@
 //!
 //! Real-time monitoring of git status changes for live decoration updates
 
+use anyhow::{Context, Result};
+use dioxus::prelude::*;
+use notify::{Config, RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::interval;
-use notify::{Watcher, RecursiveMode, Config};
-use dioxus::prelude::*;
-use anyhow::{Result, Context};
 
-use crate::desktop::git::decorations::{GitDecorationManager, EnhancedGitStatus};
+use crate::desktop::git::decorations::{EnhancedGitStatus, GitDecorationManager};
 use crate::desktop::state::GitFileStatus;
 
 /// Events that can trigger decoration updates
@@ -101,7 +101,9 @@ impl GitDecorationWatcher {
 
         // Update repository path
         *self.repository_path.write().await = Some(repo_path.clone());
-        self.decoration_manager.repo_root.set(Some(repo_path.clone()));
+        self.decoration_manager
+            .repo_root
+            .set(Some(repo_path.clone()));
 
         // Setup file system watcher
         self.setup_fs_watcher(&repo_path).await?;
@@ -110,7 +112,8 @@ impl GitDecorationWatcher {
         self.start_background_task().await;
 
         // Trigger initial update
-        self.trigger_update(DecorationEvent::RepositoryChanged(repo_path)).await;
+        self.trigger_update(DecorationEvent::RepositoryChanged(repo_path))
+            .await;
 
         Ok(())
     }
@@ -133,21 +136,20 @@ impl GitDecorationWatcher {
     /// Setup file system watcher
     async fn setup_fs_watcher(&self, repo_path: &Path) -> Result<()> {
         let event_sender = self.event_sender.clone();
-        
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            match res {
+
+        let mut watcher =
+            notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
                 Ok(event) => {
                     for path in event.paths {
                         if let Err(e) = event_sender.send(DecorationEvent::FileSystemChange(path)) {
                             tracing::error!("Failed to send file system event: {}", e);
                         }
                     }
-                },
+                }
                 Err(e) => {
                     tracing::error!("File system watcher error: {}", e);
                 }
-            }
-        })?;
+            })?;
 
         // Watch the repository directory
         watcher.watch(repo_path, RecursiveMode::Recursive)?;
@@ -167,7 +169,7 @@ impl GitDecorationWatcher {
                 if git_refs.exists() {
                     watcher.watch(&git_refs, RecursiveMode::Recursive)?;
                 }
-                
+
                 let git_head = git_dir.join("HEAD");
                 if git_head.exists() {
                     watcher.watch(&git_head, RecursiveMode::NonRecursive)?;
@@ -183,7 +185,7 @@ impl GitDecorationWatcher {
     async fn start_background_task(&self) {
         // For now, let's comment out the background task to fix compilation
         // TODO: Implement a Send-safe background task using different channel types
-        
+
         // We'll use a simpler approach without spawning for now
         let _decoration_manager = self.decoration_manager.clone();
         let _repository_path = self.repository_path.clone();
@@ -213,17 +215,17 @@ impl GitDecorationWatcher {
                         Self::update_git_status(decoration_manager, &repo_path).await;
                     }
                 }
-            },
-            DecorationEvent::GitIndexChange |
-            DecorationEvent::GitHeadChange |
-            DecorationEvent::ManualRefresh => {
+            }
+            DecorationEvent::GitIndexChange
+            | DecorationEvent::GitHeadChange
+            | DecorationEvent::ManualRefresh => {
                 if let Some(repo_path) = repository_path.read().await.clone() {
                     Self::update_git_status(decoration_manager, &repo_path).await;
                 }
-            },
+            }
             DecorationEvent::RepositoryChanged(repo_path) => {
                 Self::update_git_status(decoration_manager, &repo_path).await;
-            },
+            }
         }
     }
 
@@ -233,7 +235,7 @@ impl GitDecorationWatcher {
             Ok(statuses) => {
                 decoration_manager.update_file_statuses(statuses);
                 tracing::debug!("Updated git decorations for {}", repo_path.display());
-            },
+            }
             Err(e) => {
                 tracing::error!("Failed to update git status: {}", e);
             }
@@ -241,13 +243,13 @@ impl GitDecorationWatcher {
     }
 
     /// Get git status for all files in repository
-    async fn get_git_status_for_repo(repo_path: &Path) -> Result<HashMap<PathBuf, EnhancedGitStatus>> {
-        let repo = git2::Repository::open(repo_path)
-            .context("Failed to open git repository")?;
+    async fn get_git_status_for_repo(
+        repo_path: &Path,
+    ) -> Result<HashMap<PathBuf, EnhancedGitStatus>> {
+        let repo = git2::Repository::open(repo_path).context("Failed to open git repository")?;
 
         let mut statuses = HashMap::new();
-        let git_statuses = repo.statuses(None)
-            .context("Failed to get git statuses")?;
+        let git_statuses = repo.statuses(None).context("Failed to get git statuses")?;
 
         for entry in git_statuses.iter() {
             if let Some(path_str) = entry.path() {
@@ -269,8 +271,11 @@ impl GitDecorationWatcher {
                 };
 
                 let mut enhanced_status = EnhancedGitStatus::new(git_file_status);
-                enhanced_status.has_staged = status.is_index_modified() || status.is_index_new() || status.is_index_deleted();
-                enhanced_status.has_unstaged = status.is_wt_modified() || status.is_wt_new() || status.is_wt_deleted();
+                enhanced_status.has_staged = status.is_index_modified()
+                    || status.is_index_new()
+                    || status.is_index_deleted();
+                enhanced_status.has_unstaged =
+                    status.is_wt_modified() || status.is_wt_new() || status.is_wt_deleted();
 
                 // Check for conflicts
                 enhanced_status.is_conflicted = status.is_conflicted();
@@ -297,7 +302,7 @@ impl GitDecorationWatcher {
         let head = repo.head()?.peel_to_tree()?;
         let workdir = repo.workdir().context("No working directory")?;
         let file_path = workdir.join(path);
-        
+
         if file_path.exists() {
             // For now, return placeholder values
             // Real implementation would use git2's diff functionality
@@ -324,7 +329,7 @@ impl Clone for GitDecorationWatcher {
     fn clone(&self) -> Self {
         // Create a new channel for the clone
         let (event_sender, event_receiver) = mpsc::unbounded_channel();
-        
+
         Self {
             config: self.config.clone(),
             event_receiver: Arc::new(RwLock::new(Some(event_receiver))),
@@ -346,7 +351,9 @@ impl Drop for GitDecorationWatcher {
 }
 
 /// Hook to use git decoration watcher
-pub fn use_git_decoration_watcher(decoration_manager: GitDecorationManager) -> GitDecorationWatcher {
+pub fn use_git_decoration_watcher(
+    decoration_manager: GitDecorationManager,
+) -> GitDecorationWatcher {
     use_context_provider(|| GitDecorationWatcher::new(decoration_manager))
 }
 
@@ -359,7 +366,7 @@ mod tests {
     async fn test_decoration_watcher_creation() {
         let decoration_manager = GitDecorationManager::new();
         let watcher = GitDecorationWatcher::new(decoration_manager);
-        
+
         // Test that watcher is created with default config
         assert_eq!(watcher.config.debounce_ms, 300);
         assert_eq!(watcher.config.update_interval_ms, 5000);
@@ -378,7 +385,7 @@ mod tests {
             // Repository is empty, so we expect an empty result or specific error
             match result {
                 Ok(statuses) => assert!(statuses.is_empty()),
-                Err(_) => {}, // Expected for empty repo
+                Err(_) => {} // Expected for empty repo
             }
         }
     }

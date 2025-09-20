@@ -1,8 +1,8 @@
 // Operation Dependency Graph Generation and Sequencing
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use petgraph::algo::{all_simple_paths, is_cyclic_directed, toposort};
+use petgraph::dot::{Config, Dot};
 use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::algo::{toposort, is_cyclic_directed, all_simple_paths};
-use petgraph::dot::{Dot, Config};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -10,10 +10,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_parser::EnhancedFileOperation;
-use crate::consensus::operation_clustering::OperationCluster;
 use crate::ai_helpers::pattern_recognizer::PatternRecognizer;
+use crate::consensus::operation_clustering::OperationCluster;
+use crate::consensus::operation_parser::EnhancedFileOperation;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 
 /// Generates and analyzes dependency graphs for file operations
 #[derive(Debug, Clone)]
@@ -210,7 +210,7 @@ impl DependencyGraphGenerator {
         clusters: Option<&[OperationCluster]>,
     ) -> Result<DependencyGraph> {
         let cache_key = self.generate_cache_key(operations);
-        
+
         // Check cache
         if let Some(cached) = self.graph_cache.read().await.get(&cache_key) {
             debug!("Using cached dependency graph");
@@ -230,27 +230,30 @@ impl DependencyGraphGenerator {
 
         // Add edges based on dependencies
         self.add_explicit_dependencies(&mut graph, operations, &node_map)?;
-        
+
         if self.config.include_implicit_dependencies {
-            self.add_implicit_dependencies(&mut graph, operations, &node_map).await?;
+            self.add_implicit_dependencies(&mut graph, operations, &node_map)
+                .await?;
         }
 
         if self.config.use_ai_predictions && self.pattern_recognizer.is_some() {
-            self.add_ai_predicted_dependencies(&mut graph, operations, &node_map).await?;
+            self.add_ai_predicted_dependencies(&mut graph, operations, &node_map)
+                .await?;
         }
 
         // Analyze the graph
         let analysis = self.analyze_graph(&graph, &node_map)?;
-        
+
         // Generate execution sequence
         let execution_sequence = self.generate_execution_sequence(&graph, &node_map)?;
-        
+
         // Find critical path
         let critical_path = self.find_critical_path(&graph, &node_map)?;
-        
+
         // Identify parallel groups
-        let parallel_groups = self.identify_parallel_groups(&graph, &node_map, &execution_sequence)?;
-        
+        let parallel_groups =
+            self.identify_parallel_groups(&graph, &node_map, &execution_sequence)?;
+
         // Generate visuals if enabled
         let visuals = if self.config.generate_visuals {
             Some(self.generate_visuals(&graph, &node_map)?)
@@ -269,12 +272,19 @@ impl DependencyGraphGenerator {
         };
 
         // Cache the result
-        self.graph_cache.write().await.insert(cache_key, dependency_graph.clone());
+        self.graph_cache
+            .write()
+            .await
+            .insert(cache_key, dependency_graph.clone());
 
         Ok(dependency_graph)
     }
 
-    fn create_operation_node(&self, enhanced_op: &EnhancedFileOperation, index: usize) -> Result<OperationNode> {
+    fn create_operation_node(
+        &self,
+        enhanced_op: &EnhancedFileOperation,
+        index: usize,
+    ) -> Result<OperationNode> {
         let (operation_type, color, shape) = match &enhanced_op.operation {
             FileOperation::Create { .. } => ("Create", "#4CAF50", "box"),
             FileOperation::Update { .. } => ("Update", "#2196F3", "ellipse"),
@@ -335,7 +345,8 @@ impl DependencyGraphGenerator {
                     continue;
                 }
 
-                let dep_type = self.check_file_dependency(&operations[i].operation, &operations[j].operation);
+                let dep_type =
+                    self.check_file_dependency(&operations[i].operation, &operations[j].operation);
                 if let Some(dep) = dep_type {
                     let from_idx = node_map[&format!("op_{}", i)];
                     let to_idx = node_map[&format!("op_{}", j)];
@@ -347,7 +358,11 @@ impl DependencyGraphGenerator {
         Ok(())
     }
 
-    fn check_file_dependency(&self, op1: &FileOperation, op2: &FileOperation) -> Option<DependencyEdge> {
+    fn check_file_dependency(
+        &self,
+        op1: &FileOperation,
+        op2: &FileOperation,
+    ) -> Option<DependencyEdge> {
         match (op1, op2) {
             // Update depends on Create for same file
             (FileOperation::Update { path: p1, .. }, FileOperation::Create { path: p2, .. }) => {
@@ -376,8 +391,8 @@ impl DependencyGraphGenerator {
                 }
             }
             // Delete should happen after other operations on same file
-            (FileOperation::Delete { path: p1 }, FileOperation::Update { path: p2, .. }) |
-            (FileOperation::Delete { path: p1 }, FileOperation::Create { path: p2, .. }) => {
+            (FileOperation::Delete { path: p1 }, FileOperation::Update { path: p2, .. })
+            | (FileOperation::Delete { path: p1 }, FileOperation::Create { path: p2, .. }) => {
                 if p1 == p2 {
                     Some(DependencyEdge {
                         dependency_type: DependencyType::OrderingConstraint,
@@ -405,9 +420,12 @@ impl DependencyGraphGenerator {
 
         // Analyze content for import dependencies
         for (i, enhanced_op) in operations.iter().enumerate() {
-            if let FileOperation::Create { content, .. } | FileOperation::Update { content, .. } = &enhanced_op.operation {
-                let imports = self.extract_imports(content, &self.get_operation_path(&enhanced_op.operation))?;
-                
+            if let FileOperation::Create { content, .. } | FileOperation::Update { content, .. } =
+                &enhanced_op.operation
+            {
+                let imports = self
+                    .extract_imports(content, &self.get_operation_path(&enhanced_op.operation))?;
+
                 for import_path in imports {
                     // Find operations that create/modify the imported file
                     for (j, other_op) in operations.iter().enumerate() {
@@ -419,7 +437,7 @@ impl DependencyGraphGenerator {
                         if self.path_matches_import(&other_path, &import_path) {
                             let from_idx = node_map[&format!("op_{}", i)];
                             let to_idx = node_map[&format!("op_{}", j)];
-                            
+
                             let edge = DependencyEdge {
                                 dependency_type: DependencyType::ImportDependency,
                                 strength: 0.8,
@@ -445,14 +463,14 @@ impl DependencyGraphGenerator {
                 // Rust imports
                 let use_regex = regex::Regex::new(r"use\s+([a-zA-Z0-9_:]+)")?;
                 let mod_regex = regex::Regex::new(r"mod\s+([a-zA-Z0-9_]+)")?;
-                
+
                 for caps in use_regex.captures_iter(content) {
                     let module = &caps[1];
                     if !module.starts_with("std::") && !module.starts_with("core::") {
                         imports.push(PathBuf::from(module.replace("::", "/")));
                     }
                 }
-                
+
                 for caps in mod_regex.captures_iter(content) {
                     imports.push(PathBuf::from(format!("{}.rs", &caps[1])));
                 }
@@ -461,11 +479,11 @@ impl DependencyGraphGenerator {
                 // JavaScript/TypeScript imports
                 let import_regex = regex::Regex::new(r#"import\s+.*?\s+from\s+['"](\..*?)['""]"#)?;
                 let require_regex = regex::Regex::new(r#"require\(['"](\..*?)['"]\)"#)?;
-                
+
                 for caps in import_regex.captures_iter(content) {
                     imports.push(PathBuf::from(&caps[1]));
                 }
-                
+
                 for caps in require_regex.captures_iter(content) {
                     imports.push(PathBuf::from(&caps[1]));
                 }
@@ -474,14 +492,14 @@ impl DependencyGraphGenerator {
                 // Python imports
                 let import_regex = regex::Regex::new(r"from\s+([a-zA-Z0-9_.]+)\s+import")?;
                 let import_direct = regex::Regex::new(r"import\s+([a-zA-Z0-9_.]+)")?;
-                
+
                 for caps in import_regex.captures_iter(content) {
                     let module = &caps[1];
                     if !module.starts_with("__") {
                         imports.push(PathBuf::from(module.replace(".", "/")));
                     }
                 }
-                
+
                 for caps in import_direct.captures_iter(content) {
                     let module = &caps[1];
                     if !module.starts_with("__") {
@@ -497,8 +515,7 @@ impl DependencyGraphGenerator {
 
     fn path_matches_import(&self, file_path: &Path, import_path: &Path) -> bool {
         // Simple heuristic: check if the file path ends with the import path
-        file_path.ends_with(import_path) ||
-        file_path.file_stem() == import_path.file_stem()
+        file_path.ends_with(import_path) || file_path.file_stem() == import_path.file_stem()
     }
 
     async fn add_ai_predicted_dependencies(
@@ -510,26 +527,26 @@ impl DependencyGraphGenerator {
         if let Some(pattern_recognizer) = &self.pattern_recognizer {
             // Use pattern recognizer to predict dependencies
             // This is a simplified version - real implementation would use AI
-            
+
             for i in 0..operations.len() {
-                for j in i+1..operations.len() {
+                for j in i + 1..operations.len() {
                     let op1 = &operations[i].operation;
                     let op2 = &operations[j].operation;
-                    
+
                     // Predict if op2 might depend on op1
                     let dependency_probability = self.predict_dependency_probability(op1, op2)?;
-                    
+
                     if dependency_probability > 0.6 {
                         let from_idx = node_map[&format!("op_{}", j)];
                         let to_idx = node_map[&format!("op_{}", i)];
-                        
+
                         let edge = DependencyEdge {
                             dependency_type: DependencyType::PredictedDependency,
                             strength: dependency_probability,
                             required: false,
                             label: format!("predicted ({:.0}%)", dependency_probability * 100.0),
                         };
-                        
+
                         // Only add if edge doesn't exist
                         if !graph.contains_edge(from_idx, to_idx) {
                             graph.add_edge(from_idx, to_idx, edge);
@@ -542,26 +559,30 @@ impl DependencyGraphGenerator {
         Ok(())
     }
 
-    fn predict_dependency_probability(&self, op1: &FileOperation, op2: &FileOperation) -> Result<f32> {
+    fn predict_dependency_probability(
+        &self,
+        op1: &FileOperation,
+        op2: &FileOperation,
+    ) -> Result<f32> {
         // Simple heuristic-based prediction
         let path1 = self.get_operation_path(op1);
         let path2 = self.get_operation_path(op2);
-        
+
         // Same directory operations might be related
         let same_dir = path1.parent() == path2.parent();
-        
+
         // Test files often depend on implementation
-        let is_test_impl = path2.to_string_lossy().contains("test") && 
-                          !path1.to_string_lossy().contains("test");
-        
+        let is_test_impl =
+            path2.to_string_lossy().contains("test") && !path1.to_string_lossy().contains("test");
+
         // Config files might affect other operations
-        let is_config = path1.extension().map_or(false, |e| 
+        let is_config = path1.extension().map_or(false, |e| {
             e == "toml" || e == "yaml" || e == "json" || e == "env"
-        );
+        });
 
         let probability = match (same_dir, is_test_impl, is_config) {
-            (true, true, _) => 0.9,    // Test depends on implementation
-            (_, _, true) => 0.7,        // Config affects other files
+            (true, true, _) => 0.9,      // Test depends on implementation
+            (_, _, true) => 0.7,         // Config affects other files
             (true, false, false) => 0.5, // Same directory
             _ => 0.2,
         };
@@ -576,7 +597,7 @@ impl DependencyGraphGenerator {
     ) -> Result<GraphAnalysis> {
         let node_count = graph.node_count();
         let edge_count = graph.edge_count();
-        
+
         // Check for cycles
         let has_cycles = is_cyclic_directed(graph);
         let cycles = if has_cycles {
@@ -587,13 +608,14 @@ impl DependencyGraphGenerator {
 
         // Calculate max depth
         let max_depth = self.calculate_max_depth(graph)?;
-        
+
         // Find bottlenecks (nodes with many dependents)
         let bottlenecks = self.find_bottlenecks(graph, node_map)?;
-        
+
         // Analyze parallelization potential
-        let (parallel_group_count, parallelization_speedup) = self.analyze_parallelization(graph)?;
-        
+        let (parallel_group_count, parallelization_speedup) =
+            self.analyze_parallelization(graph)?;
+
         // Risk analysis
         let risk_summary = self.analyze_risk(graph, node_map)?;
 
@@ -610,24 +632,36 @@ impl DependencyGraphGenerator {
         })
     }
 
-    fn find_cycles(&self, graph: &DiGraph<OperationNode, DependencyEdge>, node_map: &HashMap<String, NodeIndex>) -> Result<Vec<Vec<String>>> {
+    fn find_cycles(
+        &self,
+        graph: &DiGraph<OperationNode, DependencyEdge>,
+        node_map: &HashMap<String, NodeIndex>,
+    ) -> Result<Vec<Vec<String>>> {
         // Simple cycle detection - in practice would use more sophisticated algorithm
         let mut cycles = Vec::new();
-        
+
         // For now, just note that cycles exist
         if is_cyclic_directed(graph) {
-            cycles.push(vec!["Cycle detected - manual resolution required".to_string()]);
+            cycles.push(vec![
+                "Cycle detected - manual resolution required".to_string()
+            ]);
         }
-        
+
         Ok(cycles)
     }
 
     fn calculate_max_depth(&self, graph: &DiGraph<OperationNode, DependencyEdge>) -> Result<usize> {
         let mut max_depth = 0;
-        
+
         // Find nodes with no incoming edges (roots)
-        let roots: Vec<_> = graph.node_indices()
-            .filter(|&node| graph.edges_directed(node, petgraph::Direction::Incoming).count() == 0)
+        let roots: Vec<_> = graph
+            .node_indices()
+            .filter(|&node| {
+                graph
+                    .edges_directed(node, petgraph::Direction::Incoming)
+                    .count()
+                    == 0
+            })
             .collect();
 
         // BFS from each root to find max depth
@@ -639,10 +673,14 @@ impl DependencyGraphGenerator {
         Ok(max_depth)
     }
 
-    fn bfs_max_depth(&self, graph: &DiGraph<OperationNode, DependencyEdge>, start: NodeIndex) -> Result<usize> {
+    fn bfs_max_depth(
+        &self,
+        graph: &DiGraph<OperationNode, DependencyEdge>,
+        start: NodeIndex,
+    ) -> Result<usize> {
         let mut queue = VecDeque::new();
         let mut depths = HashMap::new();
-        
+
         queue.push_back(start);
         depths.insert(start, 0);
         let mut max_depth = 0;
@@ -668,9 +706,11 @@ impl DependencyGraphGenerator {
         node_map: &HashMap<String, NodeIndex>,
     ) -> Result<Vec<String>> {
         let mut bottlenecks = Vec::new();
-        
+
         for (id, &idx) in node_map {
-            let dependent_count = graph.edges_directed(idx, petgraph::Direction::Outgoing).count();
+            let dependent_count = graph
+                .edges_directed(idx, petgraph::Direction::Outgoing)
+                .count();
             if dependent_count > 3 {
                 bottlenecks.push(id.clone());
             }
@@ -679,11 +719,14 @@ impl DependencyGraphGenerator {
         Ok(bottlenecks)
     }
 
-    fn analyze_parallelization(&self, graph: &DiGraph<OperationNode, DependencyEdge>) -> Result<(usize, f32)> {
+    fn analyze_parallelization(
+        &self,
+        graph: &DiGraph<OperationNode, DependencyEdge>,
+    ) -> Result<(usize, f32)> {
         // Simple analysis - count independent subgraphs
         let mut visited = HashSet::new();
         let mut group_count = 0;
-        
+
         for node in graph.node_indices() {
             if !visited.contains(&node) {
                 group_count += 1;
@@ -700,10 +743,8 @@ impl DependencyGraphGenerator {
         }
 
         // Calculate potential speedup (simplified)
-        let sequential_time: u64 = graph.node_weights()
-            .map(|n| n.estimated_duration_ms)
-            .sum();
-        
+        let sequential_time: u64 = graph.node_weights().map(|n| n.estimated_duration_ms).sum();
+
         let parallel_time = sequential_time / group_count.max(1) as u64;
         let speedup = sequential_time as f32 / parallel_time.max(1) as f32;
 
@@ -720,7 +761,10 @@ impl DependencyGraphGenerator {
         let mut mitigation_suggestions = Vec::new();
 
         for node in graph.node_weights() {
-            if matches!(node.metadata.risk_level, RiskLevel::High | RiskLevel::Critical) {
+            if matches!(
+                node.metadata.risk_level,
+                RiskLevel::High | RiskLevel::Critical
+            ) {
                 high_risk_count += 1;
             }
         }
@@ -728,7 +772,10 @@ impl DependencyGraphGenerator {
         // Find critical dependencies (high-risk operations that others depend on)
         for (id, &idx) in node_map {
             let node = &graph[idx];
-            if matches!(node.metadata.risk_level, RiskLevel::High | RiskLevel::Critical) {
+            if matches!(
+                node.metadata.risk_level,
+                RiskLevel::High | RiskLevel::Critical
+            ) {
                 for neighbor in graph.neighbors_directed(idx, petgraph::Direction::Outgoing) {
                     let dependent = &graph[neighbor];
                     critical_dependencies.push((id.clone(), dependent.id.clone()));
@@ -738,7 +785,8 @@ impl DependencyGraphGenerator {
 
         // Generate mitigation suggestions
         if high_risk_count > 0 {
-            mitigation_suggestions.push("Create backups before executing high-risk operations".to_string());
+            mitigation_suggestions
+                .push("Create backups before executing high-risk operations".to_string());
         }
         if !critical_dependencies.is_empty() {
             mitigation_suggestions.push("Review critical dependencies carefully".to_string());
@@ -790,13 +838,25 @@ impl DependencyGraphGenerator {
         let mut max_duration = 0;
 
         // Find all source nodes (no incoming edges)
-        let sources: Vec<_> = graph.node_indices()
-            .filter(|&node| graph.edges_directed(node, petgraph::Direction::Incoming).count() == 0)
+        let sources: Vec<_> = graph
+            .node_indices()
+            .filter(|&node| {
+                graph
+                    .edges_directed(node, petgraph::Direction::Incoming)
+                    .count()
+                    == 0
+            })
             .collect();
 
         // Find all sink nodes (no outgoing edges)
-        let sinks: Vec<_> = graph.node_indices()
-            .filter(|&node| graph.edges_directed(node, petgraph::Direction::Outgoing).count() == 0)
+        let sinks: Vec<_> = graph
+            .node_indices()
+            .filter(|&node| {
+                graph
+                    .edges_directed(node, petgraph::Direction::Outgoing)
+                    .count()
+                    == 0
+            })
             .collect();
 
         // Find longest path from each source to each sink
@@ -806,9 +866,7 @@ impl DependencyGraphGenerator {
                     let duration = self.calculate_path_duration(graph, &path)?;
                     if duration > max_duration {
                         max_duration = duration;
-                        critical_path = path.into_iter()
-                            .map(|idx| graph[idx].id.clone())
-                            .collect();
+                        critical_path = path.into_iter().map(|idx| graph[idx].id.clone()).collect();
                     }
                 }
             }
@@ -828,8 +886,7 @@ impl DependencyGraphGenerator {
         let mut max_length = 0;
 
         // Use all_simple_paths from petgraph
-        let paths: Vec<Vec<NodeIndex>> = all_simple_paths(graph, start, end, 0, None)
-            .collect();
+        let paths: Vec<Vec<NodeIndex>> = all_simple_paths(graph, start, end, 0, None).collect();
 
         for path in paths {
             let length = self.calculate_path_duration(graph, &path)?;
@@ -842,8 +899,13 @@ impl DependencyGraphGenerator {
         Ok(longest_path)
     }
 
-    fn calculate_path_duration(&self, graph: &DiGraph<OperationNode, DependencyEdge>, path: &[NodeIndex]) -> Result<u64> {
-        let duration = path.iter()
+    fn calculate_path_duration(
+        &self,
+        graph: &DiGraph<OperationNode, DependencyEdge>,
+        path: &[NodeIndex],
+    ) -> Result<u64> {
+        let duration = path
+            .iter()
             .map(|&idx| graph[idx].estimated_duration_ms)
             .sum();
         Ok(duration)
@@ -864,7 +926,7 @@ impl DependencyGraphGenerator {
         for op_id in execution_sequence {
             let idx = node_map[op_id];
             let node = &graph[idx];
-            
+
             // Check if this operation depends on any in current group
             let depends_on_current = current_group.iter().any(|group_op: &String| {
                 let group_idx = node_map[group_op];
@@ -875,7 +937,8 @@ impl DependencyGraphGenerator {
                 // Start new group
                 if !current_group.is_empty() {
                     let group_id = groups.len();
-                    let parallel_duration = current_group.iter()
+                    let parallel_duration = current_group
+                        .iter()
                         .map(|id| graph[node_map[id]].estimated_duration_ms)
                         .max()
                         .unwrap_or(0);
@@ -894,14 +957,15 @@ impl DependencyGraphGenerator {
                     current_group.clear();
                 }
             }
-            
+
             current_group.push(op_id.clone());
         }
 
         // Don't forget the last group
         if !current_group.is_empty() {
             let group_id = groups.len();
-            let parallel_duration = current_group.iter()
+            let parallel_duration = current_group
+                .iter()
                 .map(|id| graph[node_map[id]].estimated_duration_ms)
                 .max()
                 .unwrap_or(0);
@@ -921,10 +985,10 @@ impl DependencyGraphGenerator {
         // Calculate group dependencies
         for (i, group) in groups.iter_mut().enumerate() {
             let mut depends_on = HashSet::new();
-            
+
             for op_id in &group.operations {
                 let idx = node_map[op_id];
-                
+
                 // Check all incoming edges
                 for neighbor in graph.neighbors_directed(idx, petgraph::Direction::Incoming) {
                     let source_node = &graph[neighbor];
@@ -935,7 +999,7 @@ impl DependencyGraphGenerator {
                     }
                 }
             }
-            
+
             group.depends_on = depends_on.into_iter().collect();
             group.depends_on.sort();
         }
@@ -943,16 +1007,20 @@ impl DependencyGraphGenerator {
         Ok(groups)
     }
 
-    fn generate_visuals(&self, graph: &DiGraph<OperationNode, DependencyEdge>, node_map: &HashMap<String, NodeIndex>) -> Result<GraphVisuals> {
+    fn generate_visuals(
+        &self,
+        graph: &DiGraph<OperationNode, DependencyEdge>,
+        node_map: &HashMap<String, NodeIndex>,
+    ) -> Result<GraphVisuals> {
         // Generate DOT format
         let dot_graph = format!("{:?}", Dot::with_config(graph, &[Config::EdgeNoLabel]));
-        
+
         // Generate ASCII art
         let ascii_graph = self.generate_ascii_graph(graph, node_map)?;
-        
+
         // Generate Mermaid diagram
         let mermaid_diagram = self.generate_mermaid_diagram(graph, node_map)?;
-        
+
         // Generate timeline chart
         let timeline_chart = self.generate_timeline_chart(graph, node_map)?;
 
@@ -964,25 +1032,35 @@ impl DependencyGraphGenerator {
         })
     }
 
-    fn generate_ascii_graph(&self, graph: &DiGraph<OperationNode, DependencyEdge>, node_map: &HashMap<String, NodeIndex>) -> Result<String> {
+    fn generate_ascii_graph(
+        &self,
+        graph: &DiGraph<OperationNode, DependencyEdge>,
+        node_map: &HashMap<String, NodeIndex>,
+    ) -> Result<String> {
         let mut ascii = String::from("Operation Dependency Graph:\n");
         ascii.push_str("==========================\n\n");
 
         // Simple ASCII representation
         for (id, &idx) in node_map {
             let node = &graph[idx];
-            let incoming = graph.edges_directed(idx, petgraph::Direction::Incoming).count();
-            let outgoing = graph.edges_directed(idx, petgraph::Direction::Outgoing).count();
-            
-            ascii.push_str(&format!("[{}] {} ({})\n", 
+            let incoming = graph
+                .edges_directed(idx, petgraph::Direction::Incoming)
+                .count();
+            let outgoing = graph
+                .edges_directed(idx, petgraph::Direction::Outgoing)
+                .count();
+
+            ascii.push_str(&format!(
+                "[{}] {} ({})\n",
                 node.metadata.operation_type.chars().next().unwrap_or('?'),
                 node.metadata.file_path.display(),
                 node.id
             ));
-            
+
             if outgoing > 0 {
                 ascii.push_str("  └─> ");
-                let deps: Vec<_> = graph.neighbors(idx)
+                let deps: Vec<_> = graph
+                    .neighbors(idx)
                     .map(|neighbor| graph[neighbor].id.as_str())
                     .collect();
                 ascii.push_str(&deps.join(", "));
@@ -994,7 +1072,11 @@ impl DependencyGraphGenerator {
         Ok(ascii)
     }
 
-    fn generate_mermaid_diagram(&self, graph: &DiGraph<OperationNode, DependencyEdge>, node_map: &HashMap<String, NodeIndex>) -> Result<String> {
+    fn generate_mermaid_diagram(
+        &self,
+        graph: &DiGraph<OperationNode, DependencyEdge>,
+        node_map: &HashMap<String, NodeIndex>,
+    ) -> Result<String> {
         let mut mermaid = String::from("graph TD\n");
 
         // Add nodes
@@ -1016,12 +1098,17 @@ impl DependencyGraphGenerator {
                 "hexagon" => "}}",
                 _ => "]",
             };
-            
-            mermaid.push_str(&format!("    {}{}{} {}{}\n",
+
+            mermaid.push_str(&format!(
+                "    {}{}{} {}{}\n",
                 node.id,
                 shape_start,
                 node.metadata.operation_type,
-                node.metadata.file_path.file_name().unwrap_or_default().to_string_lossy(),
+                node.metadata
+                    .file_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy(),
                 shape_end
             ));
         }
@@ -1032,11 +1119,10 @@ impl DependencyGraphGenerator {
             let source = &graph[source_idx];
             let target = &graph[target_idx];
             let edge_data = &graph[edge_idx];
-            
-            mermaid.push_str(&format!("    {} -->|{}| {}\n",
-                source.id,
-                edge_data.label,
-                target.id
+
+            mermaid.push_str(&format!(
+                "    {} -->|{}| {}\n",
+                source.id, edge_data.label, target.id
             ));
         }
 
@@ -1048,7 +1134,11 @@ impl DependencyGraphGenerator {
         Ok(mermaid)
     }
 
-    fn generate_timeline_chart(&self, graph: &DiGraph<OperationNode, DependencyEdge>, node_map: &HashMap<String, NodeIndex>) -> Result<String> {
+    fn generate_timeline_chart(
+        &self,
+        graph: &DiGraph<OperationNode, DependencyEdge>,
+        node_map: &HashMap<String, NodeIndex>,
+    ) -> Result<String> {
         let mut timeline = String::from("Execution Timeline:\n");
         timeline.push_str("==================\n\n");
 
@@ -1058,14 +1148,15 @@ impl DependencyGraphGenerator {
         for (i, op_id) in sequence.iter().enumerate() {
             let idx = node_map[op_id];
             let node = &graph[idx];
-            
-            timeline.push_str(&format!("{:>4}. [{:>6}ms] {} {}\n",
+
+            timeline.push_str(&format!(
+                "{:>4}. [{:>6}ms] {} {}\n",
                 i + 1,
                 current_time,
                 node.metadata.operation_type,
                 node.metadata.file_path.display()
             ));
-            
+
             current_time += node.estimated_duration_ms;
         }
 
@@ -1076,10 +1167,10 @@ impl DependencyGraphGenerator {
 
     fn get_operation_path(&self, operation: &FileOperation) -> PathBuf {
         match operation {
-            FileOperation::Create { path, .. } |
-            FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } |
-            FileOperation::Append { path, .. } => path.clone(),
+            FileOperation::Create { path, .. }
+            | FileOperation::Update { path, .. }
+            | FileOperation::Delete { path }
+            | FileOperation::Append { path, .. } => path.clone(),
             FileOperation::Rename { to, .. } => to.clone(),
         }
     }
@@ -1088,8 +1179,9 @@ impl DependencyGraphGenerator {
         match operation {
             FileOperation::Delete { .. } => RiskLevel::High,
             FileOperation::Update { path, .. } => {
-                if path.to_string_lossy().contains("config") ||
-                   path.to_string_lossy().contains("settings") {
+                if path.to_string_lossy().contains("config")
+                    || path.to_string_lossy().contains("settings")
+                {
                     RiskLevel::Medium
                 } else {
                     RiskLevel::Low
@@ -1103,27 +1195,23 @@ impl DependencyGraphGenerator {
 
     fn estimate_duration(&self, operation: &FileOperation) -> u64 {
         match operation {
-            FileOperation::Create { content, .. } => {
-                10 + (content.len() as u64 / 1000)
-            }
+            FileOperation::Create { content, .. } => 10 + (content.len() as u64 / 1000),
             FileOperation::Update { .. } => 15,
             FileOperation::Delete { .. } => 5,
-            FileOperation::Append { content, .. } => {
-                5 + (content.len() as u64 / 1000)
-            }
+            FileOperation::Append { content, .. } => 5 + (content.len() as u64 / 1000),
             FileOperation::Rename { .. } => 10,
         }
     }
 
     fn generate_cache_key(&self, operations: &[EnhancedFileOperation]) -> String {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
+        use std::hash::{Hash, Hasher};
+
         let mut hasher = DefaultHasher::new();
         for op in operations {
             format!("{:?}", op.operation).hash(&mut hasher);
         }
-        
+
         format!("graph_{:x}", hasher.finish())
     }
 
@@ -1136,11 +1224,11 @@ impl DependencyGraphGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_dependency_graph_generation() {
         let generator = DependencyGraphGenerator::new(None, None);
-        
+
         // Create test operations with dependencies
         let operations = vec![
             EnhancedFileOperation {
@@ -1164,8 +1252,11 @@ mod tests {
             },
         ];
 
-        let graph = generator.generate_dependency_graph(&operations, None).await.unwrap();
-        
+        let graph = generator
+            .generate_dependency_graph(&operations, None)
+            .await
+            .unwrap();
+
         assert_eq!(graph.node_map.len(), 2);
         assert_eq!(graph.execution_sequence.len(), 2);
         assert!(!graph.analysis.has_cycles);
@@ -1176,12 +1267,12 @@ mod tests {
     #[test]
     fn test_risk_assessment() {
         let generator = DependencyGraphGenerator::new(None, None);
-        
+
         let delete_op = FileOperation::Delete {
             path: PathBuf::from("important.rs"),
         };
         assert_eq!(generator.assess_operation_risk(&delete_op), RiskLevel::High);
-        
+
         let create_op = FileOperation::Create {
             path: PathBuf::from("new.rs"),
             content: String::new(),

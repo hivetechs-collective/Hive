@@ -1,31 +1,30 @@
 // Consensus Pipeline - Orchestrates the 4-stage consensus process
 // Manages flow from Generator → Refiner → Validator → Curator
 
-use std::path::PathBuf;
+use crate::ai_helpers::AIHelperEcosystem;
+use crate::consensus::cancellation::{CancellationChecker, CancellationReason, CancellationToken};
+use crate::consensus::memory::ConsensusMemory;
 use crate::consensus::repository_context::RepositoryContextManager;
-use crate::consensus::verified_context_builder::VerifiedContextBuilder;
-use crate::consensus::cancellation::{CancellationToken, CancellationReason, CancellationChecker};
 use crate::consensus::stages::{
+    file_aware_curator::FileAwareCuratorStage, file_aware_generator::FileAwareGeneratorStage,
     ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage,
-    file_aware_generator::FileAwareGeneratorStage,
-    file_aware_curator::FileAwareCuratorStage,
 };
 use crate::consensus::streaming::{
     ConsoleCallbacks, ProgressInfo, ProgressTracker, StreamingCallbacks,
 };
 use crate::consensus::temporal::TemporalContextProvider;
-use crate::ai_helpers::AIHelperEcosystem;
-use crate::consensus::memory::ConsensusMemory;
+use crate::consensus::verified_context_builder::VerifiedContextBuilder;
 use crate::consensus::{
-    FileOperationExecutor, ExecutorConfig, SmartDecisionEngine, 
-    OperationIntelligenceCoordinator, operation_analysis::{AutoAcceptMode, OperationContext as ConsensusOperationContext},
+    operation_analysis::{AutoAcceptMode, OperationContext as ConsensusOperationContext},
     smart_decision_engine::UserPreferences,
-    ModeDetector, ExecutionMode, DirectExecutionHandler, StreamingOperationExecutor,
+    DirectExecutionHandler, ExecutionMode, ExecutorConfig, FileOperationExecutor, ModeDetector,
+    OperationIntelligenceCoordinator, SmartDecisionEngine, StreamingOperationExecutor,
 };
+use std::path::PathBuf;
 // Removed DynamicModelSelector - direct execution uses profile's generator model
 use crate::consensus::types::{
-    ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
-    TokenUsage, AnalyticsFeatures, ResponseMetadata,
+    AnalyticsFeatures, ConsensusConfig, ConsensusProfile, ConsensusResult, ResponseMetadata, Stage,
+    StageAnalytics, StageResult, TokenUsage,
 };
 // use crate::hooks::{HooksSystem, EventType, EventSource, HookEvent, ConsensusIntegration};
 use crate::consensus::models::ModelManager;
@@ -40,8 +39,8 @@ use crate::subscription::conversation_gateway::ConversationGateway;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 use uuid::Uuid;
 
@@ -54,7 +53,8 @@ pub struct ConsensusPipeline {
     profile: ConsensusProfile,
     temporal_provider: TemporalContextProvider,
     repository_context: Option<Arc<RepositoryContextManager>>,
-    codebase_intelligence: Option<Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>>,
+    codebase_intelligence:
+        Option<Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>>,
     verified_context_builder: VerifiedContextBuilder,
     stages: Vec<Box<dyn ConsensusStage>>,
     callbacks: Arc<dyn StreamingCallbacks>,
@@ -103,7 +103,7 @@ impl ConsensusPipeline {
             config,
             profile,
             temporal_provider: TemporalContextProvider::default(),
-            repository_context: None, // Will be set when needed
+            repository_context: None,    // Will be set when needed
             codebase_intelligence: None, // Will be set when needed
             verified_context_builder: VerifiedContextBuilder::new(),
             stages: vec![
@@ -117,15 +117,15 @@ impl ConsensusPipeline {
             // consensus_integration: None,
             openrouter_client,
             model_manager,
-            database: None, // Will be set later when needed
+            database: None,   // Will be set later when needed
             db_service: None, // Will be set when database is provided
             api_key,
-            usage_tracker: None, // Will be set when database is provided
-            ai_helpers: None, // Will be set when database is provided
+            usage_tracker: None,    // Will be set when database is provided
+            ai_helpers: None,       // Will be set when database is provided
             consensus_memory: None, // Will be set when database is provided
-            file_executor: None, // Will be set when AI helpers are configured
-            mode_detector: None, // Will be set when AI helpers are configured
-            direct_handler: None, // Will be set when components are configured
+            file_executor: None,    // Will be set when AI helpers are configured
+            mode_detector: None,    // Will be set when AI helpers are configured
+            direct_handler: None,   // Will be set when components are configured
         }
     }
 
@@ -146,83 +146,93 @@ impl ConsensusPipeline {
     }
 
     /// Set the repository context manager for this pipeline
-    pub fn with_repository_context(mut self, repository_context: Arc<RepositoryContextManager>) -> Self {
+    pub fn with_repository_context(
+        mut self,
+        repository_context: Arc<RepositoryContextManager>,
+    ) -> Self {
         self.repository_context = Some(repository_context);
         self
     }
-    
+
     /// Configure mode detection for Claude Code-style execution
     pub async fn with_mode_detection(mut self) -> Result<Self> {
         tracing::info!("🔧 Configuring mode detection...");
-        
+
         // Mode detection is REQUIRED - ensure all components exist
-        let ai_helpers = self.ai_helpers
+        let ai_helpers = self
+            .ai_helpers
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("AI Helpers required for mode detection"))?;
-            
-        let openrouter_client = self.openrouter_client
+
+        let openrouter_client = self
+            .openrouter_client
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("OpenRouter client required for mode detection"))?;
-            
-        let database = self.database
+
+        let database = self
+            .database
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Database required for mode detection"))?;
-        
+
         // Create mode detector with routing config using Generator model from profile
-        let mut mode_detector = ModeDetector::new()?
-            .with_ai_helpers(ai_helpers.clone());
-        
+        let mut mode_detector = ModeDetector::new()?.with_ai_helpers(ai_helpers.clone());
+
         // Configure with OpenRouter and Generator model for LLM-based routing
         mode_detector = mode_detector.with_routing_config(
             openrouter_client.clone(),
-            self.profile.generator_model.clone()
+            self.profile.generator_model.clone(),
         );
-        
-        tracing::info!("✅ Mode detector configured with Generator model: {}", self.profile.generator_model);
+
+        tracing::info!(
+            "✅ Mode detector configured with Generator model: {}",
+            self.profile.generator_model
+        );
         self.mode_detector = Some(Arc::new(mode_detector));
-        
+
         // Create streaming executor for direct mode
         if let Some(file_executor) = &self.file_executor {
-            let streaming_executor = Arc::new(
-                StreamingOperationExecutor::new(
-                    file_executor.clone(),
-                    ai_helpers.clone(),
-                    Arc::new(std::sync::atomic::AtomicBool::new(true)), // Auto-accept for direct mode
-                    tokio::sync::mpsc::unbounded_channel().0, // Status channel
-                )
-            );
-            
+            let streaming_executor = Arc::new(StreamingOperationExecutor::new(
+                file_executor.clone(),
+                ai_helpers.clone(),
+                Arc::new(std::sync::atomic::AtomicBool::new(true)), // Auto-accept for direct mode
+                tokio::sync::mpsc::unbounded_channel().0,           // Status channel
+            ));
+
             // Create direct execution handler
             let generator_stage = Arc::new(GeneratorStage::new());
-            let direct_handler = Arc::new(
-                DirectExecutionHandler::new(
-                    generator_stage,
-                    ai_helpers.clone(),
-                    streaming_executor,
-                    openrouter_client.clone(),
-                    self.profile.clone(),
-                    database.clone(),
-                )
-            );
-            
+            let direct_handler = Arc::new(DirectExecutionHandler::new(
+                generator_stage,
+                ai_helpers.clone(),
+                streaming_executor,
+                openrouter_client.clone(),
+                self.profile.clone(),
+                database.clone(),
+            ));
+
             self.direct_handler = Some(direct_handler);
             tracing::info!("✅ Direct execution handler configured for simple questions");
         }
-        
+
         Ok(self)
     }
-    
+
     /// Initialize repository verification for anti-hallucination
-    pub async fn with_repository_verification(mut self, repo_path: std::path::PathBuf) -> Result<Self> {
+    pub async fn with_repository_verification(
+        mut self,
+        repo_path: std::path::PathBuf,
+    ) -> Result<Self> {
         self.verified_context_builder
             .with_repository_verification(repo_path)
             .await?;
         tracing::info!("Repository verification initialized for consensus pipeline");
         Ok(self)
     }
-    
+
     /// Set the codebase intelligence for this pipeline
-    pub fn with_codebase_intelligence(mut self, codebase_intelligence: Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>) -> Self {
+    pub fn with_codebase_intelligence(
+        mut self,
+        codebase_intelligence: Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>,
+    ) -> Self {
         self.codebase_intelligence = Some(codebase_intelligence);
         self
     }
@@ -230,9 +240,9 @@ impl ConsensusPipeline {
     /// Set the AI helpers for this pipeline
     pub fn with_ai_helpers(mut self, ai_helpers: Arc<AIHelperEcosystem>) -> Self {
         self.ai_helpers = Some(ai_helpers.clone());
-        
+
         // ConsensusMemory will be initialized asynchronously later to avoid runtime conflicts
-        
+
         // Initialize file executor when AI helpers are available
         if let Some(ref db) = self.database {
             // Create default user preferences
@@ -245,14 +255,14 @@ impl ConsensusPipeline {
                 preferred_mode: AutoAcceptMode::Conservative,
                 custom_rules: vec![],
             };
-            
+
             // Initialize decision engine with proper constructor
             let decision_engine = SmartDecisionEngine::new(
                 AutoAcceptMode::Balanced, // Default to balanced mode
                 user_prefs,
                 None, // History database can be added later
             );
-            
+
             // Extract AI helpers from ecosystem
             let intelligence_coordinator = OperationIntelligenceCoordinator::new(
                 ai_helpers.knowledge_indexer.clone(),
@@ -261,34 +271,36 @@ impl ConsensusPipeline {
                 ai_helpers.quality_analyzer.clone(),
                 ai_helpers.knowledge_synthesizer.clone(),
             );
-            
+
             let executor_config = ExecutorConfig {
                 create_backups: true,
                 validate_syntax: false, // Can be enabled based on config
-                dry_run_mode: false, // Real execution mode
+                dry_run_mode: false,    // Real execution mode
                 max_file_size: 10 * 1024 * 1024, // 10MB
                 allowed_extensions: vec![
-                    "rs", "js", "ts", "py", "java", "cpp", "c", "h", 
-                    "go", "rb", "php", "md", "txt", "json", "yaml", 
-                    "yml", "toml", "html", "css", "scss"
-                ].into_iter().map(String::from).collect(),
+                    "rs", "js", "ts", "py", "java", "cpp", "c", "h", "go", "rb", "php", "md",
+                    "txt", "json", "yaml", "yml", "toml", "html", "css", "scss",
+                ]
+                .into_iter()
+                .map(String::from)
+                .collect(),
                 forbidden_paths: vec![], // Can be configured
                 stop_on_error: true,
             };
-            
+
             let file_executor = FileOperationExecutor::new(
                 executor_config,
                 decision_engine,
                 intelligence_coordinator,
             );
-            
+
             self.file_executor = Some(Arc::new(file_executor));
             tracing::info!("Initialized FileOperationExecutor with AI helpers");
         }
-        
+
         self
     }
-    
+
     /// Initialize consensus memory asynchronously (must be called after with_ai_helpers and with_database)
     pub async fn initialize_consensus_memory(&mut self) -> Result<()> {
         if let (Some(ref db_service), Some(ref ai_helpers)) = (&self.db_service, &self.ai_helpers) {
@@ -296,14 +308,14 @@ impl ConsensusPipeline {
             match ConsensusMemory::new(db_service.clone(), ai_helpers.clone()).await {
                 Ok(consensus_memory) => {
                     let consensus_memory_arc = Arc::new(consensus_memory);
-                    
+
                     // Connect the hive mind - give AI helpers access to the knowledge store
                     if let Err(e) = consensus_memory_arc.connect_hive_mind(ai_helpers).await {
                         tracing::warn!("Failed to connect hive mind: {}", e);
                     } else {
                         tracing::info!("✅ ConsensusMemory initialized and hive mind connected - All stages share collective knowledge!");
                     }
-                    
+
                     self.consensus_memory = Some(consensus_memory_arc);
                 }
                 Err(e) => {
@@ -325,7 +337,7 @@ impl ConsensusPipeline {
     //     self.consensus_integration = Some(integration);
     //     self
     // }
-    
+
     /// Get the file executor if available
     pub fn get_file_executor(&self) -> Option<Arc<FileOperationExecutor>> {
         self.file_executor.clone()
@@ -341,17 +353,19 @@ impl ConsensusPipeline {
         // Set global consensus flag to pause non-essential processes
         CONSENSUS_ACTIVE.store(true, Ordering::SeqCst);
         tracing::info!("⏸️ Pausing non-essential processes for consensus focus mode");
-        
+
         // Give background tasks time to pause - this prevents race conditions
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        
+
         let cancellation_token = CancellationToken::new();
-        let result = self.run_with_cancellation(question, context, user_id, cancellation_token).await;
-        
+        let result = self
+            .run_with_cancellation(question, context, user_id, cancellation_token)
+            .await;
+
         // Clear consensus flag to resume normal operations
         CONSENSUS_ACTIVE.store(false, Ordering::SeqCst);
         tracing::info!("▶️ Resuming normal operations after consensus");
-        
+
         result
     }
 
@@ -366,7 +380,7 @@ impl ConsensusPipeline {
         // Create cancellation checker for periodic checks
         let mut cancellation_checker = CancellationChecker::new(
             cancellation_token.clone(),
-            std::time::Duration::from_millis(500)
+            std::time::Duration::from_millis(500),
         );
 
         // Check for cancellation before starting
@@ -376,7 +390,7 @@ impl ConsensusPipeline {
         let autonomous_context = if let Some(ref ai_helpers) = self.ai_helpers {
             if let Some(ref autonomous_helper) = ai_helpers.autonomous_helper {
                 tracing::info!("🤖 Autonomous AI Helper processing raw user input...");
-                
+
                 match autonomous_helper.process_autonomously(question).await {
                     Ok(decision) => {
                         tracing::info!(
@@ -384,19 +398,19 @@ impl ConsensusPipeline {
                             decision.intent_understanding,
                             decision.confidence
                         );
-                        
+
                         // Log the autonomous actions taken
                         for action in &decision.actions {
                             tracing::info!("🎯 AI autonomously decided to: {:?}", action);
                         }
-                        
+
                         // Use the context the AI gathered autonomously
                         if let Some(ref gathered_context) = decision.gathered_context {
                             tracing::info!(
                                 "✅ AI autonomously gathered {} chars of context",
                                 gathered_context.len()
                             );
-                            
+
                             // Merge with existing context if any
                             if let Some(existing_context) = context {
                                 Some(format!("{}\n\n{}", existing_context, gathered_context))
@@ -408,7 +422,10 @@ impl ConsensusPipeline {
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Autonomous AI Helper failed: {}. Continuing with normal flow.", e);
+                        tracing::warn!(
+                            "Autonomous AI Helper failed: {}. Continuing with normal flow.",
+                            e
+                        );
                         context
                     }
                 }
@@ -419,7 +436,7 @@ impl ConsensusPipeline {
         } else {
             context
         };
-        
+
         // Use the autonomous context (which may include AI-gathered information)
         let context = autonomous_context;
 
@@ -561,9 +578,13 @@ impl ConsensusPipeline {
 
         // Check if repository verification is available
         if !self.verified_context_builder.has_verification() {
-            tracing::warn!("⚠️ No repository verification available - consensus may produce hallucinations!");
+            tracing::warn!(
+                "⚠️ No repository verification available - consensus may produce hallucinations!"
+            );
         } else {
-            tracing::info!("✅ Repository verification is active - anti-hallucination system enabled");
+            tracing::info!(
+                "✅ Repository verification is active - anti-hallucination system enabled"
+            );
         }
 
         let mut previous_answer: Option<String> = None;
@@ -571,22 +592,28 @@ impl ConsensusPipeline {
 
         // Use AI-powered mode detection to route questions intelligently
         // Mode detector is REQUIRED - this should never be None in production
-        let mode_detector = self.mode_detector
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Mode detector not initialized - this is a critical error"))?;
-        
+        let mode_detector = self.mode_detector.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Mode detector not initialized - this is a critical error")
+        })?;
+
         tracing::info!("🔍 Analyzing question for routing: {}", question);
         let execution_mode = mode_detector.detect_mode(question).await;
         tracing::info!("🤖 AI Mode Detection result: {:?}", execution_mode);
-        
+
         // Notify the frontend about the routing decision
         let direct_mode = matches!(execution_mode, ExecutionMode::Direct);
         let reason = match execution_mode {
-            ExecutionMode::Direct => "AI determined this is a simple question suitable for direct response",
-            ExecutionMode::Consensus => "AI determined this question requires full consensus analysis",
-            ExecutionMode::HybridConsensus => "AI determined this requires consensus with file operations",
+            ExecutionMode::Direct => {
+                "AI determined this is a simple question suitable for direct response"
+            }
+            ExecutionMode::Consensus => {
+                "AI determined this question requires full consensus analysis"
+            }
+            ExecutionMode::HybridConsensus => {
+                "AI determined this requires consensus with file operations"
+            }
         };
-        
+
         if let Err(e) = self.callbacks.on_mode_decision(direct_mode, reason) {
             tracing::warn!("Failed to send mode decision callback: {}", e);
         }
@@ -595,15 +622,17 @@ impl ConsensusPipeline {
         match execution_mode {
             ExecutionMode::Direct => {
                 tracing::info!("🚀 Using Direct Mode for simple question: {}", question);
-                
+
                 // Check if direct handler is available
                 if let Some(direct_handler) = &self.direct_handler {
-                    return self.execute_direct_mode(
-                        question,
-                        context.as_deref(),
-                        &conversation_id,
-                        &cancellation_token,
-                    ).await;
+                    return self
+                        .execute_direct_mode(
+                            question,
+                            context.as_deref(),
+                            &conversation_id,
+                            &cancellation_token,
+                        )
+                        .await;
                 } else {
                     tracing::warn!("Direct handler not available, falling back to consensus");
                 }
@@ -618,11 +647,13 @@ impl ConsensusPipeline {
         }
 
         // Dynamically select stages based on question type
-        let stages_to_use: Vec<Box<dyn ConsensusStage>> = if let Some(ai_helpers) = &self.ai_helpers {
+        let stages_to_use: Vec<Box<dyn ConsensusStage>> = if let Some(ai_helpers) = &self.ai_helpers
+        {
             // Use AI helpers to intelligently decide if we need file-aware stages
-            match ai_helpers.intelligent_orchestrator
+            match ai_helpers
+                .intelligent_orchestrator
                 .make_intelligent_context_decision(question, self.repository_context.is_some())
-                .await 
+                .await
             {
                 Ok(decision) => {
                     if decision.should_use_repo && decision.confidence > 0.7 {
@@ -644,9 +675,15 @@ impl ConsensusPipeline {
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to get AI context decision: {}, using default stages", e);
+                    tracing::warn!(
+                        "Failed to get AI context decision: {}, using default stages",
+                        e
+                    );
                     // Fallback to simple detection
-                    if self.verified_context_builder.is_repository_related_question(question) {
+                    if self
+                        .verified_context_builder
+                        .is_repository_related_question(question)
+                    {
                         vec![
                             Box::new(FileAwareGeneratorStage::new()),
                             Box::new(RefinerStage::new()),
@@ -665,7 +702,10 @@ impl ConsensusPipeline {
             }
         } else {
             // No AI helpers, use verified context builder's simple detection
-            if self.verified_context_builder.is_repository_related_question(question) {
+            if self
+                .verified_context_builder
+                .is_repository_related_question(question)
+            {
                 tracing::info!("📁 Simple detection: repository-related question");
                 vec![
                     Box::new(FileAwareGeneratorStage::new()),
@@ -691,31 +731,43 @@ impl ConsensusPipeline {
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 tracing::debug!("⏱️ Stage transition buffer applied");
             }
-            
+
             // Check for cancellation before each stage
             cancellation_checker.check_if_due()?;
-            
+
             let stage = stage_handler.stage();
 
             // Use model directly from profile - the maintenance system ensures these are always valid
             let model = self.profile.get_model_for_stage(stage).to_string();
 
             // Build verified context for this specific stage (includes mandatory verification)
-            let verified_stage_context = match self.verified_context_builder.build_verified_stage_context(
-                stage,
-                question,
-                context.clone(),
-                temporal_context.clone(),
-                memory_context.clone(),
-                self.repository_context.clone(),
-                self.ai_helpers.as_ref().cloned(),
-            ).await {
+            let verified_stage_context = match self
+                .verified_context_builder
+                .build_verified_stage_context(
+                    stage,
+                    question,
+                    context.clone(),
+                    temporal_context.clone(),
+                    memory_context.clone(),
+                    self.repository_context.clone(),
+                    self.ai_helpers.as_ref().cloned(),
+                )
+                .await
+            {
                 Ok(context) => {
-                    tracing::info!("Built verified context for {} stage: {} chars", stage.display_name(), context.len());
+                    tracing::info!(
+                        "Built verified context for {} stage: {} chars",
+                        stage.display_name(),
+                        context.len()
+                    );
                     Some(context)
                 }
                 Err(e) => {
-                    tracing::error!("Failed to build verified context for {} stage: {}", stage.display_name(), e);
+                    tracing::error!(
+                        "Failed to build verified context for {} stage: {}",
+                        stage.display_name(),
+                        e
+                    );
                     return Err(e);
                 }
             };
@@ -824,7 +876,7 @@ impl ConsensusPipeline {
 
             // Notify stage complete
             self.callbacks.on_stage_complete(stage, &stage_result)?;
-            
+
             // Only learn from Curator stage as it's the authoritative final output
             // Earlier stages may contain incomplete or unvalidated information
             if stage == Stage::Curator {
@@ -891,10 +943,13 @@ impl ConsensusPipeline {
             //             }
 
             stage_results.push(stage_result);
-            
+
             // Check for cancellation AFTER stage completes to prevent next stage from starting
             if cancellation_token.is_cancelled() {
-                tracing::info!("Consensus cancelled after {} stage - stopping pipeline", stage.display_name());
+                tracing::info!(
+                    "Consensus cancelled after {} stage - stopping pipeline",
+                    stage.display_name()
+                );
                 return Err(anyhow!("Consensus was cancelled by user"));
             }
         }
@@ -905,19 +960,26 @@ impl ConsensusPipeline {
 
         // Process Curator output through AI helpers
         if let Some(ref ai_helpers) = self.ai_helpers {
-            match ai_helpers.process_curator_output(&final_answer, question, &conversation_id).await {
+            match ai_helpers
+                .process_curator_output(&final_answer, question, &conversation_id)
+                .await
+            {
                 Ok(processed_knowledge) => {
                     tracing::info!(
                         "AI helpers processed Curator output: {} patterns found, quality score: {:.2}",
                         processed_knowledge.patterns.len(),
                         processed_knowledge.quality.overall_score
                     );
-                    
+
                     // Log any quality issues
                     for issue in &processed_knowledge.quality.issues {
-                        tracing::warn!("Quality issue: {} - {}", issue.issue_type, issue.description);
+                        tracing::warn!(
+                            "Quality issue: {} - {}",
+                            issue.issue_type,
+                            issue.description
+                        );
                     }
-                    
+
                     // Log discovered insights
                     for insight in &processed_knowledge.insights {
                         tracing::info!("Insight ({:?}): {}", insight.insight_type, insight.content);
@@ -929,10 +991,13 @@ impl ConsensusPipeline {
                 }
             }
         }
-        
+
         // Store curator output in ConsensusMemory for future context injection
         if let Some(ref consensus_memory) = self.consensus_memory {
-            match consensus_memory.store_curator_output(&final_answer, question, stage_results.clone()).await {
+            match consensus_memory
+                .store_curator_output(&final_answer, question, stage_results.clone())
+                .await
+            {
                 Ok(learning_result) => {
                     tracing::info!(
                         "✅ Curator output stored in ConsensusMemory: {} facts added, {} patterns detected",
@@ -946,13 +1011,13 @@ impl ConsensusPipeline {
                 }
             }
         }
-        
+
         // Execute file operations if present in curator output
         if let Some(ref file_executor) = self.file_executor {
             if let Some(ref repo_manager) = self.repository_context {
                 // Get the repository context
                 let repo_context = repo_manager.get_context().await;
-                
+
                 // Create operation context
                 let operation_context = ConsensusOperationContext {
                     repository_path: repo_context.root_path.unwrap_or_else(|| PathBuf::from(".")),
@@ -962,17 +1027,17 @@ impl ConsensusPipeline {
                     session_id: conversation_id.clone(),
                     git_commit: repo_context.git_info.and_then(|info| info.last_commit_hash),
                 };
-                
+
                 // Check if auto-accept is enabled (passed via streaming callbacks)
                 let auto_accept_enabled = self.callbacks.get_auto_accept_state().unwrap_or(false);
-                
+
                 tracing::info!("🤖 Auto-accept state: {}", auto_accept_enabled);
-                
+
                 // Parse operations first
-                match file_executor.parse_operations_from_curator_response(
-                    &final_answer,
-                    &operation_context,
-                ).await {
+                match file_executor
+                    .parse_operations_from_curator_response(&final_answer, &operation_context)
+                    .await
+                {
                     Ok(parsed_operations) => {
                         if parsed_operations.operations.is_empty() {
                             tracing::debug!("No file operations found in curator response");
@@ -982,12 +1047,12 @@ impl ConsensusPipeline {
                                 parsed_operations.operations.len(),
                                 parsed_operations.confidence
                             );
-                            
+
                             // Analyze operations with decision engine
                             let mut operations_to_execute = Vec::new();
                             let mut operations_requiring_confirmation = Vec::new();
                             let mut blocked_operations = Vec::new();
-                            
+
                             for op_with_metadata in &parsed_operations.operations {
                                 match file_executor.analyze_operation_decision(
                                     &op_with_metadata.operation,
@@ -1016,20 +1081,22 @@ impl ConsensusPipeline {
                                     }
                                 }
                             }
-                            
+
                             // Report on operations requiring confirmation
                             if !operations_requiring_confirmation.is_empty() {
                                 tracing::info!(
                                     "⚠️ {} operations require user confirmation",
                                     operations_requiring_confirmation.len()
                                 );
-                                
+
                                 // Send operations to UI for approval
-                                self.callbacks.on_operations_require_confirmation(
-                                    operations_requiring_confirmation.clone()
-                                ).ok();
+                                self.callbacks
+                                    .on_operations_require_confirmation(
+                                        operations_requiring_confirmation.clone(),
+                                    )
+                                    .ok();
                             }
-                            
+
                             // Report on blocked operations
                             if !blocked_operations.is_empty() {
                                 tracing::warn!(
@@ -1040,32 +1107,36 @@ impl ConsensusPipeline {
                                     tracing::warn!("Blocked: {:?}", blocked.operation);
                                 }
                             }
-                            
+
                             // Execute auto-approved operations
                             if !operations_to_execute.is_empty() {
                                 tracing::info!(
                                     "✅ Auto-executing {} approved operations",
                                     operations_to_execute.len()
                                 );
-                                
-                                match file_executor.execute_operations_batch(
-                                    operations_to_execute,
-                                    &operation_context,
-                                ).await {
+
+                                match file_executor
+                                    .execute_operations_batch(
+                                        operations_to_execute,
+                                        &operation_context,
+                                    )
+                                    .await
+                                {
                                     Ok(results) => {
-                                        let successful = results.iter().filter(|r| r.success).count();
+                                        let successful =
+                                            results.iter().filter(|r| r.success).count();
                                         let failed = results.iter().filter(|r| !r.success).count();
-                                        
+
                                         tracing::info!(
                                             "🤖 File operations executed: {} successful, {} failed",
                                             successful,
                                             failed
                                         );
-                                        
+
                                         // Log execution details
                                         for result in &results {
                                             if result.success {
-                                                tracing::info!("✅ {} operation on {}: {}", 
+                                                tracing::info!("✅ {} operation on {}: {}",
                                                     match &result.operation {
                                         crate::consensus::stages::file_aware_curator::FileOperation::Create { .. } => "CREATE",
                                         crate::consensus::stages::file_aware_curator::FileOperation::Update { .. } => "UPDATE",
@@ -1079,11 +1150,16 @@ impl ConsensusPipeline {
                                     result.message
                                 );
                                             } else {
-                                                tracing::error!("❌ Failed operation: {}", 
-                                                    result.error_message.as_ref().unwrap_or(&result.message));
+                                                tracing::error!(
+                                                    "❌ Failed operation: {}",
+                                                    result
+                                                        .error_message
+                                                        .as_ref()
+                                                        .unwrap_or(&result.message)
+                                                );
                                             }
                                         }
-                                        
+
                                         if failed > 0 {
                                             tracing::warn!(
                                                 "⚠️ {} file operations failed. Check logs for details.",
@@ -1092,11 +1168,18 @@ impl ConsensusPipeline {
                                         }
                                     }
                                     Err(e) => {
-                                        tracing::error!("Failed to execute operations batch: {}", e);
+                                        tracing::error!(
+                                            "Failed to execute operations batch: {}",
+                                            e
+                                        );
                                     }
                                 }
-                            } else if operations_to_execute.is_empty() && operations_requiring_confirmation.is_empty() {
-                                tracing::info!("No operations to execute (all blocked or no operations found)");
+                            } else if operations_to_execute.is_empty()
+                                && operations_requiring_confirmation.is_empty()
+                            {
+                                tracing::info!(
+                                    "No operations to execute (all blocked or no operations found)"
+                                );
                             }
                         }
                     }
@@ -1106,7 +1189,9 @@ impl ConsensusPipeline {
                     }
                 }
             } else {
-                tracing::debug!("No repository context available - skipping file operation execution");
+                tracing::debug!(
+                    "No repository context available - skipping file operation execution"
+                );
             }
         } else {
             tracing::debug!("File executor not initialized - skipping file operation execution");
@@ -1215,7 +1300,7 @@ impl ConsensusPipeline {
         cancellation_token: &CancellationToken,
     ) -> Result<ConsensusResult> {
         tracing::info!("🚀 Executing Direct Mode for question: {}", question);
-        
+
         // Use the direct handler if available
         if let Some(direct_handler) = &self.direct_handler {
             // Build minimal context - no heavy repository scanning for simple questions
@@ -1224,21 +1309,21 @@ impl ConsensusPipeline {
             } else {
                 String::new()
             };
-            
+
             // Execute with single model (Generator)
             let start_time = Instant::now();
-            let model = self.profile.get_model_for_stage(Stage::Generator).to_string();
-            
+            let model = self
+                .profile
+                .get_model_for_stage(Stage::Generator)
+                .to_string();
+
             // Create callbacks that will handle cancellation
             let callbacks = self.callbacks.clone();
-            
-            let (result_text, usage_data) = direct_handler.handle_request(
-                question,
-                Some(&direct_context),
-                callbacks,
-                conversation_id,
-            ).await?;
-            
+
+            let (result_text, usage_data) = direct_handler
+                .handle_request(question, Some(&direct_context), callbacks, conversation_id)
+                .await?;
+
             // Learn from direct execution - note that proper usage/analytics are already
             // sent via callbacks in DirectExecutionHandler
             if let Some(ai_helpers) = &self.ai_helpers {
@@ -1248,7 +1333,7 @@ impl ConsensusPipeline {
                     completion_tokens: u.completion_tokens,
                     total_tokens: u.total_tokens,
                 });
-                
+
                 let stage_result = StageResult {
                     stage_id: Uuid::new_v4().to_string(),
                     stage_name: "direct".to_string(),
@@ -1260,36 +1345,36 @@ impl ConsensusPipeline {
                     usage: token_usage,
                     analytics: None, // Analytics are already sent via callbacks
                 };
-                
+
                 if let Err(e) = ai_helpers.learn_from_stage_completion(&stage_result).await {
                     tracing::warn!("Failed to trigger learning from direct execution: {}", e);
                 }
             }
-            
+
             // Record in database if available
             if let Some(ref db_service) = self.db_service {
                 // Direct mode results are saved as a single conversation entry
                 // The db_service handles the details
                 tracing::info!("Recording direct mode execution in database");
             }
-            
+
             // Calculate total cost from usage data if available
-            let total_cost = if let (Some(usage), Some(db)) = (usage_data.as_ref(), self.database.as_ref()) {
-                match db.calculate_model_cost(
-                    &model,
-                    usage.prompt_tokens,
-                    usage.completion_tokens,
-                ).await {
-                    Ok(cost) => cost,
-                    Err(e) => {
-                        tracing::error!("Failed to calculate direct mode cost: {}", e);
-                        0.0
+            let total_cost =
+                if let (Some(usage), Some(db)) = (usage_data.as_ref(), self.database.as_ref()) {
+                    match db
+                        .calculate_model_cost(&model, usage.prompt_tokens, usage.completion_tokens)
+                        .await
+                    {
+                        Ok(cost) => cost,
+                        Err(e) => {
+                            tracing::error!("Failed to calculate direct mode cost: {}", e);
+                            0.0
+                        }
                     }
-                }
-            } else {
-                0.0
-            };
-            
+                } else {
+                    0.0
+                };
+
             // Create a stage result for Direct mode to include in the ConsensusResult
             let stage_result = StageResult {
                 stage_id: Uuid::new_v4().to_string(),
@@ -1316,7 +1401,8 @@ impl ConsensusPipeline {
                     fallback_used: false,
                     rate_limit_hit: false,
                     retry_count: 0,
-                    start_time: Utc::now() - chrono::Duration::seconds(start_time.elapsed().as_secs() as i64),
+                    start_time: Utc::now()
+                        - chrono::Duration::seconds(start_time.elapsed().as_secs() as i64),
                     end_time: Utc::now(),
                     time_to_first_token: None,
                     classification_latency: None,
@@ -1328,7 +1414,7 @@ impl ConsensusPipeline {
                     },
                 }),
             };
-            
+
             Ok(ConsensusResult {
                 success: true,
                 result: Some(result_text),
@@ -1341,16 +1427,21 @@ impl ConsensusPipeline {
         } else {
             // Fallback to creating a simple direct execution
             tracing::warn!("Direct handler not initialized, using simplified execution");
-            
+
             // Use Generator stage directly
             let generator = GeneratorStage::new();
             let messages = generator.build_messages(question, None, context)?;
-            
-            let model = self.profile.get_model_for_stage(Stage::Generator).to_string();
+
+            let model = self
+                .profile
+                .get_model_for_stage(Stage::Generator)
+                .to_string();
             let mut tracker = ProgressTracker::new(Stage::Generator, self.callbacks.clone());
-            
-            let response = self.call_model(&model, &messages, &mut tracker, cancellation_token).await?;
-            
+
+            let response = self
+                .call_model(&model, &messages, &mut tracker, cancellation_token)
+                .await?;
+
             Ok(ConsensusResult {
                 success: true,
                 result: Some(response.content),
@@ -1377,15 +1468,17 @@ impl ConsensusPipeline {
     ) -> Result<StageResult> {
         // Check for cancellation at start of stage
         cancellation_token.throw_if_cancelled()?;
-        
+
         let stage_start = Instant::now();
         let stage_id = Uuid::new_v4().to_string();
 
         // CRITICAL FIX: Dynamically choose the right curator based on question type
         let messages = if stage == Stage::Curator {
             // Check if this is a repository-related question
-            let is_repo_related = self.verified_context_builder.is_repository_related_question(question);
-            
+            let is_repo_related = self
+                .verified_context_builder
+                .is_repository_related_question(question);
+
             if is_repo_related {
                 tracing::info!("🎨 Using FileAwareCuratorStage for repository-related question");
                 handler.build_messages(question, previous_answer, context)?
@@ -1399,9 +1492,12 @@ impl ConsensusPipeline {
             // For non-curator stages, use the provided handler
             handler.build_messages(question, previous_answer, context)?
         };
-        
-        tracing::info!("🧠 {} stage: Using verified context (already filtered for relevance)", stage.display_name());
-        
+
+        tracing::info!(
+            "🧠 {} stage: Using verified context (already filtered for relevance)",
+            stage.display_name()
+        );
+
         // Debug log the messages being sent to the AI
         if stage == Stage::Generator {
             for (idx, msg) in messages.iter().enumerate() {
@@ -1436,7 +1532,12 @@ impl ConsensusPipeline {
 
             // Call with replacement model
             response = self
-                .call_model(replacement_model, &messages, &mut tracker, cancellation_token)
+                .call_model(
+                    replacement_model,
+                    &messages,
+                    &mut tracker,
+                    cancellation_token,
+                )
                 .await
                 .with_context(|| {
                     format!(
@@ -1492,7 +1593,9 @@ impl ConsensusPipeline {
         temporal_context: Option<crate::consensus::temporal::TemporalContext>,
         memory_context: Option<String>,
         question: &str,
-        codebase_intelligence: Option<Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>>,
+        codebase_intelligence: Option<
+            Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>,
+        >,
     ) -> Result<Option<String>> {
         let mut contexts = Vec::new();
 
@@ -1511,7 +1614,10 @@ impl ConsensusPipeline {
                 match intelligence.get_context_for_question(question).await {
                     Ok(codebase_context) => {
                         if !codebase_context.is_empty() {
-                            contexts.push(format!("## 🔍 SEMANTIC CODEBASE SEARCH RESULTS\n{}", codebase_context));
+                            contexts.push(format!(
+                                "## 🔍 SEMANTIC CODEBASE SEARCH RESULTS\n{}",
+                                codebase_context
+                            ));
                             tracing::info!("Added semantic search results to context");
                         }
                     }
@@ -1564,13 +1670,13 @@ impl ConsensusPipeline {
     ) -> Result<ModelResponse> {
         // Check for cancellation before making API call
         cancellation_token.throw_if_cancelled()?;
-        
+
         // Also check if we should stop early
         if cancellation_token.is_cancelled() {
             tracing::info!("🛑 Model call cancelled before starting");
             return Err(anyhow::anyhow!("Operation was cancelled"));
         }
-        
+
         // Check if OpenRouter client is available
         let openrouter_client = self.openrouter_client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("OpenRouter client not initialized. Please set OPENROUTER_API_KEY environment variable."))?;
@@ -1618,28 +1724,38 @@ impl ConsensusPipeline {
                     tracker.content = response_content.clone();
 
                     // For streaming, we need to estimate tokens since we don't get usage from API
-                    let estimated_prompt_tokens = messages.iter()
+                    let estimated_prompt_tokens = messages
+                        .iter()
                         .map(|m| m.content.len() / 4) // Rough estimate: 1 token = 4 chars
                         .sum::<usize>() as u32;
                     let estimated_completion_tokens = (response_content.len() / 4) as u32;
-                    
+
                     // Calculate cost using database pricing
                     let cost_result = if let Some(db) = &self.database {
-                        db.calculate_model_cost(model, estimated_prompt_tokens, estimated_completion_tokens).await
+                        db.calculate_model_cost(
+                            model,
+                            estimated_prompt_tokens,
+                            estimated_completion_tokens,
+                        )
+                        .await
                     } else {
                         Ok(0.0)
                     };
-                    
+
                     let (total_cost, input_cost, output_cost) = match cost_result {
                         Ok(cost) => {
                             // Calculate component costs
                             let input_cost = if let Some(db) = &self.database {
-                                db.calculate_model_cost(model, estimated_prompt_tokens, 0).await.unwrap_or(0.0)
+                                db.calculate_model_cost(model, estimated_prompt_tokens, 0)
+                                    .await
+                                    .unwrap_or(0.0)
                             } else {
                                 0.0
                             };
                             let output_cost = if let Some(db) = &self.database {
-                                db.calculate_model_cost(model, 0, estimated_completion_tokens).await.unwrap_or(0.0)
+                                db.calculate_model_cost(model, 0, estimated_completion_tokens)
+                                    .await
+                                    .unwrap_or(0.0)
                             } else {
                                 0.0
                             };
@@ -1650,7 +1766,7 @@ impl ConsensusPipeline {
                             (0.0, 0.0, 0.0)
                         }
                     };
-                    
+
                     tracing::info!(
                         "💰 Streaming response - Model: {}, Estimated tokens: {} input, {} output, Cost: ${:.8}",
                         model, estimated_prompt_tokens, estimated_completion_tokens, total_cost
@@ -1714,42 +1830,51 @@ impl ConsensusPipeline {
                     // Calculate cost using real database pricing - NO FALLBACKS
                     let (cost, input_cost, output_cost) = if let Some(ref usage) = usage {
                         if let Some(ref db) = self.database {
-                        tracing::info!(
-                            "💰 Calculating cost for model: {} (prompt: {}, completion: {})",
-                            model,
-                            usage.prompt_tokens,
-                            usage.completion_tokens
-                        );
-                        
-                        match db.calculate_model_cost(
-                            model,
-                            usage.prompt_tokens,
-                            usage.completion_tokens,
-                        ).await {
-                            Ok(calculated_cost) => {
-                                // Also calculate component costs
-                                let input_cost = db.calculate_model_cost(model, usage.prompt_tokens, 0).await.unwrap_or(0.0);
-                                let output_cost = db.calculate_model_cost(model, 0, usage.completion_tokens).await.unwrap_or(0.0);
-                                
-                                tracing::info!(
+                            tracing::info!(
+                                "💰 Calculating cost for model: {} (prompt: {}, completion: {})",
+                                model,
+                                usage.prompt_tokens,
+                                usage.completion_tokens
+                            );
+
+                            match db
+                                .calculate_model_cost(
+                                    model,
+                                    usage.prompt_tokens,
+                                    usage.completion_tokens,
+                                )
+                                .await
+                            {
+                                Ok(calculated_cost) => {
+                                    // Also calculate component costs
+                                    let input_cost = db
+                                        .calculate_model_cost(model, usage.prompt_tokens, 0)
+                                        .await
+                                        .unwrap_or(0.0);
+                                    let output_cost = db
+                                        .calculate_model_cost(model, 0, usage.completion_tokens)
+                                        .await
+                                        .unwrap_or(0.0);
+
+                                    tracing::info!(
                                     "💰 Database cost calculation: ${:.8} for {} ({} input + {} output tokens)",
                                     calculated_cost,
                                     model,
                                     usage.prompt_tokens,
                                     usage.completion_tokens
                                 );
-                                (calculated_cost, input_cost, output_cost)
-                            },
-                            Err(e) => {
-                                tracing::error!(
-                                    "💰 ERROR: Failed to calculate model cost for {}: {}",
-                                    model,
-                                    e
-                                );
-                                // Return error instead of fallback
-                                return Err(anyhow::anyhow!("Cost calculation failed: {}", e));
+                                    (calculated_cost, input_cost, output_cost)
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "💰 ERROR: Failed to calculate model cost for {}: {}",
+                                        model,
+                                        e
+                                    );
+                                    // Return error instead of fallback
+                                    return Err(anyhow::anyhow!("Cost calculation failed: {}", e));
+                                }
                             }
-                        }
                         } else {
                             tracing::error!("💰 ERROR: No database available for cost calculation");
                             return Err(anyhow::anyhow!("Cannot calculate cost without database"));
@@ -1805,14 +1930,14 @@ impl ConsensusPipeline {
         model: &str,
     ) -> Result<ModelResponse> {
         let error_str = error.to_string();
-        
+
         // Check if this is a cancellation error first
         if error_str.contains("cancelled") || error_str.contains("Cancelled") {
             tracing::info!("🛑 Consensus cancelled during API call");
             // Return the cancellation error immediately
             return Err(error);
         }
-        
+
         // Check if this is a model unavailable error
         let is_model_unavailable = error_str.contains("404")
             || error_str.contains("model not found")
@@ -1937,7 +2062,7 @@ impl ConsensusPipeline {
 
             // 1. Store conversation record
             tracing::debug!("Storing conversation record with ID: {}", conversation_id);
-            
+
             // Calculate total tokens
             let total_input_tokens: u32 = stage_results
                 .iter()
@@ -1947,12 +2072,14 @@ impl ConsensusPipeline {
                 .iter()
                 .map(|s| s.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0))
                 .sum();
-                
+
             tracing::info!(
                 "💰 Storing conversation - Total cost: ${:.8}, Input tokens: {}, Output tokens: {}",
-                total_cost, total_input_tokens, total_output_tokens
+                total_cost,
+                total_input_tokens,
+                total_output_tokens
             );
-            
+
             let rows_affected = tx.execute(
                 "INSERT OR REPLACE INTO conversations (
                     id, user_id, title, profile_id, context_type,
@@ -1964,19 +2091,19 @@ impl ConsensusPipeline {
                     conversation_id,
                     None::<String>, // user_id is optional, like TypeScript version
                     question.chars().take(100).collect::<String>(), // title from question (truncated)
-                    profile_id,     // Use the actual profile ID from the pipeline
-                    "consensus",    // context_type
+                    profile_id,  // Use the actual profile ID from the pipeline
+                    "consensus", // context_type
                     total_cost,
                     total_input_tokens,
                     total_output_tokens,
-                    0.95f64,       // performance_score (default high)
-                    5i32,          // quality_rating (default excellent)
-                    0i32,          // is_archived (false)
-                    0i32,          // is_favorite (false)
-                    "[]",          // tags (empty JSON array)
-                    "{}",          // metadata (empty JSON object)
-                    &now,          // created_at
-                    &now           // updated_at
+                    0.95f64, // performance_score (default high)
+                    5i32,    // quality_rating (default excellent)
+                    0i32,    // is_archived (false)
+                    0i32,    // is_favorite (false)
+                    "[]",    // tags (empty JSON array)
+                    "{}",    // metadata (empty JSON object)
+                    &now,    // created_at
+                    &now     // updated_at
                 ],
             )?;
             tracing::debug!(
@@ -1990,7 +2117,7 @@ impl ConsensusPipeline {
                 if stage_result.stage_name == "generator" {
                     tx.execute(
                         "INSERT INTO messages (
-                            id, conversation_id, role, content, stage, model_used, 
+                            id, conversation_id, role, content, stage, model_used,
                             timestamp
                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                         params![
@@ -2013,16 +2140,31 @@ impl ConsensusPipeline {
                     "curator" => 4,
                     _ => 5,
                 };
-                
-                let stage_cost = stage_result.analytics.as_ref().map(|a| a.cost).unwrap_or(0.0);
-                let input_tokens = stage_result.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0) as i32;
-                let output_tokens = stage_result.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0) as i32;
-                
+
+                let stage_cost = stage_result
+                    .analytics
+                    .as_ref()
+                    .map(|a| a.cost)
+                    .unwrap_or(0.0);
+                let input_tokens = stage_result
+                    .usage
+                    .as_ref()
+                    .map(|u| u.prompt_tokens)
+                    .unwrap_or(0) as i32;
+                let output_tokens = stage_result
+                    .usage
+                    .as_ref()
+                    .map(|u| u.completion_tokens)
+                    .unwrap_or(0) as i32;
+
                 tracing::debug!(
                     "💰 Storing stage {} message - Cost: ${:.8}, Input: {}, Output: {}",
-                    stage_result.stage_name, stage_cost, input_tokens, output_tokens
+                    stage_result.stage_name,
+                    stage_cost,
+                    input_tokens,
+                    output_tokens
                 );
-                
+
                 tx.execute(
                     "INSERT INTO messages (
                         id, conversation_id, role, content, stage, model_used,
@@ -2043,20 +2185,30 @@ impl ConsensusPipeline {
             // 3. Store cost tracking records for each stage
             for stage_result in &stage_results {
                 if let Some(analytics) = &stage_result.analytics {
-                    let input_tokens = stage_result.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0) as i32;
-                    let output_tokens = stage_result.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0) as i32;
-                    
+                    let input_tokens = stage_result
+                        .usage
+                        .as_ref()
+                        .map(|u| u.prompt_tokens)
+                        .unwrap_or(0) as i32;
+                    let output_tokens = stage_result
+                        .usage
+                        .as_ref()
+                        .map(|u| u.completion_tokens)
+                        .unwrap_or(0) as i32;
+
                     // Get model internal_id from openrouter_models table
-                    let model_id: Option<i32> = tx.query_row(
-                        "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
-                        params![&stage_result.model],
-                        |row| row.get(0),
-                    ).optional()?;
-                    
+                    let model_id: Option<i32> = tx
+                        .query_row(
+                            "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
+                            params![&stage_result.model],
+                            |row| row.get(0),
+                        )
+                        .optional()?;
+
                     if let Some(model_id) = model_id {
                         tx.execute(
                             "INSERT INTO cost_tracking (
-                                user_id, conversation_id, model_id, 
+                                user_id, conversation_id, model_id,
                                 tokens_input, tokens_output,
                                 cost_input, cost_output, total_cost,
                                 created_at
@@ -2073,15 +2225,16 @@ impl ConsensusPipeline {
                                 &now
                             ],
                         )?;
-                        
+
                         tracing::debug!(
                             "💰 Cost tracking record added for {} - Total: ${:.8}",
-                            stage_result.model, analytics.cost
+                            stage_result.model,
+                            analytics.cost
                         );
                     }
                 }
             }
-            
+
             // 4. Store in knowledge_conversations (extended format matching TypeScript)
             tx.execute(
                 "INSERT OR REPLACE INTO knowledge_conversations (
@@ -2226,12 +2379,16 @@ impl ConsensusPipeline {
     async fn get_memory_context(&self, question: &str) -> Result<Option<String>> {
         // Prefer ConsensusMemory if available (AI-enhanced context)
         if let Some(ref consensus_memory) = self.consensus_memory {
-            match consensus_memory.context_injector
+            match consensus_memory
+                .context_injector
                 .inject_context(question, crate::consensus::types::Stage::Generator, None)
-                .await {
+                .await
+            {
                 Ok(injected_context) => {
                     if injected_context.formatted_context.is_empty() {
-                        tracing::info!("ConsensusMemory returned empty context, falling back to direct DB");
+                        tracing::info!(
+                            "ConsensusMemory returned empty context, falling back to direct DB"
+                        );
                         // Fall back to direct database query
                         if let Some(db) = &self.database {
                             let context = self.build_memory_context(question, db.clone()).await?;
@@ -2310,7 +2467,7 @@ impl ConsensusPipeline {
             // Get ALL conversations from the last 24 hours, ordered by recency
             // Query from the messages table where conversations are actually saved
             let mut stmt = conn.prepare(
-                "SELECT m1.content as user_question, m2.content as assistant_response, 
+                "SELECT m1.content as user_question, m2.content as assistant_response,
                         m2.stage, m2.model_used, m2.timestamp
                  FROM messages m1
                  JOIN messages m2 ON m1.conversation_id = m2.conversation_id
@@ -2333,13 +2490,13 @@ impl ConsensusPipeline {
             // ALWAYS include at least the most recent conversation for context
             // The AI Helpers will determine semantic relevance
             let mut recent_conversations = Vec::new();
-            
+
             for result in all_recent_results.take(3) { // Get last 3 conversations
                 let (curator_output, question, confidence, created_at) = result?;
                 recent_conversations.push((curator_output, question, confidence, created_at));
                 found_context = true;
             }
-            
+
             // Use the most recent as primary context
             if !recent_conversations.is_empty() {
                 selected_memory = Some(recent_conversations[0].clone());
@@ -2360,7 +2517,7 @@ impl ConsensusPipeline {
                     date, question, curator_output
                 ));
                 context_parts.push("".to_string());
-                
+
                 // Add all recent conversations for AI Helper analysis
                 if recent_conversations.len() > 1 {
                     context_parts.push("📚 Additional Recent Context:".to_string());
@@ -2370,12 +2527,12 @@ impl ConsensusPipeline {
                             .unwrap_or_else(|_| "recent".to_string());
                         context_parts.push(format!(
                             "Context {}: From {}: Question: {}\nAnswer Summary: {}...\n",
-                            i + 2, date, question, 
+                            i + 2, date, question,
                             curator_output.chars().take(200).collect::<String>()
                         ));
                     }
                 }
-                
+
                 context_parts.push("⚡ The AI Helpers will analyze this context semantically to determine relevance.".to_string());
 
                 return Ok(context_parts.join("\n"));
@@ -2389,7 +2546,7 @@ impl ConsensusPipeline {
                 tracing::debug!("Follow-up detected, checking broader window (72h)");
 
                 let mut stmt = conn.prepare(
-                    "SELECT m1.content as user_question, m2.content as assistant_response, 
+                    "SELECT m1.content as user_question, m2.content as assistant_response,
                             m2.stage, m2.model_used, m2.timestamp
                      FROM messages m1
                      JOIN messages m2 ON m1.conversation_id = m2.conversation_id
@@ -2406,7 +2563,7 @@ impl ConsensusPipeline {
                         Ok((
                             row.get::<_, String>(1)?, // assistant_response
                             row.get::<_, String>(0)?, // user_question
-                            1.0_f64,                   // confidence_score  
+                            1.0_f64,                   // confidence_score
                             row.get::<_, String>(4)?, // timestamp
                         ))
                     }
@@ -2542,18 +2699,21 @@ impl ConsensusPipeline {
                 return true;
             }
         }
-        
+
         // Use multi-stage AI intelligence for sophisticated context analysis
         if let Some(ai_helpers) = &self.ai_helpers {
             let orchestrator = &ai_helpers.intelligent_orchestrator;
-            match orchestrator.make_intelligent_context_decision(question, has_repository).await {
+            match orchestrator
+                .make_intelligent_context_decision(question, has_repository)
+                .await
+            {
                 Ok(decision) => {
                     if decision.should_use_repo {
-                        tracing::info!("🧠 Multi-AI analysis: Using repository context for: '{}' (category: {:?}, confidence: {:.2})", 
+                        tracing::info!("🧠 Multi-AI analysis: Using repository context for: '{}' (category: {:?}, confidence: {:.2})",
                             question, decision.primary_category, decision.confidence);
                         tracing::debug!("🔍 AI reasoning: {}", decision.reasoning);
                     } else {
-                        tracing::info!("🧠 Multi-AI analysis: Using general knowledge for: '{}' (category: {:?}, confidence: {:.2})", 
+                        tracing::info!("🧠 Multi-AI analysis: Using general knowledge for: '{}' (category: {:?}, confidence: {:.2})",
                             question, decision.primary_category, decision.confidence);
                         tracing::debug!("🔍 AI reasoning: {}", decision.reasoning);
                     }
@@ -2564,19 +2724,19 @@ impl ConsensusPipeline {
                 }
             }
         }
-        
+
         // Fallback to original logic if AI helpers aren't available
         if !has_repository {
             tracing::debug!("No repository context available, not using file reading");
             return false;
         }
-        
+
         // If repository is open but no AI analysis available, use basic file reading
         // for obvious code-related questions (fallback)
         if let Some(ctx) = context {
             if ctx.contains("CRITICAL REPOSITORY CONTEXT") || ctx.contains("Repository Path:") {
                 tracing::info!("📂 Repository context available, using fallback heuristics");
-                
+
                 // Only use basic file reading for explicit code questions when no index exists
                 let question_lower = question.to_lowercase();
                 let explicitly_about_code = question_lower.contains("repository")
@@ -2587,12 +2747,12 @@ impl ConsensusPipeline {
                     || question_lower.contains("this")
                     || question_lower.contains("here")
                     || question_lower.contains("@codebase");
-                    
+
                 // Removed fallback heuristics - rely on AI semantic analysis only
                 tracing::debug!("No AI semantic analysis available, skipping file reading");
             }
         }
-        
+
         tracing::debug!("⏭️ Not using file reading for: '{}'", question);
         false
     }
@@ -2604,24 +2764,27 @@ impl ConsensusPipeline {
         previous_answer: Option<&str>,
         context: Option<&str>,
     ) -> Result<Vec<crate::consensus::types::Message>> {
-        use crate::consensus::stages::file_aware_generator::{FileAwareGeneratorStage, build_file_aware_messages};
+        use crate::consensus::stages::file_aware_generator::{
+            build_file_aware_messages, FileAwareGeneratorStage,
+        };
 
         let file_aware_generator = FileAwareGeneratorStage::new();
-        
+
         // Get repository context if available
         if let Some(repo_ctx_manager) = &self.repository_context {
             let repo_context = repo_ctx_manager.get_context().await;
-            
+
             // Build messages with actual file contents
             let messages = build_file_aware_messages(
                 &file_aware_generator,
                 question,
                 Some(&repo_context),
-                context
-            ).await?;
-            
+                context,
+            )
+            .await?;
+
             tracing::info!("Built file-aware messages with {} messages", messages.len());
-            
+
             Ok(messages)
         } else {
             // Fallback to regular generator
@@ -2642,18 +2805,17 @@ impl ConsensusPipeline {
         use crate::consensus::stages::ConsensusStage;
 
         let file_aware_curator = FileAwareCuratorStage::new();
-        
+
         // Get repository context if available
         if let Some(repo_ctx_manager) = &self.repository_context {
             // Build messages using the trait method
-            let messages = file_aware_curator.build_messages(
-                question,
-                previous_answer,
-                context
-            )?;
-            
-            tracing::info!("Built file-aware curator messages with {} messages", messages.len());
-            
+            let messages = file_aware_curator.build_messages(question, previous_answer, context)?;
+
+            tracing::info!(
+                "Built file-aware curator messages with {} messages",
+                messages.len()
+            );
+
             Ok(messages)
         } else {
             // Fallback to regular curator
@@ -2671,27 +2833,37 @@ impl ConsensusPipeline {
         stage: Stage,
     ) -> crate::ai_helpers::IntelligentContextDecision {
         let has_repository = self.repository_context.is_some();
-        
+
         // First, try to use AI helpers for intelligent semantic analysis
         if let Some(ref ai_helpers) = self.ai_helpers {
-            match ai_helpers.intelligent_orchestrator
+            match ai_helpers
+                .intelligent_orchestrator
                 .make_intelligent_context_decision(question, has_repository)
-                .await {
+                .await
+            {
                 Ok(decision) => {
-                    tracing::info!("🤖 AI semantic analysis for {} stage: category={:?}, confidence={:.2}, should_use_repo={}", 
+                    tracing::info!("🤖 AI semantic analysis for {} stage: category={:?}, confidence={:.2}, should_use_repo={}",
                         stage.display_name(), decision.primary_category, decision.confidence, decision.should_use_repo);
                     return decision;
                 }
                 Err(e) => {
-                    tracing::warn!("AI semantic analysis failed for {} stage: {}, using fallback", stage.display_name(), e);
+                    tracing::warn!(
+                        "AI semantic analysis failed for {} stage: {}, using fallback",
+                        stage.display_name(),
+                        e
+                    );
                 }
             }
         }
-        
+
         // Check for indexed codebase first (always use if available)
         if let Some(ctx) = context {
             if ctx.contains("SEMANTIC CODEBASE SEARCH RESULTS") {
-                tracing::info!("🧠 {} stage: Using indexed codebase knowledge for: '{}'", stage.display_name(), question);
+                tracing::info!(
+                    "🧠 {} stage: Using indexed codebase knowledge for: '{}'",
+                    stage.display_name(),
+                    question
+                );
                 return crate::ai_helpers::IntelligentContextDecision {
                     should_use_repo: true,
                     confidence: 1.0,
@@ -2699,19 +2871,21 @@ impl ConsensusPipeline {
                     secondary_categories: vec![],
                     reasoning: "Indexed codebase knowledge available".to_string(),
                     validation_score: 1.0,
-                    pattern_analysis: crate::ai_helpers::intelligent_context_orchestrator::PatternAnalysis {
-                        detected_patterns: vec!["indexed_codebase".to_string()],
-                        code_indicators: 1.0,
-                        repo_indicators: 1.0,
-                        general_indicators: 0.0,
-                        academic_indicators: 0.0,
-                    },
-                    quality_assessment: crate::ai_helpers::intelligent_context_orchestrator::QualityAssessment {
-                        context_appropriateness: 1.0,
-                        contamination_risk: 0.0,
-                        clarity_score: 1.0,
-                        complexity_level: 0.5,
-                    },
+                    pattern_analysis:
+                        crate::ai_helpers::intelligent_context_orchestrator::PatternAnalysis {
+                            detected_patterns: vec!["indexed_codebase".to_string()],
+                            code_indicators: 1.0,
+                            repo_indicators: 1.0,
+                            general_indicators: 0.0,
+                            academic_indicators: 0.0,
+                        },
+                    quality_assessment:
+                        crate::ai_helpers::intelligent_context_orchestrator::QualityAssessment {
+                            context_appropriateness: 1.0,
+                            contamination_risk: 0.0,
+                            clarity_score: 1.0,
+                            complexity_level: 0.5,
+                        },
                 };
             }
         }
@@ -2719,9 +2893,12 @@ impl ConsensusPipeline {
         // Use intelligent orchestrator for sophisticated context analysis
         if let Some(ai_helpers) = &self.ai_helpers {
             let orchestrator = &ai_helpers.intelligent_orchestrator;
-            match orchestrator.make_intelligent_context_decision(question, has_repository).await {
+            match orchestrator
+                .make_intelligent_context_decision(question, has_repository)
+                .await
+            {
                 Ok(decision) => {
-                    tracing::debug!("🧠 {} stage: AI context decision - category: {:?}, confidence: {:.2}, use_repo: {}", 
+                    tracing::debug!("🧠 {} stage: AI context decision - category: {:?}, confidence: {:.2}, use_repo: {}",
                         stage.display_name(), decision.primary_category, decision.confidence, decision.should_use_repo);
                     return decision;
                 }
@@ -2732,28 +2909,32 @@ impl ConsensusPipeline {
         }
 
         // No fallback - require AI helpers for proper context decisions
-        tracing::warn!("No AI helpers available for context decision - defaulting to no repository context");
-        
+        tracing::warn!(
+            "No AI helpers available for context decision - defaulting to no repository context"
+        );
+
         crate::ai_helpers::IntelligentContextDecision {
-            should_use_repo: false,  // Default to NO repository context without proper analysis
-            confidence: 0.1,  // Very low confidence without AI analysis
-            primary_category: crate::ai_helpers::QuestionCategory::GeneralKnowledge,  // Default to general knowledge without AI analysis
+            should_use_repo: false, // Default to NO repository context without proper analysis
+            confidence: 0.1,        // Very low confidence without AI analysis
+            primary_category: crate::ai_helpers::QuestionCategory::GeneralKnowledge, // Default to general knowledge without AI analysis
             secondary_categories: vec![],
             reasoning: "Fallback heuristic analysis".to_string(),
             validation_score: 0.5,
-            pattern_analysis: crate::ai_helpers::intelligent_context_orchestrator::PatternAnalysis {
-                detected_patterns: vec!["heuristic_fallback".to_string()],
-                code_indicators: 0.2,  // Low indicators without AI analysis
-                repo_indicators: 0.1,  // Low indicators without AI analysis
-                general_indicators: 0.8,  // High general indicators as default
-                academic_indicators: 0.0,
-            },
-            quality_assessment: crate::ai_helpers::intelligent_context_orchestrator::QualityAssessment {
-                context_appropriateness: 0.7,
-                contamination_risk: 0.3,
-                clarity_score: 0.6,
-                complexity_level: 0.5,
-            },
+            pattern_analysis:
+                crate::ai_helpers::intelligent_context_orchestrator::PatternAnalysis {
+                    detected_patterns: vec!["heuristic_fallback".to_string()],
+                    code_indicators: 0.2, // Low indicators without AI analysis
+                    repo_indicators: 0.1, // Low indicators without AI analysis
+                    general_indicators: 0.8, // High general indicators as default
+                    academic_indicators: 0.0,
+                },
+            quality_assessment:
+                crate::ai_helpers::intelligent_context_orchestrator::QualityAssessment {
+                    context_appropriateness: 0.7,
+                    contamination_risk: 0.3,
+                    clarity_score: 0.6,
+                    complexity_level: 0.5,
+                },
         }
     }
 
@@ -2823,7 +3004,7 @@ impl ConsensusPipeline {
                         Question category: {:?} (confidence: {:.2}). Contamination risk: {:.2}\n\
                         Reasoning: {}\n\
                         Focus appropriately on the identified domain to avoid context contamination.",
-                        intelligent_decision.primary_category, intelligent_decision.confidence, 
+                        intelligent_decision.primary_category, intelligent_decision.confidence,
                         intelligent_decision.quality_assessment.contamination_risk, intelligent_decision.reasoning)
                 }
             };
@@ -2889,16 +3070,22 @@ impl OpenRouterStreamingCallbacks for TrackerForwardingCallbacks {
     ) {
         // Will be handled by on_stage_complete
     }
-    
+
     fn on_error(&self, error: &anyhow::Error) {
         // Forward the error, especially important for cancellation
-        tracing::warn!("OpenRouter streaming error for stage {:?}: {}", self.stage, error);
-        
+        tracing::warn!(
+            "OpenRouter streaming error for stage {:?}: {}",
+            self.stage,
+            error
+        );
+
         // Check if this is a cancellation error
         let error_string = error.to_string();
         if error_string.contains("cancelled") || error_string.contains("Cancelled") {
             // Send a specific cancellation error through the callbacks
-            let _ = self.tracker_callbacks.on_error(self.stage, &anyhow::anyhow!("Consensus cancelled by user"));
+            let _ = self
+                .tracker_callbacks
+                .on_error(self.stage, &anyhow::anyhow!("Consensus cancelled by user"));
         } else {
             // Forward other errors
             let _ = self.tracker_callbacks.on_error(self.stage, error);

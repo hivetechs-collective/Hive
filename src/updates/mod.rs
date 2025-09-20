@@ -90,9 +90,13 @@ impl UpdateChecker {
 
         // Compare versions
         if self.is_newer_version(&target_channel.version)? {
-            let download_url = self.get_platform_download_url_from_json(&target_channel.platforms)?;
+            let download_url =
+                self.get_platform_download_url_from_json(&target_channel.platforms)?;
             let changelog_url = releases.release_notes_url.unwrap_or_else(|| {
-                format!("https://github.com/hivetechs/hive/releases/tag/v{}", target_channel.version)
+                format!(
+                    "https://github.com/hivetechs/hive/releases/tag/v{}",
+                    target_channel.version
+                )
             });
 
             Ok(Some(UpdateInfo {
@@ -148,7 +152,9 @@ impl UpdateChecker {
                             },
                         },
                         checksums: None,
-                        release_notes_url: Some("https://github.com/hivetechs/hive/releases".to_string()),
+                        release_notes_url: Some(
+                            "https://github.com/hivetechs/hive/releases".to_string(),
+                        ),
                     });
                 }
 
@@ -157,7 +163,10 @@ impl UpdateChecker {
                     Ok(releases) => Ok(releases),
                     Err(e) => {
                         // If JSON parsing fails, treat it as no updates available
-                        tracing::warn!("Failed to parse releases metadata (server may be unavailable): {}", e);
+                        tracing::warn!(
+                            "Failed to parse releases metadata (server may be unavailable): {}",
+                            e
+                        );
                         // Return fake metadata indicating current version is latest
                         Ok(ReleasesMetadata {
                             latest_version: self.current_version.clone(),
@@ -175,7 +184,9 @@ impl UpdateChecker {
                                 },
                             },
                             checksums: None,
-                            release_notes_url: Some("https://github.com/hivetechs/hive/releases".to_string()),
+                            release_notes_url: Some(
+                                "https://github.com/hivetechs/hive/releases".to_string(),
+                            ),
                         })
                     }
                 }
@@ -204,7 +215,9 @@ impl UpdateChecker {
                             },
                         },
                         checksums: None,
-                        release_notes_url: Some("https://github.com/hivetechs/hive/releases".to_string()),
+                        release_notes_url: Some(
+                            "https://github.com/hivetechs/hive/releases".to_string(),
+                        ),
                     })
                 } else {
                     Err(anyhow!("Failed to fetch releases metadata: {}", e))
@@ -216,7 +229,11 @@ impl UpdateChecker {
     /// Get download URL for current platform from JSON structure
     fn get_platform_download_url_from_json(&self, platforms: &serde_json::Value) -> Result<String> {
         let (os_key, arch_key, download_key) = if cfg!(target_os = "macos") {
-            let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+            let arch = if cfg!(target_arch = "aarch64") {
+                "arm64"
+            } else {
+                "x64"
+            };
             ("darwin", arch, "dmg")
         } else if cfg!(target_os = "windows") {
             ("windows", "x64", "msi")

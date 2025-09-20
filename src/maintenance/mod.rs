@@ -73,12 +73,15 @@ impl BackgroundMaintenance {
     /// Start background maintenance tasks
     pub async fn start(self: Arc<Self>) {
         info!("🔧 Starting background maintenance system");
-        
+
         // Update status
         {
             let mut status = self.status.write().await;
             status.is_running = true;
-            status.next_sync = Some(Utc::now() + chrono::Duration::from_std(self.config.openrouter_sync_interval).unwrap());
+            status.next_sync = Some(
+                Utc::now()
+                    + chrono::Duration::from_std(self.config.openrouter_sync_interval).unwrap(),
+            );
         }
 
         // Spawn OpenRouter sync task
@@ -101,13 +104,13 @@ impl BackgroundMaintenance {
     /// Run OpenRouter sync in a loop
     async fn run_openrouter_sync_loop(&self) {
         let mut interval = interval(self.config.openrouter_sync_interval);
-        
+
         // Run immediately on start (after 30 seconds to let system stabilize)
         tokio::time::sleep(Duration::from_secs(30)).await;
-        
+
         loop {
             interval.tick().await;
-            
+
             // Check CPU before running
             if !self.check_system_resources().await {
                 warn!("System resources too high, skipping OpenRouter sync");
@@ -115,18 +118,24 @@ impl BackgroundMaintenance {
             }
 
             info!("🔄 Running scheduled OpenRouter sync");
-            
+
             match self.sync_openrouter_models().await {
                 Ok(report) => {
-                    info!("✅ OpenRouter sync completed: {} models updated, {} profiles migrated", 
-                        report.models_updated, report.profiles_migrated);
-                    
+                    info!(
+                        "✅ OpenRouter sync completed: {} models updated, {} profiles migrated",
+                        report.models_updated, report.profiles_migrated
+                    );
+
                     // Update status
                     let mut status = self.status.write().await;
                     status.last_openrouter_sync = Some(Utc::now());
                     status.models_updated = report.models_updated;
                     status.profiles_migrated = report.profiles_migrated;
-                    status.next_sync = Some(Utc::now() + chrono::Duration::from_std(self.config.openrouter_sync_interval).unwrap());
+                    status.next_sync = Some(
+                        Utc::now()
+                            + chrono::Duration::from_std(self.config.openrouter_sync_interval)
+                                .unwrap(),
+                    );
                 }
                 Err(e) => {
                     error!("❌ OpenRouter sync failed: {}", e);
@@ -138,13 +147,13 @@ impl BackgroundMaintenance {
     /// Run database cleanup in a loop
     async fn run_database_cleanup_loop(&self) {
         let mut interval = interval(self.config.database_cleanup_interval);
-        
+
         // Wait longer before first cleanup (1 hour)
         tokio::time::sleep(Duration::from_secs(3600)).await;
-        
+
         loop {
             interval.tick().await;
-            
+
             // Check CPU before running
             if !self.check_system_resources().await {
                 warn!("System resources too high, skipping database cleanup");
@@ -152,11 +161,11 @@ impl BackgroundMaintenance {
             }
 
             info!("🧹 Running scheduled database cleanup");
-            
+
             match self.cleanup_database().await {
                 Ok(cleaned) => {
                     info!("✅ Database cleanup completed: {} records cleaned", cleaned);
-                    
+
                     // Update status
                     let mut status = self.status.write().await;
                     status.last_database_cleanup = Some(Utc::now());
@@ -170,13 +179,10 @@ impl BackgroundMaintenance {
 
     /// Sync models from OpenRouter
     async fn sync_openrouter_models(&self) -> Result<SyncReport> {
-        let mut manager = TemplateMaintenanceManager::new(
-            self.db.clone(),
-            self.api_key.clone()
-        );
-        
+        let mut manager = TemplateMaintenanceManager::new(self.db.clone(), self.api_key.clone());
+
         let report = manager.run_maintenance().await?;
-        
+
         Ok(SyncReport {
             models_updated: report.models_synced,
             profiles_migrated: report.migrated_profiles.len() as u32,
@@ -211,7 +217,7 @@ impl BackgroundMaintenance {
 
         // Optimize database
         conn.execute("VACUUM", [])?;
-        
+
         Ok(cleaned)
     }
 
@@ -221,7 +227,7 @@ impl BackgroundMaintenance {
         use sysinfo::System;
         let mut sys = System::new_all();
         sys.refresh_cpu();
-        
+
         // Get average CPU usage (returns percentage 0-100)
         let cpu_usage = sys.global_cpu_info().cpu_usage() / 100.0;
         cpu_usage < self.config.cpu_threshold
@@ -236,13 +242,13 @@ impl BackgroundMaintenance {
     pub async fn force_sync(&self) -> Result<SyncReport> {
         info!("⚡ Force running OpenRouter sync");
         let report = self.sync_openrouter_models().await?;
-        
+
         // Update status
         let mut status = self.status.write().await;
         status.last_openrouter_sync = Some(Utc::now());
         status.models_updated = report.models_updated;
         status.profiles_migrated = report.profiles_migrated;
-        
+
         Ok(report)
     }
 }

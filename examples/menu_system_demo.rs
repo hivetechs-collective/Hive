@@ -1,14 +1,14 @@
 //! Example demonstrating the menu system components
 
-use dioxus::prelude::*;
 use crate::desktop::components::{
-    menu::{Menu, MenuProps, GenericMenuItem, MenuItemBuilder},
-    tooltip::{Tooltip, TooltipProps, TooltipPosition, TooltipTrigger},
+    menu::{GenericMenuItem, Menu, MenuItemBuilder, MenuProps},
     progress_indicator::{
-        ProgressIndicator, ProgressIndicatorProps, ProgressType, 
-        ProgressSize, ProgressColor, ProgressStep, Spinner, LoadingDots
+        LoadingDots, ProgressColor, ProgressIndicator, ProgressIndicatorProps, ProgressSize,
+        ProgressStep, ProgressType, Spinner,
     },
+    tooltip::{Tooltip, TooltipPosition, TooltipProps, TooltipTrigger},
 };
+use dioxus::prelude::*;
 
 fn main() {
     dioxus::launch(app);
@@ -18,19 +18,19 @@ fn app() -> Element {
     rsx! {
         div {
             style: "padding: 20px; font-family: Arial, sans-serif;",
-            
+
             h1 { "Menu System Components Demo" }
-            
+
             // Menu Component Demo
             MenuDemo {}
-            
+
             hr { style: "margin: 40px 0;" }
-            
+
             // Tooltip Component Demo
             TooltipDemo {}
-            
+
             hr { style: "margin: 40px 0;" }
-            
+
             // Progress Indicator Demo
             ProgressDemo {}
         }
@@ -41,37 +41,62 @@ fn app() -> Element {
 fn MenuDemo() -> Element {
     let mut menu_visible = use_signal(|| false);
     let mut last_selected = use_signal(|| String::new());
-    
+
     let menu_items = vec![
-        MenuItemBuilder::new("New File").shortcut("Ctrl+N").icon("📄").build(),
-        MenuItemBuilder::new("Open File").shortcut("Ctrl+O").icon("📁").build(),
-        MenuItemBuilder::new("Save").shortcut("Ctrl+S").icon("💾").build(),
+        MenuItemBuilder::new("New File")
+            .shortcut("Ctrl+N")
+            .icon("📄")
+            .build(),
+        MenuItemBuilder::new("Open File")
+            .shortcut("Ctrl+O")
+            .icon("📁")
+            .build(),
+        MenuItemBuilder::new("Save")
+            .shortcut("Ctrl+S")
+            .icon("💾")
+            .build(),
         MenuItemBuilder::separator().build(),
-        MenuItemBuilder::new("Cut").shortcut("Ctrl+X").icon("✂️").build(),
-        MenuItemBuilder::new("Copy").shortcut("Ctrl+C").icon("📋").build(),
-        MenuItemBuilder::new("Paste").shortcut("Ctrl+V").icon("📌").enabled(false).build(),
+        MenuItemBuilder::new("Cut")
+            .shortcut("Ctrl+X")
+            .icon("✂️")
+            .build(),
+        MenuItemBuilder::new("Copy")
+            .shortcut("Ctrl+C")
+            .icon("📋")
+            .build(),
+        MenuItemBuilder::new("Paste")
+            .shortcut("Ctrl+V")
+            .icon("📌")
+            .enabled(false)
+            .build(),
         MenuItemBuilder::separator().build(),
-        MenuItemBuilder::new("Settings").icon("⚙️").submenu().build(),
-        MenuItemBuilder::new("Exit").shortcut("Alt+F4").icon("🚪").build(),
+        MenuItemBuilder::new("Settings")
+            .icon("⚙️")
+            .submenu()
+            .build(),
+        MenuItemBuilder::new("Exit")
+            .shortcut("Alt+F4")
+            .icon("🚪")
+            .build(),
     ];
-    
+
     rsx! {
         div {
             h2 { "Menu Component" }
-            
+
             button {
                 onclick: move |_| menu_visible.set(!menu_visible()),
                 style: "padding: 8px 16px; cursor: pointer;",
                 "Toggle Menu"
             }
-            
+
             if !last_selected().is_empty() {
                 p { "Last selected: {last_selected}" }
             }
-            
+
             div {
                 style: "position: relative; margin-top: 10px;",
-                
+
                 Menu {
                     items: menu_items,
                     visible: menu_visible(),
@@ -91,10 +116,10 @@ fn TooltipDemo() -> Element {
     rsx! {
         div {
             h2 { "Tooltip Component" }
-            
+
             div {
                 style: "display: flex; gap: 20px; flex-wrap: wrap;",
-                
+
                 Tooltip {
                     content: "This tooltip appears on top",
                     position: TooltipPosition::Top,
@@ -103,7 +128,7 @@ fn TooltipDemo() -> Element {
                         "Hover me (Top)"
                     }
                 }
-                
+
                 Tooltip {
                     content: "This tooltip appears on the right",
                     position: TooltipPosition::Right,
@@ -112,7 +137,7 @@ fn TooltipDemo() -> Element {
                         "Hover me (Right)"
                     }
                 }
-                
+
                 Tooltip {
                     content: "This tooltip appears on click",
                     trigger: TooltipTrigger::Click,
@@ -121,7 +146,7 @@ fn TooltipDemo() -> Element {
                         "Click me"
                     }
                 }
-                
+
                 Tooltip {
                     content: "This tooltip has no delay",
                     delay: 0,
@@ -139,7 +164,7 @@ fn TooltipDemo() -> Element {
 fn ProgressDemo() -> Element {
     let mut progress = use_signal(|| 0.0);
     let mut loading = use_signal(|| false);
-    
+
     // Auto-increment progress
     use_effect(move || {
         if progress() < 100.0 && !loading() {
@@ -149,7 +174,7 @@ fn ProgressDemo() -> Element {
             });
         }
     });
-    
+
     let steps = vec![
         ProgressStep {
             label: "Setup".to_string(),
@@ -180,14 +205,14 @@ fn ProgressDemo() -> Element {
             error: false,
         },
     ];
-    
+
     rsx! {
         div {
             h2 { "Progress Indicators" }
-            
+
             div {
                 style: "display: flex; flex-direction: column; gap: 30px;",
-                
+
                 // Linear Progress
                 div {
                     h3 { "Linear Progress" }
@@ -197,34 +222,34 @@ fn ProgressDemo() -> Element {
                         label: Some("Loading...".to_string()),
                         color: ProgressColor::Primary,
                     }
-                    
+
                     button {
                         onclick: move |_| progress.set(0.0),
                         style: "margin-top: 10px; padding: 4px 8px;",
                         "Reset"
                     }
                 }
-                
+
                 // Circular Progress
                 div {
                     h3 { "Circular Progress" }
                     div {
                         style: "display: flex; gap: 20px; align-items: center;",
-                        
+
                         ProgressIndicator {
                             value: Some(progress()),
                             progress_type: ProgressType::Circular,
                             size: ProgressSize::Small,
                             color: ProgressColor::Success,
                         }
-                        
+
                         ProgressIndicator {
                             value: Some(progress()),
                             progress_type: ProgressType::Circular,
                             size: ProgressSize::Medium,
                             color: ProgressColor::Warning,
                         }
-                        
+
                         ProgressIndicator {
                             value: Some(progress()),
                             progress_type: ProgressType::Circular,
@@ -233,26 +258,26 @@ fn ProgressDemo() -> Element {
                         }
                     }
                 }
-                
+
                 // Indeterminate Indicators
                 div {
                     h3 { "Indeterminate Progress" }
                     div {
                         style: "display: flex; gap: 20px; align-items: center;",
-                        
+
                         Spinner {
                             size: ProgressSize::Medium,
                             color: ProgressColor::Primary,
                             label: Some("Loading...".to_string()),
                         }
-                        
+
                         LoadingDots {
                             size: ProgressSize::Medium,
                             color: ProgressColor::Info,
                         }
                     }
                 }
-                
+
                 // Steps Progress
                 div {
                     h3 { "Steps Progress" }

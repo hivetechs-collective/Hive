@@ -1,10 +1,10 @@
 // User Feedback Interfaces for Operation Confirmations
-use dioxus::prelude::*;
-use crate::consensus::operation_intelligence::{OperationAnalysis, AutoAcceptMode};
-use crate::consensus::smart_decision_engine::{ExecutionDecision, UserDecision, UserChoice};
+use crate::consensus::operation_intelligence::{AutoAcceptMode, OperationAnalysis};
 use crate::consensus::operation_preview::OperationPreview;
 use crate::consensus::rollback_planner::RollbackPlan;
+use crate::consensus::smart_decision_engine::{ExecutionDecision, UserChoice, UserDecision};
 use chrono::{DateTime, Utc};
+use dioxus::prelude::*;
 use std::collections::HashMap;
 
 /// Main user feedback interface for operation confirmations
@@ -23,7 +23,7 @@ pub fn OperationConfirmationDialog(
     let show_details = use_signal(|| false);
     let show_rollback_info = use_signal(|| false);
     let trust_level_adjustment = use_signal(|| 0i32);
-    
+
     rsx! {
         if show_dialog() {
             div {
@@ -33,36 +33,36 @@ pub fn OperationConfirmationDialog(
                         show_dialog.set(false);
                     }
                 },
-                
+
                 div {
                     class: "confirmation-dialog",
-                    
+
                     // Dialog header
                     div {
                         class: "dialog-header",
-                        
-                        h2 { 
+
+                        h2 {
                             class: "dialog-title",
                             "Operation Confirmation Required"
                         }
-                        
+
                         if let Some(decision) = execution_decision() {
                             DecisionSummary {
                                 decision: decision.clone()
                             }
                         }
-                        
+
                         button {
                             class: "close-button",
                             onclick: move |_| show_dialog.set(false),
                             "×"
                         }
                     }
-                    
+
                     // Dialog content
                     div {
                         class: "dialog-content",
-                        
+
                         // Operation analysis summary
                         if let Some(analysis) = operation_analysis() {
                             OperationAnalysisSummary {
@@ -70,14 +70,14 @@ pub fn OperationConfirmationDialog(
                                 show_details: show_details
                             }
                         }
-                        
+
                         // Operation preview
                         if let Some(preview) = operation_preview() {
                             OperationPreviewSection {
                                 preview: preview.clone()
                             }
                         }
-                        
+
                         // Rollback information
                         if let Some(plan) = rollback_plan() {
                             RollbackInformation {
@@ -85,7 +85,7 @@ pub fn OperationConfirmationDialog(
                                 show_info: show_rollback_info
                             }
                         }
-                        
+
                         // User decision options
                         UserDecisionOptions {
                             user_choice: user_choice,
@@ -93,24 +93,24 @@ pub fn OperationConfirmationDialog(
                             analysis: operation_analysis(),
                             decision: execution_decision()
                         }
-                        
+
                         // Feedback section
                         FeedbackSection {
                             comment: feedback_comment,
                             trust_adjustment: trust_level_adjustment
                         }
                     }
-                    
+
                     // Dialog actions
                     div {
                         class: "dialog-actions",
-                        
+
                         button {
                             class: "action-button secondary",
                             onclick: move |_| show_dialog.set(false),
                             "Cancel"
                         }
-                        
+
                         button {
                             class: "action-button danger",
                             onclick: move |_| {
@@ -125,7 +125,7 @@ pub fn OperationConfirmationDialog(
                             },
                             "Reject"
                         }
-                        
+
                         button {
                             class: "action-button primary",
                             onclick: move |_| {
@@ -136,7 +136,7 @@ pub fn OperationConfirmationDialog(
                                     timestamp: Utc::now(),
                                 };
                                 on_user_decision.call(decision);
-                                
+
                                 // Submit feedback
                                 let feedback = OperationFeedback {
                                     operation_id: String::new(), // Would be set by parent
@@ -148,7 +148,7 @@ pub fn OperationConfirmationDialog(
                                     submitted_at: Utc::now(),
                                 };
                                 on_feedback_submitted.call(feedback);
-                                
+
                                 show_dialog.set(false);
                             },
                             disabled: user_choice() == UserChoice::Pending,
@@ -167,22 +167,22 @@ fn DecisionSummary(decision: ExecutionDecision) -> Element {
     rsx! {
         div {
             class: "decision-summary",
-            
+
             match &decision {
                 ExecutionDecision::RequireConfirmation { reason, warnings, suggestions, confidence, risk_level } => rsx! {
                     div {
                         class: "decision-require-confirmation",
-                        
+
                         div {
                             class: "decision-reason",
                             "⚠️ {reason}"
                         }
-                        
+
                         div {
                             class: "decision-metrics",
                             "Confidence: {confidence:.0}% | Risk: {risk_level:.0}%"
                         }
-                        
+
                         if !warnings.is_empty() {
                             div {
                                 class: "decision-warnings",
@@ -192,7 +192,7 @@ fn DecisionSummary(decision: ExecutionDecision) -> Element {
                                 }
                             }
                         }
-                        
+
                         if !suggestions.is_empty() {
                             div {
                                 class: "decision-suggestions",
@@ -207,17 +207,17 @@ fn DecisionSummary(decision: ExecutionDecision) -> Element {
                 ExecutionDecision::Block { reason, critical_issues, alternatives, risk_level } => rsx! {
                     div {
                         class: "decision-block",
-                        
+
                         div {
                             class: "decision-reason",
                             "🚫 {reason}"
                         }
-                        
+
                         div {
                             class: "decision-metrics",
                             "Risk: {risk_level:.0}% (Critical)"
                         }
-                        
+
                         if !critical_issues.is_empty() {
                             div {
                                 class: "critical-issues",
@@ -227,7 +227,7 @@ fn DecisionSummary(decision: ExecutionDecision) -> Element {
                                 }
                             }
                         }
-                        
+
                         if !alternatives.is_empty() {
                             div {
                                 class: "alternatives",
@@ -249,68 +249,65 @@ fn DecisionSummary(decision: ExecutionDecision) -> Element {
 
 /// Operation analysis summary
 #[component]
-fn OperationAnalysisSummary(
-    analysis: OperationAnalysis,
-    show_details: Signal<bool>,
-) -> Element {
+fn OperationAnalysisSummary(analysis: OperationAnalysis, show_details: Signal<bool>) -> Element {
     rsx! {
         div {
             class: "operation-analysis-summary",
-            
+
             div {
                 class: "analysis-header",
                 onclick: move |_| show_details.set(!show_details()),
-                
+
                 h3 { "AI Analysis" }
-                
+
                 div {
                     class: "analysis-scores",
-                    
+
                     div {
                         class: "score-item confidence",
                         span { class: "score-label", "Confidence:" }
                         span { class: "score-value", "{analysis.unified_score.confidence:.0}%" }
                     }
-                    
+
                     div {
                         class: "score-item risk",
                         span { class: "score-label", "Risk:" }
                         span { class: "score-value", "{analysis.unified_score.risk:.0}%" }
                     }
                 }
-                
+
                 div {
                     class: "expand-icon {if show_details() { \"expanded\" } else { \"\" }}",
                     "▼"
                 }
             }
-            
+
             if show_details() {
                 div {
                     class: "analysis-details",
-                    
+
                     // AI Recommendations
                     if !analysis.recommendations.is_empty() {
                         div {
                             class: "recommendations-section",
-                            
+
                             h4 { "AI Recommendations" }
-                            
+
                             for rec in &analysis.recommendations {
                                 div {
                                     class: "recommendation-item priority-{rec.priority:?}",
-                                    
+
                                     div {
                                         class: "rec-header",
                                         span { class: "rec-action", "{rec.action}" }
                                         span { class: "rec-confidence", "{rec.confidence:.0}%" }
                                     }
-                                    
+
                                     div {
                                         class: "rec-description",
                                         "{rec.description}"
                                     }
-                                    
+
                                     if !rec.rationale.is_empty() {
                                         div {
                                             class: "rec-rationale",
@@ -318,7 +315,7 @@ fn OperationAnalysisSummary(
                                             {rec.rationale.join(", ")}
                                         }
                                     }
-                                    
+
                                     if !rec.risks.is_empty() {
                                         div {
                                             class: "rec-risks",
@@ -330,41 +327,41 @@ fn OperationAnalysisSummary(
                             }
                         }
                     }
-                    
+
                     // Component Scores
                     if let Some(scores) = &analysis.unified_score.component_scores {
                         div {
                             class: "component-scores-section",
-                            
+
                             h4 { "AI Helper Contributions" }
-                            
+
                             div {
                                 class: "component-grid",
-                                
+
                                 ComponentScoreDisplay {
                                     name: "Knowledge",
                                     score: scores.knowledge_indexer,
                                     description: "File operation tracking"
                                 }
-                                
+
                                 ComponentScoreDisplay {
                                     name: "Context",
                                     score: scores.context_retriever,
                                     description: "Historical patterns"
                                 }
-                                
+
                                 ComponentScoreDisplay {
                                     name: "Patterns",
                                     score: scores.pattern_recognizer,
                                     description: "Safety detection"
                                 }
-                                
+
                                 ComponentScoreDisplay {
                                     name: "Quality",
                                     score: scores.quality_analyzer,
                                     description: "Risk assessment"
                                 }
-                                
+
                                 ComponentScoreDisplay {
                                     name: "Synthesis",
                                     score: scores.knowledge_synthesizer,
@@ -390,12 +387,12 @@ fn ComponentScoreDisplay(
         div {
             class: "component-score-display",
             title: "{description}",
-            
+
             div {
                 class: "component-name",
                 "{name}"
             }
-            
+
             div {
                 class: "component-score",
                 if let Some(s) = score {
@@ -419,47 +416,47 @@ fn ComponentScoreDisplay(
 #[component]
 fn OperationPreviewSection(preview: OperationPreview) -> Element {
     let show_diff = use_signal(|| false);
-    
+
     rsx! {
         div {
             class: "operation-preview-section",
-            
+
             div {
                 class: "preview-header",
                 onclick: move |_| show_diff.set(!show_diff()),
-                
+
                 h3 { "Operation Preview" }
-                
+
                 div {
                     class: "operation-info",
                     span { class: "operation-type", "{get_operation_type(&preview.operation)}" }
                     span { class: "operation-file", "{get_operation_file(&preview.operation)}" }
                 }
-                
+
                 div {
                     class: "expand-icon {if show_diff() { \"expanded\" } else { \"\" }}",
                     "▼"
                 }
             }
-            
+
             if show_diff() {
                 div {
                     class: "preview-content",
-                    
+
                     // Before/After states
                     div {
                         class: "state-comparison",
-                        
+
                         div {
                             class: "state-section before",
                             h4 { "Before" }
-                            
+
                             if preview.before_state.exists {
                                 div {
                                     class: "file-info",
                                     "Size: {preview.before_state.size_bytes.unwrap_or(0)} bytes"
                                 }
-                                
+
                                 if let Some(content) = &preview.before_state.content_preview {
                                     pre {
                                         class: "content-preview",
@@ -473,17 +470,17 @@ fn OperationPreviewSection(preview: OperationPreview) -> Element {
                                 }
                             }
                         }
-                        
+
                         div {
                             class: "state-section after",
                             h4 { "After" }
-                            
+
                             if preview.after_state.exists {
                                 div {
                                     class: "file-info",
                                     "Size: {preview.after_state.size_bytes.unwrap_or(0)} bytes"
                                 }
-                                
+
                                 if let Some(content) = &preview.after_state.content_preview {
                                     pre {
                                         class: "content-preview",
@@ -498,18 +495,18 @@ fn OperationPreviewSection(preview: OperationPreview) -> Element {
                             }
                         }
                     }
-                    
+
                     // Diff view
                     if let Some(diff) = &preview.diff_view {
                         div {
                             class: "diff-view",
-                            
+
                             h4 { "Changes" }
-                            
+
                             for chunk in &diff.chunks {
                                 div {
                                     class: "diff-chunk",
-                                    
+
                                     div {
                                         class: "chunk-header",
                                         "@@ -{},{} +{},{} @@",
@@ -518,7 +515,7 @@ fn OperationPreviewSection(preview: OperationPreview) -> Element {
                                         chunk.new_start,
                                         chunk.new_lines
                                     }
-                                    
+
                                     for line in &chunk.lines {
                                         div {
                                             class: "diff-line {line.change_type:?}",
@@ -529,22 +526,22 @@ fn OperationPreviewSection(preview: OperationPreview) -> Element {
                             }
                         }
                     }
-                    
+
                     // Impact summary
                     div {
                         class: "impact-summary",
-                        
+
                         h4 { "Impact Analysis" }
-                        
+
                         div {
                             class: "impact-metrics",
-                            
+
                             div {
                                 class: "impact-item",
                                 span { class: "impact-label", "Confidence:" }
                                 span { class: "impact-value", "{preview.confidence:.0}%" }
                             }
-                            
+
                             if let Some(explanation) = &preview.ai_explanation {
                                 div {
                                     class: "ai-explanation",
@@ -562,53 +559,50 @@ fn OperationPreviewSection(preview: OperationPreview) -> Element {
 
 /// Rollback information section
 #[component]
-fn RollbackInformation(
-    plan: RollbackPlan,
-    show_info: Signal<bool>,
-) -> Element {
+fn RollbackInformation(plan: RollbackPlan, show_info: Signal<bool>) -> Element {
     rsx! {
         div {
             class: "rollback-information",
-            
+
             div {
                 class: "rollback-header",
                 onclick: move |_| show_info.set(!show_info()),
-                
+
                 h3 { "Rollback Plan" }
-                
+
                 div {
                     class: "rollback-summary",
                     span { class: "strategy", "{get_strategy_name(&plan.strategy)}" }
                     span { class: "steps", "{plan.steps.len()} steps" }
                     span { class: "duration", "~{plan.estimated_duration_ms}ms" }
                 }
-                
+
                 div {
                     class: "expand-icon {if show_info() { \"expanded\" } else { \"\" }}",
                     "▼"
                 }
             }
-            
+
             if show_info() {
                 div {
                     class: "rollback-details",
-                    
+
                     // Risk assessment
                     div {
                         class: "risk-assessment",
-                        
+
                         h4 { "Risk Assessment" }
-                        
+
                         div {
                             class: "risk-level {plan.risk_assessment.risk_level:?}",
                             "Risk Level: {plan.risk_assessment.risk_level:?}"
                         }
-                        
+
                         div {
                             class: "success-probability",
                             "Success Probability: {plan.risk_assessment.success_probability:.0}%"
                         }
-                        
+
                         if !plan.risk_assessment.risks.is_empty() {
                             div {
                                 class: "identified-risks",
@@ -621,7 +615,7 @@ fn RollbackInformation(
                                 }
                             }
                         }
-                        
+
                         if !plan.risk_assessment.mitigations.is_empty() {
                             div {
                                 class: "mitigations",
@@ -635,30 +629,30 @@ fn RollbackInformation(
                             }
                         }
                     }
-                    
+
                     // Rollback steps
                     div {
                         class: "rollback-steps",
-                        
+
                         h4 { "Rollback Steps" }
-                        
+
                         for step in plan.steps.iter().take(5) {
                             div {
                                 class: "rollback-step",
-                                
+
                                 div {
                                     class: "step-number",
                                     "{step.step_number}"
                                 }
-                                
+
                                 div {
                                     class: "step-info",
-                                    
+
                                     div {
                                         class: "step-description",
                                         "{step.description}"
                                     }
-                                    
+
                                     div {
                                         class: "step-meta",
                                         span { class: "step-duration", "~{step.estimated_duration_ms}ms" }
@@ -672,7 +666,7 @@ fn RollbackInformation(
                                 }
                             }
                         }
-                        
+
                         if plan.steps.len() > 5 {
                             div {
                                 class: "steps-truncated",
@@ -697,12 +691,12 @@ fn UserDecisionOptions(
     rsx! {
         div {
             class: "user-decision-options",
-            
+
             h3 { "Your Decision" }
-            
+
             div {
                 class: "decision-buttons",
-                
+
                 DecisionButton {
                     choice: UserChoice::Accept,
                     current_choice: user_choice(),
@@ -712,7 +706,7 @@ fn UserDecisionOptions(
                     class: "accept",
                     onclick: move |_| user_choice.set(UserChoice::Accept)
                 }
-                
+
                 DecisionButton {
                     choice: UserChoice::AcceptWithModifications,
                     current_choice: user_choice(),
@@ -722,7 +716,7 @@ fn UserDecisionOptions(
                     class: "modify",
                     onclick: move |_| user_choice.set(UserChoice::AcceptWithModifications)
                 }
-                
+
                 DecisionButton {
                     choice: UserChoice::Defer,
                     current_choice: user_choice(),
@@ -732,7 +726,7 @@ fn UserDecisionOptions(
                     class: "defer",
                     onclick: move |_| user_choice.set(UserChoice::Defer)
                 }
-                
+
                 DecisionButton {
                     choice: UserChoice::Reject,
                     current_choice: user_choice(),
@@ -743,16 +737,16 @@ fn UserDecisionOptions(
                     onclick: move |_| user_choice.set(UserChoice::Reject)
                 }
             }
-            
+
             // Trust level adjustment
             div {
                 class: "trust-adjustment",
-                
+
                 h4 { "Trust Level Adjustment" }
-                
+
                 div {
                     class: "trust-slider",
-                    
+
                     input {
                         r#type: "range",
                         min: "-10",
@@ -764,7 +758,7 @@ fn UserDecisionOptions(
                             }
                         }
                     }
-                    
+
                     div {
                         class: "trust-labels",
                         span { class: "trust-less", "Trust AI Less" }
@@ -772,7 +766,7 @@ fn UserDecisionOptions(
                         span { class: "trust-more", "Trust AI More" }
                     }
                 }
-                
+
                 div {
                     class: "trust-explanation",
                     "{get_trust_explanation(trust_level_adjustment())}"
@@ -794,32 +788,32 @@ fn DecisionButton(
     onclick: EventHandler<()>,
 ) -> Element {
     let is_selected = choice == current_choice;
-    
+
     rsx! {
         button {
             class: "decision-button {class} {if is_selected { \"selected\" } else { \"\" }}",
             onclick: move |_| onclick.call(()),
             title: "{description}",
-            
+
             div {
                 class: "button-icon",
                 "{icon}"
             }
-            
+
             div {
                 class: "button-content",
-                
+
                 div {
                     class: "button-label",
                     "{label}"
                 }
-                
+
                 div {
                     class: "button-description",
                     "{description}"
                 }
             }
-            
+
             if is_selected {
                 div {
                     class: "selected-indicator",
@@ -832,16 +826,13 @@ fn DecisionButton(
 
 /// Feedback section
 #[component]
-fn FeedbackSection(
-    comment: Signal<String>,
-    trust_adjustment: Signal<i32>,
-) -> Element {
+fn FeedbackSection(comment: Signal<String>, trust_adjustment: Signal<i32>) -> Element {
     rsx! {
         div {
             class: "feedback-section",
-            
+
             h3 { "Additional Feedback (Optional)" }
-            
+
             textarea {
                 class: "feedback-textarea",
                 placeholder: "Share your thoughts on this AI recommendation...",
@@ -849,7 +840,7 @@ fn FeedbackSection(
                 oninput: move |e| comment.set(e.value()),
                 rows: "3"
             }
-            
+
             div {
                 class: "feedback-suggestions",
                 "💡 Help us improve by sharing:"
@@ -886,12 +877,12 @@ pub fn QuickFeedbackWidget(
 ) -> Element {
     let show_widget = use_signal(|| true);
     let rating_given = use_signal(|| false);
-    
+
     rsx! {
         if show_widget() && !rating_given() {
             div {
                 class: "quick-feedback-widget {if operation_success { \"success\" } else { \"failure\" }}",
-                
+
                 div {
                     class: "feedback-prompt",
                     if operation_success {
@@ -900,10 +891,10 @@ pub fn QuickFeedbackWidget(
                         "❌ Operation failed. How could the AI have better predicted this?"
                     }
                 }
-                
+
                 div {
                     class: "quick-rating",
-                    
+
                     button {
                         class: "rating-btn positive",
                         onclick: move |_| {
@@ -918,7 +909,7 @@ pub fn QuickFeedbackWidget(
                         },
                         "👍 Accurate"
                     }
-                    
+
                     button {
                         class: "rating-btn neutral",
                         onclick: move |_| {
@@ -933,7 +924,7 @@ pub fn QuickFeedbackWidget(
                         },
                         "👎 Inaccurate"
                     }
-                    
+
                     button {
                         class: "rating-btn dismiss",
                         onclick: move |_| show_widget.set(false),
@@ -989,7 +980,9 @@ fn get_trust_explanation(adjustment: i32) -> &'static str {
     }
 }
 
-fn get_operation_type(operation: &crate::consensus::stages::file_aware_curator::FileOperation) -> &'static str {
+fn get_operation_type(
+    operation: &crate::consensus::stages::file_aware_curator::FileOperation,
+) -> &'static str {
     match operation {
         crate::consensus::stages::file_aware_curator::FileOperation::Create { .. } => "Create",
         crate::consensus::stages::file_aware_curator::FileOperation::Update { .. } => "Update",
@@ -999,27 +992,35 @@ fn get_operation_type(operation: &crate::consensus::stages::file_aware_curator::
     }
 }
 
-fn get_operation_file(operation: &crate::consensus::stages::file_aware_curator::FileOperation) -> String {
+fn get_operation_file(
+    operation: &crate::consensus::stages::file_aware_curator::FileOperation,
+) -> String {
     match operation {
-        crate::consensus::stages::file_aware_curator::FileOperation::Create { path, .. } |
-        crate::consensus::stages::file_aware_curator::FileOperation::Update { path, .. } |
-        crate::consensus::stages::file_aware_curator::FileOperation::Delete { path } => {
+        crate::consensus::stages::file_aware_curator::FileOperation::Create { path, .. }
+        | crate::consensus::stages::file_aware_curator::FileOperation::Update { path, .. }
+        | crate::consensus::stages::file_aware_curator::FileOperation::Delete { path } => {
             path.display().to_string()
         }
-        crate::consensus::stages::file_aware_curator::FileOperation::Rename { new_path, .. } => {
-            new_path.display().to_string()
-        }
-        crate::consensus::stages::file_aware_curator::FileOperation::Move { destination, .. } => {
-            destination.display().to_string()
-        }
+        crate::consensus::stages::file_aware_curator::FileOperation::Rename {
+            new_path, ..
+        } => new_path.display().to_string(),
+        crate::consensus::stages::file_aware_curator::FileOperation::Move {
+            destination, ..
+        } => destination.display().to_string(),
     }
 }
 
-fn get_strategy_name(strategy: &crate::consensus::rollback_planner::RollbackStrategy) -> &'static str {
+fn get_strategy_name(
+    strategy: &crate::consensus::rollback_planner::RollbackStrategy,
+) -> &'static str {
     match strategy {
         crate::consensus::rollback_planner::RollbackStrategy::GitRevert { .. } => "Git Revert",
-        crate::consensus::rollback_planner::RollbackStrategy::BackupRestore { .. } => "Backup Restore",
-        crate::consensus::rollback_planner::RollbackStrategy::ManualRollback { .. } => "Manual Rollback",
+        crate::consensus::rollback_planner::RollbackStrategy::BackupRestore { .. } => {
+            "Backup Restore"
+        }
+        crate::consensus::rollback_planner::RollbackStrategy::ManualRollback { .. } => {
+            "Manual Rollback"
+        }
         crate::consensus::rollback_planner::RollbackStrategy::Hybrid { .. } => "Hybrid Strategy",
     }
 }

@@ -169,31 +169,31 @@ pub struct LicenseConfig {
 pub struct RepositoryDiscoveryConfig {
     /// Scanning mode to use
     pub scanning_mode: String,
-    
+
     /// Directories to scan for repositories
     pub scan_paths: Vec<PathBuf>,
-    
+
     /// Maximum depth for recursive scanning
     pub max_depth: usize,
-    
+
     /// Whether to follow symlinks
     pub follow_symlinks: bool,
-    
+
     /// Patterns to exclude from scanning
     pub exclude_patterns: Vec<String>,
-    
+
     /// Maximum repositories to discover
     pub max_repositories: Option<usize>,
-    
+
     /// Cache settings
     pub cache_enabled: bool,
     pub cache_ttl_seconds: u64,
     pub cache_max_entries: usize,
     pub cache_persist: bool,
-    
+
     /// Whether to extract detailed project information
     pub extract_project_info: bool,
-    
+
     /// Timeout for individual repository operations (seconds)
     pub operation_timeout_seconds: u64,
 }
@@ -273,10 +273,22 @@ impl Default for HiveConfig {
             repository_discovery: RepositoryDiscoveryConfig {
                 scanning_mode: "hybrid".to_string(),
                 scan_paths: vec![
-                    std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Developer"),
-                    std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Projects"),
-                    std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Code"),
-                    std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Workspace"),
+                    std::env::var("HOME")
+                        .map(PathBuf::from)
+                        .unwrap_or_default()
+                        .join("Developer"),
+                    std::env::var("HOME")
+                        .map(PathBuf::from)
+                        .unwrap_or_default()
+                        .join("Projects"),
+                    std::env::var("HOME")
+                        .map(PathBuf::from)
+                        .unwrap_or_default()
+                        .join("Code"),
+                    std::env::var("HOME")
+                        .map(PathBuf::from)
+                        .unwrap_or_default()
+                        .join("Workspace"),
                     PathBuf::from("."),
                 ],
                 max_depth: 3,

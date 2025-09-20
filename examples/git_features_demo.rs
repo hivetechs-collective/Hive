@@ -1,17 +1,17 @@
 //! Standalone Git Features Demo
-//! 
+//!
 //! This example showcases the VS Code-style git features implemented in Hive.
 //! It demonstrates repository detection, branch display, file status indicators,
 //! and performance monitoring in a working Dioxus application.
 
-use dioxus::prelude::*;
-use git2::{Repository, StatusOptions, BranchType as Git2BranchType, Status};
-use std::path::PathBuf;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use tokio::time::interval;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use dioxus::prelude::*;
+use git2::{BranchType as Git2BranchType, Repository, Status, StatusOptions};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+use tokio::time::interval;
 
 /// Repository information structure
 #[derive(Debug, Clone, PartialEq)]
@@ -74,7 +74,9 @@ impl StatusType {
             StatusType::Deleted
         } else if status.contains(Status::WT_RENAMED) || status.contains(Status::INDEX_RENAMED) {
             StatusType::Renamed
-        } else if status.contains(Status::WT_TYPECHANGE) || status.contains(Status::INDEX_TYPECHANGE) {
+        } else if status.contains(Status::WT_TYPECHANGE)
+            || status.contains(Status::INDEX_TYPECHANGE)
+        {
             StatusType::Typechange
         } else if status.contains(Status::IGNORED) {
             StatusType::Ignored
@@ -136,7 +138,8 @@ pub fn discover_repository(path: &std::path::Path) -> Result<Option<RepositoryIn
     match Repository::discover(path) {
         Ok(repo) => {
             let workdir = repo.workdir().unwrap_or_else(|| repo.path());
-            let name = workdir.file_name()
+            let name = workdir
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("Unknown")
                 .to_string();
@@ -161,11 +164,11 @@ pub fn discover_repository(path: &std::path::Path) -> Result<Option<RepositoryIn
 pub fn get_current_branch(repo_path: &std::path::Path) -> Result<Option<BranchInfo>> {
     let repo = Repository::open(repo_path)?;
     let head = repo.head()?;
-    
+
     if let Some(branch_name) = head.shorthand() {
         let branch = repo.find_branch(branch_name, Git2BranchType::Local)?;
         let commit = head.peel_to_commit()?;
-        
+
         let commit_info = CommitInfo {
             hash: commit.id().to_string(),
             hash_short: commit.id().to_string()[..8].to_string(),
@@ -177,9 +180,10 @@ pub fn get_current_branch(repo_path: &std::path::Path) -> Result<Option<BranchIn
         Ok(Some(BranchInfo {
             name: branch_name.to_string(),
             is_current: true,
-            upstream: branch.upstream().ok().and_then(|upstream| {
-                upstream.name().ok().flatten().map(String::from)
-            }),
+            upstream: branch
+                .upstream()
+                .ok()
+                .and_then(|upstream| upstream.name().ok().flatten().map(String::from)),
             last_commit: Some(commit_info),
         }))
     } else {
@@ -191,7 +195,7 @@ pub fn get_file_statuses(repo_path: &std::path::Path) -> Result<HashMap<PathBuf,
     let repo = Repository::open(repo_path)?;
     let mut status_opts = StatusOptions::new();
     status_opts.include_untracked(true).include_ignored(false);
-    
+
     let statuses = repo.statuses(Some(&mut status_opts))?;
     let mut file_statuses = HashMap::new();
 
@@ -199,25 +203,25 @@ pub fn get_file_statuses(repo_path: &std::path::Path) -> Result<HashMap<PathBuf,
         if let Some(path_str) = entry.path() {
             let path = PathBuf::from(path_str);
             let status = entry.status();
-            
+
             let file_status = FileStatus {
                 status_type: StatusType::from_git2_status(status),
                 has_staged_changes: status.intersects(
-                    Status::INDEX_NEW | 
-                    Status::INDEX_MODIFIED | 
-                    Status::INDEX_DELETED |
-                    Status::INDEX_RENAMED |
-                    Status::INDEX_TYPECHANGE
+                    Status::INDEX_NEW
+                        | Status::INDEX_MODIFIED
+                        | Status::INDEX_DELETED
+                        | Status::INDEX_RENAMED
+                        | Status::INDEX_TYPECHANGE,
                 ),
                 has_unstaged_changes: status.intersects(
-                    Status::WT_NEW |
-                    Status::WT_MODIFIED |
-                    Status::WT_DELETED |
-                    Status::WT_RENAMED |
-                    Status::WT_TYPECHANGE
+                    Status::WT_NEW
+                        | Status::WT_MODIFIED
+                        | Status::WT_DELETED
+                        | Status::WT_RENAMED
+                        | Status::WT_TYPECHANGE,
                 ),
             };
-            
+
             file_statuses.insert(path, file_status);
         }
     }
@@ -260,13 +264,12 @@ fn main() {
     // Launch the Dioxus app
     LaunchBuilder::desktop()
         .with_cfg(
-            dioxus_desktop::Config::new()
-                .with_window(
-                    dioxus_desktop::WindowBuilder::new()
-                        .with_title("Hive Git Features Demo")
-                        .with_inner_size(dioxus_desktop::LogicalSize::new(1200.0, 800.0))
-                        .with_min_inner_size(dioxus_desktop::LogicalSize::new(800.0, 600.0))
-                )
+            dioxus_desktop::Config::new().with_window(
+                dioxus_desktop::WindowBuilder::new()
+                    .with_title("Hive Git Features Demo")
+                    .with_inner_size(dioxus_desktop::LogicalSize::new(1200.0, 800.0))
+                    .with_min_inner_size(dioxus_desktop::LogicalSize::new(800.0, 600.0)),
+            ),
         )
         .launch(App);
 }
@@ -274,26 +277,30 @@ fn main() {
 #[component]
 fn App() -> Element {
     let state = use_context_provider(|| DemoState::new());
-    
+
     // Initialize the demo with the current directory
     use_effect(move || {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         spawn(async move {
             if let Ok(Some(repo_info)) = discover_repository(&current_dir) {
                 state.current_repo.set(Some(repo_info.clone()));
-                state.status_message.set(format!("Found repository: {}", repo_info.name));
-                
+                state
+                    .status_message
+                    .set(format!("Found repository: {}", repo_info.name));
+
                 // Get branch info
                 if let Ok(Some(branch_info)) = get_current_branch(&repo_info.path) {
                     state.current_branch.set(Some(branch_info));
                 }
-                
+
                 // Get file statuses
                 if let Ok(file_statuses) = get_file_statuses(&repo_info.path) {
                     state.file_statuses.set(file_statuses);
                 }
             } else {
-                state.status_message.set("No git repository found in current directory".to_string());
+                state
+                    .status_message
+                    .set("No git repository found in current directory".to_string());
             }
         });
     });
@@ -302,14 +309,14 @@ fn App() -> Element {
     use_effect(move || {
         spawn(async move {
             let mut interval = interval(Duration::from_secs(2));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Update refresh count and performance stats
                 let current_count = state.refresh_count.read().clone();
                 state.refresh_count.set(current_count + 1);
-                
+
                 // Simulate performance stats updates
                 let mut stats = state.performance_stats.read().clone();
                 stats.total_operations += 1;
@@ -317,9 +324,9 @@ fn App() -> Element {
                 stats.cache_misses += if current_count % 3 == 0 { 1 } else { 0 };
                 stats.average_time_ms = 15.0 + (current_count as f64 * 0.5) % 10.0;
                 stats.background_tasks = (current_count / 5) as u64;
-                
+
                 state.performance_stats.set(stats);
-                
+
                 // Update file statuses if we have a repo
                 if let Some(repo_info) = state.current_repo.read().as_ref() {
                     if let Ok(file_statuses) = get_file_statuses(&repo_info.path) {
@@ -334,21 +341,21 @@ fn App() -> Element {
         style { {CSS_STYLES} }
         div {
             class: "app-container",
-            
+
             Header {}
-            
+
             div {
                 class: "main-grid",
-                
+
                 RepositoryPanel {}
                 PerformancePanel {}
             }
-            
+
             div {
                 class: "file-status-section",
                 FileStatusPanel {}
             }
-            
+
             Footer {}
         }
     }
@@ -359,21 +366,21 @@ fn Header() -> Element {
     let state = use_context::<DemoState>();
     let demo_start_time = state.demo_start_time.read();
     let elapsed = demo_start_time.elapsed().as_secs();
-    
+
     rsx! {
         div {
             class: "header",
-            
+
             h1 {
                 class: "header-title",
                 "🐝 Hive Git Features Demo"
             }
-            
+
             p {
                 class: "header-subtitle",
                 "VS Code-style Git Integration • Running for {elapsed}s"
             }
-            
+
             div {
                 class: "status-message",
                 {state.status_message.read().clone()}
@@ -385,17 +392,17 @@ fn Header() -> Element {
 #[component]
 fn RepositoryPanel() -> Element {
     let state = use_context::<DemoState>();
-    
+
     rsx! {
         div {
             class: "panel",
-            
+
             h2 {
                 class: "panel-title repo-title",
                 span { class: "panel-icon", "📁" }
                 "Repository Information"
             }
-            
+
             if let Some(repo_info) = state.current_repo.read().as_ref() {
                 div {
                     div {
@@ -403,63 +410,63 @@ fn RepositoryPanel() -> Element {
                         span { class: "info-label", "Name:" }
                         span { {repo_info.name.clone()} }
                         if repo_info.has_changes {
-                            span { 
+                            span {
                                 class: "changes-badge",
                                 "CHANGES"
                             }
                         }
                     }
-                    
+
                     div {
                         class: "info-row",
                         span { class: "info-label", "Path:" }
-                        span { class: "mono-text path-text", 
+                        span { class: "mono-text path-text",
                             {repo_info.path.to_string_lossy().to_string()}
                         }
                     }
-                    
+
                     div {
                         class: "info-row",
                         span { class: "info-label", "Type:" }
-                        span { 
+                        span {
                             if repo_info.is_bare { "Bare Repository" } else { "Working Directory" }
                         }
                     }
-                    
+
                     if let Some(branch_info) = state.current_branch.read().as_ref() {
                         div {
                             class: "branch-section",
-                            
+
                             h3 {
                                 class: "branch-title",
                                 span { class: "branch-icon", "🌿" }
                                 "Current Branch"
                             }
-                            
+
                             div {
                                 class: "info-row",
                                 span { class: "info-label branch-label", "Branch:" }
-                                span { 
+                                span {
                                     class: "branch-name",
                                     {branch_info.name.clone()}
                                 }
                             }
-                            
+
                             if let Some(commit_info) = &branch_info.last_commit {
                                 div {
                                     class: "commit-info",
-                                    div { 
+                                    div {
                                         class: "commit-row",
                                         span { class: "commit-label", "Last Commit: " }
-                                        span { 
+                                        span {
                                             class: "mono-text commit-hash",
                                             {commit_info.hash_short.clone()}
                                         }
                                         span { " by " }
                                         span { class: "commit-author", {commit_info.author.clone()} }
                                     }
-                                    div { 
-                                        class: "commit-message", 
+                                    div {
+                                        class: "commit-message",
                                         {commit_info.message.chars().take(60).collect::<String>()}
                                         if commit_info.message.len() > 60 { "..." } else { "" }
                                     }
@@ -483,89 +490,89 @@ fn PerformancePanel() -> Element {
     let state = use_context::<DemoState>();
     let stats = state.performance_stats.read();
     let refresh_count = state.refresh_count.read();
-    
+
     rsx! {
         div {
             class: "panel",
-            
+
             h2 {
                 class: "panel-title perf-title",
                 span { class: "panel-icon", "⚡" }
                 "Performance Monitor"
             }
-            
+
             div {
                 class: "perf-grid",
-                
+
                 div {
                     div {
                         class: "perf-row",
                         span { class: "perf-label", "Cache Hit Rate:" }
-                        span { 
+                        span {
                             class: "perf-value",
                             "{stats.cache_hit_rate() * 100.0:.1}%"
                         }
                     }
-                    
+
                     div {
                         class: "perf-row",
                         span { class: "perf-label", "Avg Response:" }
-                        span { 
+                        span {
                             class: "perf-value",
                             "{stats.average_time_ms:.1}ms"
                         }
                     }
-                    
+
                     div {
                         class: "perf-row",
                         span { class: "perf-label", "Cache Hits:" }
-                        span { 
+                        span {
                             class: "perf-value",
                             "{stats.cache_hits}"
                         }
                     }
                 }
-                
+
                 div {
                     div {
                         class: "perf-row",
                         span { class: "perf-label", "Total Ops:" }
-                        span { 
+                        span {
                             class: "perf-value",
                             "{stats.total_operations}"
                         }
                     }
-                    
+
                     div {
                         class: "perf-row",
                         span { class: "perf-label", "Background:" }
-                        span { 
+                        span {
                             class: "perf-value",
                             "{stats.background_tasks}"
                         }
                     }
-                    
+
                     div {
                         class: "perf-row",
                         span { class: "perf-label", "Refreshes:" }
-                        span { 
+                        span {
                             class: "perf-value",
                             "{refresh_count}"
                         }
                     }
                 }
             }
-            
+
             div {
                 class: "status-indicators",
-                
+
                 div {
                     class: "status-item status-active",
                     span { class: "status-icon", "✅" }
                     span { class: "status-label", "Git Integration: " }
                     span { "Active and monitoring" }
                 }
-                
+
                 div {
                     class: "status-item status-info",
                     span { class: "status-icon", "🔄" }
@@ -581,11 +588,11 @@ fn PerformancePanel() -> Element {
 fn FileStatusPanel() -> Element {
     let state = use_context::<DemoState>();
     let file_statuses = state.file_statuses.read();
-    
+
     rsx! {
         div {
             class: "panel",
-            
+
             h2 {
                 class: "panel-title files-title",
                 span { class: "panel-icon", "📄" }
@@ -595,7 +602,7 @@ fn FileStatusPanel() -> Element {
                     "{file_statuses.len()} files"
                 }
             }
-            
+
             if file_statuses.is_empty() {
                 div {
                     class: "empty-state clean-state",
@@ -606,30 +613,30 @@ fn FileStatusPanel() -> Element {
             } else {
                 div {
                     class: "file-list",
-                    
+
                     for (path, status) in file_statuses.iter() {
                         div {
                             key: "{path:?}",
                             class: "file-item",
-                            
+
                             div {
                                 class: "file-status-icon",
                                 style: "background: {status.status_type.color()}20; color: {status.status_type.color()}; border-color: {status.status_type.color()}40;",
                                 {status.status_type.icon()}
                             }
-                            
+
                             div {
                                 class: "file-path",
                                 {path.to_string_lossy().to_string()}
                             }
-                            
+
                             if status.has_staged_changes {
                                 div {
                                     class: "file-badge staged-badge",
                                     "STAGED"
                                 }
                             }
-                            
+
                             if status.has_unstaged_changes {
                                 div {
                                     class: "file-badge unstaged-badge",
@@ -651,34 +658,34 @@ fn Footer() -> Element {
     let elapsed = demo_start_time.elapsed();
     let minutes = elapsed.as_secs() / 60;
     let seconds = elapsed.as_secs() % 60;
-    
+
     rsx! {
         div {
             class: "footer",
-            
+
             div {
                 class: "footer-info",
-                
+
                 div {
                     span { class: "footer-label", "Demo Runtime: " }
                     span { "{minutes:02}:{seconds:02}" }
                 }
-                
+
                 div { class: "footer-separator", "•" }
-                
+
                 div {
                     span { class: "footer-label", "Features: " }
                     span { "Repository Detection, Branch Info, File Status, Performance Monitoring" }
                 }
-                
+
                 div { class: "footer-separator", "•" }
-                
+
                 div {
                     span { class: "footer-label", "Framework: " }
                     span { "Dioxus + git2 + VS Code Styling" }
                 }
             }
-            
+
             div {
                 class: "footer-subtitle",
                 "This demo showcases the core git integration features built for Hive AI's VS Code-style interface"

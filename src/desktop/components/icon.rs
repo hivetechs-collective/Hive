@@ -6,10 +6,10 @@ use dioxus::prelude::*;
 /// Icon size options
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IconSize {
-    Small,   // 12x12
-    Medium,  // 16x16 (default)
-    Large,   // 20x20
-    XLarge,  // 24x24
+    Small,  // 12x12
+    Medium, // 16x16 (default)
+    Large,  // 20x20
+    XLarge, // 24x24
 }
 
 impl IconSize {
@@ -64,7 +64,7 @@ pub fn Icon(props: IconProps) -> Element {
     let size = props.size.as_css();
     let class_name = props.class.unwrap_or_default();
     let label = props.label.unwrap_or_else(|| "icon".to_string());
-    
+
     rsx! {
         div {
             class: "icon-wrapper {class_name}",
@@ -108,7 +108,7 @@ pub struct IconWithLabelProps {
 pub fn IconWithLabel(props: IconWithLabelProps) -> Element {
     let class_name = props.class.unwrap_or_default();
     let spacing = format!("{}px", props.spacing);
-    
+
     rsx! {
         div {
             class: "icon-with-label {class_name}",

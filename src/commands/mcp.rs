@@ -3,16 +3,24 @@
 //! Commands for managing the Model Context Protocol server
 
 use crate::core::config::Config;
-use crate::integration::mcp::{McpServer, protocol::{Tool, Resource}};
-use anyhow::{Result, anyhow};
+use crate::integration::mcp::{
+    protocol::{Resource, Tool},
+    McpServer,
+};
+use anyhow::{anyhow, Result};
 use console::style;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
-use tracing::{info, error};
+use tracing::{error, info};
 
 /// Start MCP server
 pub async fn start_server(port: u16, host: &str) -> Result<()> {
-    println!("🚀 {} MCP server on {}:{}", style("Starting").green(), host, port);
+    println!(
+        "🚀 {} MCP server on {}:{}",
+        style("Starting").green(),
+        host,
+        port
+    );
     println!("📡 Model Context Protocol server for IDE integration");
     println!("🔌 Waiting for IDE connections...\n");
 
@@ -31,14 +39,24 @@ pub async fn check_status(port: u16, host: &str) -> Result<()> {
     match reqwest::get(&url).await {
         Ok(response) => {
             if response.status().is_success() {
-                println!("✅ MCP server is {} on {}:{}", style("running").green(), host, port);
+                println!(
+                    "✅ MCP server is {} on {}:{}",
+                    style("running").green(),
+                    host,
+                    port
+                );
                 println!("📊 Status: {}", response.status());
             } else {
                 println!("⚠️  MCP server responded with: {}", response.status());
             }
         }
         Err(_) => {
-            println!("❌ MCP server is {} on {}:{}", style("not running").red(), host, port);
+            println!(
+                "❌ MCP server is {} on {}:{}",
+                style("not running").red(),
+                host,
+                port
+            );
             println!("💡 Start it with: hive mcp start");
         }
     }
@@ -59,21 +77,52 @@ pub async fn list_tools() -> Result<()> {
 
     // List of tools we know are registered
     let tools = vec![
-        ("ask_hive", "Ask Hive AI a question using multi-model consensus"),
-        ("analyze_code", "Analyze code files or directories using AI consensus"),
+        (
+            "ask_hive",
+            "Ask Hive AI a question using multi-model consensus",
+        ),
+        (
+            "analyze_code",
+            "Analyze code files or directories using AI consensus",
+        ),
         ("explain_code", "Explain what code does using AI consensus"),
-        ("improve_code", "Suggest improvements for code using AI consensus"),
-        ("generate_tests", "Generate unit tests for code using AI consensus"),
-        ("repository_summary", "Generate a comprehensive summary of the repository"),
-        ("plan_project", "Create a strategic plan for implementing features or changes"),
+        (
+            "improve_code",
+            "Suggest improvements for code using AI consensus",
+        ),
+        (
+            "generate_tests",
+            "Generate unit tests for code using AI consensus",
+        ),
+        (
+            "repository_summary",
+            "Generate a comprehensive summary of the repository",
+        ),
+        (
+            "plan_project",
+            "Create a strategic plan for implementing features or changes",
+        ),
         ("transform_code", "Apply AI-powered code transformations"),
-        ("search_memory", "Search through conversation history and knowledge base"),
-        ("generate_analytics", "Generate analytics reports and insights"),
-        ("generate_docs", "Generate documentation for code using AI consensus"),
+        (
+            "search_memory",
+            "Search through conversation history and knowledge base",
+        ),
+        (
+            "generate_analytics",
+            "Generate analytics reports and insights",
+        ),
+        (
+            "generate_docs",
+            "Generate documentation for code using AI consensus",
+        ),
     ];
 
     for (name, desc) in tools {
-        println!("  {} {}", style(name).cyan().bold(), style(format!("- {}", desc)).dim());
+        println!(
+            "  {} {}",
+            style(name).cyan().bold(),
+            style(format!("- {}", desc)).dim()
+        );
     }
 
     println!("\n💡 Use these tools through your IDE's MCP integration");
@@ -83,7 +132,11 @@ pub async fn list_tools() -> Result<()> {
 
 /// Test MCP tool execution
 pub async fn test_tool(tool_name: &str, params: Option<String>) -> Result<()> {
-    println!("🧪 {} tool: {}\n", style("Testing").bold(), style(tool_name).cyan());
+    println!(
+        "🧪 {} tool: {}\n",
+        style("Testing").bold(),
+        style(tool_name).cyan()
+    );
 
     // Parse parameters if provided
     let args = if let Some(params_str) = params {
@@ -127,17 +180,32 @@ pub async fn show_logs(follow: bool) -> Result<()> {
 
         // In a real implementation, this would tail the log file
         loop {
-            println!("{} [INFO] MCP server: Waiting for connections...", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "{} [INFO] MCP server: Waiting for connections...",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+            );
             sleep(Duration::from_secs(5)).await;
         }
     } else {
         // Show recent logs
         println!("📋 Recent server activity:");
         println!("─────────────────────────────────────────────────");
-        println!("{} [INFO] MCP server started on port 7777", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
-        println!("{} [INFO] Registered 11 tools", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
-        println!("{} [INFO] Resource manager initialized", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
-        println!("{} [INFO] Authentication manager ready", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+        println!(
+            "{} [INFO] MCP server started on port 7777",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        );
+        println!(
+            "{} [INFO] Registered 11 tools",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        );
+        println!(
+            "{} [INFO] Resource manager initialized",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        );
+        println!(
+            "{} [INFO] Authentication manager ready",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        );
         println!("\n💡 Use --follow to tail logs in real-time");
     }
 
@@ -150,9 +218,18 @@ pub async fn list_resources() -> Result<()> {
 
     println!("📋 System resources:");
     println!("─────────────────────────────────────────────────");
-    println!("  {} - Current Hive AI configuration", style("hive://config").cyan());
-    println!("  {} - Recent conversation summaries", style("hive://memory/conversations").cyan());
-    println!("  {} - Current repository analysis data", style("hive://analysis/repository").cyan());
+    println!(
+        "  {} - Current Hive AI configuration",
+        style("hive://config").cyan()
+    );
+    println!(
+        "  {} - Recent conversation summaries",
+        style("hive://memory/conversations").cyan()
+    );
+    println!(
+        "  {} - Current repository analysis data",
+        style("hive://analysis/repository").cyan()
+    );
 
     println!("\n📋 File resources:");
     println!("─────────────────────────────────────────────────");
@@ -167,13 +244,22 @@ pub async fn list_resources() -> Result<()> {
 
 /// Show MCP protocol information
 pub async fn show_protocol_info() -> Result<()> {
-    println!("📡 {} Protocol Information\n", style("Model Context").bold());
+    println!(
+        "📡 {} Protocol Information\n",
+        style("Model Context").bold()
+    );
 
     println!("📋 Protocol Details:");
     println!("─────────────────────────────────────────────────");
     println!("  Version: {}", style("2024-11-05").cyan());
-    println!("  Transport: {}", style("JSON-RPC over HTTP/WebSocket").cyan());
-    println!("  Capabilities: {}", style("tools, resources, logging").cyan());
+    println!(
+        "  Transport: {}",
+        style("JSON-RPC over HTTP/WebSocket").cyan()
+    );
+    println!(
+        "  Capabilities: {}",
+        style("tools, resources, logging").cyan()
+    );
 
     println!("\n📋 Supported IDEs:");
     println!("─────────────────────────────────────────────────");

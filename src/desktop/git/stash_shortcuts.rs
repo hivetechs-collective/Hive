@@ -1,15 +1,15 @@
 //! Keyboard shortcuts for git stash operations
-//! 
+//!
 //! VS Code-style keybindings:
 //! - Ctrl+Shift+S: Save stash
-//! - Ctrl+Shift+Q: Quick stash  
+//! - Ctrl+Shift+Q: Quick stash
 //! - Ctrl+Shift+P: Pop latest stash
 //! - Ctrl+Shift+A: Apply latest stash
 
 use dioxus::prelude::*;
 use std::path::PathBuf;
 
-use super::{GitStash, StashSaveOptions, StashApplyOptions, stash::async_ops};
+use super::{stash::async_ops, GitStash, StashApplyOptions, StashSaveOptions};
 
 /// Keyboard shortcut handler for stash operations
 #[component]
@@ -23,7 +23,7 @@ pub fn StashKeyboardHandler(
         // at the application level or through the window manager
         // For now, we'll implement this through button actions
     });
-    
+
     rsx! {
         // This component renders nothing but handles keyboard shortcuts
         div { style: "display: none;" }
@@ -44,17 +44,19 @@ pub fn handle_stash_shortcut(
                     callback("Opening stash save dialog...".to_string());
                 }
             }
-            
+
             StashShortcutAction::QuickStash => {
                 spawn(async move {
                     if let Some(ref callback) = status_callback {
                         callback("Creating quick stash...".to_string());
                     }
-                    
+
                     match tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
                         let stash = GitStash::new(&path)?;
                         stash.quick_stash()
-                    }).await {
+                    })
+                    .await
+                    {
                         Ok(Ok(_)) => {
                             if let Some(ref callback) = status_callback {
                                 callback("Quick stash created successfully".to_string());
@@ -73,18 +75,18 @@ pub fn handle_stash_shortcut(
                     }
                 });
             }
-            
+
             StashShortcutAction::PopLatest => {
                 spawn(async move {
                     if let Some(ref callback) = status_callback {
                         callback("Popping latest stash...".to_string());
                     }
-                    
+
                     let opts = StashApplyOptions {
                         reinstate_index: false,
                         check_index: true,
                     };
-                    
+
                     match async_ops::pop_stash(&path, 0, opts).await {
                         Ok(_) => {
                             if let Some(ref callback) = status_callback {
@@ -99,18 +101,18 @@ pub fn handle_stash_shortcut(
                     }
                 });
             }
-            
+
             StashShortcutAction::ApplyLatest => {
                 spawn(async move {
                     if let Some(ref callback) = status_callback {
                         callback("Applying latest stash...".to_string());
                     }
-                    
+
                     let opts = StashApplyOptions {
                         reinstate_index: false,
                         check_index: true,
                     };
-                    
+
                     match async_ops::apply_stash(&path, 0, opts).await {
                         Ok(_) => {
                             if let Some(ref callback) = status_callback {
@@ -132,10 +134,10 @@ pub fn handle_stash_shortcut(
 /// Stash keyboard shortcut actions
 #[derive(Debug, Clone, PartialEq)]
 pub enum StashShortcutAction {
-    SaveStash,      // Ctrl+Shift+S
-    QuickStash,     // Ctrl+Shift+Q
-    PopLatest,      // Ctrl+Shift+P
-    ApplyLatest,    // Ctrl+Shift+A
+    SaveStash,   // Ctrl+Shift+S
+    QuickStash,  // Ctrl+Shift+Q
+    PopLatest,   // Ctrl+Shift+P
+    ApplyLatest, // Ctrl+Shift+A
 }
 
 /// VS Code-style keyboard shortcuts info component
@@ -145,70 +147,70 @@ pub fn StashShortcutsInfo() -> Element {
         div {
             class: "shortcuts-info",
             style: SHORTCUTS_INFO_STYLES,
-            
+
             h4 {
                 style: "margin: 0 0 8px 0; color: #cccccc; font-size: 12px; font-weight: 600;",
                 "Stash Shortcuts"
             }
-            
+
             div {
                 class: "shortcut-list",
                 style: "display: flex; flex-direction: column; gap: 4px;",
-                
+
                 div {
                     class: "shortcut-item",
                     style: SHORTCUT_ITEM_STYLES,
-                    
+
                     kbd {
                         style: KBD_STYLES,
                         "Ctrl+Shift+S"
                     }
-                    
+
                     span {
                         style: "margin-left: 8px; color: #cccccc; font-size: 11px;",
                         "Save stash with dialog"
                     }
                 }
-                
+
                 div {
                     class: "shortcut-item",
                     style: SHORTCUT_ITEM_STYLES,
-                    
+
                     kbd {
                         style: KBD_STYLES,
                         "Ctrl+Shift+Q"
                     }
-                    
+
                     span {
                         style: "margin-left: 8px; color: #cccccc; font-size: 11px;",
                         "Quick stash"
                     }
                 }
-                
+
                 div {
                     class: "shortcut-item",
                     style: SHORTCUT_ITEM_STYLES,
-                    
+
                     kbd {
                         style: KBD_STYLES,
                         "Ctrl+Shift+P"
                     }
-                    
+
                     span {
                         style: "margin-left: 8px; color: #cccccc; font-size: 11px;",
                         "Pop latest stash"
                     }
                 }
-                
+
                 div {
                     class: "shortcut-item",
                     style: SHORTCUT_ITEM_STYLES,
-                    
+
                     kbd {
                         style: KBD_STYLES,
                         "Ctrl+Shift+A"
                     }
-                    
+
                     span {
                         style: "margin-left: 8px; color: #cccccc; font-size: 11px;",
                         "Apply latest stash"

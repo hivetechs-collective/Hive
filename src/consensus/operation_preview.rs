@@ -1,17 +1,17 @@
 // Operation Preview System with Before/After Code Generation
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use similar::{ChangeTag, TextDiff};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-use similar::{ChangeTag, TextDiff};
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_parser::EnhancedFileOperation;
-use crate::consensus::operation_clustering::OperationCluster;
 use crate::ai_helpers::knowledge_synthesizer::KnowledgeSynthesizer;
+use crate::consensus::operation_clustering::OperationCluster;
+use crate::consensus::operation_parser::EnhancedFileOperation;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 
 /// Generates comprehensive previews of file operations
 #[derive(Debug, Clone)]
@@ -286,7 +286,7 @@ impl OperationPreviewGenerator {
         clusters: Option<&[OperationCluster]>,
     ) -> Result<OperationPreviewSet> {
         let cache_key = self.generate_cache_key(operations);
-        
+
         // Check cache
         if let Some(cached) = self.preview_cache.read().await.get(&cache_key) {
             debug!("Using cached preview");
@@ -304,8 +304,10 @@ impl OperationPreviewGenerator {
 
         // Generate preview for each operation
         for (i, enhanced_op) in operations.iter().enumerate() {
-            let preview = self.generate_single_preview(&enhanced_op.operation, i).await?;
-            
+            let preview = self
+                .generate_single_preview(&enhanced_op.operation, i)
+                .await?;
+
             // Accumulate impact data
             all_elements.extend(preview.impact.affected_elements.clone());
             if let Some(diff) = &preview.diff_view {
@@ -314,16 +316,17 @@ impl OperationPreviewGenerator {
                 total_changes.modifications += diff.line_changes.modifications;
                 total_changes.total_changes += diff.line_changes.total_changes;
             }
-            
+
             previews.push(preview);
         }
 
         // Generate combined impact analysis
-        let combined_impact = self.analyze_combined_impact(&previews, &all_elements, total_changes)?;
-        
+        let combined_impact =
+            self.analyze_combined_impact(&previews, &all_elements, total_changes)?;
+
         // Generate execution timeline
         let timeline = self.generate_timeline(operations, clusters)?;
-        
+
         // Generate visual summary
         let visual_summary = self.generate_visual_summary(&previews)?;
 
@@ -335,7 +338,10 @@ impl OperationPreviewGenerator {
         };
 
         // Cache the result
-        self.preview_cache.write().await.insert(cache_key, preview_set.clone());
+        self.preview_cache
+            .write()
+            .await
+            .insert(cache_key, preview_set.clone());
 
         Ok(preview_set)
     }
@@ -349,7 +355,7 @@ impl OperationPreviewGenerator {
         let after_state = self.get_after_state(operation, &before_state).await?;
         let diff_view = self.generate_diff_view(&before_state, &after_state)?;
         let impact = self.analyze_operation_impact(operation, &before_state, &after_state)?;
-        
+
         let ai_explanation = if self.config.include_ai_explanations {
             self.generate_ai_explanation(operation, &impact).await?
         } else {
@@ -380,22 +386,26 @@ impl OperationPreviewGenerator {
 
         let full_path = self.workspace_root.join(path);
         let exists = tokio::fs::metadata(&full_path).await.is_ok();
-        
+
         let (content, metadata) = if exists {
             let content = self.read_file_cached(&full_path).await?;
             let metadata = self.get_file_metadata(&full_path, &content).await?;
             (Some(content), metadata)
         } else {
-            (None, FileMetadata {
-                size: None,
-                line_count: None,
-                language: self.detect_language(path),
-                encoding: "UTF-8".to_string(),
-            })
+            (
+                None,
+                FileMetadata {
+                    size: None,
+                    line_count: None,
+                    language: self.detect_language(path),
+                    encoding: "UTF-8".to_string(),
+                },
+            )
         };
 
         let highlighted_content = if self.config.syntax_highlight && content.is_some() {
-            self.syntax_highlight(content.as_ref().unwrap(), &metadata.language).await?
+            self.syntax_highlight(content.as_ref().unwrap(), &metadata.language)
+                .await?
         } else {
             None
         };
@@ -409,7 +419,11 @@ impl OperationPreviewGenerator {
         })
     }
 
-    async fn get_after_state(&self, operation: &FileOperation, before: &FileState) -> Result<FileState> {
+    async fn get_after_state(
+        &self,
+        operation: &FileOperation,
+        before: &FileState,
+    ) -> Result<FileState> {
         match operation {
             FileOperation::Create { path, content } => {
                 let metadata = FileMetadata {
@@ -466,20 +480,18 @@ impl OperationPreviewGenerator {
                 after.metadata.line_count = Some(new_content.lines().count());
                 Ok(after)
             }
-            FileOperation::Delete { path } => {
-                Ok(FileState {
-                    path: path.clone(),
-                    exists: false,
-                    content: None,
-                    metadata: FileMetadata {
-                        size: None,
-                        line_count: None,
-                        language: None,
-                        encoding: "UTF-8".to_string(),
-                    },
-                    highlighted_content: None,
-                })
-            }
+            FileOperation::Delete { path } => Ok(FileState {
+                path: path.clone(),
+                exists: false,
+                content: None,
+                metadata: FileMetadata {
+                    size: None,
+                    line_count: None,
+                    language: None,
+                    encoding: "UTF-8".to_string(),
+                },
+                highlighted_content: None,
+            }),
             FileOperation::Rename { to, .. } => {
                 let mut after = before.clone();
                 after.path = to.clone();
@@ -488,7 +500,11 @@ impl OperationPreviewGenerator {
         }
     }
 
-    fn generate_diff_view(&self, before: &FileState, after: &FileState) -> Result<Option<DiffView>> {
+    fn generate_diff_view(
+        &self,
+        before: &FileState,
+        after: &FileState,
+    ) -> Result<Option<DiffView>> {
         let (old_content, new_content) = match (&before.content, &after.content) {
             (Some(old), Some(new)) => (old.as_str(), new.as_str()),
             (None, Some(new)) => ("", new.as_str()),
@@ -501,7 +517,10 @@ impl OperationPreviewGenerator {
         let unified_diff = diff
             .unified_diff()
             .context_radius(self.config.context_lines)
-            .header(&format!("--- {}", before.path.display()), &format!("+++ {}", after.path.display()))
+            .header(
+                &format!("--- {}", before.path.display()),
+                &format!("+++ {}", after.path.display()),
+            )
             .to_string();
 
         // Generate side-by-side chunks
@@ -513,7 +532,7 @@ impl OperationPreviewGenerator {
         for change in diff.iter_all_changes() {
             let tag = change.tag();
             let line_content = change.to_string_lossy();
-            
+
             let diff_line = match tag {
                 ChangeTag::Equal => {
                     let line = DiffLine {
@@ -585,8 +604,14 @@ impl OperationPreviewGenerator {
         }
 
         // Calculate line change summary
-        let additions = diff.iter_all_changes().filter(|c| c.tag() == ChangeTag::Insert).count();
-        let deletions = diff.iter_all_changes().filter(|c| c.tag() == ChangeTag::Delete).count();
+        let additions = diff
+            .iter_all_changes()
+            .filter(|c| c.tag() == ChangeTag::Insert)
+            .count();
+        let deletions = diff
+            .iter_all_changes()
+            .filter(|c| c.tag() == ChangeTag::Delete)
+            .count();
         let modifications = additions.min(deletions);
         let total_changes = additions + deletions;
 
@@ -614,8 +639,12 @@ impl OperationPreviewGenerator {
 
     fn generate_visual_diff(&self, diff: &TextDiff<str>) -> Result<String> {
         let mut visual = String::new();
-        
-        for (idx, group) in diff.grouped_ops(self.config.context_lines).iter().enumerate() {
+
+        for (idx, group) in diff
+            .grouped_ops(self.config.context_lines)
+            .iter()
+            .enumerate()
+        {
             if idx > 0 {
                 visual.push_str("\n...\n");
             }
@@ -653,14 +682,14 @@ impl OperationPreviewGenerator {
             FileOperation::Update { path, content } => {
                 let old_elements = self.extract_code_elements("", path)?;
                 let new_elements = self.extract_code_elements(content, path)?;
-                
+
                 // Find changed elements
                 for new_elem in &new_elements {
                     if !old_elements.iter().any(|old| old.name == new_elem.name) {
                         affected_elements.push(new_elem.clone());
                     }
                 }
-                
+
                 side_effects.push("Existing functionality modified".to_string());
             }
             FileOperation::Delete { path } => {
@@ -718,7 +747,7 @@ impl OperationPreviewGenerator {
                 // Extract JS/TS functions and classes
                 let fn_regex = regex::Regex::new(r"(?:function|const|let|var)\s+(\w+)\s*[=\(]")?;
                 let class_regex = regex::Regex::new(r"class\s+(\w+)")?;
-                
+
                 for (line_no, line) in content.lines().enumerate() {
                     if let Some(caps) = fn_regex.captures(line) {
                         elements.push(CodeElement {
@@ -772,8 +801,10 @@ impl OperationPreviewGenerator {
                         path.display(),
                         impact.affected_elements.len(),
                         match impact.risk_level {
-                            ImpactRiskLevel::High => "This is a high-risk change that could affect system behavior.",
-                            ImpactRiskLevel::Medium => "This change has moderate risk and should be tested.",
+                            ImpactRiskLevel::High =>
+                                "This is a high-risk change that could affect system behavior.",
+                            ImpactRiskLevel::Medium =>
+                                "This change has moderate risk and should be tested.",
                             _ => "This appears to be a routine update.",
                         }
                     )
@@ -812,16 +843,19 @@ impl OperationPreviewGenerator {
 
         // Read from disk
         let content = tokio::fs::read_to_string(path).await?;
-        
+
         // Cache it
-        self.file_cache.write().await.insert(path.to_path_buf(), content.clone());
-        
+        self.file_cache
+            .write()
+            .await
+            .insert(path.to_path_buf(), content.clone());
+
         Ok(content)
     }
 
     async fn get_file_metadata(&self, path: &Path, content: &str) -> Result<FileMetadata> {
         let metadata = tokio::fs::metadata(path).await?;
-        
+
         Ok(FileMetadata {
             size: Some(metadata.len()),
             line_count: Some(content.lines().count()),
@@ -831,9 +865,8 @@ impl OperationPreviewGenerator {
     }
 
     fn detect_language(&self, path: &Path) -> Option<String> {
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| match ext {
+        path.extension().and_then(|ext| ext.to_str()).map(|ext| {
+            match ext {
                 "rs" => "rust",
                 "js" => "javascript",
                 "ts" => "typescript",
@@ -856,10 +889,16 @@ impl OperationPreviewGenerator {
                 "scss" | "sass" => "scss",
                 "md" => "markdown",
                 _ => ext,
-            }.to_string())
+            }
+            .to_string()
+        })
     }
 
-    async fn syntax_highlight(&self, content: &str, language: &Option<String>) -> Result<Option<String>> {
+    async fn syntax_highlight(
+        &self,
+        content: &str,
+        language: &Option<String>,
+    ) -> Result<Option<String>> {
         // In a real implementation, this would use a syntax highlighting library
         // For now, just return None
         Ok(None)
@@ -872,15 +911,19 @@ impl OperationPreviewGenerator {
         total_changes: LineChangeSummary,
     ) -> Result<CombinedImpact> {
         let total_files = previews.len();
-        
+
         // Determine overall risk
-        let high_risk_count = previews.iter()
+        let high_risk_count = previews
+            .iter()
             .filter(|p| matches!(p.impact.risk_level, ImpactRiskLevel::High))
             .count();
-        
+
         let overall_risk = if high_risk_count > 0 {
             ImpactRiskLevel::High
-        } else if previews.iter().any(|p| matches!(p.impact.risk_level, ImpactRiskLevel::Medium)) {
+        } else if previews
+            .iter()
+            .any(|p| matches!(p.impact.risk_level, ImpactRiskLevel::Medium))
+        {
             ImpactRiskLevel::Medium
         } else if total_files > 10 {
             ImpactRiskLevel::Medium
@@ -918,9 +961,9 @@ impl OperationPreviewGenerator {
 
         for (i, op) in operations.iter().enumerate() {
             let dependencies = op.context.dependencies.clone();
-            let is_critical = matches!(op.operation, FileOperation::Delete { .. }) ||
-                           op.context.dependencies.len() > 2;
-            
+            let is_critical = matches!(op.operation, FileOperation::Delete { .. })
+                || op.context.dependencies.len() > 2;
+
             if is_critical {
                 critical_path.push(i);
             }
@@ -935,9 +978,7 @@ impl OperationPreviewGenerator {
             });
         }
 
-        let estimated_duration_ms = steps.iter()
-            .map(|s| s.estimated_duration_ms)
-            .sum();
+        let estimated_duration_ms = steps.iter().map(|s| s.estimated_duration_ms).sum();
 
         Ok(ExecutionTimeline {
             steps,
@@ -1027,10 +1068,10 @@ Total size change: {} bytes
 
     fn generate_file_tree_diff(&self, previews: &[OperationPreview]) -> Result<String> {
         let mut tree = String::from("Project Structure Changes:\n");
-        
+
         // Group by directory
         let mut dirs: HashMap<String, Vec<String>> = HashMap::new();
-        
+
         for preview in previews {
             let (indicator, path) = match &preview.operation {
                 FileOperation::Create { path, .. } => ("+", path),
@@ -1038,20 +1079,29 @@ Total size change: {} bytes
                 FileOperation::Delete { path } => ("-", path),
                 FileOperation::Append { path, .. } => ("»", path),
                 FileOperation::Rename { from, to } => {
-                    tree.push_str(&format!("  {} {} -> {}\n", "→", from.display(), to.display()));
+                    tree.push_str(&format!(
+                        "  {} {} -> {}\n",
+                        "→",
+                        from.display(),
+                        to.display()
+                    ));
                     continue;
                 }
             };
 
-            let dir = path.parent()
+            let dir = path
+                .parent()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| ".".to_string());
-            
-            let filename = path.file_name()
+
+            let filename = path
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| path.to_string_lossy().to_string());
 
-            dirs.entry(dir).or_default().push(format!("{} {}", indicator, filename));
+            dirs.entry(dir)
+                .or_default()
+                .push(format!("{} {}", indicator, filename));
         }
 
         // Format tree
@@ -1066,14 +1116,14 @@ Total size change: {} bytes
     }
 
     fn generate_cache_key(&self, operations: &[EnhancedFileOperation]) -> String {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
-        
+        use std::hash::{Hash, Hasher};
+
         let mut hasher = DefaultHasher::new();
         for op in operations {
             format!("{:?}", op.operation).hash(&mut hasher);
         }
-        
+
         format!("preview_{:x}", hasher.finish())
     }
 
@@ -1087,19 +1137,17 @@ Total size change: {} bytes
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_preview_generation() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let generator = OperationPreviewGenerator::new(
-            temp_dir.path().to_path_buf(),
-            None,
-            None,
-        );
+        let generator = OperationPreviewGenerator::new(temp_dir.path().to_path_buf(), None, None);
 
         // Create test file
         let test_path = temp_dir.path().join("test.rs");
-        tokio::fs::write(&test_path, "fn main() {\n    println!(\"Hello\");\n}").await.unwrap();
+        tokio::fs::write(&test_path, "fn main() {\n    println!(\"Hello\");\n}")
+            .await
+            .unwrap();
 
         // Test update operation
         let operation = FileOperation::Update {
@@ -1114,29 +1162,37 @@ mod tests {
             parsing_confidence: 0.9,
         };
 
-        let preview_set = generator.generate_previews(&[enhanced_op], None).await.unwrap();
-        
+        let preview_set = generator
+            .generate_previews(&[enhanced_op], None)
+            .await
+            .unwrap();
+
         assert_eq!(preview_set.previews.len(), 1);
         let preview = &preview_set.previews[0];
-        
+
         assert!(preview.before_state.exists);
         assert!(preview.after_state.exists);
         assert!(preview.diff_view.is_some());
-        
+
         let diff = preview.diff_view.as_ref().unwrap();
         assert!(diff.line_changes.modifications > 0);
     }
 
     #[test]
     fn test_language_detection() {
-        let generator = OperationPreviewGenerator::new(
-            PathBuf::from("/test"),
-            None,
-            None,
-        );
+        let generator = OperationPreviewGenerator::new(PathBuf::from("/test"), None, None);
 
-        assert_eq!(generator.detect_language(&PathBuf::from("test.rs")), Some("rust".to_string()));
-        assert_eq!(generator.detect_language(&PathBuf::from("test.js")), Some("javascript".to_string()));
-        assert_eq!(generator.detect_language(&PathBuf::from("test.py")), Some("python".to_string()));
+        assert_eq!(
+            generator.detect_language(&PathBuf::from("test.rs")),
+            Some("rust".to_string())
+        );
+        assert_eq!(
+            generator.detect_language(&PathBuf::from("test.js")),
+            Some("javascript".to_string())
+        );
+        assert_eq!(
+            generator.detect_language(&PathBuf::from("test.py")),
+            Some("python".to_string())
+        );
     }
 }

@@ -337,17 +337,16 @@ fn html_escape(s: &str) -> String {
 
 fn highlight_rust(code: &str) -> String {
     let keywords = &[
-        "fn", "let", "mut", "const", "if", "else", "match", "for", "while", "loop",
-        "impl", "trait", "struct", "enum", "pub", "use", "mod", "self", "super",
-        "return", "break", "continue", "async", "await", "move", "ref", "as",
-        "type", "where", "static", "extern", "unsafe", "in", "crate"
+        "fn", "let", "mut", "const", "if", "else", "match", "for", "while", "loop", "impl",
+        "trait", "struct", "enum", "pub", "use", "mod", "self", "super", "return", "break",
+        "continue", "async", "await", "move", "ref", "as", "type", "where", "static", "extern",
+        "unsafe", "in", "crate",
     ];
 
     let types = &[
-        "String", "str", "Vec", "Option", "Result", "Box", "Rc", "Arc",
-        "i8", "i16", "i32", "i64", "i128", "isize",
-        "u8", "u16", "u32", "u64", "u128", "usize",
-        "f32", "f64", "bool", "char", "Self"
+        "String", "str", "Vec", "Option", "Result", "Box", "Rc", "Arc", "i8", "i16", "i32", "i64",
+        "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32", "f64", "bool", "char",
+        "Self",
     ];
 
     highlight_with_rules(code, keywords, types)
@@ -355,16 +354,51 @@ fn highlight_rust(code: &str) -> String {
 
 fn highlight_javascript(code: &str) -> String {
     let keywords = &[
-        "function", "var", "let", "const", "if", "else", "for", "while", "do",
-        "return", "break", "continue", "switch", "case", "default", "try", "catch",
-        "finally", "throw", "new", "this", "class", "extends", "super", "import",
-        "export", "from", "async", "await", "yield", "typeof", "instanceof", "in",
-        "of", "delete", "void", "null", "undefined", "true", "false"
+        "function",
+        "var",
+        "let",
+        "const",
+        "if",
+        "else",
+        "for",
+        "while",
+        "do",
+        "return",
+        "break",
+        "continue",
+        "switch",
+        "case",
+        "default",
+        "try",
+        "catch",
+        "finally",
+        "throw",
+        "new",
+        "this",
+        "class",
+        "extends",
+        "super",
+        "import",
+        "export",
+        "from",
+        "async",
+        "await",
+        "yield",
+        "typeof",
+        "instanceof",
+        "in",
+        "of",
+        "delete",
+        "void",
+        "null",
+        "undefined",
+        "true",
+        "false",
     ];
 
     let types = &[
-        "Array", "Object", "String", "Number", "Boolean", "Promise", "Map", "Set",
-        "Date", "RegExp", "Error", "Function", "Symbol", "BigInt"
+        "Array", "Object", "String", "Number", "Boolean", "Promise", "Map", "Set", "Date",
+        "RegExp", "Error", "Function", "Symbol", "BigInt",
     ];
 
     highlight_with_rules(code, keywords, types)
@@ -372,15 +406,29 @@ fn highlight_javascript(code: &str) -> String {
 
 fn highlight_python(code: &str) -> String {
     let keywords = &[
-        "def", "class", "if", "elif", "else", "for", "while", "break", "continue",
-        "return", "yield", "import", "from", "as", "try", "except", "finally",
-        "raise", "with", "pass", "lambda", "in", "is", "not", "and", "or",
-        "True", "False", "None", "self", "async", "await", "global", "nonlocal"
+        "def", "class", "if", "elif", "else", "for", "while", "break", "continue", "return",
+        "yield", "import", "from", "as", "try", "except", "finally", "raise", "with", "pass",
+        "lambda", "in", "is", "not", "and", "or", "True", "False", "None", "self", "async",
+        "await", "global", "nonlocal",
     ];
 
     let types = &[
-        "int", "float", "str", "list", "dict", "set", "tuple", "bool", "bytes",
-        "type", "object", "range", "enumerate", "zip", "map", "filter"
+        "int",
+        "float",
+        "str",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "bool",
+        "bytes",
+        "type",
+        "object",
+        "range",
+        "enumerate",
+        "zip",
+        "map",
+        "filter",
     ];
 
     highlight_with_rules(code, keywords, types)
@@ -394,7 +442,10 @@ fn highlight_json(code: &str) -> String {
 
     while let Some(ch) = chars.next() {
         if escape_next {
-            result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+            result.push_str(&format!(
+                "<span style=\"color: #ce9178;\">{}</span>",
+                html_escape(&ch.to_string())
+            ));
             escape_next = false;
             continue;
         }
@@ -402,24 +453,42 @@ fn highlight_json(code: &str) -> String {
         match ch {
             '"' => {
                 in_string = !in_string;
-                result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #ce9178;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             '\\' if in_string => {
                 escape_next = true;
-                result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #ce9178;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             '{' | '}' | '[' | ']' => {
-                result.push_str(&format!("<span style=\"color: #d4d4d4;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #d4d4d4;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             ':' | ',' => {
-                result.push_str(&format!("<span style=\"color: #d4d4d4;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #d4d4d4;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             '0'..='9' | '-' | '.' if !in_string => {
-                result.push_str(&format!("<span style=\"color: #b5cea8;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #b5cea8;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             _ => {
                 if in_string {
-                    result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                    result.push_str(&format!(
+                        "<span style=\"color: #ce9178;\">{}</span>",
+                        html_escape(&ch.to_string())
+                    ));
                 } else {
                     result.push_str(&html_escape(&ch.to_string()));
                 }
@@ -438,15 +507,24 @@ fn highlight_toml(code: &str) -> String {
 
         if trimmed.starts_with('#') {
             // Comment
-            result.push_str(&format!("<span style=\"color: #6a9955;\">{}</span>\n", html_escape(line)));
+            result.push_str(&format!(
+                "<span style=\"color: #6a9955;\">{}</span>\n",
+                html_escape(line)
+            ));
         } else if trimmed.starts_with('[') {
             // Section header
-            result.push_str(&format!("<span style=\"color: #569cd6;\">{}</span>\n", html_escape(line)));
+            result.push_str(&format!(
+                "<span style=\"color: #569cd6;\">{}</span>\n",
+                html_escape(line)
+            ));
         } else if let Some(eq_pos) = line.find('=') {
             // Key-value pair
             let key = &line[..eq_pos];
             let value = &line[eq_pos..];
-            result.push_str(&format!("<span style=\"color: #4ec9b0;\">{}</span>", html_escape(key)));
+            result.push_str(&format!(
+                "<span style=\"color: #4ec9b0;\">{}</span>",
+                html_escape(key)
+            ));
             result.push_str(&html_escape(value));
             result.push('\n');
         } else {
@@ -466,13 +544,22 @@ fn highlight_markdown(code: &str) -> String {
 
         if trimmed.starts_with('#') {
             // Headers
-            result.push_str(&format!("<span style=\"color: #569cd6; font-weight: bold;\">{}</span>\n", html_escape(line)));
+            result.push_str(&format!(
+                "<span style=\"color: #569cd6; font-weight: bold;\">{}</span>\n",
+                html_escape(line)
+            ));
         } else if trimmed.starts_with("```") {
             // Code blocks
-            result.push_str(&format!("<span style=\"color: #6a9955;\">{}</span>\n", html_escape(line)));
+            result.push_str(&format!(
+                "<span style=\"color: #6a9955;\">{}</span>\n",
+                html_escape(line)
+            ));
         } else if trimmed.starts_with('*') || trimmed.starts_with('-') || trimmed.starts_with('+') {
             // Lists
-            result.push_str(&format!("<span style=\"color: #d4d4d4;\">{}</span>\n", html_escape(line)));
+            result.push_str(&format!(
+                "<span style=\"color: #d4d4d4;\">{}</span>\n",
+                html_escape(line)
+            ));
         } else {
             // Regular text
             result.push_str(&html_escape(line));
@@ -494,11 +581,17 @@ fn highlight_html(code: &str) -> String {
         match ch {
             '<' if !in_string => {
                 in_tag = true;
-                result.push_str(&format!("<span style=\"color: #808080;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #808080;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             '>' if !in_string => {
                 in_tag = false;
-                result.push_str(&format!("<span style=\"color: #808080;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #808080;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             '"' | '\'' if in_tag => {
                 if !in_string {
@@ -507,13 +600,22 @@ fn highlight_html(code: &str) -> String {
                 } else if ch == string_char {
                     in_string = false;
                 }
-                result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #ce9178;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             _ => {
                 if in_string {
-                    result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                    result.push_str(&format!(
+                        "<span style=\"color: #ce9178;\">{}</span>",
+                        html_escape(&ch.to_string())
+                    ));
                 } else if in_tag {
-                    result.push_str(&format!("<span style=\"color: #569cd6;\">{}</span>", html_escape(&ch.to_string())));
+                    result.push_str(&format!(
+                        "<span style=\"color: #569cd6;\">{}</span>",
+                        html_escape(&ch.to_string())
+                    ));
                 } else {
                     result.push_str(&html_escape(&ch.to_string()));
                 }
@@ -538,23 +640,35 @@ fn highlight_css(code: &str) -> String {
             '{' => {
                 in_selector = false;
                 in_property = true;
-                result.push_str(&format!("<span style=\"color: #d4d4d4;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #d4d4d4;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             '}' => {
                 in_selector = true;
                 in_property = false;
                 in_value = false;
-                result.push_str(&format!("<span style=\"color: #d4d4d4;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #d4d4d4;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             ':' if in_property && !in_string => {
                 in_property = false;
                 in_value = true;
-                result.push_str(&format!("<span style=\"color: #d4d4d4;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #d4d4d4;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             ';' if in_value && !in_string => {
                 in_value = false;
                 in_property = true;
-                result.push_str(&format!("<span style=\"color: #d4d4d4;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #d4d4d4;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             '"' | '\'' => {
                 if !in_string {
@@ -563,15 +677,27 @@ fn highlight_css(code: &str) -> String {
                 } else if ch == string_char {
                     in_string = false;
                 }
-                result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #ce9178;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             _ => {
                 if in_string {
-                    result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                    result.push_str(&format!(
+                        "<span style=\"color: #ce9178;\">{}</span>",
+                        html_escape(&ch.to_string())
+                    ));
                 } else if in_selector {
-                    result.push_str(&format!("<span style=\"color: #4ec9b0;\">{}</span>", html_escape(&ch.to_string())));
+                    result.push_str(&format!(
+                        "<span style=\"color: #4ec9b0;\">{}</span>",
+                        html_escape(&ch.to_string())
+                    ));
                 } else if in_property {
-                    result.push_str(&format!("<span style=\"color: #569cd6;\">{}</span>", html_escape(&ch.to_string())));
+                    result.push_str(&format!(
+                        "<span style=\"color: #569cd6;\">{}</span>",
+                        html_escape(&ch.to_string())
+                    ));
                 } else {
                     result.push_str(&html_escape(&ch.to_string()));
                 }
@@ -590,7 +716,10 @@ fn highlight_shell(code: &str) -> String {
 
         if trimmed.starts_with('#') {
             // Comment
-            result.push_str(&format!("<span style=\"color: #6a9955;\">{}</span>\n", html_escape(line)));
+            result.push_str(&format!(
+                "<span style=\"color: #6a9955;\">{}</span>\n",
+                html_escape(line)
+            ));
         } else {
             // Simple word-based highlighting
             let words: Vec<&str> = line.split_whitespace().collect();
@@ -602,13 +731,22 @@ fn highlight_shell(code: &str) -> String {
 
                 if first && !word.starts_with('$') {
                     // Command
-                    result.push_str(&format!("<span style=\"color: #569cd6;\">{}</span>", html_escape(word)));
+                    result.push_str(&format!(
+                        "<span style=\"color: #569cd6;\">{}</span>",
+                        html_escape(word)
+                    ));
                 } else if word.starts_with('-') {
                     // Flag
-                    result.push_str(&format!("<span style=\"color: #4ec9b0;\">{}</span>", html_escape(word)));
+                    result.push_str(&format!(
+                        "<span style=\"color: #4ec9b0;\">{}</span>",
+                        html_escape(word)
+                    ));
                 } else if word.starts_with('$') {
                     // Variable
-                    result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(word)));
+                    result.push_str(&format!(
+                        "<span style=\"color: #ce9178;\">{}</span>",
+                        html_escape(word)
+                    ));
                 } else {
                     result.push_str(&html_escape(word));
                 }
@@ -635,18 +773,30 @@ fn highlight_with_rules(code: &str, keywords: &[&str], types: &[&str]) -> String
             if !in_string {
                 in_string = true;
                 string_char = ch;
-                result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #ce9178;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             } else if ch == string_char {
                 in_string = false;
-                result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #ce9178;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             } else {
-                result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+                result.push_str(&format!(
+                    "<span style=\"color: #ce9178;\">{}</span>",
+                    html_escape(&ch.to_string())
+                ));
             }
             continue;
         }
 
         if in_string {
-            result.push_str(&format!("<span style=\"color: #ce9178;\">{}</span>", html_escape(&ch.to_string())));
+            result.push_str(&format!(
+                "<span style=\"color: #ce9178;\">{}</span>",
+                html_escape(&ch.to_string())
+            ));
             continue;
         }
 
@@ -656,7 +806,10 @@ fn highlight_with_rules(code: &str, keywords: &[&str], types: &[&str]) -> String
         }
 
         if in_comment {
-            result.push_str(&format!("<span style=\"color: #6a9955;\">{}</span>", html_escape(&ch.to_string())));
+            result.push_str(&format!(
+                "<span style=\"color: #6a9955;\">{}</span>",
+                html_escape(&ch.to_string())
+            ));
             if ch == '\n' {
                 in_comment = false;
             }
@@ -666,13 +819,23 @@ fn highlight_with_rules(code: &str, keywords: &[&str], types: &[&str]) -> String
         // Handle identifiers
         if ch.is_alphabetic() || ch == '_' {
             let word: String = std::iter::once(ch)
-                .chain(chars.by_ref().take_while(|&c| c.is_alphanumeric() || c == '_'))
+                .chain(
+                    chars
+                        .by_ref()
+                        .take_while(|&c| c.is_alphanumeric() || c == '_'),
+                )
                 .collect();
 
             if keywords.contains(&word.as_str()) {
-                result.push_str(&format!("<span style=\"color: #569cd6;\">{}</span>", html_escape(&word)));
+                result.push_str(&format!(
+                    "<span style=\"color: #569cd6;\">{}</span>",
+                    html_escape(&word)
+                ));
             } else if types.contains(&word.as_str()) {
-                result.push_str(&format!("<span style=\"color: #4ec9b0;\">{}</span>", html_escape(&word)));
+                result.push_str(&format!(
+                    "<span style=\"color: #4ec9b0;\">{}</span>",
+                    html_escape(&word)
+                ));
             } else {
                 result.push_str(&html_escape(&word));
             }
@@ -680,7 +843,10 @@ fn highlight_with_rules(code: &str, keywords: &[&str], types: &[&str]) -> String
             let number: String = std::iter::once(ch)
                 .chain(chars.by_ref().take_while(|&c| c.is_numeric() || c == '.'))
                 .collect();
-            result.push_str(&format!("<span style=\"color: #b5cea8;\">{}</span>", html_escape(&number)));
+            result.push_str(&format!(
+                "<span style=\"color: #b5cea8;\">{}</span>",
+                html_escape(&number)
+            ));
         } else {
             result.push_str(&html_escape(&ch.to_string()));
         }

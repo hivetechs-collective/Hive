@@ -22,8 +22,8 @@ use crate::analysis::{
     symbol_index::{SymbolEntry, SymbolIndexer},
 };
 use crate::core::ast::{CodeMetrics, ParseResult};
-use crate::core::{Position, SymbolKind};
 use crate::core::database::DatabaseManager;
+use crate::core::{Position, SymbolKind};
 
 /// Repository analyzer for comprehensive codebase intelligence
 pub struct RepositoryAnalyzer {
@@ -2975,11 +2975,7 @@ mod tests {
         };
         let db_manager = DatabaseManager::new(db_config).await.unwrap();
         let analyzer = RepositoryAnalyzer::new(
-            Arc::new(
-                SymbolIndexer::new(Arc::new(db_manager))
-                    .await
-                    .unwrap(),
-            ),
+            Arc::new(SymbolIndexer::new(Arc::new(db_manager)).await.unwrap()),
             Arc::new(DependencyAnalyzer::new().await.unwrap()),
         )
         .await

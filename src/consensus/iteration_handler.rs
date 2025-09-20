@@ -8,43 +8,43 @@
 //!
 //! Similar to how Claude Code handles iterative development tasks.
 
-use std::sync::Arc;
-use std::collections::HashMap;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::ai_helpers::AIHelperEcosystem;
-use crate::consensus::streaming_executor::{StreamingOperationExecutor, ExecutionStatus};
-use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::direct_executor::DirectExecutionHandler;
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::streaming_executor::{ExecutionStatus, StreamingOperationExecutor};
 
 /// Context maintained across iterations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IterationContext {
     /// The original user request
     pub original_request: String,
-    
+
     /// Current iteration number
     pub iteration: usize,
-    
+
     /// Operations executed so far
     pub executed_operations: Vec<ExecutedOperation>,
-    
+
     /// Test results from previous iterations
     pub test_results: Vec<TestResult>,
-    
+
     /// Current goal/task being worked on
     pub current_goal: String,
-    
+
     /// Remaining tasks to complete
     pub remaining_tasks: Vec<String>,
-    
+
     /// Files created or modified
     pub affected_files: Vec<std::path::PathBuf>,
-    
+
     /// Errors encountered
     pub errors: Vec<IterationError>,
-    
+
     /// User feedback received
     pub user_feedback: Vec<String>,
 }
@@ -89,16 +89,16 @@ pub enum ErrorType {
 pub enum NextIteration {
     /// Continue with more operations
     Execute(Vec<FileOperation>),
-    
+
     /// Run tests to verify current state
     RunTests(Vec<String>),
-    
+
     /// Request user feedback on specific questions
     RequestFeedback(Vec<String>),
-    
+
     /// Fix errors before continuing
     FixErrors(Vec<IterationError>),
-    
+
     /// Task is complete
     Done(String), // Summary message
 }
@@ -106,11 +106,11 @@ pub enum NextIteration {
 /// Recommendation from AI analysis
 #[derive(Debug, Clone)]
 pub enum Recommendation {
-    Continue,        // Keep going with the plan
-    NeedsFeedback,   // Ask user for clarification
-    FixRequired,     // Need to fix errors first
-    TestRequired,    // Should run tests before continuing
-    Complete,        // Task appears to be done
+    Continue,      // Keep going with the plan
+    NeedsFeedback, // Ask user for clarification
+    FixRequired,   // Need to fix errors first
+    TestRequired,  // Should run tests before continuing
+    Complete,      // Task appears to be done
 }
 
 /// Handler for iterative development workflows
@@ -156,25 +156,25 @@ impl IterationHandler {
     ) -> Result<NextIteration> {
         // Increment iteration counter
         self.context.iteration += 1;
-        
+
         // Check if we've hit the max iterations
         if self.context.iteration >= self.max_iterations {
             return Ok(NextIteration::Done(
-                "Reached maximum iterations. Please review the work so far.".to_string()
+                "Reached maximum iterations. Please review the work so far.".to_string(),
             ));
         }
-        
+
         // Add user feedback if provided
         if let Some(feedback) = user_feedback {
             self.context.user_feedback.push(feedback);
         }
-        
+
         // Update context based on previous result
         self.update_context_from_result(&previous_result)?;
-        
+
         // Analyze what happened and determine next steps
         let analysis = self.analyze_current_state().await?;
-        
+
         // Determine next iteration based on analysis
         match analysis.recommendation {
             Recommendation::Continue => {
@@ -215,7 +215,7 @@ impl IterationHandler {
                         timestamp: std::time::SystemTime::now(),
                         iteration: self.context.iteration,
                     });
-                    
+
                     // Track affected files
                     if let Some(path) = get_operation_path(&op) {
                         if !self.context.affected_files.contains(&path) {
@@ -231,21 +231,27 @@ impl IterationHandler {
                 self.context.errors.push(error.clone());
             }
         }
-        
+
         Ok(())
     }
 
     /// Analyze current state and recommend next action
     async fn analyze_current_state(&self) -> Result<IterationAnalysis> {
         // Use AI helpers to analyze the situation
-        let recent_errors = self.context.errors.iter()
+        let recent_errors = self
+            .context
+            .errors
+            .iter()
             .filter(|e| e.iteration == self.context.iteration - 1)
             .collect::<Vec<_>>();
-        
-        let recent_tests = self.context.test_results.iter()
+
+        let recent_tests = self
+            .context
+            .test_results
+            .iter()
             .filter(|t| t.iteration == self.context.iteration - 1)
             .collect::<Vec<_>>();
-        
+
         // Determine recommendation based on state
         let recommendation = if !recent_errors.is_empty() {
             Recommendation::FixRequired
@@ -258,7 +264,7 @@ impl IterationHandler {
         } else {
             Recommendation::Continue
         };
-        
+
         Ok(IterationAnalysis {
             recommendation: recommendation.clone(),
             confidence: 0.8, // Would be calculated by AI helpers
@@ -270,30 +276,36 @@ impl IterationHandler {
     /// Check if all planned tasks are complete
     fn all_planned_tasks_complete(&self) -> bool {
         // Simple heuristic for now
-        self.context.remaining_tasks.is_empty() && 
-        self.context.errors.is_empty() &&
-        self.context.test_results.iter().all(|t| t.success)
+        self.context.remaining_tasks.is_empty()
+            && self.context.errors.is_empty()
+            && self.context.test_results.iter().all(|t| t.success)
     }
 
     /// Check if we need user clarification
     fn needs_user_clarification(&self) -> bool {
         // Check if we've encountered ambiguous situations
-        self.context.errors.iter().any(|e| {
-            matches!(e.error_type, ErrorType::Other(_))
-        }) || self.context.iteration > 3 && self.context.user_feedback.is_empty()
+        self.context
+            .errors
+            .iter()
+            .any(|e| matches!(e.error_type, ErrorType::Other(_)))
+            || self.context.iteration > 3 && self.context.user_feedback.is_empty()
     }
 
     /// Generate reasoning for the recommendation
     fn generate_reasoning(&self, recommendation: &Recommendation) -> String {
         match recommendation {
             Recommendation::Continue => {
-                "Previous operations completed successfully. Continuing with next steps.".to_string()
+                "Previous operations completed successfully. Continuing with next steps."
+                    .to_string()
             }
             Recommendation::TestRequired => {
                 "Code changes complete. Running tests to verify functionality.".to_string()
             }
             Recommendation::FixRequired => {
-                format!("Found {} errors that need to be fixed before continuing.", self.context.errors.len())
+                format!(
+                    "Found {} errors that need to be fixed before continuing.",
+                    self.context.errors.len()
+                )
             }
             Recommendation::NeedsFeedback => {
                 "Encountered ambiguous requirements. Need clarification to proceed.".to_string()
@@ -311,11 +323,18 @@ impl IterationHandler {
                 vec!["Implement next feature".to_string()]
             }
             Recommendation::TestRequired => {
-                vec!["Run unit tests".to_string(), "Run integration tests".to_string()]
+                vec![
+                    "Run unit tests".to_string(),
+                    "Run integration tests".to_string(),
+                ]
             }
-            Recommendation::FixRequired => {
-                self.context.errors.iter()
-                    .map(|e| format!("Fix {}: {}", 
+            Recommendation::FixRequired => self
+                .context
+                .errors
+                .iter()
+                .map(|e| {
+                    format!(
+                        "Fix {}: {}",
                         match &e.error_type {
                             ErrorType::CompilationError => "compilation error",
                             ErrorType::TestFailure => "test failure",
@@ -325,9 +344,9 @@ impl IterationHandler {
                             ErrorType::Other(s) => s,
                         },
                         e.message
-                    ))
-                    .collect()
-            }
+                    )
+                })
+                .collect(),
             Recommendation::NeedsFeedback => {
                 vec!["Clarify requirements".to_string()]
             }
@@ -338,7 +357,10 @@ impl IterationHandler {
     }
 
     /// Generate next operations to execute
-    async fn generate_next_operations(&self, _analysis: &IterationAnalysis) -> Result<Vec<FileOperation>> {
+    async fn generate_next_operations(
+        &self,
+        _analysis: &IterationAnalysis,
+    ) -> Result<Vec<FileOperation>> {
         // This would use the AI to determine next steps
         // For now, return empty as this would be implementation-specific
         Ok(Vec::new())
@@ -348,32 +370,45 @@ impl IterationHandler {
     async fn determine_test_commands(&self, _analysis: &IterationAnalysis) -> Result<Vec<String>> {
         // Determine appropriate test commands based on the project
         let mut commands = Vec::new();
-        
+
         // Check what kind of project this is
-        if self.context.affected_files.iter().any(|f| f.extension() == Some(std::ffi::OsStr::new("rs"))) {
+        if self
+            .context
+            .affected_files
+            .iter()
+            .any(|f| f.extension() == Some(std::ffi::OsStr::new("rs")))
+        {
             commands.push("cargo test".to_string());
             commands.push("cargo check".to_string());
-        } else if self.context.affected_files.iter().any(|f| f.extension() == Some(std::ffi::OsStr::new("ts"))) {
+        } else if self
+            .context
+            .affected_files
+            .iter()
+            .any(|f| f.extension() == Some(std::ffi::OsStr::new("ts")))
+        {
             commands.push("npm test".to_string());
             commands.push("npm run type-check".to_string());
         }
-        
+
         Ok(commands)
     }
 
     /// Generate clarification questions for the user
-    async fn generate_clarification_questions(&self, _analysis: &IterationAnalysis) -> Result<Vec<String>> {
+    async fn generate_clarification_questions(
+        &self,
+        _analysis: &IterationAnalysis,
+    ) -> Result<Vec<String>> {
         // Generate questions based on current state
         let mut questions = Vec::new();
-        
+
         if !self.context.errors.is_empty() {
             questions.push("How should I handle the errors encountered?".to_string());
         }
-        
+
         if self.context.remaining_tasks.is_empty() && self.context.iteration > 1 {
             questions.push("What additional features would you like me to implement?".to_string());
         }
-        
+
         Ok(questions)
     }
 
@@ -390,7 +425,7 @@ impl IterationHandler {
             self.context.test_results.len(),
             self.context.test_results.iter().all(|t| t.success)
         );
-        
+
         Ok(summary)
     }
 
@@ -437,10 +472,10 @@ pub enum ExecutionResult {
 /// Get the file path from an operation
 fn get_operation_path(op: &FileOperation) -> Option<std::path::PathBuf> {
     match op {
-        FileOperation::Create { path, .. } |
-        FileOperation::Update { path, .. } |
-        FileOperation::Delete { path } |
-        FileOperation::Append { path, .. } => Some(path.clone()),
+        FileOperation::Create { path, .. }
+        | FileOperation::Update { path, .. }
+        | FileOperation::Delete { path }
+        | FileOperation::Append { path, .. } => Some(path.clone()),
         FileOperation::Rename { to, .. } => Some(to.clone()),
     }
 }
@@ -531,7 +566,7 @@ mod tests {
             )),
             max_iterations: 10,
         };
-        
+
         assert_eq!(handler.context.iteration, 0);
         assert_eq!(handler.context.remaining_tasks.len(), 2);
     }
@@ -555,7 +590,7 @@ mod tests {
             }],
             user_feedback: Vec::new(),
         };
-        
+
         // With errors, should recommend fix
         assert!(!context.errors.is_empty());
     }

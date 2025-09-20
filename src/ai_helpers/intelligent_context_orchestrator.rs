@@ -4,14 +4,14 @@
 //! to make intelligent context decisions, preventing context contamination
 //! and ensuring appropriate knowledge domain routing.
 
-use std::sync::Arc;
+use crate::consensus::ExecutionMode;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
-use crate::consensus::ExecutionMode;
 
 use crate::ai_helpers::{
-    ContextRetriever, PatternRecognizer, QualityAnalyzer, KnowledgeSynthesizer, QualityMetrics
+    ContextRetriever, KnowledgeSynthesizer, PatternRecognizer, QualityAnalyzer, QualityMetrics,
 };
 
 /// Enhanced context decision with multi-AI validation
@@ -32,7 +32,7 @@ pub struct IntelligentContextDecision {
 pub enum QuestionCategory {
     /// Repository-specific questions about current codebase
     RepositorySpecific,
-    /// General programming concepts and techniques  
+    /// General programming concepts and techniques
     GeneralProgramming,
     /// Computer science theory and algorithms
     ComputerScience,
@@ -71,10 +71,10 @@ pub struct IntelligentContextOrchestrator {
     pattern_recognizer: Arc<PatternRecognizer>,
     quality_analyzer: Arc<QualityAnalyzer>,
     knowledge_synthesizer: Arc<KnowledgeSynthesizer>,
-    
+
     /// OpenRouter client for making LLM routing decisions
     openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>,
-    
+
     /// Separate caches for different question types to prevent contamination
     repo_cache: Arc<tokio::sync::RwLock<lru::LruCache<String, IntelligentContextDecision>>>,
     general_cache: Arc<tokio::sync::RwLock<lru::LruCache<String, IntelligentContextDecision>>>,
@@ -94,10 +94,10 @@ impl IntelligentContextOrchestrator {
             pattern_recognizer,
             quality_analyzer,
             knowledge_synthesizer,
-            None
+            None,
         )
     }
-    
+
     /// Create a new Intelligent Context Orchestrator with OpenRouter client
     pub fn new_with_client(
         context_retriever: Arc<ContextRetriever>,
@@ -107,7 +107,7 @@ impl IntelligentContextOrchestrator {
         openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>,
     ) -> Self {
         let cache_size = std::num::NonZeroUsize::new(50).unwrap();
-        
+
         Self {
             context_retriever,
             pattern_recognizer,
@@ -119,65 +119,79 @@ impl IntelligentContextOrchestrator {
             academic_cache: Arc::new(tokio::sync::RwLock::new(lru::LruCache::new(cache_size))),
         }
     }
-    
+
     /// Make an intelligent context decision using all AI helpers
     pub async fn make_intelligent_context_decision(
         &self,
         question: &str,
         has_open_repository: bool,
     ) -> Result<IntelligentContextDecision> {
-        info!("🧠 Starting intelligent context analysis for: '{}'", 
-            &question[..question.len().min(100)]);
+        info!(
+            "🧠 Starting intelligent context analysis for: '{}'",
+            &question[..question.len().min(100)]
+        );
         info!("📂 Repository open: {}", has_open_repository);
-        
+
         // Stage 1: Multi-AI Question Classification
         let classification = self.classify_question_multi_ai(question).await?;
-        debug!("📊 Question classification: {:?}", classification.primary_category);
-        
+        debug!(
+            "📊 Question classification: {:?}",
+            classification.primary_category
+        );
+
         // Stage 2: Pattern Analysis
         let pattern_analysis = self.analyze_question_patterns(question).await?;
-        debug!("🔍 Pattern analysis complete: {} patterns detected", 
-            pattern_analysis.detected_patterns.len());
-        
-        // Stage 3: Quality Assessment  
-        let quality_assessment = self.assess_context_quality(question, &classification).await?;
-        debug!("⭐ Quality assessment: appropriateness={:.2}, contamination_risk={:.2}", 
-            quality_assessment.context_appropriateness, quality_assessment.contamination_risk);
-        
+        debug!(
+            "🔍 Pattern analysis complete: {} patterns detected",
+            pattern_analysis.detected_patterns.len()
+        );
+
+        // Stage 3: Quality Assessment
+        let quality_assessment = self
+            .assess_context_quality(question, &classification)
+            .await?;
+        debug!(
+            "⭐ Quality assessment: appropriateness={:.2}, contamination_risk={:.2}",
+            quality_assessment.context_appropriateness, quality_assessment.contamination_risk
+        );
+
         // Stage 4: Ensemble Decision Making
-        let decision = self.make_ensemble_decision(
-            question,
-            has_open_repository,
-            classification,
-            pattern_analysis,
-            quality_assessment,
-        ).await?;
-        
+        let decision = self
+            .make_ensemble_decision(
+                question,
+                has_open_repository,
+                classification,
+                pattern_analysis,
+                quality_assessment,
+            )
+            .await?;
+
         // Stage 5: Cache with Domain Isolation
         self.cache_decision_by_domain(question, &decision).await;
-        
-        info!("✅ Intelligent context decision: use_repo={}, confidence={:.2}, category={:?}",
-            decision.should_use_repo, decision.confidence, decision.primary_category);
-        
+
+        info!(
+            "✅ Intelligent context decision: use_repo={}, confidence={:.2}, category={:?}",
+            decision.should_use_repo, decision.confidence, decision.primary_category
+        );
+
         Ok(decision)
     }
-    
+
     /// Classify question using multiple AI helpers for robust analysis
     async fn classify_question_multi_ai(&self, question: &str) -> Result<QuestionClassification> {
         // Use ContextRetriever's semantic analysis
-        let context_analysis = self.context_retriever
+        let context_analysis = self
+            .context_retriever
             .analyze_question_context(question)
             .await?;
-        
+
         // Enhance with additional AI analysis
         let enhanced_categories = self.detect_additional_categories(question);
-        
+
         // Combine insights for comprehensive classification
-        let primary_category = self.determine_primary_category(
-            &context_analysis.category,
-            &enhanced_categories
-        );
-        
+        let primary_category =
+            self.determine_primary_category(&context_analysis.category, &enhanced_categories);
+
         Ok(QuestionClassification {
             primary_category,
             secondary_categories: enhanced_categories,
@@ -185,44 +199,49 @@ impl IntelligentContextOrchestrator {
             reasoning: context_analysis.reasoning,
         })
     }
-    
+
     /// Analyze question patterns using PatternRecognizer
     async fn analyze_question_patterns(&self, question: &str) -> Result<PatternAnalysis> {
         // Use PatternRecognizer to identify code vs general patterns
-        let patterns = self.pattern_recognizer
+        let patterns = self
+            .pattern_recognizer
             .analyze_code_patterns(question, "question_analysis")
-            .await?;  // NO FALLBACK - if AI pattern analysis fails, propagate error
-        
+            .await?; // NO FALLBACK - if AI pattern analysis fails, propagate error
+
         // Calculate indicator scores
         let code_indicators = self.calculate_code_indicators(question, &patterns);
         let repo_indicators = self.calculate_repo_indicators(question, &patterns);
         let general_indicators = self.calculate_general_indicators(question, &patterns);
         let academic_indicators = self.calculate_academic_indicators(question, &patterns);
-        
+
         Ok(PatternAnalysis {
-            detected_patterns: patterns.iter().map(|p| format!("{:?}", p.pattern_type)).collect(),
+            detected_patterns: patterns
+                .iter()
+                .map(|p| format!("{:?}", p.pattern_type))
+                .collect(),
             code_indicators,
-            repo_indicators, 
+            repo_indicators,
             general_indicators,
             academic_indicators,
         })
     }
-    
-    /// Assess context quality using QualityAnalyzer  
+
+    /// Assess context quality using QualityAnalyzer
     async fn assess_context_quality(
         &self,
         question: &str,
         classification: &QuestionClassification,
     ) -> Result<QualityAssessment> {
         // Use QualityAnalyzer to validate context appropriateness
-        let quality_metrics = self.quality_analyzer
+        let quality_metrics = self
+            .quality_analyzer
             .analyze_text_quality(question, "context_validation")
             .await
             .unwrap_or_else(|e| {
                 warn!("Quality analysis failed: {}, using defaults", e);
                 Default::default()
             });
-        
+
         // Calculate contamination risk based on category
         let contamination_risk = match classification.primary_category {
             QuestionCategory::RepositorySpecific => 0.1,
@@ -233,7 +252,7 @@ impl IntelligentContextOrchestrator {
             QuestionCategory::Hybrid => 0.6,
             QuestionCategory::Ambiguous => 0.7,
         };
-        
+
         Ok(QualityAssessment {
             context_appropriateness: quality_metrics.overall_score,
             contamination_risk,
@@ -241,7 +260,7 @@ impl IntelligentContextOrchestrator {
             complexity_level: quality_metrics.complexity,
         })
     }
-    
+
     /// Make ensemble decision combining all AI insights
     async fn make_ensemble_decision(
         &self,
@@ -253,14 +272,14 @@ impl IntelligentContextOrchestrator {
     ) -> Result<IntelligentContextDecision> {
         // The ContextRetriever now handles intelligent auto-discovery
         // We just need to make the decision based on the classification
-        
+
         // Calculate repository context suitability score
         let repo_suitability = self.calculate_repo_suitability(
             &classification,
             &pattern_analysis,
             &quality_assessment,
         );
-        
+
         // Apply stricter contamination prevention rules
         let should_use_repo = repo_suitability > 0.7  // Increased threshold from 0.6
             && quality_assessment.contamination_risk < 0.3  // Reduced from 0.5
@@ -268,13 +287,13 @@ impl IntelligentContextOrchestrator {
                 classification.primary_category,
                 QuestionCategory::RepositorySpecific  // Only for repository-specific questions
             );
-        
+
         let confidence = if should_use_repo {
             repo_suitability * (1.0 - quality_assessment.contamination_risk)
         } else {
             1.0 - repo_suitability
         };
-        
+
         let reasoning = self.generate_decision_reasoning(
             &classification,
             &pattern_analysis,
@@ -282,7 +301,7 @@ impl IntelligentContextOrchestrator {
             repo_suitability,
             should_use_repo,
         );
-        
+
         let decision = IntelligentContextDecision {
             should_use_repo,
             confidence,
@@ -293,13 +312,13 @@ impl IntelligentContextOrchestrator {
             pattern_analysis,
             quality_assessment,
         };
-        
+
         info!("🎯 Final decision: category={:?}, should_use_repo={}, confidence={:.2}, repo_suitability={:.2}",
             decision.primary_category, decision.should_use_repo, decision.confidence, repo_suitability);
-        
+
         Ok(decision)
     }
-    
+
     /// Cache decision in appropriate domain-specific cache
     async fn cache_decision_by_domain(
         &self,
@@ -307,28 +326,37 @@ impl IntelligentContextOrchestrator {
         decision: &IntelligentContextDecision,
     ) {
         let cache_key = question.to_string();
-        
+
         match decision.primary_category {
             QuestionCategory::RepositorySpecific | QuestionCategory::GeneralProgramming => {
-                self.repo_cache.write().await.put(cache_key, decision.clone());
+                self.repo_cache
+                    .write()
+                    .await
+                    .put(cache_key, decision.clone());
             }
             QuestionCategory::AcademicKnowledge | QuestionCategory::GeneralKnowledge => {
-                self.academic_cache.write().await.put(cache_key, decision.clone());
+                self.academic_cache
+                    .write()
+                    .await
+                    .put(cache_key, decision.clone());
             }
             _ => {
-                self.general_cache.write().await.put(cache_key, decision.clone());
+                self.general_cache
+                    .write()
+                    .await
+                    .put(cache_key, decision.clone());
             }
         }
     }
-    
+
     // Helper methods for calculations and analysis
-    
+
     fn detect_additional_categories(&self, _question: &str) -> Vec<QuestionCategory> {
         // NO HARD-CODED DETECTION - AI model must determine all categories
         // The LLM should analyze the question semantically, not with keywords
         Vec::new() // AI model provides all category analysis
     }
-    
+
     fn determine_primary_category(
         &self,
         context_category: &str,
@@ -345,34 +373,64 @@ impl IntelligentContextOrchestrator {
             QuestionCategory::GeneralKnowledge
         }
     }
-    
-    fn calculate_code_indicators(&self, _question: &str, patterns: &[crate::ai_helpers::Pattern]) -> f64 {
-        patterns.iter()
-            .filter(|p| matches!(p.pattern_type, crate::ai_helpers::PatternType::Recurring | crate::ai_helpers::PatternType::Evolution))
-            .count() as f64 / patterns.len().max(1) as f64
+
+    fn calculate_code_indicators(
+        &self,
+        _question: &str,
+        patterns: &[crate::ai_helpers::Pattern],
+    ) -> f64 {
+        patterns
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p.pattern_type,
+                    crate::ai_helpers::PatternType::Recurring
+                        | crate::ai_helpers::PatternType::Evolution
+                )
+            })
+            .count() as f64
+            / patterns.len().max(1) as f64
     }
-    
-    fn calculate_repo_indicators(&self, _question: &str, patterns: &[crate::ai_helpers::Pattern]) -> f64 {
+
+    fn calculate_repo_indicators(
+        &self,
+        _question: &str,
+        patterns: &[crate::ai_helpers::Pattern],
+    ) -> f64 {
         // Use AI pattern analysis only - no keywords
-        patterns.iter()
+        patterns
+            .iter()
             .filter(|p| matches!(p.pattern_type, crate::ai_helpers::PatternType::Evolution))
-            .count() as f64 / patterns.len().max(1) as f64
+            .count() as f64
+            / patterns.len().max(1) as f64
     }
-    
-    fn calculate_general_indicators(&self, _question: &str, patterns: &[crate::ai_helpers::Pattern]) -> f64 {
+
+    fn calculate_general_indicators(
+        &self,
+        _question: &str,
+        patterns: &[crate::ai_helpers::Pattern],
+    ) -> f64 {
         // Use AI pattern analysis only - no keywords
-        patterns.iter()
+        patterns
+            .iter()
             .filter(|p| matches!(p.pattern_type, crate::ai_helpers::PatternType::Insight))
-            .count() as f64 / patterns.len().max(1) as f64
+            .count() as f64
+            / patterns.len().max(1) as f64
     }
-    
-    fn calculate_academic_indicators(&self, _question: &str, patterns: &[crate::ai_helpers::Pattern]) -> f64 {
+
+    fn calculate_academic_indicators(
+        &self,
+        _question: &str,
+        patterns: &[crate::ai_helpers::Pattern],
+    ) -> f64 {
         // Use AI pattern analysis only - no keywords
-        patterns.iter()
+        patterns
+            .iter()
             .filter(|p| matches!(p.pattern_type, crate::ai_helpers::PatternType::Relationship))
-            .count() as f64 / patterns.len().max(1) as f64
+            .count() as f64
+            / patterns.len().max(1) as f64
     }
-    
+
     fn calculate_repo_suitability(
         &self,
         classification: &QuestionClassification,
@@ -381,25 +439,25 @@ impl IntelligentContextOrchestrator {
     ) -> f64 {
         let category_weight = match classification.primary_category {
             QuestionCategory::RepositorySpecific => 1.0,
-            QuestionCategory::GeneralProgramming => 0.3,  // Reduced from 0.4
-            QuestionCategory::ComputerScience => 0.1,      // Reduced from 0.2
-            QuestionCategory::GeneralKnowledge => 0.0,     // Explicit zero for general knowledge
-            QuestionCategory::AcademicKnowledge => 0.0,    // Explicit zero for academic knowledge
+            QuestionCategory::GeneralProgramming => 0.3, // Reduced from 0.4
+            QuestionCategory::ComputerScience => 0.1,    // Reduced from 0.2
+            QuestionCategory::GeneralKnowledge => 0.0,   // Explicit zero for general knowledge
+            QuestionCategory::AcademicKnowledge => 0.0,  // Explicit zero for academic knowledge
             _ => 0.0,
         };
-        
+
         // Only consider pattern weight for repository-specific questions
         let pattern_weight = match classification.primary_category {
             QuestionCategory::RepositorySpecific => {
                 (pattern_analysis.code_indicators + pattern_analysis.repo_indicators) / 2.0
-            },
-            _ => 0.0  // No pattern weight for non-repository questions
+            }
+            _ => 0.0, // No pattern weight for non-repository questions
         };
-        
+
         // More conservative calculation
         (category_weight * 0.8) + (pattern_weight * 0.2)
     }
-    
+
     fn generate_decision_reasoning(
         &self,
         classification: &QuestionClassification,
@@ -417,29 +475,35 @@ impl IntelligentContextOrchestrator {
             if should_use_repo { "use_repo" } else { "general_knowledge" }
         )
     }
-    
+
     /// Make an intelligent execution mode decision (Direct vs Consensus)
     /// This will be called by the mode detector which has access to the current profile
     pub async fn make_execution_mode_decision(&self, question: &str) -> Result<ExecutionMode> {
-        info!("🤖 AI Helper analyzing execution mode for: '{}'", 
-            &question[..question.len().min(100)]);
-        
+        info!(
+            "🤖 AI Helper analyzing execution mode for: '{}'",
+            &question[..question.len().min(100)]
+        );
+
         // The actual LLM call should be made by the mode detector using the Generator model
         // If we're called directly, it means the mode detector doesn't have proper config
-        
+
         error!("Execution mode decision should be made by mode detector with profile's Generator model");
-        Err(anyhow!("LLM routing must be done through mode detector with Generator model"))
+        Err(anyhow!(
+            "LLM routing must be done through mode detector with Generator model"
+        ))
     }
-    
+
     /// Assess true complexity of a question using AI semantic analysis
     async fn assess_true_question_complexity(&self, question: &str) -> Result<f64> {
         // Use our semantic retriever to understand the question's true complexity
         // This uses GraphCodeBERT to create embeddings and understand semantic meaning
-        
+
         // For now, fall back to basic analysis until analyze_question_complexity is implemented
         // NO FALLBACK - must use AI for complexity analysis
         error!("AI complexity analysis required but not implemented - cannot use fallback");
-        Err(anyhow!("LLM-based complexity analysis required but not available"))
+        Err(anyhow!(
+            "LLM-based complexity analysis required but not available"
+        ))
     }
 }
 
@@ -451,4 +515,3 @@ struct QuestionClassification {
     confidence: f64,
     reasoning: String,
 }
-

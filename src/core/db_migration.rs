@@ -9,27 +9,27 @@ use rusqlite::{Connection, Transaction};
 pub fn fix_schema_mismatches(conn: &mut Connection) -> Result<()> {
     // Disable foreign keys temporarily during migration
     conn.execute("PRAGMA foreign_keys = OFF", [])?;
-    
+
     let tx = conn.transaction()?;
-    
+
     println!("🔧 Starting database schema migration...");
-    
+
     // Check and fix conversations table
     fix_conversations_table(&tx)?;
-    
+
     // Create missing cost_tracking table
     create_missing_cost_tracking_table(&tx)?;
-    
+
     // Verify all tables exist
     verify_schema_integrity(&tx)?;
-    
+
     tx.commit()?;
-    
+
     // Re-enable foreign keys
     conn.execute("PRAGMA foreign_keys = ON", [])?;
-    
+
     println!("✅ Database schema migration completed successfully!");
-    
+
     Ok(())
 }
 
@@ -40,17 +40,20 @@ fn fix_conversations_table(tx: &Transaction) -> Result<()> {
     let columns: Vec<String> = stmt
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| HiveError::DatabaseQuery { query: format!("PRAGMA table_info(conversations): {}", e) })?;
-    
+        .map_err(|e| HiveError::DatabaseQuery {
+            query: format!("PRAGMA table_info(conversations): {}", e),
+        })?;
+
     // Check if we have the old column names
     let has_input_tokens = columns.contains(&"input_tokens".to_string());
     let has_output_tokens = columns.contains(&"output_tokens".to_string());
     let has_total_tokens_input = columns.contains(&"total_tokens_input".to_string());
     let has_total_tokens_output = columns.contains(&"total_tokens_output".to_string());
-    
-    if has_input_tokens && has_output_tokens && !has_total_tokens_input && !has_total_tokens_output {
+
+    if has_input_tokens && has_output_tokens && !has_total_tokens_input && !has_total_tokens_output
+    {
         println!("🔄 Migrating conversations table schema...");
-        
+
         // SQLite doesn't support ALTER COLUMN, so we need to recreate the table
         // Step 1: Create new table with correct schema
         tx.execute(
@@ -75,7 +78,7 @@ fn fix_conversations_table(tx: &Transaction) -> Result<()> {
             )",
             [],
         )?;
-        
+
         // Step 2: Copy data from old table to new table, preserving all existing columns
         // Note: Some columns may not exist in the new schema, so we only copy what's needed
         tx.execute(
@@ -83,25 +86,25 @@ fn fix_conversations_table(tx: &Transaction) -> Result<()> {
                 id, user_id, profile_id, total_cost, total_tokens_input, total_tokens_output,
                 created_at, updated_at
             )
-            SELECT 
-                id, 
-                user_id, 
-                consensus_profile_id, 
-                total_cost, 
-                input_tokens as total_tokens_input, 
+            SELECT
+                id,
+                user_id,
+                consensus_profile_id,
+                total_cost,
+                input_tokens as total_tokens_input,
                 output_tokens as total_tokens_output,
-                created_at, 
+                created_at,
                 updated_at
             FROM conversations",
             [],
         )?;
-        
+
         // Step 3: Drop old table
         tx.execute("DROP TABLE conversations", [])?;
-        
+
         // Step 4: Rename new table
         tx.execute("ALTER TABLE conversations_new RENAME TO conversations", [])?;
-        
+
         println!("✅ Conversations table schema migrated successfully");
     } else if has_total_tokens_input && has_total_tokens_output {
         println!("✅ Conversations table already has correct schema");
@@ -111,7 +114,7 @@ fn fix_conversations_table(tx: &Transaction) -> Result<()> {
             message: "Unexpected conversations table schema".to_string(),
         });
     }
-    
+
     Ok(())
 }
 
@@ -125,10 +128,10 @@ fn create_missing_cost_tracking_table(tx: &Transaction) -> Result<()> {
             |row| row.get(0),
         )
         .unwrap_or(false);
-    
+
     if !table_exists {
         println!("🔄 Creating cost_tracking table...");
-        
+
         tx.execute(
             "CREATE TABLE cost_tracking (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -148,12 +151,9 @@ fn create_missing_cost_tracking_table(tx: &Transaction) -> Result<()> {
             )",
             [],
         )?;
-        
+
         // Create indexes for cost_tracking
-        tx.execute(
-            "CREATE INDEX idx_cost_user ON cost_tracking (user_id)",
-            [],
-        )?;
+        tx.execute("CREATE INDEX idx_cost_user ON cost_tracking (user_id)", [])?;
         tx.execute(
             "CREATE INDEX idx_cost_model ON cost_tracking (model_id)",
             [],
@@ -162,12 +162,12 @@ fn create_missing_cost_tracking_table(tx: &Transaction) -> Result<()> {
             "CREATE INDEX idx_cost_created ON cost_tracking (created_at)",
             [],
         )?;
-        
+
         println!("✅ Cost tracking table created successfully");
     } else {
         println!("✅ Cost tracking table already exists");
     }
-    
+
     Ok(())
 }
 
@@ -178,8 +178,10 @@ fn verify_schema_integrity(tx: &Transaction) -> Result<()> {
     let columns: Vec<String> = stmt
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| HiveError::DatabaseQuery { query: format!("PRAGMA table_info(conversations): {}", e) })?;
-    
+        .map_err(|e| HiveError::DatabaseQuery {
+            query: format!("PRAGMA table_info(conversations): {}", e),
+        })?;
+
     let required_columns = vec!["total_cost", "total_tokens_input", "total_tokens_output"];
     for col in required_columns {
         if !columns.contains(&col.to_string()) {
@@ -188,7 +190,7 @@ fn verify_schema_integrity(tx: &Transaction) -> Result<()> {
             });
         }
     }
-    
+
     // Check cost_tracking table exists
     let cost_tracking_exists: bool = tx
         .query_row(
@@ -197,13 +199,13 @@ fn verify_schema_integrity(tx: &Transaction) -> Result<()> {
             |row| row.get(0),
         )
         .unwrap_or(false);
-    
+
     if !cost_tracking_exists {
         return Err(HiveError::DatabaseSchema {
             message: "cost_tracking table is missing".to_string(),
         });
     }
-    
+
     println!("✅ Schema integrity verified successfully");
     Ok(())
 }
@@ -215,13 +217,15 @@ pub fn needs_migration(conn: &Connection) -> Result<bool> {
     let columns: Vec<String> = stmt
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| HiveError::DatabaseQuery { query: format!("PRAGMA table_info(conversations): {}", e) })?;
-    
-    let has_old_columns = columns.contains(&"input_tokens".to_string()) && 
-                         columns.contains(&"output_tokens".to_string());
-    let has_new_columns = columns.contains(&"total_tokens_input".to_string()) && 
-                         columns.contains(&"total_tokens_output".to_string());
-    
+        .map_err(|e| HiveError::DatabaseQuery {
+            query: format!("PRAGMA table_info(conversations): {}", e),
+        })?;
+
+    let has_old_columns = columns.contains(&"input_tokens".to_string())
+        && columns.contains(&"output_tokens".to_string());
+    let has_new_columns = columns.contains(&"total_tokens_input".to_string())
+        && columns.contains(&"total_tokens_output".to_string());
+
     // Check if cost_tracking table exists
     let cost_tracking_exists: bool = conn
         .query_row(
@@ -230,7 +234,7 @@ pub fn needs_migration(conn: &Connection) -> Result<bool> {
             |row| row.get(0),
         )
         .unwrap_or(false);
-    
+
     // Need migration if we have old columns or missing cost_tracking table
     Ok((has_old_columns && !has_new_columns) || !cost_tracking_exists)
 }
@@ -243,7 +247,7 @@ mod tests {
     #[test]
     fn test_migration_detection() {
         let mut conn = Connection::open_in_memory().unwrap();
-        
+
         // Create old schema
         conn.execute(
             "CREATE TABLE conversations (
@@ -256,13 +260,14 @@ mod tests {
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )",
             [],
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         assert!(needs_migration(&conn).unwrap());
-        
+
         // Run migration
         fix_schema_mismatches(&mut conn).unwrap();
-        
+
         // Should not need migration anymore
         assert!(!needs_migration(&conn).unwrap());
     }

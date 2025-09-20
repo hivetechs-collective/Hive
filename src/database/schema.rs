@@ -4,7 +4,7 @@
 //! matching the TypeScript implementation for 100% compatibility.
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use tracing::info;
 
 /// Create or update default consensus profiles
@@ -12,11 +12,9 @@ pub fn create_default_profiles(conn: &Connection) -> Result<()> {
     info!("Creating default consensus profiles");
 
     // Check if profiles already exist
-    let count: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM consensus_profiles",
-        [],
-        |row| row.get(0),
-    )?;
+    let count: i32 = conn.query_row("SELECT COUNT(*) FROM consensus_profiles", [], |row| {
+        row.get(0)
+    })?;
 
     if count > 0 {
         info!("Consensus profiles already exist, skipping creation");
@@ -89,11 +87,9 @@ pub fn seed_openrouter_models(conn: &Connection) -> Result<()> {
     info!("Seeding OpenRouter models for consensus profiles");
 
     // Check if models already exist
-    let count: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM openrouter_models",
-        [],
-        |row| row.get(0),
-    )?;
+    let count: i32 = conn.query_row("SELECT COUNT(*) FROM openrouter_models", [], |row| {
+        row.get(0)
+    })?;
 
     if count > 0 {
         info!("OpenRouter models already exist, skipping seeding");
@@ -103,16 +99,65 @@ pub fn seed_openrouter_models(conn: &Connection) -> Result<()> {
     // Insert essential models used by consensus profiles
     let models = vec![
         // Anthropic models
-        ("anthropic/claude-3-opus-20240229", "Claude 3 Opus", "anthropic", 15.0, 75.0, 131072),
-        ("anthropic/claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet", "anthropic", 3.0, 15.0, 200000),
-        ("anthropic/claude-3-haiku-20240307", "Claude 3 Haiku", "anthropic", 0.25, 1.25, 200000),
+        (
+            "anthropic/claude-3-opus-20240229",
+            "Claude 3 Opus",
+            "anthropic",
+            15.0,
+            75.0,
+            131072,
+        ),
+        (
+            "anthropic/claude-3-5-sonnet-20241022",
+            "Claude 3.5 Sonnet",
+            "anthropic",
+            3.0,
+            15.0,
+            200000,
+        ),
+        (
+            "anthropic/claude-3-haiku-20240307",
+            "Claude 3 Haiku",
+            "anthropic",
+            0.25,
+            1.25,
+            200000,
+        ),
         // OpenAI models
         ("openai/gpt-4o", "GPT-4o", "openai", 5.0, 15.0, 128000),
-        ("openai/gpt-4-turbo", "GPT-4 Turbo", "openai", 10.0, 30.0, 128000),
-        ("openai/gpt-3.5-turbo", "GPT-3.5 Turbo", "openai", 0.5, 1.5, 16385),
+        (
+            "openai/gpt-4-turbo",
+            "GPT-4 Turbo",
+            "openai",
+            10.0,
+            30.0,
+            128000,
+        ),
+        (
+            "openai/gpt-3.5-turbo",
+            "GPT-3.5 Turbo",
+            "openai",
+            0.5,
+            1.5,
+            16385,
+        ),
         // Open source models
-        ("meta-llama/llama-3.2-3b-instruct", "Llama 3.2 3B", "meta-llama", 0.06, 0.06, 131072),
-        ("mistralai/mistral-7b-instruct", "Mistral 7B Instruct", "mistralai", 0.06, 0.06, 32768),
+        (
+            "meta-llama/llama-3.2-3b-instruct",
+            "Llama 3.2 3B",
+            "meta-llama",
+            0.06,
+            0.06,
+            131072,
+        ),
+        (
+            "mistralai/mistral-7b-instruct",
+            "Mistral 7B Instruct",
+            "mistralai",
+            0.06,
+            0.06,
+            32768,
+        ),
     ];
 
     // First, ensure providers exist
@@ -146,7 +191,7 @@ pub fn seed_openrouter_models(conn: &Connection) -> Result<()> {
                 id,
                 name,
                 provider_id,
-                provider_id, // Using provider_id as provider_name for now
+                provider_id,              // Using provider_id as provider_name for now
                 input_cost / 1_000_000.0, // Convert to per-token pricing
                 output_cost / 1_000_000.0,
                 context_window,
@@ -233,11 +278,9 @@ mod tests {
         create_default_profiles(&conn)?;
 
         // Verify profiles were created
-        let count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM consensus_profiles",
-            [],
-            |row| row.get(0),
-        )?;
+        let count: i32 = conn.query_row("SELECT COUNT(*) FROM consensus_profiles", [], |row| {
+            row.get(0)
+        })?;
         assert_eq!(count, 4);
 
         // Verify active profile was set

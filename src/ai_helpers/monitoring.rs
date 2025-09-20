@@ -1,14 +1,14 @@
 //! Performance Monitoring for AI Helpers
-//! 
+//!
 //! This module provides comprehensive monitoring and observability for the AI helper
 //! ecosystem, tracking performance, errors, and usage patterns.
 
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use anyhow::Result;
 use tokio::sync::{Mutex, RwLock};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 /// Performance metrics for a single operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,16 +40,16 @@ pub enum OperationType {
 pub struct MonitoringConfig {
     /// Enable detailed performance tracking
     pub detailed_tracking: bool,
-    
+
     /// Maximum metrics to keep in memory
     pub max_metrics_in_memory: usize,
-    
+
     /// Metrics aggregation window
     pub aggregation_window: Duration,
-    
+
     /// Enable automatic alerts
     pub enable_alerts: bool,
-    
+
     /// Performance thresholds for alerts
     pub thresholds: PerformanceThresholds,
 }
@@ -83,16 +83,16 @@ impl Default for MonitoringConfig {
 /// Performance monitor for AI helpers
 pub struct PerformanceMonitor {
     config: MonitoringConfig,
-    
+
     /// Recent operation metrics
     recent_metrics: Arc<Mutex<Vec<OperationMetrics>>>,
-    
+
     /// Aggregated statistics
     aggregated_stats: Arc<RwLock<AggregatedStats>>,
-    
+
     /// Active operations being tracked
     active_operations: Arc<Mutex<std::collections::HashMap<String, ActiveOperation>>>,
-    
+
     /// Alert handler
     alert_handler: Arc<dyn AlertHandler + Send + Sync>,
 }
@@ -102,19 +102,19 @@ pub struct PerformanceMonitor {
 struct AggregatedStats {
     /// Total operations by type
     operations_count: std::collections::HashMap<OperationType, usize>,
-    
+
     /// Success rate by operation type
     success_rates: std::collections::HashMap<OperationType, f64>,
-    
+
     /// Average duration by operation type
     average_durations: std::collections::HashMap<OperationType, Duration>,
-    
+
     /// Error counts by operation type
     error_counts: std::collections::HashMap<OperationType, usize>,
-    
+
     /// Memory usage over time
     memory_usage_history: Vec<(DateTime<Utc>, f64)>,
-    
+
     /// Throughput metrics
     throughput_per_minute: Vec<(DateTime<Utc>, usize)>,
 }
@@ -171,7 +171,9 @@ impl AlertHandler for LoggingAlertHandler {
             AlertSeverity::Info => tracing::info!("Performance alert: {}", alert.message),
             AlertSeverity::Warning => tracing::warn!("Performance alert: {}", alert.message),
             AlertSeverity::Error => tracing::error!("Performance alert: {}", alert.message),
-            AlertSeverity::Critical => tracing::error!("CRITICAL performance alert: {}", alert.message),
+            AlertSeverity::Critical => {
+                tracing::error!("CRITICAL performance alert: {}", alert.message)
+            }
         }
     }
 }
@@ -181,7 +183,7 @@ impl PerformanceMonitor {
     pub fn new(config: MonitoringConfig) -> Self {
         Self::with_alert_handler(config, Arc::new(LoggingAlertHandler))
     }
-    
+
     /// Create with custom alert handler
     pub fn with_alert_handler(
         config: MonitoringConfig,
@@ -195,7 +197,7 @@ impl PerformanceMonitor {
             alert_handler,
         }
     }
-    
+
     /// Start tracking an operation
     pub async fn start_operation(
         &self,
@@ -203,19 +205,22 @@ impl PerformanceMonitor {
         helper_name: &str,
     ) -> String {
         let operation_id = uuid::Uuid::new_v4().to_string();
-        
+
         let active_op = ActiveOperation {
             operation_type,
             helper_name: helper_name.to_string(),
             start_time: Instant::now(),
             start_utc: Utc::now(),
         };
-        
-        self.active_operations.lock().await.insert(operation_id.clone(), active_op);
-        
+
+        self.active_operations
+            .lock()
+            .await
+            .insert(operation_id.clone(), active_op);
+
         operation_id
     }
-    
+
     /// Complete an operation
     pub async fn complete_operation(
         &self,
@@ -225,10 +230,10 @@ impl PerformanceMonitor {
         metadata: serde_json::Value,
     ) -> Result<()> {
         let active_op = self.active_operations.lock().await.remove(operation_id);
-        
+
         if let Some(op) = active_op {
             let duration = op.start_time.elapsed();
-            
+
             let metrics = OperationMetrics {
                 operation_type: op.operation_type.clone(),
                 helper_name: op.helper_name,
@@ -238,67 +243,83 @@ impl PerformanceMonitor {
                 error_message: error_message.clone(),
                 metadata,
             };
-            
+
             // Record metrics
             self.record_metrics(metrics).await?;
-            
+
             // Check for alerts
             if self.config.enable_alerts {
-                self.check_alerts(&op.operation_type, duration, success, error_message).await;
+                self.check_alerts(&op.operation_type, duration, success, error_message)
+                    .await;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Record metrics
     async fn record_metrics(&self, metrics: OperationMetrics) -> Result<()> {
         // Add to recent metrics
         let mut recent = self.recent_metrics.lock().await;
         recent.push(metrics.clone());
-        
+
         // Trim if over limit
         if recent.len() > self.config.max_metrics_in_memory {
             recent.drain(0..100); // Remove oldest 100
         }
         drop(recent);
-        
+
         // Update aggregated stats
         self.update_aggregated_stats(&metrics).await;
-        
+
         Ok(())
     }
-    
+
     /// Update aggregated statistics
     async fn update_aggregated_stats(&self, metrics: &OperationMetrics) {
         let mut stats = self.aggregated_stats.write().await;
-        
+
         // Update operation count
-        *stats.operations_count.entry(metrics.operation_type.clone()).or_insert(0) += 1;
-        
+        *stats
+            .operations_count
+            .entry(metrics.operation_type.clone())
+            .or_insert(0) += 1;
+
         // Update error count
         if !metrics.success {
-            *stats.error_counts.entry(metrics.operation_type.clone()).or_insert(0) += 1;
+            *stats
+                .error_counts
+                .entry(metrics.operation_type.clone())
+                .or_insert(0) += 1;
         }
-        
+
         // Update average duration
         let count = stats.operations_count[&metrics.operation_type] as f64;
-        let current_avg = stats.average_durations
+        let current_avg = stats
+            .average_durations
             .get(&metrics.operation_type)
             .cloned()
             .unwrap_or(Duration::ZERO);
-        
+
         let new_avg = Duration::from_secs_f64(
-            (current_avg.as_secs_f64() * (count - 1.0) + metrics.duration.as_secs_f64()) / count
+            (current_avg.as_secs_f64() * (count - 1.0) + metrics.duration.as_secs_f64()) / count,
         );
-        stats.average_durations.insert(metrics.operation_type.clone(), new_avg);
-        
+        stats
+            .average_durations
+            .insert(metrics.operation_type.clone(), new_avg);
+
         // Update success rate
-        let error_count = stats.error_counts.get(&metrics.operation_type).cloned().unwrap_or(0) as f64;
+        let error_count = stats
+            .error_counts
+            .get(&metrics.operation_type)
+            .cloned()
+            .unwrap_or(0) as f64;
         let success_rate = (count - error_count) / count;
-        stats.success_rates.insert(metrics.operation_type.clone(), success_rate);
+        stats
+            .success_rates
+            .insert(metrics.operation_type.clone(), success_rate);
     }
-    
+
     /// Check for alerts
     async fn check_alerts(
         &self,
@@ -314,9 +335,7 @@ impl PerformanceMonitor {
                 severity: AlertSeverity::Warning,
                 message: format!(
                     "{:?} operation took {:?}, exceeding threshold of {:?}",
-                    operation_type,
-                    duration,
-                    self.config.thresholds.max_operation_duration
+                    operation_type, duration, self.config.thresholds.max_operation_duration
                 ),
                 timestamp: Utc::now(),
                 metadata: serde_json::json!({
@@ -326,7 +345,7 @@ impl PerformanceMonitor {
             };
             self.alert_handler.handle_alert(alert);
         }
-        
+
         // Check for operation failure
         if !success {
             let alert = PerformanceAlert {
@@ -345,12 +364,12 @@ impl PerformanceMonitor {
             self.alert_handler.handle_alert(alert);
         }
     }
-    
+
     /// Get current performance statistics
     pub async fn get_stats(&self) -> PerformanceStats {
         let stats = self.aggregated_stats.read().await;
         let recent_metrics = self.recent_metrics.lock().await;
-        
+
         // Calculate overall metrics
         let total_operations: usize = stats.operations_count.values().sum();
         let total_errors: usize = stats.error_counts.values().sum();
@@ -359,7 +378,7 @@ impl PerformanceMonitor {
         } else {
             1.0
         };
-        
+
         // Get per-operation stats
         let mut operation_stats = Vec::new();
         for (op_type, count) in &stats.operations_count {
@@ -367,11 +386,15 @@ impl PerformanceMonitor {
                 operation_type: op_type.clone(),
                 count: *count,
                 success_rate: stats.success_rates.get(op_type).cloned().unwrap_or(1.0),
-                average_duration: stats.average_durations.get(op_type).cloned().unwrap_or(Duration::ZERO),
+                average_duration: stats
+                    .average_durations
+                    .get(op_type)
+                    .cloned()
+                    .unwrap_or(Duration::ZERO),
                 error_count: stats.error_counts.get(op_type).cloned().unwrap_or(0),
             });
         }
-        
+
         PerformanceStats {
             total_operations,
             overall_success_rate,
@@ -380,14 +403,14 @@ impl PerformanceMonitor {
             memory_usage_mb: Self::get_current_memory_usage(),
         }
     }
-    
+
     /// Get current memory usage
     fn get_current_memory_usage() -> f64 {
         // TODO: Implement actual memory measurement
         // For now, return a placeholder
         256.0
     }
-    
+
     /// Export metrics for external analysis
     pub async fn export_metrics(&self) -> Vec<OperationMetrics> {
         self.recent_metrics.lock().await.clone()
@@ -434,16 +457,21 @@ pub trait MonitoredOperation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_performance_monitoring() {
         let monitor = PerformanceMonitor::new(MonitoringConfig::default());
-        
+
         // Track a successful operation
-        let op_id = monitor.start_operation(OperationType::IndexKnowledge, "test_helper").await;
+        let op_id = monitor
+            .start_operation(OperationType::IndexKnowledge, "test_helper")
+            .await;
         tokio::time::sleep(Duration::from_millis(100)).await;
-        monitor.complete_operation(&op_id, true, None, serde_json::json!({})).await.unwrap();
-        
+        monitor
+            .complete_operation(&op_id, true, None, serde_json::json!({}))
+            .await
+            .unwrap();
+
         // Check stats
         let stats = monitor.get_stats().await;
         assert_eq!(stats.total_operations, 1);

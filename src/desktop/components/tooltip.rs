@@ -57,46 +57,46 @@ impl Default for TooltipArrow {
 pub struct TooltipProps {
     /// The content to display in the tooltip
     pub content: String,
-    
+
     /// The child element that triggers the tooltip
     pub children: Element,
-    
+
     /// Position of the tooltip relative to the target
     #[props(default)]
     pub position: TooltipPosition,
-    
+
     /// Trigger mode for showing the tooltip
     #[props(default)]
     pub trigger: TooltipTrigger,
-    
+
     /// Delay before showing the tooltip (in milliseconds)
     #[props(default = 500)]
     pub delay: u64,
-    
+
     /// Whether the tooltip is manually controlled
     #[props(default = false)]
     pub open: bool,
-    
+
     /// Callback when tooltip visibility changes
     #[props(default = EventHandler::new(|_| {}))]
     pub on_open_change: EventHandler<bool>,
-    
+
     /// Maximum width of the tooltip
     #[props(default = 300.0)]
     pub max_width: f64,
-    
+
     /// Arrow style
     #[props(default)]
     pub arrow: TooltipArrow,
-    
+
     /// Custom CSS class for the tooltip
     #[props(default = "tooltip".to_string())]
     pub class: String,
-    
+
     /// Z-index for the tooltip
     #[props(default = 9999)]
     pub z_index: i32,
-    
+
     /// Offset from the target element (in pixels)
     #[props(default = 8.0)]
     pub offset: f64,
@@ -135,22 +135,39 @@ fn calculate_position(
     let target_height = target_rect.height;
     let target_center_x = target_x + target_width / 2.0;
     let target_center_y = target_y + target_height / 2.0;
-    
+
     // Helper to check if position fits in viewport
     let fits_in_viewport = |x: f64, y: f64| -> bool {
-        x >= 0.0 && y >= 0.0 && 
-        x + tooltip_width <= viewport_width && 
-        y + tooltip_height <= viewport_height
+        x >= 0.0
+            && y >= 0.0
+            && x + tooltip_width <= viewport_width
+            && y + tooltip_height <= viewport_height
     };
-    
+
     // Calculate positions for each direction
     let positions = [
-        (TooltipPosition::Top, target_center_x - tooltip_width / 2.0, target_y - tooltip_height - offset),
-        (TooltipPosition::Right, target_x + target_width + offset, target_center_y - tooltip_height / 2.0),
-        (TooltipPosition::Bottom, target_center_x - tooltip_width / 2.0, target_y + target_height + offset),
-        (TooltipPosition::Left, target_x - tooltip_width - offset, target_center_y - tooltip_height / 2.0),
+        (
+            TooltipPosition::Top,
+            target_center_x - tooltip_width / 2.0,
+            target_y - tooltip_height - offset,
+        ),
+        (
+            TooltipPosition::Right,
+            target_x + target_width + offset,
+            target_center_y - tooltip_height / 2.0,
+        ),
+        (
+            TooltipPosition::Bottom,
+            target_center_x - tooltip_width / 2.0,
+            target_y + target_height + offset,
+        ),
+        (
+            TooltipPosition::Left,
+            target_x - tooltip_width - offset,
+            target_center_y - tooltip_height / 2.0,
+        ),
     ];
-    
+
     // Try preferred position first
     if preferred_position != TooltipPosition::Auto {
         for (pos, x, y) in &positions {
@@ -164,16 +181,26 @@ fn calculate_position(
             }
         }
     }
-    
+
     // Auto positioning: try all positions in order of preference
     let preference_order = if target_center_y > viewport_height / 2.0 {
         // Target is in bottom half, prefer top
-        [TooltipPosition::Top, TooltipPosition::Left, TooltipPosition::Right, TooltipPosition::Bottom]
+        [
+            TooltipPosition::Top,
+            TooltipPosition::Left,
+            TooltipPosition::Right,
+            TooltipPosition::Bottom,
+        ]
     } else {
         // Target is in top half, prefer bottom
-        [TooltipPosition::Bottom, TooltipPosition::Left, TooltipPosition::Right, TooltipPosition::Top]
+        [
+            TooltipPosition::Bottom,
+            TooltipPosition::Left,
+            TooltipPosition::Right,
+            TooltipPosition::Top,
+        ]
     };
-    
+
     for preferred in &preference_order {
         for (pos, x, y) in &positions {
             if pos == preferred && fits_in_viewport(*x, *y) {
@@ -186,7 +213,7 @@ fn calculate_position(
             }
         }
     }
-    
+
     // Fallback: use the position with most space available
     let (best_pos, best_x, best_y) = positions[0];
     PositionCalculation {
@@ -215,14 +242,14 @@ pub fn Tooltip(props: TooltipProps) -> Element {
     let mut position_calc = use_signal(|| None::<PositionCalculation>);
     let target_ref = use_node_ref();
     let tooltip_ref = use_node_ref();
-    
+
     // Update controlled state
     use_effect(move || {
         if props.trigger == TooltipTrigger::Manual {
             is_open.set(props.open);
         }
     });
-    
+
     // Calculate position when tooltip opens
     use_effect(move || {
         if is_open() {
@@ -237,7 +264,7 @@ pub fn Tooltip(props: TooltipProps) -> Element {
             position_calc.set(Some(calc));
         }
     });
-    
+
     // Timer effect for delay
     use_effect(move || {
         if show_timer() > 0 {
@@ -250,13 +277,13 @@ pub fn Tooltip(props: TooltipProps) -> Element {
             });
         }
     });
-    
+
     let show_tooltip = move || {
         if props.trigger != TooltipTrigger::Manual {
             show_timer.set(show_timer() + 1);
         }
     };
-    
+
     let hide_tooltip = move || {
         show_timer.set(0);
         if props.trigger != TooltipTrigger::Manual {
@@ -264,19 +291,19 @@ pub fn Tooltip(props: TooltipProps) -> Element {
             props.on_open_change.call(false);
         }
     };
-    
+
     let arrow_size = match props.arrow {
         TooltipArrow::None => 0,
         TooltipArrow::Small => 4,
         TooltipArrow::Medium => 6,
         TooltipArrow::Large => 8,
     };
-    
+
     rsx! {
         div {
             class: "tooltip-container",
             style: "position: relative; display: inline-block;",
-            
+
             // Target element with event handlers
             div {
                 node_ref: target_ref,
@@ -310,10 +337,10 @@ pub fn Tooltip(props: TooltipProps) -> Element {
                         }
                     }
                 },
-                
+
                 {props.children}
             }
-            
+
             // Tooltip portal
             if is_open() {
                 Portal {
@@ -329,13 +356,13 @@ pub fn Tooltip(props: TooltipProps) -> Element {
                             }).unwrap_or_default()
                         ),
                         role: "tooltip",
-                        
+
                         // Tooltip content
                         div {
                             class: "tooltip-content",
                             {props.content.clone()}
                         }
-                        
+
                         // Arrow
                         if props.arrow != TooltipArrow::None {
                             div {

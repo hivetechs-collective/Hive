@@ -1,22 +1,22 @@
 // Consensus pipeline stages
 // Each stage implements specific logic matching TypeScript behavior
 
+pub mod claude_code_curator;
 pub mod curator;
 pub mod enhanced_generator;
-pub mod file_aware_generator;
 pub mod file_aware_curator;
+pub mod file_aware_generator;
 pub mod generator;
 pub mod refiner;
-pub mod validator;
 pub mod repository_scanner;
-pub mod claude_code_curator;
+pub mod validator;
 
+pub use claude_code_curator::ClaudeCodeCuratorStage;
 pub use curator::CuratorStage;
 pub use file_aware_curator::FileAwareCuratorStage;
 pub use generator::GeneratorStage;
 pub use refiner::RefinerStage;
 pub use validator::ValidatorStage;
-pub use claude_code_curator::ClaudeCodeCuratorStage;
 
 use crate::consensus::types::{Message, Stage};
 use anyhow::Result;

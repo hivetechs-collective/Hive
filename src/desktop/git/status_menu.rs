@@ -1,10 +1,10 @@
 //! Git status menu component for branch switching
-//! 
+//!
 //! Provides a dropdown menu for git branch operations
 
+use super::{BranchInfo, BranchType, GitRepository};
 use dioxus::prelude::*;
 use std::path::PathBuf;
-use super::{GitRepository, BranchInfo, BranchType};
 
 /// Props for the git status menu component
 #[derive(Props, Clone, PartialEq)]
@@ -29,28 +29,26 @@ pub fn GitStatusMenu(props: GitStatusMenuProps) -> Element {
     let mut branches = use_signal(|| Vec::<BranchInfo>::new());
     let mut loading = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
-    
+
     // Load branches when menu becomes visible
     use_effect(move || {
         if *props.visible.read() {
             loading.set(true);
             error.set(None);
-            
+
             if let Some(repo_path) = props.repo_path.clone() {
                 spawn(async move {
                     match GitRepository::open(&repo_path) {
-                        Ok(repo) => {
-                            match repo.list_branches() {
-                                Ok(branch_list) => {
-                                    branches.set(branch_list);
-                                    loading.set(false);
-                                }
-                                Err(e) => {
-                                    error.set(Some(format!("Failed to list branches: {}", e)));
-                                    loading.set(false);
-                                }
+                        Ok(repo) => match repo.list_branches() {
+                            Ok(branch_list) => {
+                                branches.set(branch_list);
+                                loading.set(false);
                             }
-                        }
+                            Err(e) => {
+                                error.set(Some(format!("Failed to list branches: {}", e)));
+                                loading.set(false);
+                            }
+                        },
                         Err(e) => {
                             error.set(Some(format!("Failed to open repository: {}", e)));
                             loading.set(false);
@@ -63,14 +61,14 @@ pub fn GitStatusMenu(props: GitStatusMenuProps) -> Element {
             }
         }
     });
-    
+
     if !*props.visible.read() {
         return rsx! { div {} };
     }
-    
+
     let current_branch = props.branch_info.as_ref().map(|b| &b.name);
     let (x, y) = props.position;
-    
+
     rsx! {
         // Backdrop to capture clicks outside
         div {
@@ -83,7 +81,7 @@ pub fn GitStatusMenu(props: GitStatusMenuProps) -> Element {
                 }
             }
         }
-        
+
         // Menu container
         div {
             class: "git-status-menu",
@@ -98,19 +96,19 @@ pub fn GitStatusMenu(props: GitStatusMenuProps) -> Element {
                 // Prevent closing when clicking inside menu
                 evt.stop_propagation();
             },
-            
+
             // Menu header
             div {
                 class: "menu-header",
                 style: "padding: 10px 12px; border-bottom: 1px solid #3e3e42; font-weight: 600; color: #cccccc;",
                 "Git Branches"
             }
-            
+
             // Menu content
             div {
                 class: "menu-content",
                 style: "max-height: 300px; overflow-y: auto;",
-                
+
                 if *loading.read() {
                     div {
                         style: "padding: 20px; text-align: center; color: #808080;",
@@ -130,7 +128,7 @@ pub fn GitStatusMenu(props: GitStatusMenuProps) -> Element {
                             style: "padding: 8px 12px; font-size: 11px; color: #808080; text-transform: uppercase;",
                             "Local Branches"
                         }
-                        
+
                         for branch in branches.read().iter().filter(|b| b.branch_type == BranchType::Local) {
                             BranchMenuItem {
                                 branch: branch.clone(),
@@ -147,7 +145,7 @@ pub fn GitStatusMenu(props: GitStatusMenuProps) -> Element {
                             }
                         }
                     }
-                    
+
                     // Remote branches section
                     if branches.read().iter().any(|b| b.branch_type == BranchType::Remote) {
                         div {
@@ -157,7 +155,7 @@ pub fn GitStatusMenu(props: GitStatusMenuProps) -> Element {
                                 style: "padding: 8px 12px; font-size: 11px; color: #808080; text-transform: uppercase; border-top: 1px solid #3e3e42;",
                                 "Remote Branches"
                             }
-                            
+
                             for branch in branches.read().iter().filter(|b| b.branch_type == BranchType::Remote) {
                                 BranchMenuItem {
                                     branch: branch.clone(),
@@ -177,12 +175,12 @@ pub fn GitStatusMenu(props: GitStatusMenuProps) -> Element {
                     }
                 }
             }
-            
+
             // Menu footer with actions
             div {
                 class: "menu-footer",
                 style: "border-top: 1px solid #3e3e42; padding: 8px;",
-                
+
                 button {
                     class: "menu-action-button",
                     style: "width: 100%; padding: 6px 12px; background: #0e639c; color: white; \
@@ -221,7 +219,7 @@ fn BranchMenuItem(branch: BranchInfo, is_current: bool, on_click: EventHandler<(
                     on_click.call(());
                 }
             },
-            
+
             // Branch icon
             span {
                 style: "font-size: 14px;",
@@ -231,13 +229,13 @@ fn BranchMenuItem(branch: BranchInfo, is_current: bool, on_click: EventHandler<(
                     BranchType::Tag => "🏷️",
                 }
             }
-            
+
             // Branch name
             span {
                 style: if is_current { "color: white; font-weight: 600;" } else { "color: #cccccc;" },
                 "{branch.name}"
             }
-            
+
             // Current indicator
             if is_current {
                 span {
@@ -245,7 +243,7 @@ fn BranchMenuItem(branch: BranchInfo, is_current: bool, on_click: EventHandler<(
                     "✓ current"
                 }
             }
-            
+
             // Ahead/behind indicators
             if branch.ahead > 0 || branch.behind > 0 {
                 span {
