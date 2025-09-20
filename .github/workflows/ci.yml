@@ -28,6 +28,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare Python model service
+        run: |
+          mkdir -p electron-poc/resources/python-runtime/models
+          cp python/model_service.py electron-poc/resources/python-runtime/models/model_service.py
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
