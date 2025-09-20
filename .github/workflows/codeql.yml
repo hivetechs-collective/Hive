@@ -1,0 +1,81 @@
+# For most projects, this workflow file will not need changing; you simply need
+# to commit it to your repository.
+#
+# You may wish to alter this file to override the set of languages analyzed,
+# or to provide custom queries or build logic.
+#
+# ******** NOTE ********
+# We have attempted to detect the languages in your repository. Please check
+# the `language` matrix defined below to confirm you have the correct set of
+# supported CodeQL languages.
+#
+name: CodeQL Security Scan
+
+  on:
+    push:
+      branches: [main, master]
+    pull_request:
+      branches: [main, master]
+    schedule:
+      - cron: '18 22 * * 6'
+
+  permissions:
+    contents: read
+    actions: read
+    security-events: write
+
+  jobs:
+    precheck:
+      name: Check Advanced Security
+      runs-on: ubuntu-latest
+      outputs:
+        advanced-security-enabled: ${{ steps.detect.outputs.enabled }}
+      steps:
+        - name: Detect advanced security status
+          id: detect
+          uses: actions/github-script@v7
+          with:
+            github-token: ${{ secrets.GITHUB_TOKEN }}
+            script: |
+              const { owner, repo } = context.repo;
+              const { data } = await github.rest.repos.get({ owner, repo });
+              const status = data.security_and_analysis?.advanced_security?.status || 'disabled';
+              core.info(`Advanced security status: ${status}`);
+              return { enabled: status === 'enabled' ? 'true' : 'false' };
+
+    analyze:
+      name: Analyze (${{ matrix.language }})
+      needs: precheck
+      if: needs.precheck.outputs.advanced-security-enabled == 'true'
+      runs-on: ubuntu-latest
+      strategy:
+        fail-fast: false
+        matrix:
+          include:
+            - language: javascript-typescript
+              working-directory: electron-poc
+            - language: python
+              working-directory: .
+      steps:
+        - uses: actions/checkout@v4
+
+        - name: Install Node dependencies
+          if: matrix.language == 'javascript-typescript'
+          working-directory: ${{ matrix.working-directory }}
+          run: npm ci --prefer-offline --no-audit
+
+        - name: Install Python dependencies
+          if: matrix.language == 'python' && hashFiles('python/requirements.txt') != ''
+          run: |
+            python3 -m pip install --upgrade pip
+            python3 -m pip install -r python/requirements.txt
+
+        - name: Initialize CodeQL
+          uses: github/codeql-action/init@v3
+          with:
+            languages: ${{ matrix.language }}
+
+        - name: Perform CodeQL Analysis
+          uses: github/codeql-action/analyze@v3
+          with:
+            category: "/language:${{ matrix.language }}"
