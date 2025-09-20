@@ -376,11 +376,7 @@ async function main() {
     if (!modelServiceCopied) {
       console.error('  ❌ model_service.py not found - AI Helpers will NOT work!');
       console.error('     Please ensure model_service.py is in resources/python-runtime/models/');
-      if (process.env.ALLOW_MISSING_DEPS === '1' || process.env.ALLOW_MISSING_DEPS === 'true') {
-        console.log('  ⚠️  ALLOW_MISSING_DEPS set; continuing without model_service.py');
-      } else {
-        process.exit(1); // FAIL BUILD - no fallbacks unless explicitly allowed
-      }
+      process.exit(1); // FAIL BUILD - no fallbacks!
     }
     
     // STEP 2: Create wrapper for compatibility (but use model_service.py in production)
