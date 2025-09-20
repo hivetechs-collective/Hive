@@ -376,6 +376,7 @@ async function main() {
     if (!modelServiceCopied) {
       console.error('  ❌ model_service.py not found - AI Helpers will NOT work!');
       console.error('     Please ensure model_service.py is in resources/python-runtime/models/');
+      console.log(`  [debug] ALLOW_MISSING_DEPS=${process.env.ALLOW_MISSING_DEPS}`);
       if (process.env.ALLOW_MISSING_DEPS === '1' || process.env.ALLOW_MISSING_DEPS === 'true') {
         console.log('  ⚠️  ALLOW_MISSING_DEPS set; continuing without model_service.py');
       } else {
