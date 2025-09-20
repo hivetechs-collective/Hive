@@ -81,6 +81,12 @@ jobs:
         working-directory: electron-poc
         run: npm ci
 
+      - name: Install macOS tooling
+        run: |
+          if ! command -v ttyd >/dev/null; then
+            brew install ttyd
+          fi
+
       - name: Install Playwright browser
         working-directory: electron-poc
         run: npx playwright install chromium
