@@ -35,10 +35,20 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: |
+          set -euo pipefail
+          install_x86_brew() {
+            if [[ ! -x /usr/local/bin/brew ]]; then
+              echo "Installing Rosetta Homebrew for x86_64..."
+              sudo softwareupdate --install-rosetta --agree-to-license || true
+              NONINTERACTIVE=1 arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            fi
+          }
+
           if [[ "$TARGET" == "x86_64-apple-darwin" ]]; then
+            install_x86_brew
             arch -x86_64 /usr/local/bin/brew update
             arch -x86_64 /usr/local/bin/brew install openssl@3 pkg-config
-            OPENSSL_PREFIX="$(/usr/local/bin/brew --prefix openssl@3)"
+            OPENSSL_PREFIX="$(arch -x86_64 /usr/local/bin/brew --prefix openssl@3)"
           else
             brew update
             brew install openssl@3 pkg-config
