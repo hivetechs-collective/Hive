@@ -5448,6 +5448,16 @@ jobs:
           path: out/make/**/*.exe
 ```
 
+**7.1 GitHub Actions Implementation (2025 Update)**
+
+- **macOS-only binary publishing** – `build-binaries.yml` and `build-release.yml` now target only `x86_64-apple-darwin` and `aarch64-apple-darwin`. The workflows install **architecture-specific OpenSSL**: Rosetta Homebrew is bootstrapped for Intel linkage while `openssl@3` from `/opt/homebrew` powers the arm build. The release workflow stitches both artifacts into a universal binary before uploading the DMG bundle to Cloudflare R2.
+- **Rust + multi-language scanning** – `codeql.yml` runs JavaScript/TypeScript, Python, and Rust analyses. The Rust leg depends on the same OpenSSL provisioning so CodeQL’s autobuild step can link native crates.
+- **Formatting + smoke checks** – `ci-simple.yml` (CI job) enforces `cargo fmt --all -- --check` and drives quick build/test hooks. Any trailing whitespace or unformatted files will stop the pipeline before heavier stages run.
+- **Actions budget requirement** – GitHub Actions enforces the organization spending limit. A `$0` budget immediately blocks macOS runners, so the organization must keep a positive limit (we set `Actions` to `$30`) to allow Build/Release/CodeQL jobs to queue.
+- **Trigger cadence** – Every push or pull request against `veronelazio-patch-2` fans out to the four workflows above. Build jobs can be re-run after formatting cleanup; CodeQL is slightly longer (~35 minutes) because of the Rust compile.
+
+- **Operational reminder**: if macOS jobs stall with "recent account payments have failed" warnings, raise the Actions budget before retrying. The pipelines now surface these failures quickly during the dependency installation step.
+
 **8. Comprehensive Build Requirements Check System & Build Order**
 
 To prevent recurring production issues (like missing binary permissions, Node.js not found, etc.), we have implemented a comprehensive build system that ensures all dependencies are met AND executes the build in the EXACT CORRECT ORDER.
