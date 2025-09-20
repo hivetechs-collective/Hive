@@ -42,7 +42,7 @@ fn bench_token_processing(c: &mut Criterion) {
 /// Benchmark consensus engine initialization
 fn bench_engine_init(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    
+
     c.bench_function("engine_initialization", |b| {
         b.to_async(&rt).iter(|| async {
             let engine = ConsensusEngine::new(None).await;
@@ -55,9 +55,9 @@ fn bench_engine_init(c: &mut Criterion) {
 fn bench_parallel_stages(c: &mut Criterion) {
     let mut group = c.benchmark_group("stage_execution");
     group.sample_size(10); // Reduce sample size for longer operations
-    
+
     let rt = Runtime::new().unwrap();
-    
+
     // Sequential execution
     group.bench_function("sequential", |b| {
         b.to_async(&rt).iter(|| async {
@@ -68,31 +68,31 @@ fn bench_parallel_stages(c: &mut Criterion) {
             tokio::time::sleep(Duration::from_millis(10)).await; // Curator
         });
     });
-    
+
     // Parallel execution (Refiner + Validator in parallel)
     group.bench_function("parallel", |b| {
         b.to_async(&rt).iter(|| async {
             // Generator first
             tokio::time::sleep(Duration::from_millis(10)).await;
-            
+
             // Refiner and Validator in parallel
             tokio::join!(
                 tokio::time::sleep(Duration::from_millis(10)),
                 tokio::time::sleep(Duration::from_millis(10))
             );
-            
+
             // Curator last
             tokio::time::sleep(Duration::from_millis(10)).await;
         });
     });
-    
+
     group.finish();
 }
 
 /// Benchmark memory allocation patterns
 fn bench_memory_allocation(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_allocation");
-    
+
     // Without object pooling
     group.bench_function("without_pooling", |b| {
         b.iter(|| {
@@ -103,12 +103,12 @@ fn bench_memory_allocation(c: &mut Criterion) {
             black_box(allocations);
         });
     });
-    
+
     // With object pooling (simulated)
     group.bench_function("with_pooling", |b| {
         // Pre-allocate pool
         let pool: Vec<Vec<u8>> = (0..1000).map(|_| vec![0u8; 1024]).collect();
-        
+
         b.iter(|| {
             // Reuse from pool instead of allocating
             let mut borrowed = Vec::new();
@@ -118,18 +118,18 @@ fn bench_memory_allocation(c: &mut Criterion) {
             black_box(borrowed);
         });
     });
-    
+
     group.finish();
 }
 
 /// Benchmark zero-copy operations
 fn bench_zero_copy(c: &mut Criterion) {
     use bytes::{Bytes, BytesMut};
-    
+
     let mut group = c.benchmark_group("zero_copy");
-    
+
     let data = vec![0u8; 10000]; // 10KB of data
-    
+
     // With copying
     group.bench_function("with_copy", |b| {
         b.iter(|| {
@@ -140,11 +140,11 @@ fn bench_zero_copy(c: &mut Criterion) {
             black_box(result);
         });
     });
-    
+
     // Zero-copy with Bytes
     group.bench_function("zero_copy", |b| {
         let bytes_data = Bytes::from(data.clone());
-        
+
         b.iter(|| {
             let mut result = BytesMut::new();
             for i in 0..100 {
@@ -155,14 +155,14 @@ fn bench_zero_copy(c: &mut Criterion) {
             black_box(result);
         });
     });
-    
+
     group.finish();
 }
 
 /// Benchmark UI update batching
 fn bench_ui_batching(c: &mut Criterion) {
     let mut group = c.benchmark_group("ui_batching");
-    
+
     // Without batching - update every token
     group.bench_function("no_batching", |b| {
         b.iter(|| {
@@ -174,16 +174,16 @@ fn bench_ui_batching(c: &mut Criterion) {
             }
         });
     });
-    
+
     // With batching - update at 60 FPS
     group.bench_function("60fps_batching", |b| {
         b.iter(|| {
             let mut updates = 0;
             let mut batch = Vec::new();
-            
+
             for i in 0..1000 {
                 batch.push(i);
-                
+
                 // Update only at 60 FPS intervals (roughly every 16 items)
                 if batch.len() >= 16 {
                     updates += 1;
@@ -193,7 +193,7 @@ fn bench_ui_batching(c: &mut Criterion) {
             }
         });
     });
-    
+
     group.finish();
 }
 
