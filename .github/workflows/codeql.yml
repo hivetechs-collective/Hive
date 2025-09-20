@@ -47,8 +47,10 @@ jobs:
             ].filter(status => typeof status === 'string');
             const enabled = statuses.includes('enabled') || statuses.length === 0;
             const status = statuses[0] || (statuses.length === 0 ? 'unknown (defaulting to enabled)' : 'disabled');
+            const value = enabled ? 'true' : 'false';
             core.info(`Code scanning/advanced security status: ${status}`);
-            return { enabled: enabled ? 'true' : 'false' };
+            core.setOutput('enabled', value);
+            return { enabled: value };
 
   analyze:
     name: Analyze (${{ matrix.language }})
