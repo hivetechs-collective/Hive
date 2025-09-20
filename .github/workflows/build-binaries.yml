@@ -32,10 +32,18 @@ jobs:
       - name: Install macOS OpenSSL dependencies
         if: matrix.os == 'macos-latest'
         shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
-          brew update
-          brew install openssl@3 pkg-config
-          OPENSSL_PREFIX="$(brew --prefix openssl@3)"
+          if [[ "$TARGET" == "x86_64-apple-darwin" ]]; then
+            arch -x86_64 /usr/local/bin/brew update
+            arch -x86_64 /usr/local/bin/brew install openssl@3 pkg-config
+            OPENSSL_PREFIX="$(/usr/local/bin/brew --prefix openssl@3)"
+          else
+            brew update
+            brew install openssl@3 pkg-config
+            OPENSSL_PREFIX="$(brew --prefix openssl@3)"
+          fi
           echo "OPENSSL_DIR=$OPENSSL_PREFIX" >> "$GITHUB_ENV"
           echo "OPENSSL_INCLUDE_DIR=$OPENSSL_PREFIX/include" >> "$GITHUB_ENV"
           echo "OPENSSL_LIB_DIR=$OPENSSL_PREFIX/lib" >> "$GITHUB_ENV"
