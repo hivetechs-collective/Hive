@@ -6059,17 +6059,18 @@ Hive Consensus.app/
 #### Workflow Overview
 | Workflow | Trigger | Purpose | Key jobs |
 | --- | --- | --- | --- |
-| `.github/workflows/ci.yml` | PRs and pushes to `main` / `master` | Default status checks for code review | `rust` (fmt/clippy/tests), `electron-unit` (TypeScript checks, lint, welcome suite), optional `ui-smoke` (macOS build + Playwright smoke) |
+| `.github/workflows/ci.yml` | PRs and pushes to `main` / `master` | Default status checks for code review | `rust` (backend clippy/tests), `electron-unit` (module/type verification), optional `ui-smoke` (macOS build + Playwright smoke) |
 | `.github/workflows/release.yml` | Tag push `v*.*.*` or manual dispatch | Build DMG, run Playwright smoke, publish to R2 and GitHub Releases | Single macOS job calling `scripts/release.sh` |
 | `.github/workflows/codeql.yml` | PR/push + weekly cron | CodeQL static analysis for JS/TS + Python scripts | `analyze` matrix |
 
 #### CI Details
-- `rust` job installs toolchain via `dtolnay/rust-toolchain@stable`, caches with `Swatinem/rust-cache`, and enforces `cargo fmt`, `cargo clippy -D warnings`, and `cargo test --workspace --all-features`.
-- `electron-unit` job uses Node 18 with npm cache, runs `npm ci`, `npm run verify:all`, `npm run lint`, and the TS test suite (`npm run test:welcome`).
-- `ui-smoke` job (macOS) runs when pushing to main or when a PR is labeled `ui-smoke`. It builds the packaged app via `npm run build:complete` with Playwright remote debugging and automatically runs the smoke suite. It uploads the generated DMG/ZIP as artifacts for validation.
+- `rust` job installs toolchain via `dtolnay/rust-toolchain@stable`, caches with `Swatinem/rust-cache`, and runs `cargo clippy` / `cargo test` **targeted at `hive-backend-server-enhanced`**. This keeps the job focused on the shipping backend without rebuilding legacy binaries.
+- `electron-unit` job uses Node 18 with npm cache. Before running TypeScript verification it copies `python/model_service.py` into `resources/python-runtime/models/` so the backend bundler has the required AI helper script. It then runs `npm ci` and the fast verification commands (`npm run verify:modules && npm run verify:types`).
+- `ui-smoke` job (macOS) runs when pushing to `main` or when a PR carries the `ui-smoke` label. It installs ttyd (if missing), runs `npm run build:complete`, and executes the Playwright smoke suite. Successful runs publish the DMG/ZIP artifacts for manual inspection.
 - Summary step writes a consolidated status to the run log to support branch-protection rollups.
+- The CodeQL workflow performs a lightweight “precheck” step that verifies GitHub Advanced Security is enabled. If not, the job exits early with a reminder; once Advanced Security is turned on, the standard JavaScript/TypeScript and Python scans run automatically.
 
-**Recommendation**: mark `ci.yml` jobs (`rust`, `electron-unit`, `CI Summary`) as required status checks on `main`. Add a branch protection rule that enforces linear history and at least one approving review. To run the heavy UI smoke on a PR, add the `ui-smoke` label.
+**Recommendation**: mark `ci.yml` jobs (`Backend (Rust)`, `Electron Unit & Lint`, `CI Summary`) as required checks on `main`. Keep branch protection enforcing linear history and at least one approving review. When a UI change needs end-to-end coverage, add the `ui-smoke` label to the PR so the macOS job runs before merge.
 
 #### Release Workflow
 - Secrets required (store under **Settings → Secrets and variables → Actions**):
