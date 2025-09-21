@@ -5454,9 +5454,9 @@ jobs:
 - **Rust + multi-language scanning** – `codeql.yml` runs JavaScript/TypeScript, Python, and Rust analyses. The Rust leg depends on the same OpenSSL provisioning so CodeQL’s autobuild step can link native crates.
 - **Formatting + smoke checks** – `ci-simple.yml` (CI job) enforces `cargo fmt --all -- --check` and drives quick build/test hooks. Any trailing whitespace or unformatted files will stop the pipeline before heavier stages run.
 - **Actions budget requirement** – GitHub Actions enforces the organization spending limit. A `$0` budget immediately blocks macOS runners, so the organization must keep a positive limit (we set `Actions` to `$30`) to allow Build/Release/CodeQL jobs to queue.
-- **Trigger cadence** – Every push or pull request against `veronelazio-patch-2` fans out to the four workflows above. Build jobs can be re-run after formatting cleanup; CodeQL is slightly longer (~35 minutes) because of the Rust compile.
-
-- **Operational reminder**: if macOS jobs stall with "recent account payments have failed" warnings, raise the Actions budget before retrying. The pipelines now surface these failures quickly during the dependency installation step.
+- **Release gating** – `build-release.yml` only pushes artifacts to Cloudflare R2 when the workflow runs as a push to `main`/`master` (or from a `v*` tag). Pull-request runs still build the macOS binaries and upload them as workflow artifacts, but they exit before the R2 upload step.
+- **Trigger cadence** – Every push or pull request against the branch fans out to the four workflows above. CodeQL takes the longest (~35 minutes) because of the Rust autobuild; the other jobs are typically < 20 minutes.
+- **Operational reminder** – If macOS jobs stall with "recent account payments have failed" warnings, raise the Actions budget before retrying. The pipelines now surface these failures quickly during the dependency installation step.
 
 **8. Comprehensive Build Requirements Check System & Build Order**
 
