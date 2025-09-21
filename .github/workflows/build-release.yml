@@ -5,9 +5,16 @@ on:
     branches: [ main, master ]
     tags:
       - 'v*'
-  pull_request:
-    branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'electron-poc/MASTER_ARCHITECTURE.md'
+      - '.github/dependabot.yml'
   workflow_dispatch:
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,6 +25,16 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            ~/Library/Caches/TemporaryItems
+          key: ${{ runner.os }}-brew-release-v1
+          restore-keys: |
+            ${{ runner.os }}-brew-
 
       - name: Install macOS OpenSSL dependencies
         run: |
@@ -56,6 +73,18 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
       
       - name: Build Intel binary
         env:

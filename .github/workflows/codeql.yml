@@ -14,10 +14,18 @@ name: CodeQL Security Scan
 on:
   push:
     branches: [main, master]
-  pull_request:
-    branches: [main, master]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'electron-poc/MASTER_ARCHITECTURE.md'
+      - '.github/dependabot.yml'
   schedule:
     - cron: '18 22 * * 6'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -70,10 +78,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        if: matrix.language == 'javascript-typescript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: electron-poc/package-lock.json
+
       - name: Install Node dependencies
         if: matrix.language == 'javascript-typescript'
         working-directory: ${{ matrix.working-directory }}
         run: npm ci --prefer-offline --no-audit
+
+      - name: Setup Python
+        if: matrix.language == 'python' && hashFiles('python/requirements.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+          cache-dependency-path: python/requirements.txt
 
       - name: Install Python dependencies
         if: matrix.language == 'python' && hashFiles('python/requirements.txt') != ''

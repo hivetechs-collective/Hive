@@ -5450,12 +5450,13 @@ jobs:
 
 **7.1 GitHub Actions Implementation (2025 Update)**
 
-- **macOS-only binary publishing** – `build-binaries.yml` and `build-release.yml` now target only `x86_64-apple-darwin` and `aarch64-apple-darwin`. The workflows install **architecture-specific OpenSSL**: Rosetta Homebrew is bootstrapped for Intel linkage while `openssl@3` from `/opt/homebrew` powers the arm build. The release workflow stitches both artifacts into a universal binary before uploading the DMG bundle to Cloudflare R2.
-- **Rust + multi-language scanning** – `codeql.yml` runs JavaScript/TypeScript, Python, and Rust analyses. The Rust leg depends on the same OpenSSL provisioning so CodeQL’s autobuild step can link native crates.
-- **Formatting + smoke checks** – `ci-simple.yml` (CI job) enforces `cargo fmt --all -- --check` and drives quick build/test hooks. Any trailing whitespace or unformatted files will stop the pipeline before heavier stages run.
+- **macOS-only binary publishing** – `build-release.yml` builds the Intel and Apple Silicon binaries, stitches them into a universal executable, and packages `Hive-macOS.app`. Architecture-specific OpenSSL is provisioned (Rosetta Homebrew for Intel, `/opt/homebrew` for Arm) before the build so both targets link successfully.
+- **Manual binary smoke builds** – `build-binaries.yml` is now `workflow_dispatch`-only. Trigger it manually when you need single-arch artifacts for debugging without running the full release workflow.
+- **Rust + multi-language scanning** – `codeql.yml` still analyzes JavaScript/TypeScript, Python, and Rust, but it now triggers only on pushes to `main`/`master`, the weekly Saturday cron, or an explicit manual dispatch. Feature-branch pushes and pull requests no longer consume CodeQL minutes.
+- **Concurrency & caching** – All macOS and CodeQL workflows enable `cancel-in-progress` so superseded runs stop immediately. Shared Homebrew, Cargo, npm, and pip caches keep reruns fast without re-downloading toolchains on every job.
+- **Formatting + smoke checks** – `ci-simple.yml` (CI job) continues to enforce `cargo fmt --all -- --check` and quick health checks, ensuring formatting failures are caught before expensive macOS builds are started.
 - **Actions budget requirement** – GitHub Actions enforces the organization spending limit. A `$0` budget immediately blocks macOS runners, so the organization must keep a positive limit (we set `Actions` to `$30`) to allow Build/Release/CodeQL jobs to queue.
-- **Release gating** – `build-release.yml` only pushes artifacts to Cloudflare R2 when the workflow runs as a push to `main`/`master` (or from a `v*` tag). Pull-request runs still build the macOS binaries and upload them as workflow artifacts, but they exit before the R2 upload step.
-- **Trigger cadence** – Every push or pull request against the branch fans out to the four workflows above. CodeQL takes the longest (~35 minutes) because of the Rust autobuild; the other jobs are typically < 20 minutes.
+- **Release gating** – `build-release.yml` pushes artifacts to Cloudflare R2 only for pushes to `main`/`master` or `v*` tags. Manual dispatches and dry runs build the binaries and attach workflow artifacts but skip the R2 upload step.
 - **Operational reminder** – If macOS jobs stall with "recent account payments have failed" warnings, raise the Actions budget before retrying. The pipelines now surface these failures quickly during the dependency installation step.
 
 **8. Comprehensive Build Requirements Check System & Build Order**
