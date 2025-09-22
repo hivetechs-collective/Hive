@@ -114,18 +114,7 @@ jobs:
 
           DMG_NAME="Hive-Consensus.dmg"
           if [[ -f release/build-report.json ]]; then
-            VERSION=$(python - <<'PY'
-import json
-try:
-    with open('release/build-report.json', 'r', encoding='utf-8') as fh:
-        data = json.load(fh)
-    version = data.get('buildTimings', {}).get('buildVersion')
-    if version:
-        print(version)
-except FileNotFoundError:
-    pass
-PY
-)
+            VERSION=$(python -c "import json, pathlib; path = pathlib.Path('release/build-report.json'); data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}; print(data.get('buildTimings', {}).get('buildVersion', ''))")
             if [[ -n "$VERSION" ]]; then
               DMG_NAME="Hive-Consensus-${VERSION}.dmg"
               echo "Detected build version $VERSION"
