@@ -28,6 +28,7 @@ const INSTALLED_APP_BINARY = path.join(
 );
 
 const SHOULD_RUN_UI_SMOKE = process.env.PLAYWRIGHT_RUN_TESTS === '1';
+const IS_CI = process.env.CI === 'true';
 
 function launchInstalledApp() {
   if (process.env.HIVE_SKIP_AUTO_LAUNCH === '1') {
@@ -160,8 +161,11 @@ class BuildLogger {
       fs.mkdirSync(this.logDir, { recursive: true });
     }
     
-    // Visual terminal already spawned at script start
-    console.log(`${GREEN}✓ Visual progress monitor active (16 phases)${RESET}`);
+    if (IS_CI) {
+      console.log(`${YELLOW}Visual progress monitor disabled in CI${RESET}`);
+    } else {
+      console.log(`${GREEN}✓ Visual progress monitor active (16 phases)${RESET}`);
+    }
     
     this.currentPhase = 0;
     this.totalPhases = 17; // Total phases including binary bundling and installation
@@ -180,9 +184,13 @@ class BuildLogger {
   }
   
   spawnVisualLogger() {
+    if (IS_CI) {
+      console.log(`${YELLOW}Skipping visual progress monitor in CI${RESET}`);
+      return;
+    }
     try {
       const BUILD_LOG = '/tmp/hive-build-progress.log';
-      
+
       // Kill any existing tail processes
       execSync(`pkill -f "tail -f ${BUILD_LOG}" 2>/dev/null || true`);
       
@@ -344,17 +352,18 @@ EOF`;
   }
 }
 
-// Spawn visual terminal FIRST before anything else
+// Spawn visual terminal FIRST before anything else (local runs only)
 const BUILD_LOG = '/tmp/hive-build-progress.log';
-try {
-  // Clear the log file first to remove old content
-  fs.writeFileSync(BUILD_LOG, 'Starting build...\n');
-  
-  // Kill any existing tail processes
-  execSync(`pkill -f "tail -f ${BUILD_LOG}" 2>/dev/null || true`);
-  
-  // Launch Terminal window to show progress
-  const appleScriptCmd = `osascript <<EOF
+if (!IS_CI) {
+  try {
+    // Clear the log file first to remove old content
+    fs.writeFileSync(BUILD_LOG, 'Starting build...\n');
+
+    // Kill any existing tail processes
+    execSync(`pkill -f "tail -f ${BUILD_LOG}" 2>/dev/null || true`);
+
+    // Launch Terminal window to show progress
+    const appleScriptCmd = `osascript <<EOF
 tell application "Terminal"
     activate
     set newWindow to do script "echo '🏗️  Hive Consensus Build Progress' && echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' && echo '' && tail -f ${BUILD_LOG}"
@@ -362,10 +371,14 @@ tell application "Terminal"
     set custom title of front window to "Build Progress"
 end tell
 EOF`;
-  execSync(appleScriptCmd, { shell: '/bin/bash' });
-  execSync('sleep 0.5'); // Ensure Terminal is ready
-} catch (error) {
-  // Continue even if visual terminal fails
+    execSync(appleScriptCmd, { shell: '/bin/bash' });
+    execSync('sleep 0.5'); // Ensure Terminal is ready
+  } catch (error) {
+    // Continue even if visual terminal fails
+  }
+} else {
+  // Ensure log file exists even when not streaming to Terminal
+  fs.writeFileSync(BUILD_LOG, 'CI build: visual monitor disabled.\n');
 }
 
 // Initialize build logger (which will now skip spawning since we already did it)
@@ -1851,84 +1864,91 @@ logPhase('INSTALLATION GUIDE', 'How to test the production build');
 console.log(`${GREEN}${BOLD}✅ BUILD SUCCESSFUL!${RESET}\n`);
 
 // Auto-install the DMG for immediate testing
-console.log(`${CYAN}${BOLD}Auto-installing DMG for testing...${RESET}`);
-try {
-  if (SHOULD_RUN_UI_SMOKE) {
-    process.env.HIVE_SKIP_AUTO_LAUNCH = '1';
-  }
-  // First, kill any running app
-  console.log(`${YELLOW}➤ Stopping any running Hive Consensus${RESET}`);
+if (IS_CI) {
+  console.log(`${YELLOW}Skipping DMG auto-install in CI environment${RESET}`);
+  console.log(`${CYAN}Manual installation steps:${RESET}\n`);
+  console.log(`  ${BOLD}1.${RESET} Download the DMG artifact from the workflow run`);
+  console.log(`  ${BOLD}2.${RESET} Mount the DMG locally and drag "Hive Consensus" to Applications\n`);
+} else {
+  console.log(`${CYAN}${BOLD}Auto-installing DMG for testing...${RESET}`);
   try {
-    execCommand('pkill -f "Hive Consensus" || true', 'Stop running app', { silent: true });
-    execCommand('sleep 1', 'Wait for app to quit', { silent: true });
+    if (SHOULD_RUN_UI_SMOKE) {
+      process.env.HIVE_SKIP_AUTO_LAUNCH = '1';
+    }
+    // First, kill any running app
+    console.log(`${YELLOW}➤ Stopping any running Hive Consensus${RESET}`);
+    try {
+      execCommand('pkill -f "Hive Consensus" || true', 'Stop running app', { silent: true });
+      execCommand('sleep 1', 'Wait for app to quit', { silent: true });
+    } catch (error) {
+      // Ignore errors - app might not be running
+    }
+
+    // Eject any existing Hive Consensus volumes
+    try {
+      execCommand('hdiutil detach "/Volumes/Hive Consensus" 2>/dev/null || true', 'Eject existing volume', { silent: true });
+      execCommand('sleep 0.5', 'Wait for volume to eject', { silent: true });
+    } catch (error) {
+      // Ignore errors - volume might not exist
+    }
+
+    // Mount DMG fresh
+    console.log(`${YELLOW}➤ Mounting DMG${RESET}`);
+    execCommand(`hdiutil attach "${dmgPath}" -nobrowse`, 'Mounting DMG for auto-install');
+
+    // Wait for mount to complete
+    execCommand('sleep 1', 'Wait for DMG to mount', { silent: true });
+
+    // Use standard volume path
+    const volumePath = '/Volumes/Hive Consensus';
+
+    // Verify the app exists
+    if (!fs.existsSync(`${volumePath}/Hive Consensus.app`)) {
+      throw new Error(`Could not find Hive Consensus.app in ${volumePath}`);
+    }
+
+    console.log(`${CYAN}  Found app at: ${volumePath}/Hive Consensus.app${RESET}`);
+
+    console.log(`${YELLOW}➤ Removing old version from Applications${RESET}`);
+
+    // Force remove old app first
+    try {
+      execCommand('pkill -f "Hive Consensus" || true', 'Stop running app');
+      execCommand('sleep 1', 'Wait for app to quit');
+      execCommand('rm -rf "/Applications/Hive Consensus.app"', 'Remove old app');
+    } catch (error) {
+      console.log(`${YELLOW}  Note: Old app might not exist or be in use${RESET}`);
+    }
+
+    console.log(`${YELLOW}➤ Installing new version to Applications${RESET}`);
+
+    // Copy new app (force overwrite)
+    execCommand(`cp -Rf "${volumePath}/Hive Consensus.app" /Applications/`, 'Installing app to Applications');
+
+    // Verify installation
+    if (!fs.existsSync('/Applications/Hive Consensus.app')) {
+      throw new Error('Failed to install app to Applications');
+    }
+
+    // Unmount DMG
+    console.log(`${YELLOW}➤ Ejecting DMG${RESET}`);
+    execCommand(`hdiutil detach "${volumePath}"`, 'Ejecting DMG');
+
+    console.log(`${GREEN}✅ Auto-installation complete!${RESET}`);
+    console.log(`${GREEN}  App installed to: /Applications/Hive Consensus.app${RESET}\n`);
+    if (!SHOULD_RUN_UI_SMOKE) {
+      launchInstalledApp();
+    }
+
   } catch (error) {
-    // Ignore errors - app might not be running
+    console.log(`${YELLOW}⚠ Auto-install failed: ${error.message}${RESET}`);
+    console.log(`${CYAN}Manual installation required:${RESET}\n`);
+    console.log(`  ${BOLD}1.${RESET} Mount the DMG:`);
+    console.log(`     ${YELLOW}open "${dmgPath}"${RESET}\n`);
+    console.log(`  ${BOLD}2.${RESET} Drag "Hive Consensus" to Applications folder`);
+    console.log(`     ${RED}⚠️  IMPORTANT: Do NOT launch from the DMG!${RESET}\n`);
+    console.log(`  ${BOLD}3.${RESET} Eject the DMG after copying\n`);
   }
-  
-  // Eject any existing Hive Consensus volumes
-  try {
-    execCommand('hdiutil detach "/Volumes/Hive Consensus" 2>/dev/null || true', 'Eject existing volume', { silent: true });
-    execCommand('sleep 0.5', 'Wait for volume to eject', { silent: true });
-  } catch (error) {
-    // Ignore errors - volume might not exist
-  }
-  
-  // Mount DMG fresh
-  console.log(`${YELLOW}➤ Mounting DMG${RESET}`);
-  execCommand(`hdiutil attach "${dmgPath}" -nobrowse`, 'Mounting DMG for auto-install');
-  
-  // Wait for mount to complete
-  execCommand('sleep 1', 'Wait for DMG to mount', { silent: true });
-  
-  // Use standard volume path
-  const volumePath = '/Volumes/Hive Consensus';
-  
-  // Verify the app exists
-  if (!fs.existsSync(`${volumePath}/Hive Consensus.app`)) {
-    throw new Error(`Could not find Hive Consensus.app in ${volumePath}`);
-  }
-  
-  console.log(`${CYAN}  Found app at: ${volumePath}/Hive Consensus.app${RESET}`);
-  
-  console.log(`${YELLOW}➤ Removing old version from Applications${RESET}`);
-  
-  // Force remove old app first
-  try {
-    execCommand('pkill -f "Hive Consensus" || true', 'Stop running app');
-    execCommand('sleep 1', 'Wait for app to quit');
-    execCommand('rm -rf "/Applications/Hive Consensus.app"', 'Remove old app');
-  } catch (error) {
-    console.log(`${YELLOW}  Note: Old app might not exist or be in use${RESET}`);
-  }
-  
-  console.log(`${YELLOW}➤ Installing new version to Applications${RESET}`);
-  
-  // Copy new app (force overwrite)
-  execCommand(`cp -Rf "${volumePath}/Hive Consensus.app" /Applications/`, 'Installing app to Applications');
-  
-  // Verify installation
-  if (!fs.existsSync('/Applications/Hive Consensus.app')) {
-    throw new Error('Failed to install app to Applications');
-  }
-  
-  // Unmount DMG
-  console.log(`${YELLOW}➤ Ejecting DMG${RESET}`);
-  execCommand(`hdiutil detach "${volumePath}"`, 'Ejecting DMG');
-  
-  console.log(`${GREEN}✅ Auto-installation complete!${RESET}`);
-  console.log(`${GREEN}  App installed to: /Applications/Hive Consensus.app${RESET}\n`);
-  if (!SHOULD_RUN_UI_SMOKE) {
-    launchInstalledApp();
-  }
-  
-} catch (error) {
-  console.log(`${YELLOW}⚠ Auto-install failed: ${error.message}${RESET}`);
-  console.log(`${CYAN}Manual installation required:${RESET}\n`);
-  console.log(`  ${BOLD}1.${RESET} Mount the DMG:`);
-  console.log(`     ${YELLOW}open "${dmgPath}"${RESET}\n`);
-  console.log(`  ${BOLD}2.${RESET} Drag "Hive Consensus" to Applications folder`);
-  console.log(`     ${RED}⚠️  IMPORTANT: Do NOT launch from the DMG!${RESET}\n`);
-  console.log(`  ${BOLD}3.${RESET} Eject the DMG after copying\n`);
 }
 
 if (SHOULD_RUN_UI_SMOKE) {
