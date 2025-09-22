@@ -7,22 +7,16 @@
 4. [Data Architecture](#data-architecture)
 5. [Communication Architecture](#communication-architecture)
 6. [User Interface Architecture](#user-interface-architecture)
-7. [Complete Memory-Context-Consensus Loop Architecture](#complete-memory-context-consensus-loop-architecture-v18190)
-8. [Consensus Engine Architecture](#consensus-engine-architecture)
-9. [Visual Progress System](#visual-progress-system)
-10. [Memory Service Infrastructure](#memory-service-infrastructure)
-11. [Git Integration Architecture](#git-integration-architecture)
-12. [Security & Authentication](#security--authentication)
-13. [Performance & Optimization](#performance--optimization)
-14. [Development & Deployment](#development--deployment)
-15. [CLI Tools Management](#cli-tools-management)
-16. [CLI Tools Management UI](#cli-tools-management-ui)
-17. [Complete Guide: Adding New AI CLI Tools](#complete-guide-adding-new-ai-cli-tools)
-18. [Global Folder Management System](#global-folder-management-system)
-19. [AI Tools Launch Tracking & Database](#ai-tools-launch-tracking--database)
-20. [Future Enhancements](#future-enhancements)
-21. [Architecture Diagrams](#architecture-diagrams)
-22. [Automated UI Regression Framework](#automated-ui-regression-framework)
+7. [Consensus Engine Architecture](#consensus-engine-architecture)
+8. [Visual Progress System](#visual-progress-system)
+9. [Memory Service Infrastructure](#memory-service-infrastructure)
+10. [Git Integration Architecture](#git-integration-architecture)
+11. [Security & Authentication](#security--authentication)
+12. [Performance & Optimization](#performance--optimization)
+13. [Development & Deployment](#development--deployment)
+14. [CLI Tools Management](#cli-tools-management)
+15. [AI Tools Launch Tracking & Database](#ai-tools-launch-tracking--database)
+16. [Future Enhancements](#future-enhancements)
 
 ---
 
@@ -815,7 +809,6 @@ private static async isPortListening(port: number): Promise<boolean> {
    - Clean up orphaned processes via PidTracker
    - Initialize SQLite connection
    - No network calls, always fast
-   - **CRITICAL**: No async database operations during initialization (see Critical Fixes section)
 
 2. **Process Manager Setup** (10% weight)
    - Register service configurations
@@ -1756,33 +1749,8 @@ $HIVE_BUNDLED_PYTHON $HIVE_BUNDLED_MODEL_SCRIPT --model-cache-dir ~/.hive/models
 
 ## Data Architecture
 
-### Unified Database (SQLite)
-**Primary Location**: `~/.hive/hive-ai.db`  
-**Type**: SQLite database containing all application data, settings, conversations, and metrics  
-**Size**: ~9MB (grows with usage)  
-
-> **IMPORTANT**: The unified database is ALWAYS at `~/.hive/hive-ai.db`. This is the single source of truth for all data.  
-> Do NOT look in `~/Library/Application Support/` - that location may contain empty placeholder files only.
-
-#### Unified Storage Directory Structure
-
-All application data is centralized under the `~/.hive/` directory:
-
-```
-~/.hive/
-├── hive-ai.db           # Main SQLite database (all data)
-├── logs/                # Application logs
-│   └── hive-*.log      # Timestamped log files
-├── config/              # Configuration files
-│   └── settings.json   # User preferences
-└── cache/               # Temporary cache files
-```
-
-**Key Points**:
-- **Single Location**: Everything is under `~/.hive/` for simplicity
-- **Cross-Platform**: Same structure on macOS, Linux, and Windows
-- **No Legacy Locations**: Ignore any references to Application Support directories
-- **Database First**: The SQLite database is the primary data store
+### Database Schema (SQLite)
+**Location**: `~/.hive/hive-ai.db`
 
 #### Core Tables
 
@@ -1939,21 +1907,6 @@ configurations (
 )
 ```
 
-##### 8. Consensus Profiles Table (v1.8.207+)
-```sql
-consensus_profiles (
-  id TEXT PRIMARY KEY,
-  profile_name TEXT NOT NULL UNIQUE,
-  generator_model TEXT NOT NULL,
-  refiner_model TEXT NOT NULL,
-  validator_model TEXT NOT NULL,
-  curator_model TEXT NOT NULL,
-  max_consensus_rounds INTEGER DEFAULT 3,  -- User-configurable round limit
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-)
-```
-
 ### Data Flow
 ```
 User Input → 
@@ -2074,373 +2027,16 @@ GET  /api/analytics           - Fetch usage analytics
 - **DOM Fragment Rendering**: Batched DOM updates for performance
 - **Efficient Re-renders**: Only updates changed content areas, preserves tree expansion state
 
-### Panel Collapse System (v1.8.324)
-**Implementation**: `src/renderer.ts`, `src/index.css`
-
-#### Overview
-The application features collapsible panels to maximize screen real estate and provide a cleaner initial interface. Both major side panels start collapsed by default on app startup. A unique sidebar icon provides quick access to the revolutionary Consensus panel.
-
-#### Panel Configuration
-
-##### TTYD Terminal Panel (Left Side)
-- **Location**: Left side of the application
-- **Contents**: CLI tool tabs and System Log
-- **Default State**: Collapsed on startup
-- **Toggle Button**: 
-  - Shows "+" when collapsed
-  - Shows "−" when expanded
-- **Element ID**: `isolated-terminal-panel`
-- **Toggle Button ID**: `toggle-isolated-terminal`
-- **Auto-Expand Behavior**: Automatically expands when any of the 6 AI CLI tools are launched
-- **Implementation**:
-  ```typescript
-  // Set TTYD terminal collapsed by default on app start
-  isolatedTerminalPanel.classList.add('collapsed');
-  isolatedTerminalPanel.style.width = '';
-  toggleIsolatedTerminal.textContent = '+';
-  toggleIsolatedTerminal.title = 'Expand Terminal Panel';
-  
-  // Helper function for CLI tool launches
-  function expandTTYDTerminal() {
-      if (isolatedTerminalPanel.classList.contains('collapsed')) {
-          isolatedTerminalPanel.classList.remove('collapsed');
-          isolatedTerminalPanel.style.width = '';
-          toggleIsolatedTerminal.textContent = '−';
-          toggleIsolatedTerminal.title = 'Collapse Terminal Panel';
-      }
-  }
-  ```
-
-##### Consensus Panel (Right Side)
-- **Location**: Right side of the application
-- **Contents**: Consensus chat interface and Neural Consciousness visualization
-- **Default State**: Collapsed on startup
-- **Toggle Button**:
-  - Shows "+" when collapsed
-  - Shows "−" when expanded
-- **Element ID**: `consensus-chat`
-- **Toggle Button ID**: `toggle-consensus-panel`
-- **Width States**:
-  - Collapsed: 40px (just shows toggle button)
-  - Expanded: 400px (full panel width)
-- **Implementation**:
-  ```typescript
-  // Set consensus panel collapsed by default on app start
-  consensusPanel.classList.add('collapsed');
-  consensusPanel.style.width = '40px';
-  toggleConsensusPanel.textContent = '+';
-  toggleConsensusPanel.title = 'Expand Panel';
-  ```
-
-### Input Dialog Overlay & Command Prompts (v1.8.446)
-**Implementation**: `src/renderer.ts`
-
-#### Goals
-- Replace fragile native dialog stubs with an in-renderer, VS Code-style overlay.
-- Provide a single prompt surface for Go-to-file/line, project scaffolding, and future command palette workflows.
-- Guarantee deterministic styling and selectors for Playwright and accessibility tooling.
-
-#### Architecture
-- `showInputDialog(title, options)` injected onto `window` during renderer bootstrap.
-  - Accepts rich options (`message`, `placeholder`, `defaultValue`, `type`, `hint`, `validate`, `okLabel`, `cancelLabel`).
-  - Returns a `Promise<string | null>` resolved when the dialog closes.
-- Styles are injected once via `addInputDialogStyles()` which appends a scoped stylesheet when the DOM head is available (or waits for `DOMContentLoaded`).
-- Overlay structure:
-  ```html
-  <div class="input-dialog-overlay">
-    <div class="input-dialog">
-      <h3>Title</h3>
-      <div class="input-dialog-message">…</div>
-      <input class="input-dialog-field" data-testid="input-dialog-field" />
-      <div class="input-dialog-hint">…</div>
-      <div class="input-dialog-error">…</div>
-      <div class="input-dialog-buttons">
-        <button class="input-dialog-cancel" data-testid="input-dialog-cancel">Cancel</button>
-        <button class="input-dialog-ok" data-testid="input-dialog-ok">OK</button>
-      </div>
-    </div>
-  </div>
-  ```
-- Keyboard handling:
-  - <kbd>Enter</kbd> triggers validation + submit.
-  - <kbd>Escape</kbd> or clicking the overlay cancels.
-  - Validation errors are surfaced inline via `.input-dialog-error` without closing the prompt.
-- Visual design mirrors the dark VS Code palette and uses CSS focus cues for accessibility.
-
-#### Command Integrations
-- **Go → File** and **Go → Line** menu entries now use the overlay instead of IPC fallbacks.
-- Go-to-file accepts absolute paths when no folder is open, showing a guard alert only for relatives without context.
-- Go-to-line ensures an active editor exists; on success it routes through `executeCommand('go.line.navigate', …)` so the Monaco command registry stays the single source of truth.
-- Project creation flows on the Welcome page now use the overlay for name/template prompts, ensuring consistent UX.
-
-#### Test Instrumentation
-- The renderer registers `window.__hiveTestHelpers` with methods (`goToFile()`, `goToLine()`, `getActiveTab()`, `getActiveEditorLocation()`, etc.) and a readiness flag `__hiveTestHelpersReady` once the UI bootstraps.
-- Playwright drives prompts via these helpers, using `data-testid` hooks for field/button selection and polling helpers to confirm editor state.
-- Dialog cleanup utilities remove lingering overlays between tests to guarantee isolation.
-
-### Center Panel Visibility & State (v1.8.378)
-Implementation: `src/renderer.ts`, `src/utils/panel-state.ts`, `src/utils/center-view.ts`, `src/index.css`
-
-Problem addressed
-- Users could not see the AI CLI Tools, Memory Service, or Settings panels when clicking their activity bar icons. The root causes were:
-  - Bottom-fixed sidebar section overlapping the activity stack on smaller windows (icons were present but not reachable).
-  - Inconsistent ad‑hoc show/hide paths across panels, making visibility dependent on prior DOM state.
-  - Overlays (Welcome/Help/Analytics) not being consistently hidden, or the center area remaining collapsed.
-  - Panels not yet created in the DOM at first invocation.
-
-Design updates
-- Activity Bar layout
-  - Added `.activity-bar-scroll` (scrollable middle) to ensure icons are always reachable.
-  - Kept `.sidebar-bottom-section` fixed and anchored; no overlap with scroll area.
-  - CSS updated to avoid any bottom overlay hiding icons on small screens.
-
-- Single source of truth for center panels
-  - All center panel transitions now flow through `setCenterView()` which uses the pure state machine `nextStateOnToggle()` via an integration wrapper `applyCenterView()`.
-  - Behavior:
-    - Idempotent clicks: clicking the same icon re‑focuses the panel (does not toggle back to Welcome).
-    - Exactly one visible center panel at a time.
-    - Close actions and tab closes fall back to the last panel, or Welcome.
-
-- Guaranteed panel creation on demand
-  - For `settings`, `memory`, and `cli-tools`, the renderer will create the content panel on first use if it does not exist:
-    - Settings → `#settings-panel` (with `#settings-container`)
-    - Memory → `#memory-panel` (with `#memory-container`)
-    - AI CLI Tools → `#cli-tools-panel` (with `#cli-tools-container`)
-
-- Editor/overlays coordination
-  - `ensureEditorAreaReady()` hides overlays (`#welcome-panel`, `#help-panel`, `#analytics-panel`), ensures `#editor-area` is visible, and expands `#center-area` if collapsed.
-  - When showing center panels, we also hide the `.editors-container` to give the panel full height; when opening a file, we explicitly show `.editors-container` and hide these panels.
-
-- Safety verification on click
-  - After `setCenterView()` executes, a short follow-up check verifies the intended panel is visible; if not, it force‑shows it. This protects against rare sequencing issues.
-
-Developer guidelines (to prevent regressions)
-- Do not introduce bottom overlays that cover the activity bar; keep the middle scrollable and the bottom section anchored.
-- Route all center panel visibility changes through `setCenterView()`; avoid one-off `style.display` toggles that bypass the state machine.
-- If adding a new center panel, implement a `showXPanel()` that:
-  1) calls `ensureEditorAreaReady()`;
-  2) creates the panel on demand if missing;
-  3) shows it, and hides others via `hideAllCenterPanels()`.
-- Keep idempotent icon behavior (clicking the same icon re‑focuses the current panel).
-
-Testing
-- Unit tests (pure): `tests/panel-state.test.ts` cover the state machine behavior.
-- Integration test (thin): `tests/center-view.test.ts` verifies idempotent focus, toggle‑off, and close(null) fallbacks.
-
-Key CSS hooks
-```
-.activity-bar-unified { position: relative; overflow: visible; }
-.activity-bar-scroll  { overflow: visible; flex: 1; padding-bottom: 120px; }
-.sidebar-bottom-section { position: absolute; bottom: 0; left: 0; right: 0; }
-.sidebar-panel { overflow: visible; /* Required for tooltip visibility */ }
-.content-panel { display: none; flex: 1; }
-```
-
-**Important**: The `overflow: visible` property on activity bar containers and sidebar panel is critical for tooltip visibility. Without this, tooltips that extend beyond container boundaries will be clipped.
-
-### Source Control Welcome Experience (v1.8.380)
-Implementation: `src/vscode-scm-view.ts`, `src/renderer.ts`, `src/index.ts`
-
-- Welcome states:
-  - **No folder open** — shows the classic “Open Folder / Clone Repository” call-to-actions (identical handlers shared with the Welcome view).
-  - **Folder open, but not a Git repo (v1.8.440+)** — renders an `Initialize Repository` card that explains the situation, offers a one-click `git init`, and provides a “Choose Different Folder” fallback. Successes and failures surface through the global notification system and the SCM view auto-refreshes after `gitAPI.setFolder()` rebinds the Git manager.
-- The Clone dialog drives `gitAPI.clone()` in the main process, then opens the cloned folder using the same `handleOpenFolder()` pipeline.
-
-### SCM Root Behavior & Preference (v1.8.380)
-Implementation: `src/index.ts`, `src/settings-modal.ts`, `src/renderer.ts`
-
-- Auto‑detect nearest Git root (default):
-  - Detects root via `rev-parse --show-toplevel`, falls back to walking parent directories for `.git`.
-  - Initializes Git manager at the repo root for accurate S/M/U and ahead/behind in monorepos.
-  - `git-status` IPC returns the active `repoPath` so the UI can show the root in the status bar tooltip.
-
-- SCM Root Preference (Settings → Source Control):
-  - “Prefer opened folder as Git root” (`git_prefer_opened_folder_root`).
-  - When enabled, SCM binds to the currently opened folder instead of auto‑detecting the repo root.
-
-- Status Bar SCM context menu:
-  - Right‑click branch item to open a minimal menu with:
-    - Switch SCM to Git Root (if different from opened folder)
-    - Use Opened Folder as SCM Root
-    - Reveal Git Root in Finder
-  - Branch tooltip shows the active Git root path.
-
-## Maintenance & Daily Processes (Unified DB)
-
-All maintenance is centered on a single source of truth: the unified SQLite database at `~/.hive/hive-ai.db`. Processes are designed to be non‑blocking, idempotent, and verifiable.
-
-### 1) OpenRouter Provider/Model Sync (Daily)
-
-Purpose: Keep a current local catalog of models and providers for Settings → Profiles and cost accounting, while remaining resilient to removals/renames upstream.
-
-- Data flow
-  - Fetch `https://openrouter.ai/api/v1/models` with the user’s OpenRouter key.
-  - Upsert providers and models into the unified DB; never delete — mark rows inactive.
-  - Keep a stable `internal_id` for each model (derived deterministically from `openrouter_id`).
-  - Preserve alias mapping in `model_aliases` so historical references remain resolvable.
-
-- Unified DB tables
-  - `openrouter_providers(provider_id PK, name, website, last_seen_at, is_active)`
-  - `openrouter_models(internal_id PK, openrouter_id UNIQUE, provider_id FK, name, description, context_window, pricing_input, pricing_output, is_active, last_seen_at, replaced_by)`
-  - `model_aliases(internal_id, openrouter_id, active, PRIMARY KEY(internal_id, openrouter_id))`
-
-- Scheduling & controls
-  - Runs shortly after startup and every 24h.
-  - Manual trigger: IPC `models-sync-now` (Settings → Maintenance → “Sync Models Now”).
-  - Writes last sync timestamp to `configurations('openrouter_last_sync')`.
-
-- Guarantees
-  - No hard deletes — historical models are marked `is_active=0` and remain resolvable via `model_aliases`.
-  - Pricing and context window attributes are updated atomically with each sync.
-
-### 2) Profiles v2 & Internal IDs
-
-Purpose: Ensure stable profile configuration across provider/model removals or renames by binding to internal IDs.
-
-- Storage
-  - `consensus_profiles_v2` with stage columns referencing `internal_id`: `generator_internal_id`, `refiner_internal_id`, `validator_internal_id`, `curator_internal_id`.
-  - `max_consensus_rounds` remains part of the profile.
-
-- Migration
-  - IPC `profiles-migrate-v2` maps existing `consensus_profiles` (openrouter_id strings) to v2 internal IDs using `openrouter_models` lookups.
-  - Partial migrations are allowed; runtime resolution (next point) tolerates incomplete cases.
-
-- Runtime resolution
-  - Consensus engines resolve stage models at runtime via a resolver:
-    - Accepts either an `internal_id` (preferred) or legacy `openrouter_id`/name.
-    - If a model is inactive or aliased, resolves to the current active `openrouter_id` using `model_aliases`.
-    - Guarantees that downstream OpenRouter calls always target a valid, current model.
-
-- UI intents
-  - Profiles UI continues to show human‑friendly model names and providers.
-  - A “Rebind to current best” flow (optional) can update v2 fields explicitly after a deprecation.
-
-### 3) Usage Tracking & Cloudflare D1
-
-Purpose: Track per‑user daily usage (one conversation equals one consensus pipeline run), enforce limits, and sync to D1 for licensing/credits.
-
-- Local accounting (DB)
-  - `conversation_usage(user_id, conversation_id, timestamp)` — appended when a consensus run completes.
-  - `d1_usage_queue(id, user_id, conversation_id, timestamp, status, attempts, last_error)` — background queue for D1 sync.
-  - `configurations` holds `hive_user_id`, `hive_daily_limit`, and `hive_remaining` returned by D1 validation.
-
-- Enforcement (pre‑consensus)
-  - Before executing consensus, read the effective daily limit from `configurations`.
-  - Count today’s `conversation_usage` for the current user.
-  - Block start if used ≥ limit (unless tier is unlimited), with clear UI to purchase credits.
-
-- D1 sync (background)
-  - Scheduler posts queued usage (`user_id`, `conversation_id`, `timestamp`) to the D1 gateway with exponential retry.
-  - Manual trigger: IPC `usage-sync-now` (Settings → Maintenance → “Sync Usage Now”).
-  - Minimal payload; errors logged in `d1_usage_queue.last_error`.
-
-- Identity & security
-  - `hive_user_id` and `hive_license_key` stored securely in the unified DB.
-  - D1 usage posts use Bearer token (license key) with an explicit User-Agent.
-
-### 4) Settings → Maintenance Controls
-
-- Controls in app:
-  - “Sync Models Now” → `models-sync-now`
-  - “Migrate Profiles to Internal IDs” → `profiles-migrate-v2`
-  - “Sync Usage Now” → `usage-sync-now`
-
-- Non‑blocking: All maintenance buttons are safe to run repeatedly; tasks are idempotent.
-
-
-#### Consensus Toggle Icon (v1.8.324)
-**Revolutionary Sidebar Feature**: A unique hexagon icon that represents our 4-stage consensus system
-
-##### Icon Design
-- **Shape**: Hexagon (representing Hive cell architecture)
-- **Elements**: 
-  - Outer hexagon border
-  - 4 nodes positioned at cardinal points (representing 4 consensus stages)
-  - Center node (representing convergence point)
-- **Color Scheme**: Golden (#FFC107) to highlight this unique feature
-- **Location**: Activity bar (left sidebar), positioned after Cline icon
-- **Element ID**: `sidebar-consensus-toggle`
-
-##### Visual Implementation
-```html
-<button class="activity-btn consensus-toggle" id="sidebar-consensus-toggle">
-  <svg width="24" height="24" viewBox="0 0 24 24">
-    <!-- Hexagon (Hive cell) -->
-    <path d="M12 2L21.39 7v10L12 22 2.61 17V7z" stroke="currentColor" fill="none"/>
-    <!-- 4 Stage nodes -->
-    <circle cx="12" cy="7" r="1.8" fill="currentColor" opacity="0.7"/>
-    <circle cx="7" cy="12" r="1.8" fill="currentColor" opacity="0.7"/>
-    <circle cx="17" cy="12" r="1.8" fill="currentColor" opacity="0.7"/>
-    <circle cx="12" cy="17" r="1.8" fill="currentColor" opacity="0.7"/>
-    <!-- Center consensus point -->
-    <circle cx="12" cy="12" r="2" fill="currentColor"/>
-  </svg>
-</button>
-```
-
-##### CSS Styling
-```css
-/* Special Revolutionary Styling */
-.activity-btn.consensus-toggle {
-  color: #FFC107; /* Golden color */
-  transition: all 0.3s ease;
-}
-
-.activity-btn.consensus-toggle:hover {
-  color: #FFD54F; /* Lighter gold on hover */
-  background: rgba(255, 193, 7, 0.1);
-  filter: drop-shadow(0 0 8px rgba(255, 193, 7, 0.4));
-}
-
-.activity-btn.consensus-toggle.active {
-  color: #FFD54F;
-  background: rgba(255, 193, 7, 0.15);
-  border-color: #FFC107;
-  filter: drop-shadow(0 0 12px rgba(255, 193, 7, 0.6));
-  animation: golden-pulse 2s ease-in-out infinite;
-}
-
-@keyframes golden-pulse {
-  0%, 100% { filter: drop-shadow(0 0 12px rgba(255, 193, 7, 0.6)); }
-  50% { filter: drop-shadow(0 0 20px rgba(255, 193, 7, 0.8)); }
-}
-```
-
-##### Functionality
-- **Click Action**: Toggles the Consensus panel open/closed
-- **State Synchronization**: Active state syncs with panel visibility
-- **Visual Feedback**: Golden pulse animation when active
-- **Tooltip**: "Consensus Panel (4-Stage System)"
-
-#### User Experience Benefits
-1. **Maximized Editor Space**: Both panels collapsed by default provides maximum space for the code editor
-2. **Clean Initial Interface**: Less visual clutter on startup
-3. **Smart Auto-Expansion**: TTYD terminal auto-expands when needed (CLI tool launch)
-4. **Manual Control**: Users can toggle panels as needed via collapse/expand buttons
-5. **Visual Feedback**: Clear +/− indicators show panel state
-6. **Consistent Behavior**: Both panels follow the same interaction pattern
-7. **Quick Access Icon**: Golden Consensus icon in sidebar provides instant access to our revolutionary 4-stage system
-8. **Visual Distinction**: Unique hexagon design and golden glow makes the Consensus feature stand out as a core differentiator
-
-#### Technical Implementation Details
-- **CSS Classes**: Uses `.collapsed` class to manage panel states
-- **Event Listeners**: Click handlers on toggle buttons for manual control
-- **Global Functions**: `expandTTYDTerminal()` exposed globally for CLI tool integration
-- **State Preservation**: Panel states are not persisted between sessions (always start collapsed)
-- **Responsive Sizing**: Uses CSS flexbox for proper layout when panels expand/collapse
-
 ### File Menu System
 **Implementation**: `src/index.ts` (main process)
 
-#### Menu Structure (v1.8.441)
+#### Menu Structure
 ```typescript
 File Menu
 ├── New File (Ctrl/Cmd+N)
 ├── Open File (Ctrl/Cmd+O)
 ├── Open Folder (Ctrl/Cmd+K Ctrl/Cmd+O)
-├── Clone Repository… (Shift+Ctrl/Cmd+G)
-├── Open Recent ▸ (dynamic, DB-backed MRU + Clear Recent)
-├── Initialize Repository… (shown when workspace has no .git)
+├── ─────────────
 ├── Save (Ctrl/Cmd+S)
 ├── Save As (Ctrl/Cmd+Shift+S)
 ├── ─────────────
@@ -2450,56 +2046,21 @@ File Menu
 ├── Close All Tabs
 ├── Close Folder
 └── Exit (Ctrl/Cmd+Q)
-
-View Menu
-├── Toggle File Explorer (Ctrl/Cmd+B)
-├── Toggle Source Control (Ctrl/Cmd+Shift+G)
-├── Toggle Terminal (Ctrl/Cmd+`)
-├── ─────────────
-├── Memory Service Dashboard (Ctrl/Cmd+Shift+M)
-├── AI CLI Tools (Ctrl/Cmd+Alt+T)
-├── Analytics Dashboard (Ctrl/Cmd+Shift+A)
-├── Show Welcome (Ctrl/Cmd+Shift+W)
-
-Go Menu
-├── Go to File… (Ctrl/Cmd+P, resolves relative paths)
-├── Go to Line… (Ctrl/Cmd+G)
-
-Help Menu (v1.8.441)
-├── Getting Started
-├── Memory Guide
-├── Documentation (Ctrl/Cmd+/)
-└── About
 ```
 
-**Help Menu Changes**:
-- Removed external help links
-- Documentation now opens integrated help viewer
-- Show Welcome provides access to welcome page
-- About shows application version and info
-
 #### Auto-Save Feature
-- **Toggle Option**: Checkbox in File menu (state persisted in `settings` table under `editor.autoSave` and reflected in menu context)
+- **Toggle Option**: Checkbox in File menu (checked state persists)
 - **Default Delay**: 1000ms after last change
 - **Implementation**: Debounced save on content changes via `autoSaveTimeout`
 - **Visual Feedback**: Dirty indicator (orange dot #FFA500) on unsaved tabs
-- **Persistence**: Editor rehydrates preference at startup via `initializeAutoSavePreference()` and rebuilds the application menu through `menu-update-context`
-- **IPC Event**: `menu-toggle-auto-save` toggles the feature, updates DB, and re-renders menu
+- **Persistence**: Saves editor state before closing
+- **IPC Event**: `menu-toggle-auto-save` toggles the feature
 
 #### IPC Communication
-- Main process sends menu events via IPC (e.g., `menu-open-folder`, `menu-toggle-explorer`, `menu-open-memory`)
-- Renderer listens via `electronAPI.onMenu*` handlers and routes to shared helpers (`toggleSidebarPanel`, `setCenterView`, `promptGoToLine`, etc.)
-- Bidirectional calls for dialogs (`showOpenDialog`, `showSaveDialog`) and menu context updates (`menu-update-context`, `menu-refresh`)
+- Main process sends menu events via IPC
+- Renderer listens via `electronAPI.onMenu*` handlers
+- Bidirectional communication for dialogs
 - Type-safe interfaces in `window.d.ts`
-
-#### Edit Menu Behaviour (v1.8.442)
-- Undo/Redo/Cut/Copy/Paste/Select All trigger Monaco commands via `triggerEditorCommand`; when no editor is focused, the renderer falls back to `document.execCommand` so dialogs and inputs still respond to menu shortcuts.
-- Find/Replace commands surface Monaco’s native search widgets (`actions.find`, `editor.action.startFindReplaceAction`).
-- `EditorTabs.saveActiveTabAs()` backs the File → Save As flow: prompts with a native dialog, rewires Monaco models/watchers for the new path, and refreshes Git decorations instantly.
-
-#### Navigation Commands (Go Menu)
-- “Go to File…” accepts absolute or workspace-relative paths, validates them with `fileAPI.fileExists`, and reuses `handleOpenFile` so Git/recents/status updates stay in sync.
-- “Go to Line…” prompts for a line, clamps it to the document bounds, moves the caret, and centers the line.
 
 ### Editor Tabs Component
 **Implementation**: `src/editor-tabs.ts`
@@ -2541,37 +2102,6 @@ Help Menu (v1.8.441)
 - Menu command handlers
 - Tab click/close events
 - Drag & drop support (planned)
-
-#### Production Layout v1.8.340 (Editor & Panels)
-
-To guarantee the editor is always visible and sized correctly in production, the center area follows a strict DOM and CSS contract:
-
-Structure (in `src/renderer.ts` and `src/editor-tabs.ts`):
-- `#editor-area` (center content root)
-- `.editor-tabs-wrapper` (tab bar; 35px fixed height)
-- `.editor-tabs-bar` (scrollable tab strip inside wrapper)
-- `.editors-container` (fills remaining height below tab bar)
-- `.editor-container` (one per open tab; positioned to fill container)
-
-Key CSS rules (in `src/index.css`):
-- `#editor-area { display: flex; flex-direction: column; min-height: 0; position: relative; z-index: 2; }`
-- `.editor-tabs-wrapper { height: 35px; }`
-- `.editors-container { flex: 1 1 auto; min-height: 0; position: relative; height: calc(100% - 35px); }`
-- `.editor-container { position: absolute; top:0; left:0; right:0; bottom:0; width:100%; height:100%; }`
-
-Overlay management when opening files:
-- Center overlays use `.panel-content` (Welcome, Help/Docs, Analytics, Memory, CLI tools).
-- When opening a file (via Explorer or SCM), the renderer hides all `.panel-content`, ensures `#editor-area` is `display:block`, and expands `#center-area` if collapsed.
-- Implementation: `openFileAndFocusEditor(filePath)` helper centralizes this logic; all file opens call it.
-
-Why this design:
-- Prevents the editor from being obscured by center overlays.
-- Explicit height on `.editors-container` avoids zero-height flex regressions during future UI changes.
-- Z-index on `#editor-area` keeps the editor above any stray elements.
-
-SCM and Explorer integration:
-- Explorer `onFileSelect` and SCM open actions route through `openFileAndFocusEditor()` to guarantee visibility and focus.
-- Editor creation triggers a layout pass (`editor.layout()` on activation) to avoid black content issues.
 
 ### Component Hierarchy
 ```
@@ -2623,9 +2153,9 @@ App Root (renderer.ts)
 │   ├── Progress Bars
 │   └── Chat Interface
 ├── Status Bar
-│   ├── Git Branch (if repository open) + S/M/U + ↑/↓
-│   ├── Hive User + Plan (center)
-│   └── Usage Counter (used/remaining today)
+│   ├── Connection Status
+│   ├── Usage Counter
+│   └── Model Selection
 └── Modals
     ├── Settings Modal
     └── Analytics Modal
@@ -2708,36 +2238,6 @@ The application's DOM (Document Object Model) is a tree structure that defines t
 - **Activity Bar**: 48px width, never resizes
 - **Title Bar**: 30px height, spans full width
 - **Status Bar**: 22px height, spans full width
-  - Left: current Git branch (click toggles Source Control panel), ahead/behind (↑/↓), and file counts:
-    - S (staged), M (modified), U (untracked). Counts update on Git operations.
-  - Center: current Hive user (email), membership plan, and conversations used/remaining today
-  - Right: reserved (no backend or IPC indicators)
-
-#### Git UX — Unified Flows & Indicators (v1.8.367)
-
-- Single source of truth for opening folders
-  - All “Open Folder” paths (Welcome recent, File menu, SCM button) delegate to a unified handler which:
-    - Sets the global `currentOpenedFolder`
-    - Calls `git-set-folder` (IPC) to initialize the Git manager
-    - Refreshes the status bar and initializes Explorer/SCM consistently
-  - Welcome recent now opens Source Control automatically to make branch and counts visible immediately.
-
-- Status Bar (left)
-  - Branch name shown when a repository is open; clicking it toggles the Source Control panel.
-  - Indicators:
-    - `↑N` `↓M` for ahead/behind (hidden when 0 to reduce visual noise)
-    - `S:x M:y U:z` for file counts, computed from Git porcelain v2 status
-  - Counts update on open/close folder and on Git operations (SCM emits a `git-status-changed` event).
-
-- Source Control header
-  - Shows branch name and badges:
-    - `↑N`/`↓M` (hidden when 0)
-    - `S:x`, `M:y`, `U:z` — badges are interactive; clicking scrolls to the respective group.
-
-Known UX notes
-- Current behavior toggles SCM when the branch label is clicked (open/close). Recommended refinement: clicking always opens/focuses SCM and doesn’t close it if already visible.
-- SCM header currently hides badges when zero. Consider always showing `S:0` and `U:0` to reduce ambiguity.
-- Add VS Code–style icons and tooltips to S/M/U in status bar and SCM header to improve affordance (planned).
 
 **2. Collapsible Panels**
 - **Sidebar Panel**: 260px default width, can collapse to 0
@@ -2954,104 +2454,6 @@ Recommended minimum: 1400px for all panels visible
 }
 ```
 
-##### Panel Visibility Management (v1.8.289)
-
-##### Editor Visibility Regression & Fix (v1.8.340)
-- Symptom: Files opened from Explorer/SCM created editors successfully but content remained invisible.
-- Root cause: Editors container had computed height 0 due to overlay stacking and missing explicit height.
-- Fixes applied:
-  - Added explicit height to `.editors-container` (`calc(100% - 35px)` below tab bar).
-  - Centralized overlay hiding + center expansion in a single helper during file opens.
-  - Ensured `#editor-area` has higher stacking context (`z-index: 2`).
-- Result: Files and SCM diffs open with visible editor content; Source Control commit list and Explorer interactions remain unaffected.
-
-**Overview**
-The application uses a sophisticated panel management system to handle multiple overlapping panels in the center area while maintaining proper visibility and toggle states.
-
-**Panel Categories**:
-1. **Side Panels**: Explorer, Git (left sidebar)
-2. **Right Panels**: Terminal, Consensus (right side)
-3. **Center Panels**: Editor tabs, Welcome, Documentation, Settings, Analytics, Memory, CLI Tools
-
-**Visibility Rules (Centralized Controller)**:
-- Exactly one center panel is visible at a time (Welcome, Help, Settings, Analytics, Memory, CLI Tools).
-- Side panels (Explorer/Git) are independent of center panels.
-- All show/hide logic is centralized to eliminate overlap bugs.
-
-**Centralized Center Panel Controller (v1.9)**
-We replaced ad-hoc `style.display` toggling with a single state controller and a pure state machine:
-
-```typescript
-type CenterView = 'welcome' | 'help' | 'settings' | 'memory' | 'cli-tools' | 'analytics';
-let currentCenterView: CenterView | null = 'welcome';
-let lastCenterView: CenterView | null = null;
-
-function hideAllCenterPanels() {
-  // Hides welcome, help, settings, memory, cli-tools, analytics and any .content-panel/.panel-content
-}
-
-function setCenterView(view: CenterView | null, opts?: { section?: string }) {
-  // Toggle rule: clicking the active view closes it and restores last view; if none, falls back to Welcome.
-  // Welcome is the base view; toggling Welcome off is a no-op.
-  // Internally hides all center panels, then shows the requested one and updates button states.
-}
-```
-
-Pure state machine: `src/utils/panel-state.ts` (`nextStateOnToggle`) with tests in `tests/panel-state.test.ts` ensures deterministic transitions and fewer regressions.
-
-**Dedicated Handlers** (called by controller):
-- `showWelcomePage()` — mounts Welcome and hides others via controller.
-- `showHelpPanel(section)` — mounts Help and navigates to section.
-- `showSettingsPanel()` — renders Settings once and shows panel.
-- `showMemoryPanel()` — opens Memory Dashboard.
-- `showCliToolsPanel()` — renders AI CLI Tools panel.
-- `showAnalyticsPanel()` — mounts Analytics dashboard.
-
-###### True Toggle Behaviour (v1.8.440)
-- Activity bar icons are now strict toggles: clicking the active view closes it and returns focus to the editor workspace.
-- `setCenterView()` returns the resolved view so callers only retry "force show" logic when a panel remains open.
-- `showEditorWorkspace()` centralises restoring the editor layout (`hideAllCenterPanels({ hideEditors: false })`, re‑display editors, expand center column).
-- Existing integrations (welcome deep links, documentation events) can opt into legacy idempotent focus via `forceFocus` to keep panels pinned when needed.
-
-###### Memory Panel Layout Guard (v1.8.436)
-- `configureMemoryPanelLayout(memoryPanel, container)` now runs whenever the Memory view opens or re-activates.
-- Forces the panel/container into a flex column stack (`display: flex`, `flex: 1 1 auto`, `min-height: 0`) so the dashboard owns the full viewport height.
-- Prevents the previous regression where the bottom integration guide became inaccessible due to the panel shrinking with no scrollbar.
-- Fallback: if the container can't be located, the panel still forces `display: flex` and logs a console error for diagnostics.
-
-Buttons map to views via `data-view` → `setCenterView(...)`. Explorer/Git still use `toggleSidebarPanel(...)` and are independent.
-
-##### Activity Bar Icons (v1.8.289)
-
-**Icon Organization**:
-```html
-<div class="activity-bar-unified">
-  <!-- Top Section: Core Tools -->
-  <button data-view="explorer">File Explorer</button>
-  <button data-view="git">Source Control</button>
-  
-  <!-- Middle Section: AI Tools -->
-  <div class="sidebar-divider"></div>
-  <div class="ai-cli-icons-section">
-    <button data-view="memory">Memory Service</button>
-    <button data-view="analytics">Analytics</button>
-    <button data-view="cli-tools">CLI Tools</button>
-  </div>
-  
-  <!-- Bottom Section: System -->
-  <div class="sidebar-divider"></div>
-  <button data-view="welcome">Welcome (Home icon)</button>
-  <button data-view="documentation">Documentation</button>
-  <button data-view="settings">Settings</button>
-</div>
-```
-
-**Visual Hierarchy**:
-- Dividers separate functional groups
-- Bottom section uses `margin-top: auto` to stick to bottom
-- Active states shown with background highlight
-- Tooltips show keyboard shortcuts
-
 ##### Panel Interaction Flows
 
 **1. TTYD Terminal Panel (v1.8.0 - No Manual Resize)**
@@ -3118,244 +2520,6 @@ Buttons map to views via `data-view` → `setCenterView(...)`. Explorer/Git stil
 
 ### UI Components
 
-#### Welcome Page Component (v1.8.289)
-**Implementation**: `src/components/welcome-page.ts`
-
-##### Purpose
-- Provides enterprise-grade welcome experience when app launches
-- Shows getting started information and feature highlights
-- Displays release notes and changelog information
-- Offers quick access to documentation and key features
-
-##### Architecture
-- **Enterprise Design**: Professional typography and color scheme
-- **Flat UI**: Minimal shadows, subtle borders, muted colors
-- **Responsive Layout**: Grid-based feature cards
-- **Copy-to-Clipboard**: Memory command for AI CLI tools integration
-
-##### Visual Design Principles
-```css
-/* Enterprise Typography */
-.welcome-title {
-  font-size: 36px;      /* Reduced from 48px for professionalism */
-  font-weight: 400;     /* Medium weight, not too bold */
-  letter-spacing: -0.5px;
-}
-
-.welcome-subtitle {
-  font-size: 14px;      /* Small, uppercase subtitle */
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #8b8b8b;       /* Muted color */
-}
-
-/* Flat Design Elements */
-.feature-card {
-  background: #252526;  /* Solid background */
-  border: 1px solid #3c3c3c;
-  border-radius: 4px;   /* Subtle rounding */
-  transition: border-color 0.15s;
-}
-
-.feature-icon {
-  border: 1px solid #3c3c3c;  /* Outline style */
-  color: #007acc;              /* Accent color for icons */
-}
-```
-
-##### Integration Points
-- Mounted dynamically when Help → Show Welcome is selected
-- Toggle button in activity bar (home icon above settings)
-- Hidden when other panels are activated
-- Persistent across sessions
-
-#### Help Viewer Component (v1.8.289)
-**Implementation**: `src/components/help-viewer.ts`
-
-##### Purpose
-- Integrated documentation viewer within the application
-- Replaces external browser-based help system
-- Provides VS Code-style documentation experience
-- Direct access to Getting Started, Memory Query, Database Access guides
-
-##### Architecture
-- **Section-Based Navigation**: Left sidebar with section list
-- **Forced Scrollbars**: Always visible for better UX (`overflow-y: scroll`)
-- **SVG Icons**: VS Code-style icons for each section
-- **Dark Theme**: Consistent with application theme
-
-##### Key Features
-```typescript
-// Copy-to-clipboard for memory command
-<button class="copy-btn" onclick="navigator.clipboard.writeText('Read ~/.MEMORY.md')">
-  Copy Command
-</button>
-
-// Section management
-private sections: HelpSection[] = [
-  { id: 'getting-started', title: 'Getting Started', icon: '...', content: '...' },
-  { id: 'memory-query', title: 'Memory Query', icon: '...', content: '...' },
-  // ...
-]
-```
-
-### Welcome Page System (v1.9.x)
-**Implementation**: `src/components/welcome-page.ts`
-
-#### Design Philosophy
-- **Utility over marketing** - Focus on productivity, not feature advertising
-- **Respect user preferences** - Learn from GitHub Copilot and VS Code feedback
-- **Enterprise professional** - Clean, efficient, focused on work
-
-#### Three-Column Layout
-```
-┌─────────────────────────────────────────────────┐
-│  HIVE CONSENSUS                     [Settings ⚙] │
-├─────────────┬────────────────────────┬──────────┤
-│   START     │              RECENT            │  LEARN   │
-│             │                        │          │
-│ New Project │ ~/auth-system/         │ Shortcuts│
-│ Clone       │ ~/data-pipeline/       │ Workflows│
-│ Open Folder │ ~/ml-project/          │ What's New
-│             │ api-handler.ts         │          │
-│             │ database.sql           │          │
-│             │ config.yaml            │          │
-│             │                        │          │
-│             │ [Show all 25...]       │          │
-└─────────────┴────────────────────────┴──────────┘
-[✓] Show on startup   [Open Recent ▼]   [Show All…]   [Clear]
-```
-
-#### Key Features (Developer‑Focused)
-1. **Primary actions**: New Project, Clone Repository, Open Folder, Getting Started
-2. **Recents first**: Large Recent (70% width), 20 items inline, search + Show All modal
-3. **Open Recent dropdown**: Quick top 10 with Clear and Remove
-4. **DB‑backed**: Persistent preferences and recent folders in `~/.hive/hive-ai.db`
-5. **What’s New badge**: Shown only on version change; cleared on open
-6. Drag‑and‑drop: Removed for macOS UX simplicity (no dropzone)
-7. **Continuity**: Restore last session (tabs + active tab) when available
-8. **Shortcuts modal**: In‑app quick cheat sheet; link to full docs
-
-#### Database Schema
-```sql
--- Welcome preferences stored in ~/.hive-ai.db
-CREATE TABLE IF NOT EXISTS welcome_settings (
-  id INTEGER PRIMARY KEY,
-  show_on_startup INTEGER DEFAULT 1,
-  layout_mode TEXT DEFAULT 'balanced', -- 'minimal', 'balanced', 'full'
-  recent_items_count INTEGER DEFAULT 15,
-  last_shown TIMESTAMP,
-  times_dismissed INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Usage analytics for continuous improvement
-CREATE TABLE IF NOT EXISTS welcome_analytics (
-  id INTEGER PRIMARY KEY,
-  action TEXT NOT NULL, -- 'click_recent', 'click_new', 'dismiss', etc
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-#### Smart Behavior Rules
-1. **First launch**: Show full welcome with all three columns
-2. **Has recent projects**: Expand Recent to 70% (side columns 15% each)
-3. **After 10 uses**: Default to minimal view (Recent + quick actions)
-4. **After update**: Show What’s New badge until opened once
-5. **Dismissed 3+ times quickly**: Auto-disable with toast
-
-#### Implementation Phases (v1.9)
-1. **Phase 1 — Make core actions complete**
-   - Open Recent dropdown with top 10 + Clear; Remove per item
-   - Show All modal with search, Open, Remove, optional Pin
-   - Shortcuts modal (inline) + link to full docs
-   - What’s New badge logic using stored `welcome.lastSeenVersion`
-2. **Phase 2 — High‑value flows**
-   - Create from Template (Node/Python/Rust) with Git init
-   - Clone dialog provider tabs (URL/GitHub/GitLab); progress toasts
-   - Open Terminal Here for selected project
-3. **Phase 3 — Continuity & onboarding**
-   - Restore last session button (when session exists)
-   - One‑time “Basics tour” prompt on first run
-4. **Phase 4 — Layout & analytics**
-   - Layout modes: minimal/balanced/full via `welcome.layoutMode`
-   - `welcome_analytics` event logging: `click_recent`, `clone_success`, `clone_fail`, `open_shortcuts`, `open_recents_modal`, `clear_recents`, `restore_session`, etc.
-
-### Layout Modes
-- `minimal`: Focus on Recent (80%) + Start (20%), hide Learn.
-- `balanced`: Recent (70%), Start (15%), Learn (15%).
-- `full`: Recent (60%), Start (20%), Learn (20%).
-Stored as `welcome.layoutMode` in settings. UI toggle cycles modes and persists immediately.
-
-### Welcome v1.9 Feature Matrix
-- Start actions: New Project (template scaffold + git init), Open Folder, Clone Repository (URL/GitHub tabs), Open Terminal.
-- Recents: 20 inline; Open Recent ▾ (top 10 + remove); Show All modal (search, Open, Restore, Terminal, Remove); Clear.
-- Learn: Keyboard Shortcuts (inline modal), AI Workflows, What’s New (version-aware badge; clears when opened).
-- Drag-and-drop: Removed (no Start dropzone).
-- Recents source of truth: merge structured `recent_folders` table with legacy `recent.folders` JSON key; de-duplicate by `folder_path`, prefer most recent `last_opened`, then sort desc and limit to 20.
-- Layout toggle applies regardless of recents presence (persisted under `welcome.layoutMode`).
-- Continuity: Restore Session button when the most recent folder has saved tabs.
-- Layout selector: Minimal/Balanced/Full toggle in footer.
-- Analytics: Welcome actions logged to `welcome_analytics` for UX telemetry (see DB section).
-
-### Persisted Keys (Welcome)
-- `welcome.showOnStartup` — '1'|'0'
-- `welcome.layoutMode` — 'minimal'|'balanced'|'full'
-- `welcome.lastSeenVersion` — string (compared to app version)
-- `welcome.tourSeen` — '1' once the Basics Tour is dismissed/started
-
-### Analytics Events (Welcome)
-Stored in `welcome_analytics (id, action, timestamp)`
-- `click_recent`, `open_recents_modal`, `clear_recents`, `restore_session`
-- `open_shortcuts`, `open_workflows`, `open_whats_new`
-- `layout_toggle_minimal|balanced|full`
-- `clone_success`, `clone_fail`
-
-### Layout Modes
-- `minimal`: Focus on Recent (80%) + Start (20%), hide Learn.
-- `balanced`: Recent (70%), Start (15%), Learn (15%).
-- `full`: Recent (60%), Start (20%), Learn (20%).
-Stored as `welcome.layoutMode` in settings. UI toggle cycles modes and persists immediately.
-
-#### User Experience Lessons Applied
-- ❌ **Avoid**: Persistent panels that won't dismiss (GitHub Copilot mistake)
-- ❌ **Avoid**: Cramped Recent section (VS Code issue)
-- ❌ **Avoid**: Forced walkthroughs or tutorials
-- ✅ **Include**: Clear startup preference checkbox
-- ✅ **Include**: Large, useful Recent projects list
-- ✅ **Include**: Quick action buttons for common tasks
-
-#### Technical Implementation
-```typescript
-interface WelcomeSettings {
-  showOnStartup: boolean;
-  layoutMode: 'minimal' | 'balanced' | 'full';
-  recentCount: number;
-}
-
-// Store preference in database
-const savePreference = async (show: boolean) => {
-  await window.databaseAPI.execute(
-    'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-    ['welcome.showOnStartup', show ? '1' : '0']
-  );
-};
-
-// Load on startup
-const loadPreference = async () => {
-  const result = await window.databaseAPI.query(
-    'SELECT value FROM settings WHERE key = ?',
-    ['welcome.showOnStartup']
-  );
-  return result[0]?.value !== '0';
-};
-```
-
-Additional keys in `settings` table:
-- `welcome.lastSeenVersion`: string (last app version that dismissed What’s New)
-- `welcome.layoutMode`: 'minimal' | 'balanced' | 'full'
-
 #### Isolated Terminal Panel (TTYD Implementation v1.8.0)
 **Location**: `src/components/TTYDTerminalPanel.ts`
 - Completely isolated component with zero impact on rest of app
@@ -3401,8 +2565,6 @@ Additional keys in `settings` table:
 
 ## Memory Service Infrastructure
 
-> **Note**: For the complete end-to-end Memory-Context-Consensus loop, see [Complete Memory-Context-Consensus Loop Architecture](#complete-memory-context-consensus-loop-architecture-v18190)
-
 ### Architecture Overview
 ```
 External AI Tools (Claude Code, Gemini, etc.)
@@ -3415,7 +2577,7 @@ Memory Service (Express + HTTP Server)
          ↓
    Main Process
          ↓
-   SQLite Database (messages, memory_context_logs tables)
+   SQLite Database
 ```
 
 ### Critical Implementation Details
@@ -3454,68 +2616,17 @@ this.wss = new WebSocketServer({ server: this.server });
 - Rate limiting
 - Activity monitoring
 
-### Memory Service Dashboard (v1.8.239+)
-
-#### Purpose & Design Philosophy
-**Focus**: Memory-as-a-Service infrastructure health monitoring and connectivity status
-**Not**: Developer productivity analytics (handled by Analytics Dashboard)
-
-#### Dashboard Components
-
-**Service Health Indicators:**
+### Statistics Tracking
 ```typescript
 {
-  status: "Active",           // Service operational status
-  port: 3000,                // Dynamic port allocation (varies per user)  
-  database: "~/.hive/hive-ai.db", // Database location
-  totalMemories: 797,        // Total messages in database
-  queriesToday: 19,          // Actual queries from conversation_usage table
-  contributionsToday: 0,     // Messages contributed today
-  hitRate: 92,              // Query success rate percentage
-  avgResponseTime: 45       // Milliseconds response time
+  totalMemories: 616,      // Total messages in database
+  queriesToday: 6,         // Actual consensus queries from conversation_usage table
+  contributionsToday: 5,   // Messages added today via consensus
+  connectedTools: 0,       // Currently connected external AI tools
+  hitRate: 92,            // Query success rate percentage
+  avgResponseTime: 45     // Milliseconds (exponential moving average)
 }
 ```
-
-**Connected Tools Integration (v1.8.239+):**
-```typescript
-// Uses working CLI Tools detector (same as AI CLI Tools section)
-connectedTools: 6          // Accurate count from CLI Tools detector
-toolsList: [
-  { name: "Claude Code", version: "1.0.109", status: "Active" },
-  { name: "Gemini CLI", version: "0.3.4", status: "Active" },
-  { name: "Qwen Code", version: "0.0.10", status: "Active" },
-  { name: "OpenAI Codex", version: "0.30.0", status: "Active" }, 
-  { name: "Cline", version: "0.0.1", status: "Active" },
-  { name: "Grok CLI", version: "1.0.1", status: "Active" }
-]
-```
-
-**Performance Architecture (v1.8.239+):**
-- **5-second updates**: Non-blocking renderer process intervals
-- **30-second caching**: CLI Tools detector caches detection results  
-- **WebSocket real-time**: Instant activity updates when available
-- **Efficient integration**: Single source of truth with AI CLI Tools section
-- **Performance overhead**: ~9ms every 5 seconds (0.18% CPU)
-
-**Layout Reliability (v1.8.436):**
-- Injected styles pin `#memory-panel` to full height and force `#memory-container` into a flex column with `min-height: 0`.
-- Guarantees the dashboard's internal scroll container can reach the bottom integration guide on all viewport sizes.
-- Works in tandem with the runtime `configureMemoryPanelLayout` helper documented above.
-
-**Essential Actions (v1.8.362+):**
-
-- Export/Import memory moved to Settings → Advanced (Backup & Restore).
-- Memory Service panel focuses on live stats, connected tools, and activity.
-
-**Live Activity Stream:**
-- **Real-time monitoring**: WebSocket-based activity updates
-- **API usage tracking**: Shows actual Memory Service usage patterns
-- **Tool identification**: Displays which tools are accessing the service
-
-**Removed Redundant Features (v1.8.239+):**
-- ~~Configure Tools~~ (now automatic in AI CLI Tools section)
-- ~~View Documentation~~ (not needed for service monitoring)
-- ~~Quick Integration~~ (contradicts seamless automation)
 
 ### Memory Service Implementation Details
 
@@ -3523,9 +2634,8 @@ toolsList: [
 - **Type**: Child process managed by ProcessManager
 - **Entry Point**: `src/memory-service/index.ts`
 - **Server**: `src/memory-service/server.ts`
-- **Port**: Dynamic allocation (3457-3560 range) via PortManager
+- **Port**: 3457 (with automatic fallback to 3458-3460)
 - **IPC Communication**: Fork with ts-node for TypeScript support
-- **Zero hardcoded ports**: Fully integrated with ProcessManager/PortManager architecture
 
 #### Database Access Pattern
 ```typescript
@@ -4341,442 +3451,10 @@ User Action → Event Trigger → Targeted Update → DOM Manipulation
 
 ---
 
-## Complete Memory-Context-Consensus Loop Architecture (v1.8.190+)
-
-### Overview: Closed-Loop Memory System
-The Hive Consensus system implements a complete closed-loop memory architecture where every interaction becomes part of the system's growing knowledge base. This creates a continuously learning system that improves with each use.
-
-### 🔄 End-to-End Memory Loop Flow
-
-```
-USER QUESTION
-     ↓
-[1] STORE USER MESSAGE → SQLite Database (messages table)
-     → Also insert into conversation_usage for analytics tracking
-     ↓
-[2] MEMORY RETRIEVAL STAGE (Parallel Processing)
-     ├── RECENT Layer (Last 2 hours) - Immediate context
-     ├── TODAY Layer (Last 24 hours) - Daily patterns  
-     ├── WEEK Layer (Last 7 days) - Weekly patterns
-     └── SEMANTIC Layer (All time) - Keyword matching
-     ↓
-[3] CONTEXT BUILDING STAGE
-     ├── Pattern Extraction (questions, code, debugging, etc.)
-     ├── Topic Identification (key terms and concepts)
-     └── Summary Generation (contextual framework)
-     ↓
-[4] INTELLIGENT ROUTING STAGE
-     ├── SIMPLE PATH → Direct response (1 model, fast)
-     └── COMPLEX PATH → Full consensus (4 models, thorough)
-     ↓
-[5] CONSENSUS PROCESSING (Simple or Complex)
-     ↓
-[6] STORE ASSISTANT RESPONSE → SQLite Database
-     ↓
-[7] UPDATE MEMORY SERVICE STATISTICS
-     ├── Total Memories Count
-     ├── Queries Today Count
-     └── Contributions Today Count
-     ↓
-[8] UPDATE ANALYTICS DASHBOARD
-     ├── Real-time Metrics
-     ├── Cost Tracking
-     └── Model Usage Stats
-     ↓
-[LOOP COMPLETE - Response becomes future memory]
-```
-
-### 📊 Memory & Context Stages (Pre-Consensus)
-
-#### Memory Stage Implementation
-**Location**: `src/consensus/SimpleConsensusEngine.ts:retrieveRelevantMemories()`
-**Purpose**: Retrieve relevant past conversations to inform current response
-
-```typescript
-// Optimized parallel memory retrieval using connection pooling
-const memories = await this.optimizedMemory.retrieveMemories(query, conversationId);
-
-// Four-layer parallel query execution:
-1. RECENT:   SELECT * WHERE timestamp > NOW - 2 HOURS
-2. TODAY:    SELECT * WHERE timestamp > NOW - 24 HOURS  
-3. WEEK:     SELECT * WHERE timestamp > NOW - 7 DAYS
-4. SEMANTIC: SELECT * WHERE content LIKE '%keywords%'
-```
-
-**Performance Optimizations**:
-- **Connection Pooling**: 4 SQLite connections for parallel queries
-- **WAL Mode**: Write-Ahead Logging for better concurrency
-- **Query Caching**: 5-minute cache for frequently accessed memories
-- **Parallel Execution**: All 4 layers query simultaneously
-
-#### Context Stage Implementation
-**Location**: `src/consensus/SimpleConsensusEngine.ts:buildContextFramework()`
-**Purpose**: Analyze retrieved memories to build contextual understanding
-
-```typescript
-// Extract patterns and topics from memories
-const framework = {
-  summary: "Past discussions include: authentication, API design...",
-  patterns: ["questions", "code-related", "debugging", "optimization"],
-  relevantTopics: ["authentication", "database", "performance"],
-  userPreferences: [] // Future: learned preferences
-};
-```
-
-**Pattern Detection**:
-- Questions (contains "?")
-- Code-related (contains function/class/import)
-- Creation tasks (contains create/build/implement)
-- Debugging (contains fix/debug/error)
-- Optimization (contains optimize/improve/enhance)
-
-### 🎯 Intelligent Routing with Context
-
-#### Simple vs Complex Decision
-**Location**: `src/consensus/SimpleConsensusEngine.ts` (Line 200-227)
-
-The routing decision now incorporates context from memories:
-
-```typescript
-const routingPrompt = `
-${contextFramework.summary ? `Context: ${contextFramework.summary}\n\n` : ''}
-
-Determine if this is SIMPLE or COMPLEX:
-
-A SIMPLE question:
-- Has a straightforward, factual answer
-- Requires basic explanation or definition
-- Can be answered in a few sentences
-- Examples: "What is Python?", "How do I create a variable?"
-
-A COMPLEX question:
-- Requires multi-step reasoning or analysis
-- Needs code generation or detailed technical explanation
-- Requires synthesis of multiple concepts
-- Examples: "Create a full application", "Debug this complex code"
-
-Question: ${request.query}
-
-Respond with ONLY one word: SIMPLE or COMPLEX`;
-```
-
-### 💾 Database Integration
-
-#### Message Storage Structure
-**Table**: `messages`
-```sql
-CREATE TABLE messages (
-  id TEXT PRIMARY KEY,
-  conversation_id TEXT,
-  role TEXT,  -- 'user' or 'assistant'
-  content TEXT,
-  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-  model_used TEXT,
-  tokens_used INTEGER,
-  cost REAL,
-  consensus_path TEXT, -- 'SIMPLE' or 'COMPLEX'
-  consensus_rounds INTEGER,
-  parent_message_id TEXT,
-  FOREIGN KEY (parent_message_id) REFERENCES messages(id)
-);
-```
-
-#### Memory Context Logs
-**Table**: `memory_context_logs`
-```sql
-CREATE TABLE memory_context_logs (
-  log_id TEXT PRIMARY KEY,
-  request_id TEXT,
-  conversation_id TEXT,
-  memories_retrieved_recent INTEGER,
-  memories_retrieved_today INTEGER,
-  memories_retrieved_week INTEGER,
-  memories_retrieved_semantic INTEGER,
-  context_summary TEXT,
-  patterns_identified TEXT, -- JSON array
-  topics_extracted TEXT,    -- JSON array
-  routing_decision TEXT,    -- 'SIMPLE' or 'COMPLEX'
-  memory_stage_duration_ms INTEGER,
-  context_stage_duration_ms INTEGER,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### 📈 Memory Service Integration
-
-#### Statistics Tracking
-**Location**: `src/memory-service/server.ts`
-
-The Memory Service maintains real-time statistics that are automatically updated:
-
-```typescript
-interface MemoryStats {
-  totalMemories: number;      // COUNT(*) FROM messages
-  queriesToday: number;        // COUNT(*) FROM conversation_usage WHERE date=today
-  contributionsToday: number; // COUNT(*) FROM messages WHERE date=today
-  connectedTools: number;      // External AI tools connected
-  hitRate: number;            // Cache hit percentage
-  avgResponseTime: number;    // Exponential moving average
-}
-```
-
-**Update Frequency**: Every 10 seconds via database queries through IPC
-
-#### IPC Communication Flow
-```
-Memory Service (Child Process)
-     ↓ (sends db-query)
-Main Process (Database Owner)
-     ↓ (executes query)
-Memory Service (receives result)
-     ↓ (updates stats)
-Renderer (displays in UI)
-```
-
-### 📊 Analytics Dashboard Integration
-
-#### Overview
-**Location**: `src/analytics.ts` (UI) and `src/index.ts` (`ipcMain.handle('get-analytics')`)
-
-The Analytics Dashboard reads persisted data from the unified SQLite DB and updates every 5 seconds. A period selector allows switching the window between `Last 24 Hours`, `Last 7 Days`, and `Last 30 Days`.
-
-```
-Consensus Complete
-  → INSERT/UPDATE `conversations`
-  → INSERT `conversation_usage`
-  → INSERT `performance_metrics` (if duration is provided)
-  → INSERT `stage_outputs` (current profile’s models, cost/tokens apportioned)
-  → (Optionally) INSERT `knowledge_conversations` (question/answer)
-
-UI refresh (5s interval or manual Refresh button) → IPC `get-analytics(period)` → DB queries → Render
-```
-
-#### Period Windows
-The dashboard passes one of (`'24h' | '7d' | '30d'`) to `get-analytics`. The IPC handler applies period filters with robust SQLite datetime windows against `conversation_usage.timestamp`:
-
-- `24h`: `datetime(cu.timestamp) >= datetime('now','-24 hours')`
-- `7d`:  `datetime(cu.timestamp) >= datetime('now','-7 days')`
-- `30d`: `datetime(cu.timestamp) >= datetime('now','-30 days')`
-
-These windows are used for:
-- Period Queries (count of `conversation_usage` in the window)
-- Period Cost/Tokens (sums from `conversations` joined to period-bounded `conversation_usage`)
-- Hourly stats (always last 24 hours, independent of selected period in the chart title)
-
-#### Data Sources
-- Period metrics (queries, cost, tokens, avg response):
-  - `conversation_usage` (period filter)
-  - `conversations.total_cost`, `conversations.total_tokens_input`, `conversations.total_tokens_output`
-  - `performance_metrics.total_duration` (AVG in seconds)
-- All-time metrics (total queries, total cost, avg response):
-  - Same tables as above without period filter
-- Recent activity (last 10):
-  - `conversation_usage` → `conversations` → `knowledge_conversations` → `performance_metrics`
-  - Ordered by `conversation_usage.timestamp` DESC (not period-filtered)
-- Model usage and cost-by-model:
-  - Primary: `stage_outputs` joined to `conversation_usage` (current user, not period-filtered)
-  - Fallback: `consensus_profiles` 25% allocation per stage if `stage_outputs` lookup errors
-
-#### UI Behavior
-- Metrics shown:
-  - Period Queries, Period Cost, All-Time Queries, Total Cost, Success Rate, Avg Response
-  - Token Usage (period): total / input / output
-- Query Volume title updates to include the selected period label, e.g., `Query Volume (24H)`.
-- Refresh button triggers a manual fetch and briefly animates; auto-refresh runs every 5 seconds.
-- Small costs (< $0.10) display with 4 decimals in Period Cost for clarity.
-
-#### Known Limits (current design)
-- Model Usage and Cost by Model aggregate across the user’s conversations without a period filter.
-- Recent activity is ordered by most recent usage and is not constrained to the selected period.
-- Period cost/tokens pull from `conversations` rollups; if an entry was never updated with totals, its contribution is zero for that period.
-
-### 🔧 Implementation Details
-
-#### Critical Requirements (v1.8.194+)
-
-**conversation_usage Table Tracking**:
-- **MUST** insert into `conversation_usage` for EVERY consensus query
-- Analytics and Memory Service dashboards depend on this table
-- Without entries, dashboards show 0 queries even when queries are processed
-
-**Memory Retrieval Priority**:
-- When conversationId exists, prioritize current conversation messages
-- Retrieve up to 10 messages per layer (increased from 5)
-- Build context from actual conversation content, not just keyword extraction
-
-**Context Building Enhancement**:
-- Extract actual conversation flow (User asked X, Previously discussed Y)
-- Identify meaningful topics (PowerShell, Python, etc.) not just words
-- Include conversation history in context summary for continuity
-
-#### Optimized Memory Service
-**File**: `src/database/OptimizedMemoryService.ts`
-
-Key features:
-- No separate worker threads (uses existing Memory Service)
-- Connection pooling for parallel queries
-- Query caching with 5-minute timeout
-- Automatic stats update via event emission
-
-```typescript
-class OptimizedMemoryService {
-  private dbConnections: sqlite3.Database[] = [];  // Pool of 4 connections
-  private queryCache: Map<string, CachedResult>;   // LRU cache
-  
-  async retrieveMemories(query: string, conversationId?: string) {
-    // Check cache first
-    // Execute 4 parallel queries on different connections
-    // Combine and deduplicate results
-    // Update Memory Service stats
-  }
-}
-```
-
-#### Performance Metrics
-- **Memory Retrieval**: <50ms for all 4 layers combined
-- **Context Building**: <20ms for pattern extraction
-- **Routing Decision**: <500ms including OpenRouter call
-- **Cache Hit Rate**: ~40% for repeated similar queries
-- **Parallel Efficiency**: 75-85% (vs sequential queries)
-
-### 📊 Memory Context Logging & Debugging (v1.8.203+)
-
-#### Overview
-The system now comprehensively logs all context framework data to enable debugging and evaluation of what context is provided to LLMs during consensus processing.
-
-#### Database Schema
-**Table**: `memory_context_logs`
-```sql
-CREATE TABLE memory_context_logs (
-    log_id TEXT PRIMARY KEY,
-    request_id TEXT NOT NULL,
-    conversation_id TEXT,
-    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Memory retrieval metrics
-    memories_retrieved_recent INTEGER DEFAULT 0,
-    memories_retrieved_today INTEGER DEFAULT 0,
-    memories_retrieved_week INTEGER DEFAULT 0,
-    memories_retrieved_semantic INTEGER DEFAULT 0,
-    
-    -- Context framework data (NEW)
-    context_summary TEXT,           -- Full context built from memories
-    patterns_identified TEXT,        -- JSON array of patterns found
-    topics_extracted TEXT,          -- JSON array of topics identified
-    user_preferences_detected TEXT, -- Future: learned preferences
-    
-    -- Routing information
-    routing_decision TEXT,          -- SIMPLE or COMPLEX
-    routing_confidence REAL,        -- Future: confidence score
-    context_influenced_routing BOOLEAN DEFAULT 0,
-    
-    -- Performance metrics
-    memory_stage_duration_ms INTEGER,
-    context_stage_duration_ms INTEGER,
-    total_memory_bytes INTEGER,
-    cache_hit_rate REAL,
-    
-    -- References
-    consensus_id TEXT,
-    final_message_id TEXT
-);
-```
-
-#### Implementation Details
-
-**Context Saving (After Building)**
-```typescript
-// Location: SimpleConsensusEngine.ts:199-222
-const contextLogId = `ctxlog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-await this.memoryDb.logMemoryContextOperation({
-    log_id: contextLogId,
-    request_id: request.requestId,
-    conversation_id: this.conversationId,
-    memories_retrieved: {
-        recent: relevantMemories.filter(m => m.source === 'recent').length,
-        today: relevantMemories.filter(m => m.source === 'today').length,
-        week: relevantMemories.filter(m => m.source === 'week').length,
-        semantic: relevantMemories.filter(m => m.source === 'semantic').length
-    },
-    context_summary: contextFramework.summary,
-    patterns_identified: contextFramework.patterns,
-    topics_extracted: contextFramework.relevantTopics,
-    performance_ms: { memory: 0, context: 0 }
-});
-```
-
-**Routing Decision Update**
-```typescript
-// Location: SimpleConsensusEngine.ts:256-257
-// After routing determines SIMPLE or COMPLEX
-await this.updateContextLogRouting(contextLogId, routingDecision);
-```
-
-#### Debugging Queries
-
-**View Recent Context Frameworks**
-```sql
-SELECT 
-    conversation_id,
-    context_summary,
-    patterns_identified,
-    topics_extracted,
-    routing_decision,
-    memories_retrieved_recent + memories_retrieved_today + 
-    memories_retrieved_week + memories_retrieved_semantic as total_memories
-FROM memory_context_logs 
-ORDER BY timestamp DESC 
-LIMIT 10;
-```
-
-**Analyze Routing Decisions**
-```sql
-SELECT 
-    routing_decision,
-    COUNT(*) as count,
-    AVG(memories_retrieved_recent + memories_retrieved_today + 
-        memories_retrieved_week + memories_retrieved_semantic) as avg_memories
-FROM memory_context_logs 
-GROUP BY routing_decision;
-```
-
-**Find Context Issues**
-```sql
--- Find queries with no context despite available memories
-SELECT * FROM memory_context_logs 
-WHERE (memories_retrieved_recent + memories_retrieved_today + 
-       memories_retrieved_week + memories_retrieved_semantic) > 0
-AND (context_summary IS NULL OR context_summary = '');
-```
-
-#### Benefits
-1. **Debugging**: Understand why certain questions were routed incorrectly
-2. **Evaluation**: Review what context was actually provided to LLMs
-3. **Optimization**: Identify patterns in context building for improvement
-4. **Analytics**: Track context influence on routing decisions
-5. **Quality Assurance**: Ensure context is being properly extracted and used
-
-### 🔄 Continuous Learning Loop
-
-Every interaction strengthens the system:
-
-1. **User asks question** → Stored as memory
-2. **System retrieves context** → Past relevant conversations
-3. **Context informs response** → Better, more personalized answers
-4. **Response stored** → Becomes future context
-5. **Analytics track patterns** → System learns usage patterns
-6. **Memory Service indexes** → Faster future retrievals
-
-This creates a continuously improving system where:
-- Common questions get faster, cached responses
-- Context becomes richer over time
-- Patterns emerge from usage
-- System adapts to user preferences
-
 ## Consensus Engine Architecture
 
-### Enhanced Iterative Design with Round Limits (v1.8.206+)
-The consensus engine now uses a hybrid approach with round limits and intelligent fallbacks to prevent infinite loops while maintaining quality.
+### Simplified Iterative Design (v1.8.181+)
+The consensus engine now uses an iterative approach with unified evaluation prompts that achieves consensus in 1-2 rounds instead of endless loops.
 
 #### Profile Management Directives (CRITICAL)
 **NO HARDCODED MODELS OR FALLBACKS** - The system must ALWAYS use the user's selected profile:
@@ -4825,157 +3503,6 @@ The consensus engine now uses a hybrid approach with round limits and intelligen
    - Display clear error message if profile not loaded
    - Prevent consensus execution without valid profile
 
-#### Hybrid Consensus Strategy (v1.8.207+)
-
-**Critical Enhancement**: User-configurable maximum rounds with intelligent fallback strategies to prevent infinite loops.
-
-```typescript
-// User-configurable in SimpleConsensusEngine
-private maxConsensusRounds: number; // Loaded from profile (default: 3)
-private static readonly MAJORITY_THRESHOLD = 2;
-
-// Set from consensus_profiles table
-this.maxConsensusRounds = profile.max_consensus_rounds || 3;
-```
-
-**Consensus Decision Tree**:
-```
-Round 1 to (maxRounds-1): Attempt unanimous consensus (all 3 models agree)
-    ├── If achieved → Mark as 'unanimous', run curator in polish mode
-    └── If not achieved → Continue to next round
-
-Final Round (maxRounds): Accept majority vote (2/3 models agree)  
-    ├── If majority agrees → Mark as 'majority', run curator in polish mode
-    └── If no majority → Mark as 'curator_override', curator chooses from all 3
-
-Curator Role Based on Consensus Type:
-    ├── 'unanimous': Polish the agreed response
-    ├── 'majority': Polish the majority-agreed response
-    └── 'curator_override': Review all 3 responses and select/synthesize best
-
-User Configuration (v1.8.207+):
-    ├── max_consensus_rounds: Configurable per profile (default: 3)
-    ├── UI Access: Settings cog (⚙️) in Consensus Chat header
-    ├── Range: Typically 1-10 rounds
-    └── Trade-off: Higher values = more thorough but higher token usage
-```
-
-**Benefits**:
-- **Prevents Infinite Loops**: User-configurable limit (was 5+ rounds, 87,000+ tokens)
-- **Reduces Costs**: ~65% reduction in token usage for disagreements
-- **Maintains Quality**: Majority vote or curator judgment ensures quality
-- **Always Produces Output**: No more endless deliberation
-- **Transparent to Users**: Shows consensus type achieved
-
-#### Enhanced User Experience (v1.8.226+)
-
-**Claude Code CLI Style Animations**:
-- **Rapid Symbol Cycling**: `+` → `×` → `*` → `✱` → `✲` → `✳` (80ms intervals)
-- **Tech-Fun AI Phrases**: "ai's rapping", "bots are chatting", "neural networking" 
-- **30-Second Rotation**: Guaranteed phrase changes every 30 seconds with console logging
-- **Stage-Specific Display**: Route uses networking phrases, consensus uses AI conversation phrases
-- **Complete Escape Control**: `(esc to interrupt)` - true consensus cancellation with token protection
-
-**Perfect Sequential Experience**:
-```
-Route:      ✳ path processing...
-           (esc to interrupt)
-
-Generator:  + ai's rapping...
-           (esc to interrupt)
-
-Refiner:    × bots are chatting...
-           (esc to interrupt)  
-
-Validator:  * neural networking...
-           (esc to interrupt)
-
-Curator:    ✱ algorithms arguing...
-           (esc to interrupt)
-
-Final:      Unanimous
-```
-
-**Unified Timer System**:
-- **Single Timer**: Handles all sequential stage transitions
-- **No Conflicts**: Eliminated multiple competing timers
-- **Smart Phrase Selection**: Automatically uses appropriate phrases for current stage
-- **Bounds Checking**: Prevents undefined phrase access and display errors
-
-**Visual Enhancements**:
-- **Monospace Typography**: Consistent font across status displays and headers
-- **Fixed-Width Symbols**: Prevents word bouncing during rapid symbol cycling  
-- **Orange Glow Effects**: Authentic Claude Code CLI styling with text shadows
-- **Professional Layout**: ESC message on separate line for clarity
-
-**Consensus Type Indicators** (Color-Coded):
-- 🟠 **Tech-Fun Phrases** - Active AI conversation in progress (Orange)
-- ✅ **"Unanimous"** - All 3 models agreed (Green) 
-- 🟡 **"Majority"** - 2/3 models agreed (Yellow/Amber)
-- 🟠 **"Curator Decision"** - No consensus, curator chose (Orange)
-
-**Complete Escape Control (v1.8.233+)**:
-- **Single ESC Press**: Cancels entire consensus operation immediately 
-- **Real API Abortion**: AbortController cancels network requests mid-flight (token protection)
-- **Complete Progress Reset**: All stages forced to 'ready' regardless of running state
-- **Chat Window Clearing**: Hides technical error messages from interrupted operations
-- **Comprehensive UI Reset**: Neural Consciousness, timers, progress bars, chat, status
-- **Clean State Recovery**: Perfect reset for next consensus operation
-
-**Enhanced Escape Implementation**:
-```
-ESC Pressed → Immediate Actions:
-├── Real API Call Abortion (AbortController.abort())
-│   └── Prevents token charges by stopping network requests
-├── Aggressive Progress Reset 
-│   ├── Multiple CSS selectors (.stage-status, .status, .stage-text)
-│   ├── Force CSS class updates (remove 'running', add 'ready')
-│   ├── Reset all stage attributes and progress bars
-│   └── Console logging for debugging reset success
-├── Complete UI Cleanup
-│   ├── Stop animation timers (symbols, phrases)
-│   ├── Reset Neural Consciousness to default state
-│   ├── Clear chat window → Hide 'Error: This operation was aborted'
-│   └── Reset consensus display → Clear status area
-├── Internal State Reset
-│   ├── isInterrupted flag management
-│   ├── Conversation state cleanup
-│   └── Timer and controller cleanup
-└── Ready for Next Operation → Clean slate for new consensus
-```
-
-**User Experience**:
-- **Before ESC**: Any stage showing 'running' (Generator, Refiner, Validator, Curator)
-- **After ESC**: ALL stages show 'ready', chat cleared, tokens protected
-- **Error Handling**: Technical messages hidden, clean welcome message restored
-
-**Enhanced Typography & Readability (v1.8.239+)**:
-- **Claude Code CLI Inspired**: Consistent 'SF Mono', 'Monaco', 'Consolas' monospace fonts
-- **Improved Font Sizes**: Model names (9px → 11px), headers (12px → 14px), chat content (13px → 14px)
-- **Enhanced Contrast**: Brightened secondary text for optimal readability
-- **Better Spacing**: More generous padding, margins, and line-height throughout
-- **Professional Aesthetic**: Clean terminal typography matching Claude Code CLI standards
-
-**Typography Hierarchy**:
-```
-Primary Text:   #FFFFFF (Bright white - main content)
-Secondary Text: #CCCCCC (High contrast - readable labels) 
-Muted Text:     #D1D5DB (Medium grey - easily readable timestamps/info)
-Dim Text:       #9CA3AF (Light grey - secondary status indicators)
-```
-
-**Readability Improvements**:
-- **Progress Panel**: All stage information clearly visible without strain
-- **Chat Panel**: Message content and timestamps easily readable  
-- **Model Names**: No longer dim and hard to see
-- **Status Indicators**: Clear visibility for all consensus states
-- **Monospace Consistency**: Professional terminal feel throughout
-
-**Version Information**:
-- **Help → About Dialog**: Shows current build version dynamically (v1.8.239+)
-- **Auto-Updates**: Version pulled from package.json, no manual updates needed
-- **Clean Description**: "Multi-Stage Consensus Processing" (not limiting to 4-stage)
-
 #### Core Architecture - Iterative Consensus with Unified Evaluation
 
 **Key Innovation**: All models (except Generator Round 1) use the SAME evaluation prompt, preventing endless rewrites.
@@ -5019,12 +3546,11 @@ async executeRound(round: number) {
 }
 ```
 
-**Performance Metrics (Verified in Production - v1.8.206+)**:
-- **Rounds to Consensus**: 1-3 rounds maximum (was unlimited, seen up to 5+ rounds)
-- **Response Time**: 30-60 seconds (consistent, no more infinite loops)
-- **Token Usage**: ~2,500 tokens typical, max ~30,000 for disagreements (was 87,000+)
-- **Cost**: $0.04-0.15 per query (was $0.50+ for disagreements)
-- **Success Rate**: 100% completion (no more infinite loops)
+**Performance Metrics (Verified in Production)**:
+- **Rounds to Consensus**: 1 round (94% reduction from 8-17 rounds)
+- **Response Time**: 30-35 seconds (97% faster than 15-52 minutes)
+- **Token Usage**: ~2,500 tokens (90% reduction)
+- **Cost**: $0.04 per query (vs $0.50+ before)
 
 ### 4-Stage Iterative Consensus Pipeline (v1.8.181+)
 
@@ -5060,27 +3586,12 @@ All stages now use the SAME consensus evaluation prompt:
 - Consensus check repeats until agreement
 ```
 
-#### Final Stage: Curator (Dual-Mode Operation with Context Parity - v1.8.211+)
+#### Final Stage: Curator (After Consensus)
 ```
-Curator Stage - Mode depends on consensus type:
-
-1. Polish Mode (unanimous/majority consensus):
-   ├── Input: Final agreed response from consensus (no additional context needed)
-   ├── Prompt: Enhanced direct response format without meta-commentary
-   ├── Task: Polish agreed content for presentation
-   └── Output: Clean, polished final answer
-
-2. Choose Mode (no consensus - curator_override):
-   ├── Input: Full contextFramework + Original question + All 3 LLM responses
-   ├── Prompt: Direct question format with reference materials (no role-playing)
-   ├── Task: Act as 4th LLM with same context as others to make final decision
-   └── Output: Synthesized response with proper domain understanding
-
-Enhanced Curator Design (v1.8.211+):
-- **Context Parity**: Choose mode gets same contextFramework as Generator/Refiner/Validator
-- **Clean Prompts**: Eliminated all meta-commentary and thinking process exposure
-- **Direct Response**: Curator responds as if answering original question directly
-- **Domain Understanding**: Proper context prevents misinterpretation (e.g., "angular" = JavaScript framework)
+Curator Stage
+├── Input: Final validated response from consensus
+├── Prompt: Polish and format for user presentation
+└── Output: Markdown-formatted final answer
 ```
 
 ### Key Lessons Learned (Production Verified)
@@ -5090,15 +3601,10 @@ Enhanced Curator Design (v1.8.211+):
 - **"Improve this" prompts** led to infinite loops
 - **Accumulated history** caused exponential token growth
 - **Binary YES/NO voting** was confusing (YES meant continue)
-- **Unlimited rounds** led to 5+ rounds consuming 87,000+ tokens
-- **No fallback strategy** caused endless deliberation without resolution
 
 #### What Works
 - **Unified evaluation prompt** for all models after Round 1
 - **"ACCEPT or correct" pattern** provides clear success criteria
-- **3-round maximum** prevents infinite loops while allowing deliberation
-- **Hybrid consensus strategy** (unanimous → majority → curator) ensures completion
-- **Dual-mode curator** handles both consensus and disagreement scenarios
 - **Pass only latest response** (not accumulated history)
 - **Include original question** for context in every prompt
 - **Empty responses treated as ACCEPT** to handle API failures gracefully
@@ -5334,93 +3840,6 @@ Without Python/AI Helpers, the consensus gets stuck at "router stage" and cannot
 - Stage progress indicators
 - Real-time UI updates
 - Cost tracking per stage
-
-### Consensus Classification Display (v1.8.310+)
-
-#### Overview
-The consensus classification system provides visual feedback about the decision-making outcome of the 4-stage consensus pipeline. Classifications are displayed in the "Hive Consensus Progress" header upon completion.
-
-#### Classification Types
-
-1. **Direct Answer** (Simple Path)
-   - Color: Blue (#3794ff)
-   - Occurs when: Query goes directly to a single LLM (Generator) then Curator
-   - Indicates: Simple query that doesn't require consensus
-
-2. **Unanimous** (Complex Path)
-   - Color: Green (#4caf50)
-   - Occurs when: All models (Generator, Refiner, Validator) agree "NO" improvements needed
-   - Indicates: Strong consensus achieved
-
-3. **Majority** (Complex Path)
-   - Color: Yellow (#ffc107)
-   - Occurs when: 2 out of 3 models agree (e.g., Generator and Validator say "NO", Refiner says "YES")
-   - Indicates: Partial consensus achieved
-
-4. **Curator Decision** (Complex Path)
-   - Color: Orange (#ff9800)
-   - Occurs when: No consensus reached, Curator makes final decision
-   - Indicates: Curator override was needed
-
-#### Implementation Architecture
-
-```typescript
-// SimpleConsensusEngine.ts
-interface ConsensusType {
-  type: 'unanimous' | 'majority' | 'curator_override' | 'direct';
-  achieved: boolean;
-}
-
-// Consensus determination logic
-determineConsensusType(votes: boolean[]): string {
-  if (this.isSimplePath) {
-    return 'direct';  // Direct Answer for simple queries
-  }
-  
-  const yesVotes = votes.filter(v => v).length;
-  if (yesVotes === 0) return 'unanimous';
-  if (yesVotes <= 1) return 'majority';
-  return 'curator_override';
-}
-```
-
-#### UI Display Flow
-
-1. **During Consensus**: Fun phrases animate ("✨ ai's analyzing...", "🎭 models mingling...")
-2. **On Completion**: Classification replaces fun phrase in header
-3. **Location**: Displayed in `<span class="consensus-type">` next to "Hive Consensus Progress"
-
-#### Event Communication
-
-```typescript
-// Main process sends classification
-win.webContents.send('consensus-complete', {
-  response: finalResponse,
-  consensusType: this.consensusType,
-  totalTokens: metrics.totalTokens,
-  totalCost: metrics.totalCost
-});
-
-// Renderer receives and displays
-api.receive('consensus-complete', (data) => {
-  const consensusTypeElement = document.querySelector('.consensus-type');
-  consensusTypeElement.textContent = getClassificationText(data.consensusType);
-  consensusTypeElement.style.color = getClassificationColor(data.consensusType);
-});
-```
-
-#### Status Messages During Iteration
-
-The system displays real-time status during consensus iterations:
-```
-Is this the best answer?
-🤖 Generator: NO
-🔧 Refiner: NO  
-✅ Validator: YES
-Continuing iteration...
-```
-
-This provides transparency into the decision-making process before the final classification is shown.
 
 ---
 
@@ -5698,68 +4117,6 @@ const resizeObserver = new ResizeObserver(() => {
 
 ---
 
-## Version History & Recent Changes
-
-### v1.8.319+ (Current - January 2025)
-**Profile Creation Modal Fix**
-
-#### Profile Management System Fix
-- **Modal Initialization**: Fixed profile creation modal not appearing when clicking "+ New Profile" button
-- **DOM Initialization**: Added `ensureProfileCreationModal()` method to properly add modal to DOM
-- **Tab-Based UI Compatibility**: Maintained compatibility with tab-based settings interface
-- **Event Handling**: Proper event delegation for profile creation button
-- **Z-Index Layering**: Modal properly overlays tab-based settings
-
-#### Technical Details
-- **Root Cause**: Switch from modal-based to tab-based settings broke profile creation modal initialization
-- **Solution**: Created `ensureProfileCreationModal()` that checks for existing modal before adding to DOM
-- **Location**: Modal added to document.body for proper z-index layering
-- **Prevention**: Modal only initialized once to prevent duplicates
-
-### v1.8.289 (December 2024)
-**Major UI/UX Overhaul**
-
-#### Welcome Page Enhancements
-- **Enterprise Design**: Refined typography (36px title, uppercase subtitle)
-- **Professional Icons**: Replaced sparkle with home icon
-- **Toggle Behavior**: Welcome button now toggles (not just opens)
-- **Flat UI**: Removed gradients, using subtle borders and muted colors
-- **Improved Layout**: Better visual hierarchy and spacing
-
-#### Documentation System
-- **Integrated Viewer**: Help documentation now part of main window
-- **VS Code Styling**: Consistent dark theme with application
-- **Forced Scrollbars**: Always visible for better UX
-- **Getting Started**: Added memory command with copy-to-clipboard
-- **Simplified Menu**: Help menu reduced to Documentation and About
-
-#### Panel Management Improvements
-- **Visibility Rules**: Only one center panel visible at a time
-- **Dedicated Handlers**: Special panels (Welcome, Documentation, Settings)
-- **Tab System**: Regular panels use tabs with close buttons
-- **Toggle Consistency**: All toggle buttons work uniformly
-- **Activity Bar Organization**: Three sections with dividers
-
-#### Bug Fixes
-- Fixed AI CLI Tools and Memory Service panels not appearing
-- Resolved documentation panel blocking other center panels
-- Fixed settings button visibility issues
-- Corrected TypeScript compilation errors with DOM references
-- Ensured proper panel stacking and z-index management
-
-### v1.8.280-288 (December 2024)
-- Initial welcome page implementation
-- What's New section with changelog
-- Release notes display system
-- Navigation improvements
-- Panel visibility fixes
-
-### v1.8.277-279 (December 2024)
-- Help system complete redesign
-- VS Code-style documentation viewer
-- Menu simplification
-- Icon standardization
-
 ## Development & Deployment
 
 ### Build System Architecture (v1.8.20+)
@@ -6005,105 +4362,6 @@ Hive Consensus.app/
 - IPC communication must be established
 - Dynamic ports must be allocated
 - All paths must be resolved correctly
-
-### Release Distribution via Cloudflare R2 (Public Downloads)
-
-**Goal**: Publish the freshly built DMG (and companion binaries) to an edge-accelerated CDN so users always download the latest installer from `https://releases.hivetechs.io`.
-
-#### Workflow Summary
-1. **Build the DMG** using `npm run build:complete` (17 phases) which leaves the signed installer at `electron-poc/out/make/Hive Consensus.dmg` and installs the same build locally for testing.
-2. **Stage release artifacts** in `dist/` (performed by the build or `scripts/package-macos.sh`):
-   - `hive-macos-arm64` (standalone binary)
-   - `Hive.app/` (macOS bundle)
-   - `releases.json` (channel metadata that drives the in-app updater)
-3. **Upload to Cloudflare R2** via `scripts/upload-to-r2.sh [stable|beta]`:
-   - Uses AWS S3-compatible CLI targeting bucket `releases-hivetechs`.
-   - Pushes channel-scoped payloads (`$CHANNEL/hive-macos-arm64`, `$CHANNEL/hive-macos-arm64.app.tar.gz`) plus root-level `releases.json`.
-   - Applies public-read ACLs and `Cache-Control` headers (1 hour for binaries, 5 minutes for metadata).
-   - Emits the canonical download URLs, e.g. `https://releases.hivetechs.io/stable/hive-macos-arm64.app.tar.gz`.
-4. **Optional cache purge**: the script prints a `curl` command to invalidate the Cloudflare edge cache for `releases.json` when promoting emergency builds.
-
-#### Supporting Tooling
-- `scripts/setup-r2-config.sh`, `scripts/test-r2-connection.sh`, `scripts/create-r2-bucket.sh`, `scripts/upload-to-r2-wrangler.sh`: bootstrap the R2 bucket, configure AWS CLI / Wrangler credentials, and verify connectivity.
-- `scripts/create-r2-proxy-worker.js` & `scripts/r2-releases-worker.js`: lightweight Cloudflare Workers that front the R2 bucket, set correct `Content-Type`, and enable CORS. A hardened variant lives in `cloudflare/secure-worker.js` for production rollout.
-- `dist/releases.json`: authoritative manifest consumed by the desktop updater (channel, version, URLs, checksums). Every upload overwrites it so the validator and website stay in sync.
-
-#### Release Channels & Automation
-- Channels (`stable`, `beta`, etc.) are directory prefixes inside the same bucket; switching channels only changes the CLI argument at upload time.
-- The website’s “Download for macOS” button points at the Worker URL, ensuring users pull from Cloudflare’s edge cache.
-- Continuous delivery agents (or humans) run `npm run build:complete` followed by `./scripts/upload-to-r2.sh stable` to publish; future CI pipeline steps should chain these commands and then run the smoke suite (`npm run test:ui`) against the packaged app.
-
-#### R2 Authentication Cheat Sheet (2025 UI)
-- R2 no longer exposes long-lived keys via the bucket page. Instead, create an **Account API token** scoped to the account (My Profile → API Tokens → Create token) with `Workers R2 Storage: Edit` and optional bucket scoping.
-- That token doubles as the S3 credential:
-  - Access Key ID = the token ID returned by `tokens/verify`.
-  - Secret Access Key = the SHA-256 hash of the token value.
-- Commands we used to derive the keys:
-  ```bash
-  # Access Key ID (token id)
-  ACCESS_KEY_ID=$(curl -s \
-    "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" \
-    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-    | jq -r '.result.id')
-
-  # Secret Access Key (hash of token value)
-  SECRET_ACCESS_KEY=$(printf '%s' "$CLOUDFLARE_API_TOKEN" \
-    | shasum -a 256 \
-    | awk '{print $1}')
-  ```
-- Feed those values (plus the 32-character account ID from the S3 endpoint) into `./scripts/github-ci-setup.sh`. The helper stores repo + environment secrets and locks down the `master` branch with the required CI checks.
-
-### GitHub CI/CD Pipeline (2025)
-**Objective**: keep `main` green, gate pull requests with fast feedback, and ship signed DMGs + Cloudflare releases from a single, repeatable workflow.
-
-#### Workflow Overview
-| Workflow | Trigger | Purpose | Key jobs |
-| --- | --- | --- | --- |
-| `.github/workflows/ci.yml` | PRs and pushes to `main` / `master` | Default status checks for code review | `rust` (backend clippy/tests), `electron-unit` (module/type verification), optional `ui-smoke` (macOS build + Playwright smoke) |
-| `.github/workflows/release.yml` | Tag push `v*.*.*` or manual dispatch | Build DMG, run Playwright smoke, publish to R2 and GitHub Releases | Single macOS job calling `scripts/release.sh` |
-| `.github/workflows/codeql.yml` | PR/push + weekly cron | CodeQL static analysis for JS/TS + Python scripts | `analyze` matrix |
-
-#### CI Details
-- `rust` job installs toolchain via `dtolnay/rust-toolchain@stable`, caches with `Swatinem/rust-cache`, and runs `cargo clippy` / `cargo test` **targeted at `hive-backend-server-enhanced`**. This keeps the job focused on the shipping backend without rebuilding legacy binaries.
-- `electron-unit` job uses Node 18 with npm cache. Before running TypeScript verification it copies `python/model_service.py` into `resources/python-runtime/models/` so the backend bundler has the required AI helper script. It then runs `npm ci` and the fast verification commands (`npm run verify:modules && npm run verify:types`).
-- `ui-smoke` job (macOS) runs when pushing to `main` or when a PR carries the `ui-smoke` label. It installs ttyd (if missing), runs `npm run build:complete`, and executes the Playwright smoke suite. Successful runs publish the DMG/ZIP artifacts for manual inspection.
-- Summary step writes a consolidated status to the run log to support branch-protection rollups.
-- The CodeQL workflow performs a lightweight “precheck” step that verifies GitHub Advanced Security is enabled. If not, the job exits early with a reminder; once Advanced Security is turned on, the standard JavaScript/TypeScript and Python scans run automatically.
-
-**Recommendation**: mark `ci.yml` jobs (`Backend (Rust)`, `Electron Unit & Lint`, `CI Summary`) as required checks on `main`. Keep branch protection enforcing linear history and at least one approving review. When a UI change needs end-to-end coverage, add the `ui-smoke` label to the PR so the macOS job runs before merge.
-
-#### Release Workflow
-- Secrets required (store under **Settings → Secrets and variables → Actions**):
-  - `R2_ACCESS_KEY_ID`
-  - `R2_SECRET_ACCESS_KEY`
-  - `R2_ACCOUNT_ID`
-- Environment: create `production` environment with optional reviewer approvals. The workflow expects the secrets to be available to that environment.
-- Steps executed:
-  1. Checkout + npm install (`electron-poc`).
-  2. `npx playwright install chromium` to provision browsers.
-  3. `./scripts/release.sh <channel>` → runs `npm run build:complete` with Playwright smoke tests and then `scripts/upload-to-r2.sh` using the channel provided (default `stable`).
-  4. Artifacts (`out/make/*.dmg`, `.zip`, `dist/releases.json`) uploaded for auditing.
-  5. When triggered by a tag (`vX.Y.Z`) the workflow attaches those payloads to a GitHub Release.
-- To publish without tagging, trigger **Release** manually from the Actions tab, pick the channel, and the workflow will upload to R2 but skip the GitHub Release step. Add a tag afterward if desired.
-
-#### Code Review Hygiene
-- Repository-level CODEOWNERS (`.github/CODEOWNERS`) defaults to `@veronelazio`; update with the appropriate teams (e.g. `@hivetechs/backend`, `@hivetechs/frontend`).
-- Ensure branch protections require status checks (`CI / Backend (Rust)`, `CI / Electron Unit & Lint`, `CI / CI Summary`) and at least one approving review before merge.
-- Enable **Dismiss stale approvals** so code changes after review trigger a fresh pass.
-
-#### Running UI Smoke Locally
-```
-cd electron-poc
-PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=61323 PLAYWRIGHT_RUN_TESTS=1 npm run build:complete
-```
-This mirrors the CI job, leaving the DMG in `out/make/` and the packaged app installed under `/Applications` for manual validation.
-
-#### Onboarding Checklist
-1. Configure GitHub secrets (`R2_*`) and the `production` environment.
-2. Enable branch protection on `main` with required checks.
-3. (Optional) Add an automation rule or PR template reminding authors to add the `ui-smoke` label for UI-heavy changes.
-4. Communicate to the team: feature PRs rely on `ci.yml`, releases go through **Release** workflow or `./scripts/release.sh` locally.
-5. Prefer automation? Run `scripts/github-ci-setup.sh` after `gh auth login` to perform steps 1–2 programmatically.
 
 ### Production Requirements (CRITICAL)
 
@@ -7190,6 +5448,17 @@ jobs:
           path: out/make/**/*.exe
 ```
 
+**7.1 GitHub Actions Implementation (2025 Update)**
+
+- **macOS-only binary publishing** – `build-release.yml` builds the Intel and Apple Silicon binaries, stitches them into a universal executable, and packages `Hive-macOS.app`. Architecture-specific OpenSSL is provisioned (Rosetta Homebrew for Intel, `/opt/homebrew` for Arm) before the build so both targets link successfully.
+- **Manual binary smoke builds** – `build-binaries.yml` is now `workflow_dispatch`-only. Trigger it manually when you need single-arch artifacts for debugging without running the full release workflow.
+- **Rust + multi-language scanning** – `codeql.yml` still analyzes JavaScript/TypeScript, Python, and Rust, but it now triggers only on pushes to `main`/`master`, the weekly Saturday cron, or an explicit manual dispatch. Feature-branch pushes and pull requests no longer consume CodeQL minutes.
+- **Concurrency & caching** – All macOS and CodeQL workflows enable `cancel-in-progress` so superseded runs stop immediately. Shared Homebrew, Cargo, npm, and pip caches keep reruns fast without re-downloading toolchains on every job.
+- **Formatting + smoke checks** – `ci-simple.yml` (CI job) continues to enforce `cargo fmt --all -- --check` and quick health checks, ensuring formatting failures are caught before expensive macOS builds are started.
+- **Actions budget requirement** – GitHub Actions enforces the organization spending limit. A `$0` budget immediately blocks macOS runners, so the organization must keep a positive limit (we set `Actions` to `$30`) to allow Build/Release/CodeQL jobs to queue.
+- **Release gating** – `build-release.yml` pushes artifacts to Cloudflare R2 only for pushes to `main`/`master` or `v*` tags. Manual dispatches and dry runs build the binaries and attach workflow artifacts but skip the R2 upload step.
+- **Operational reminder** – If macOS jobs stall with "recent account payments have failed" warnings, raise the Actions budget before retrying. The pipelines now surface these failures quickly during the dependency installation step.
+
 **8. Comprehensive Build Requirements Check System & Build Order**
 
 To prevent recurring production issues (like missing binary permissions, Node.js not found, etc.), we have implemented a comprehensive build system that ensures all dependencies are met AND executes the build in the EXACT CORRECT ORDER.
@@ -7397,28 +5666,22 @@ npm run make
 5. **Automate Build Verification**: Catch issues before users see them
 6. **Monitor First Launch**: Most issues appear on first run from Finder
 
-**Canonical Build (Recommended — Single Command)**
+**Production Build Commands Summary**:
 ```bash
-# Full, verified, dependency-safe build + DMG + auto-install
-npm run build:complete
+# Complete production build and test
+npm run verify-build      # Run all tests and checks
+npm run make:production   # Build DMG with verification
+npm run test:dmg         # Test the built DMG
+
+# Quick rebuild for testing
+npm run make             # Just build DMG
+open out/make/*.dmg      # Install and test manually
+
+# Release process
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+# CI/CD builds and uploads automatically
 ```
-
-What it does (high level):
-- Verifies structure and tools, cleans artifacts, bundles binaries (ttyd/git/node)
-- Installs deps, rebuilds native modules for Electron, prepares Python runtime
-- Runs verifications (modules/types/paths), builds via webpack, packages DMG
-- Mounts DMG and auto-installs app to `/Applications`
-
-Outputs and logs:
-- DMG: `electron-poc/out/make/Hive Consensus.dmg`
-- Installed app: `/Applications/Hive Consensus.app`
-- Live log: `/tmp/hive-build-progress.log` (Terminal window tails this)
-- Build logs: `electron-poc/build-logs/`
-
-Notes:
-- Phase 11/17 (Application Build) is the longest — webpack + packaging; expect several minutes.
-- Use only `npm run build:complete` for release builds to ensure all dependencies are correctly handled.
-- Dev-only alternatives exist but skip verification steps — not for releases.
 
 #### Optimized Dynamic Port Architecture (Revolutionary Design)
 
@@ -7725,28 +5988,16 @@ BACKEND_SERVER_PORTS=21000-21100
 - Analytics on port usage patterns
 - Multi-instance support with unique ports
 
-### Build System (Canonical)
+### Build System
 ```bash
-# The only supported way to build releases
-npm run build:complete
+# Development
+npm start           # Electron Forge dev server
+
+# Production
+npm run premake     # Build Memory Service
+npm run package     # Package for current platform
+npm run make       # Create distributables
 ```
-
-Why this command only:
-- Ensures binary bundling (ttyd, git, node) happens before webpack
-- Rebuilds native modules to match the exact Electron ABI
-- Prepares and verifies the Python runtime
-- Runs module/type/path verification before packaging
-- Creates the DMG and auto-installs to `/Applications` for a clean test
-
-Developer shortcuts (not for releases):
-```bash
-npm start          # Dev run via Electron Forge
-npm run build      # Webpack only (no packaging/verification)
-```
-
-Timing and expectations:
-- Phase 11/17 “Application Build” is the heaviest step (webpack + forge packaging). Expect 2–5 minutes depending on cache/state.
-- Progress appears in a Terminal tail of `/tmp/hive-build-progress.log` and in `build-logs/current-status.json`.
 
 ### Configuration Files
 ```
@@ -7817,76 +6068,7 @@ Git Integration
 ## Complete AI CLI Tools Integration Pattern
 
 ### Executive Summary
-This section documents the complete architectural pattern for integrating AI CLI tools into Hive Consensus. Each tool follows the same comprehensive integration pattern, enabling seamless installation, configuration, updates, and terminal launching with full Memory Service integration via **Direct API Access**.
-
-### Direct API Integration Architecture v3.0 (v1.8.248+)
-
-#### Simplified Memory Service Integration
-
-**Key Innovations**: 
-- **Eliminated MCP complexity** - Direct HTTP API calls to existing Memory Service endpoints
-- **Dynamic port discovery** - Uses existing ProcessManager/PortManager infrastructure  
-- **Leverages existing Memory+Context pipeline** - Same quality as Consensus engine
-- **Simple helper commands** - Universal interface across all 6 CLI tools
-
-```bash
-# Direct SQLite access used by CLI tooling
-sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 1"
-
-# Targeted query (wrap SQL in single quotes when piping)
-printf "SELECT content FROM messages WHERE content LIKE '%%React%%' \\n+        ORDER BY timestamp DESC LIMIT 3;" | sqlite3 ~/.hive-ai.db
-
-# Helper scripts remain available for interactive shells
-hive-memory-claude-code "recent authentication work"
-hive-memory-gemini-cli "show latest Python fixes"
-hive-memory-grok "audit performance debugging"
-```
-
-**Architecture Flow**:
-```
-CLI Tool → hive-memory command → Dynamic port discovery → Memory Service API → Memory+Context pipeline
-```
-
-**Benefits**:
-- **No External Dependencies**: Uses only Node.js built-ins and existing infrastructure
-- **Fast & Reliable**: Direct HTTP calls (2-5ms response times)
-- **Dynamic Port Discovery**: Leverages existing ProcessManager for port allocation  
-- **Uses Existing Tokens**: Preserves authentication system from cli-tools-config.json
-- **Maintains Connected Tools Reporting**: Dashboard continues to show all 6 tools as connected
-- **Simplified Architecture**: Eliminates MCP protocol overhead and complexity
-
-#### PATH Configuration for Memory Commands
-
-**Automatic PATH Setup**: The system automatically configures shell PATH on startup to include `~/.hive/bin`:
-
-```typescript
-// src/index.ts - addHiveBinToPath()
-// Called on every app startup to ensure memory commands are accessible
-```
-
-**Shell Configuration**: Adds to `.zshrc`, `.bashrc`, and `.bash_profile`:
-```bash
-# Hive Memory Commands
-export PATH="$HOME/.hive/bin:$PATH"
-```
-
-**Manual Setup** (if automatic setup fails):
-```bash
-# For zsh (default on macOS)
-echo 'export PATH="$HOME/.hive/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-
-# For bash
-echo 'export PATH="$HOME/.hive/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**Verification**:
-```bash
-# Test that commands are accessible
-which hive-memory
-hive-memory-gemini-cli query-with-context "test"
-```
+This section documents the complete architectural pattern for integrating AI CLI tools into Hive Consensus. Each tool follows the same comprehensive integration pattern, enabling seamless installation, configuration, updates, and terminal launching with full Memory Service integration via MCP protocol.
 
 ### Core Integration Components
 
@@ -7905,7 +6087,7 @@ interface CliToolDefinition {
   versionPattern: RegExp;        // Version extraction pattern
   docsUrl: string;              // Official documentation URL
   description: string;          // Tool description
-  memoryServiceCompatible: boolean; // Direct API support flag
+  memoryServiceCompatible: boolean; // MCP support flag
   resumeSupport: boolean;       // Supports --resume flag
 }
 ```
@@ -7947,7 +6129,7 @@ class CliToolDetector {
 ipcMain.handle('cli-tool-detect', async (_, toolId) => { /* Detection logic */ });
 ipcMain.handle('cli-tool-install', async (_, toolId) => { /* Installation logic */ });
 ipcMain.handle('cli-tool-update', async (_, toolId) => { /* Update logic */ });
-ipcMain.handle('cli-tool-configure', async (_, toolId) => { /* Direct API configuration */ });
+ipcMain.handle('cli-tool-configure', async (_, toolId) => { /* MCP configuration */ });
 ipcMain.handle('cli-tool-launch', async (_, toolId) => { /* Terminal launch */ });
 ipcMain.handle('cli-tool-uninstall', async (_, toolId) => { /* Uninstallation */ });
 ```
@@ -8021,12 +6203,11 @@ async function configureMemoryService(toolId: string): Promise<ConfigResult> {
   // 2. Save configuration
   await saveConfig('~/.hive/cli-tools-config.json', { token });
   
-  // 3. Configure direct API access (v1.8.248+)
-  // Token stored in ~/.hive/cli-tools-config.json
-  // Tools use simple helper commands for Memory Service access
+  // 3. Create MCP wrapper
+  await createMCPWrapper(toolId, token);
   
-  // 4. Setup universal memory commands
-  // ~/.hive/bin/hive-memory-[toolId] commands available
+  // 4. Update tool's MCP config
+  await updateToolMCPConfig(toolId);
   
   return { success: true, token };
 }
@@ -8131,20 +6312,12 @@ class TTYDManager {
 ```
 ~/.hive/
 ├── cli-tools-config.json       # Tool configurations and tokens
-├── bin/                         # Memory Service helper commands (v1.8.248+)
-│   ├── hive-memory              # Universal memory interface
-│   ├── hive-memory-helper.js    # Core API helper with dynamic port discovery
-│   ├── hive-memory-claude-code  # Claude Code memory commands
-│   ├── hive-memory-gemini-cli   # Gemini CLI memory commands
-│   ├── hive-memory-grok         # Grok memory commands
-│   ├── hive-memory-qwen-code    # Qwen Code memory commands
-│   ├── hive-memory-openai-codex # OpenAI Codex memory commands
-│   └── hive-memory-cline        # Cline memory commands
+├── memory-service-mcp-wrapper.js # MCP bridge for Memory Service
 ├── ai-tools.db                 # Launch history database
 └── tools/                       # Local tool installations
 
 ~/.claude/
-├── .mcp.json                   # Other MCP server configurations (non-Hive)
+├── .mcp.json                   # MCP server configurations
 ├── config.json                 # Claude Code settings
 └── settings.json               # Hooks and preferences
 
@@ -8280,31 +6453,11 @@ describe('CLI Tool Integration', () => {
    - Immediate UI updates (cache clearing fix)
    - Sensible defaults (tools manage own config)
 
-**4. Enterprise-Grade Error Recovery (v1.8.237+)**:
-   - **Robust Update System**: 4-strategy approach for npm ENOTEMPTY errors
-   - **Research-Based Solutions**: Fixes based on CLI tool GitHub issues and community solutions
-   - **Comprehensive Cleanup**: Removes all traces including temp directories and binary files
-   - **Graceful degradation**: Fallback strategies without sudo requirements
-   - **Clear error messages**: Specific instructions when all strategies fail
-   - **Retry mechanisms**: Automatic progression through strategies
-   - **Process cleanup**: Proper cleanup on app exit
-
-**Update Strategy Progression (v1.8.237+)**:
-```
-Strategy 1: Standard npm update -g [package]
-    ↓ (if ENOTEMPTY error)
-Strategy 2: npm cache clean --force + npm update --force  
-    ↓ (if still ENOTEMPTY)
-Strategy 3: npm uninstall + 2s delay + npm install
-    ↓ (if reinstall fails with ENOTEMPTY)  
-Strategy 4: Comprehensive manual cleanup + reinstall
-    ├── Remove package directories (all locations)
-    ├── Remove binary files (/opt/homebrew/bin/[tool])
-    ├── Clear npm cache directories (~/.npm/_npx)
-    ├── Remove temp directories (.*[tool]-* patterns)
-    ├── 3-second filesystem cleanup delay
-    └── Fresh npm install
-```
+**4. Error Recovery**:
+   - Graceful degradation without sudo
+   - Clear error messages with suggestions
+   - Retry mechanisms for transient failures
+   - Process cleanup on app exit
 
 **5. Performance Optimization**:
    - Lazy detection (on-demand, not at startup)
@@ -8358,7 +6511,7 @@ Before implementing ANY new AI CLI tool, you MUST become an expert by studying o
      // Claude Code specific
      claudeCode: {
        resumeSupport: true,
-       directAPI: true,
+       mcp: true,
        hooks: true,
        customInstructions: true,
        contextWindow: 200000
@@ -8382,7 +6535,7 @@ Before implementing ANY new AI CLI tool, you MUST become an expert by studying o
    ```
 
 4. **Research Tool-Specific Features**
-   - **Memory Integration**: All supported tools use Direct API Access to Memory Service
+   - **MCP Support**: Not all tools support Model Context Protocol
    - **Hooks System**: Tool-specific event hooks (PreToolUse, PostToolUse)
    - **Session Management**: Resume, continue, or stateless
    - **Context Management**: How each tool handles context limits
@@ -8409,12 +6562,12 @@ Before implementing ANY new AI CLI tool, you MUST become an expert by studying o
 
 | Tool | Package | Command | Version Detection | Special Handling | Status |
 |------|---------|---------|-------------------|------------------|---------|
-| **Claude Code** | `@anthropic-ai/claude-code` | `claude` | `/claude-code\/(\d+\.\d+\.\d+)/` | `--resume` support, Direct API integration | ✅ Complete |
+| **Claude Code** | `@anthropic-ai/claude-code` | `claude` | `/claude-code\/(\d+\.\d+\.\d+)/` | `--resume` support, MCP integration | ✅ Complete |
 | **Gemini CLI** | `@google/gemini-cli` | `gemini` | `/Gemini CLI v(\d+\.\d+\.\d+)/` | Free tier (1000 req/day), No `--resume` | ✅ Complete |
 | **Qwen Code** | `@alibaba/qwen-code` | `qwen` | `/(?:qwen\/\|v?)(\d+\.\d+\.\d+)/` | Self-managed auth | ✅ Complete |
 | **OpenAI Codex** | `@openai/codex-cli` | `codex` | `/codex-cli (\d+\.\d+\.\d+)/` | Self-managed auth | ✅ Complete |
 | **Cline** | `@yaegaki/cline-cli` | `cline-cli` | `/(\d+\.\d+\.\d+)/` | **Special: Uses Hive's OpenRouter API key** | ✅ Complete |
-| **Grok CLI** | `@vibe-kit/grok-cli` | `grok` | `/(\d+\.\d+\.\d+)/` | Direct API support, Morph Fast Apply (4500 tokens/sec) | ✅ Complete |
+| **Grok CLI** | `@vibe-kit/grok-cli` | `grok` | `/(\d+\.\d+\.\d+)/` | MCP support, Morph Fast Apply (4500 tokens/sec) | ✅ Complete |
 
 **Key Implementation Patterns**:
 
@@ -8462,18 +6615,10 @@ Before implementing ANY new AI CLI tool, you MUST become an expert by studying o
    }
    ```
 
-5. **Memory Service Integration v3.0 (v1.8.248+)**:
-   - All tools connect to Memory Service via **Direct API Access**
-   - Simple helper commands: `~/.hive/bin/hive-memory-[toolId]` for each tool
-   - Tool-specific client identification: `X-Client-Name: '[toolId]'`, `X-Tool-Version: '2.0.0'`
-   - Dynamic port discovery using existing ProcessManager infrastructure
-   - Tokens stored in `~/.hive/cli-tools-config.json` (unchanged)
-   - **Eliminated MCP complexity** - Direct HTTP calls to `/api/v1/memory/query-with-context`
-   - Works on any enterprise computer without modification
-   - **Unified Commands**: Same @memory, @context, @recall work across all tools
-   - **Natural Language**: "What have we...", "What did we..." auto-trigger memory
-   - **Smart Enhancement**: Automatic query processing and context injection
-   - **Zero Configuration**: New users get everything configured automatically on tool install
+5. **Memory Service Integration**:
+   - All tools can connect to Memory Service via MCP
+   - Configuration creates MCP wrapper at `~/.hive/memory-service-mcp-wrapper.js`
+   - Token stored in `~/.hive/cli-tools-config.json`
 
 ##### Example: Claude Code Deep Dive
 
@@ -8611,7 +6756,7 @@ See `docs/cli-tools/GEMINI_TEMPLATE.md` for the complete working pattern that in
 1. **Module-level imports** - Fixes webpack bundling issues
 2. **All four buttons working** - Install, Update, Configure, Launch
 3. **Dynamic tool IDs** - No hardcoded references
-4. **Direct API integration** - Simple helper command generation
+4. **MCP integration** - Proper wrapper generation
 5. **Full testing coverage** - All functionality verified
 
 #### Key Lessons from Gemini CLI Implementation
@@ -9118,12 +7263,12 @@ CREATE TABLE tool_metrics (
 ## CLI Tools Management
 
 ### Overview
-The CLI Tools Management system provides automated installation, updates, and integration for AI-powered CLI tools, with seamless Memory Service integration via **Direct API Access**. This system enables one-click installation, configuration, and updates for AI coding assistants, making them feel "out of the box" integrated without user configuration.
+The CLI Tools Management system provides automated installation, updates, and integration for AI-powered CLI tools, with seamless Memory Service integration via MCP (Model Context Protocol). This system enables one-click installation, configuration, and updates for AI coding assistants, making them feel "out of the box" integrated without user configuration.
 
 ### Architecture
 **Location**: `src/utils/CliToolsManager.ts`
 **Purpose**: Manage lifecycle of external AI CLI tools with full Memory Service integration
-**Integration**: Direct connection to Memory Service via REST API and simple helper commands
+**Integration**: Direct connection to Memory Service via REST API and MCP protocol
 **Detection**: `src/utils/cli-tool-detector.ts` - Real-time tool detection and version checking
 **Launch Tracking**: `src/services/AIToolsDatabase.ts` - Track tool launches per repository for intelligent resume
 
@@ -9148,15 +7293,15 @@ class CliToolsManager extends EventEmitter {
 
 ### Supported Tools
 1. **Claude Code CLI** (`@anthropic/claude-cli`)
-   - Primary integration with Memory Service via **Direct API Access**
-   - Auto-configuration using helper commands
-   - Token-based authentication preserved
-   - Commands: `hive-memory-claude-code context "query"`
+   - Primary integration with Memory Service via MCP
+   - Auto-configuration of memory endpoints
+   - Token-based authentication
+   - MCP config at `~/.claude/.mcp.json`
 
 2. **Grok CLI** (`@vibe-kit/grok-cli`)
-   - Full **Direct API** support for Memory Service integration
+   - Full MCP support for Memory Service integration
    - Custom setup wizard for API key configuration
-   - Commands: `hive-memory-grok context "query"`
+   - MCP config at `~/.grok/mcp-config.json`
    - User settings at `~/.grok/user-settings.json`
    - Supports Morph Fast Apply (4,500+ tokens/sec)
 
@@ -9165,8 +7310,8 @@ class CliToolsManager extends EventEmitter {
    - Auto-configuration support
 
 4. **Qwen Code** (`@qwen-code/qwen-code`)
- - Memory Service integration
-  - Token-based authentication
+   - Memory Service integration
+   - Token-based authentication
 
 5. **OpenAI Codex** (`openai-codex`)
    - Python-based installation
@@ -9176,12 +7321,6 @@ class CliToolsManager extends EventEmitter {
    - OpenRouter API key configuration
    - Memory Service integration
 
-7. **Cursor CLI** (`cursor-agent`)
-   - MCP bridge backed by Hive memory service
-   - `/register` endpoint returns dynamic `redirect_uris` & token metadata
-   - Maintains `~/.cursor/mcp.json` with live port and auth headers
-   - Launches in Hive TTYD terminals with automatic MCP approval flow
-
 ### Installation Flow
 ```
 1. Check tool prerequisites
@@ -9190,10 +7329,10 @@ class CliToolsManager extends EventEmitter {
 4. Verify installation success
 5. **Automatic Configuration Phase**:
    a. Register with Memory Service (generates unique token)
-   b. Save authentication token to ~/.hive/cli-tools-config.json
-   c. Configure direct API access via helper commands:
-      - Available at ~/.hive/bin/hive-memory-[toolId]
-      - Universal interface via ~/.hive/bin/hive-memory
+   b. Create MCP wrapper script at ~/.hive/memory-service-mcp-wrapper.js
+   c. Update tool's MCP configuration:
+      - Claude Code: ~/.claude/.mcp.json
+      - Grok: ~/.grok/mcp-config.json
    d. For Cline: Set OpenRouter API key in ~/.cline/config.json
    e. For Grok: Launch interactive setup wizard if API key missing
 6. Clear cache to trigger UI refresh
@@ -9249,8 +7388,8 @@ When Grok is launched without an API key, a custom interactive setup wizard is t
 
 ### Memory Service Integration
 
-#### Direct API Integration v3.0 (v1.8.248+)
-Simplified Memory Service access with unified, user-friendly commands across all 6 CLI tools:
+#### MCP (Model Context Protocol) Integration
+For Claude Code and compatible tools:
 
 1. **Registration Flow**:
    - Tool registers with Memory Service API (`POST /api/v1/memory/register`)
@@ -9258,176 +7397,21 @@ Simplified Memory Service access with unified, user-friendly commands across all
    - Token stored in `~/.hive/cli-tools-config.json`
    - Token immediately usable for authenticated API calls
 
-2. **Direct API Configuration v3.0**:
-   - Creates simple helper commands in `~/.hive/bin/`:
-     - `hive-memory-claude-code` - Claude Code memory commands
-     - `hive-memory-grok` - Grok memory commands  
-     - `hive-memory-gemini-cli` - Gemini CLI memory commands
-     - `hive-memory-qwen-code`, `hive-memory-openai-codex`, `hive-memory-cline`
-   - **Universal interface**: `hive-memory` works for all tools
-   - **Enhanced features**:
-     - Dynamic port discovery using existing ProcessManager
-     - Authentication via stored tokens
-     - Direct HTTP calls to Memory Service endpoints
-     - Uses existing Memory+Context pipeline
+2. **MCP Configuration**:
+   - Automatically updates tool-specific MCP configs:
+     - Claude Code: `~/.claude/.mcp.json`
+     - Grok: `~/.grok/mcp-config.json`
+   - Creates shared MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
+   - Wrapper script uses `@modelcontextprotocol/sdk` for MCP server
+   - Exposes two MCP tools:
+     - `query_memory`: Search AI memory system for relevant learnings
+     - `contribute_learning`: Add new learnings with type, category, content
 
-3. **Unified Command System (v3.1)**:
-   - **Direct SQLite Access (production usage)**:
-     - `sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 1"`
-     - `printf "SELECT content FROM messages WHERE content LIKE '%%OAuth%%' LIMIT 5;" | sqlite3 ~/.hive-ai.db`
-     - Pattern adopted across CLI tools (e.g., `cursor-agent`) for deterministic results
-   - **Interactive Helper Scripts (optional)**:
-     - `hive-memory-claude-code "recent React debugging"`
-     - `hive-memory-gemini-cli "show latest API fixes"`
-     - `hive-memory query "show last 3 system notes"`
-   - **Gateway Behaviour**:
-     - CLI tools can choose the direct SQLite path or call Memory Service HTTP APIs
-     - Helper scripts reuse ProcessManager dynamic port discovery and stored tokens
-
-4. **Authentication System**:
+3. **Authentication System**:
    - Bearer token authentication for all API calls
    - Per-tool tokens for isolation and security (each tool gets unique token)
    - Tokens persist across sessions in cli-tools-config.json
    - Memory Service tracks connected tools in-memory with Map<token, ToolInfo>
-
-#### Smart Memory Access Architecture v4.0 (v1.8.251+)
-
-**Revolutionary Approach**: Direct SQLite access to the unified `hive-ai.db` knowledge base from within AI CLI tools.
-
-##### Overview
-Instead of complex API calls or MCP protocols, AI CLI tools can directly query the user's growing knowledge base stored in `hive-ai.db` using simple, user-friendly SQL views and functions. This leverages SQLite's ACID properties for safe concurrent access while making memory queries as easy as natural language.
-
-##### Architecture Components
-
-1. **Symlink Creation on Tool Launch**:
-   When launching any AI CLI tool from Hive IDE, a symlink to `hive-ai.db` is created in the project directory:
-   ```typescript
-   // In launchCliTool function
-   const linkPath = path.join(projectPath, '.hive-ai.db');
-   const actualDb = path.join(os.homedir(), '.hive', 'hive-ai.db');
-   fs.symlinkSync(actualDb, linkPath, 'file');
-   ```
-   This makes the database accessible within the AI tool's workspace restrictions.
-
-2. **User-Friendly SQL Views**:
-   Pre-created views that eliminate the need for SQL expertise:
-   ```sql
-   -- What we've been working on
-   CREATE VIEW recent_work AS
-   SELECT content, created_at FROM messages 
-   ORDER BY created_at DESC LIMIT 100;
-   
-   -- Solutions and fixes
-   CREATE VIEW solutions AS
-   SELECT content FROM messages 
-   WHERE content LIKE '%fixed%' OR content LIKE '%solved%'
-   ORDER BY created_at DESC;
-   
-   -- Patterns and learnings
-   CREATE VIEW patterns AS
-   SELECT content FROM messages 
-   WHERE content LIKE '%pattern:%' OR content LIKE '%learned:%'
-   ORDER BY created_at DESC;
-   
-   -- Debugging history
-   CREATE VIEW debugging AS
-   SELECT content FROM messages 
-   WHERE content LIKE '%error%' OR content LIKE '%debug%'
-   ORDER BY created_at DESC;
-   ```
-
-3. **Smart Context Function**:
-   A custom SQLite function that mimics the consensus Memory→Context pipeline:
-   ```sql
-   -- Users can query with natural language
-   SELECT get_context('debugging React hooks')
-   
-   -- Returns JSON with:
-   -- - Relevant memories (semantic + temporal)
-   -- - Extracted patterns
-   -- - Summarized context
-   -- - Thematic clustering
-   ```
-
-4. **Full-Text Search Support**:
-   ```sql
-   CREATE VIRTUAL TABLE messages_fts USING fts5(
-     content, created_at, role,
-     tokenize = 'porter'
-   );
-   ```
-
-##### User Experience
-
-**Simple Queries in AI Tools**:
-```bash
-# In Gemini, Claude Code, or any AI CLI tool:
-
-# Natural language
-"Query .hive-ai.db: What have we worked on with authentication?"
-
-# Named views
-"Query .hive-ai.db view 'recent_work'"
-"Query .hive-ai.db view 'solutions' about React"
-
-# Smart context function
-"Query .hive-ai.db: SELECT get_context('debugging TypeScript')"
-
-# Direct SQL (for advanced users)
-"Query .hive-ai.db: SELECT * FROM messages WHERE content LIKE '%API%' LIMIT 5"
-```
-
-##### Implementation Details
-
-1. **Database Initialization** (`src/index.ts`):
-   - Creates views on app startup
-   - Registers custom SQLite functions
-   - Maintains FTS index for fast searching
-
-2. **Launch Integration** (`launchCliTool`):
-   - Creates symlink before tool launch
-   - Generates README with query examples
-   - Ensures database accessibility
-
-3. **Memory Growth**:
-   - Consensus curator continuously adds to `hive-ai.db`
-   - Views automatically reflect new knowledge
-   - No sync or update needed - direct access to source
-
-##### Benefits
-
-- ✅ **Zero Configuration**: Works immediately after tool launch
-- ✅ **No API Overhead**: Direct SQLite queries (microsecond response)
-- ✅ **Single Source of Truth**: Direct access to `hive-ai.db`
-- ✅ **Natural Language**: Simple queries without SQL knowledge
-- ✅ **Growing Knowledge**: Automatically includes all consensus learnings
-- ✅ **ACID Safety**: SQLite handles concurrent access perfectly
-- ✅ **Universal**: Works with ALL AI CLI tools that can read files
-
-##### Query Examples for Users
-
-```sql
--- What have we been working on?
-Query .hive-ai.db view 'recent_work'
-
--- Find previous solutions
-Query .hive-ai.db view 'solutions' 
-
--- Get context about specific topic
-Query .hive-ai.db: SELECT get_context('React hooks debugging')
-
--- Search with full-text
-Query .hive-ai.db: SELECT * FROM messages_fts WHERE messages_fts MATCH 'authentication'
-
--- Complex analysis
-Query .hive-ai.db: 
-SELECT DATE(created_at) as day, COUNT(*) as queries 
-FROM messages 
-GROUP BY day 
-ORDER BY day DESC LIMIT 7
-```
-
-This approach makes the entire knowledge base accessible with simple, intuitive queries while maintaining the integrity of the unified database system
    - Authentication middleware validates token on each request:
      ```typescript
      const token = req.headers.authorization?.replace('Bearer ', '');
@@ -9437,7 +7421,7 @@ This approach makes the entire knowledge base accessible with simple, intuitive 
      }
      ```
 
-5. **API Endpoints**:
+4. **API Endpoints**:
    ```
    POST /api/v1/memory/query      - Query memories with context
    POST /api/v1/memory/contribute - Contribute new learnings
@@ -9445,426 +7429,36 @@ This approach makes the entire knowledge base accessible with simple, intuitive 
    GET  /api/v1/memory/tools      - List connected tools
    ```
 
-#### Zero-Hardcoded-Ports Architecture for CLI Tools (v1.8.238+)
+#### Dynamic Port Handling for MCP
 
-**Problem**: CLI tools were using hardcoded endpoints breaking ProcessManager/PortManager philosophy.
+**Problem**: Memory Service uses dynamic port allocation (3457-3560) but MCP configs need the actual port.
 
-**Solution**: Complete migration to dynamic port discovery architecture matching core system design.
+**Solution**: Automatic MCP configuration updates on every app startup.
 
-1. **ProcessManager Integration**:
+1. **Port Discovery Flow**:
    ```typescript
-   // CLI tools detector gets ProcessManager reference
-   import { setProcessManagerReference } from './main/cli-tools/detector';
-   setProcessManagerReference(processManager);
-   
-   // Connection testing uses actual dynamic port
-   const memoryStatus = processManager.getProcessStatus('memory-service');
-   const dynamicPort = memoryStatus.port; // Real port, not hardcoded
-   ```
-
-2. **Authentication-Only Configuration** (`~/.hive/cli-tools-config.json`):
-   ```json
-   {
-     "gemini-cli": {
-       "memoryService": {
-         "token": "abc123"  // ONLY authentication stored
-         // NO endpoint stored - discovered at runtime
-       }
+   // When Memory Service starts
+   processManager.on('process:message', (name, msg) => {
+     if (name === 'memory-service' && msg.type === 'ready') {
+       memoryServicePort = msg.port;  // Actual allocated port
+       updateAllMCPConfigurations(memoryServicePort);
      }
-   }
+   });
    ```
 
-3. **Dynamic MCP Configuration Updates** (`updateAllMCPConfigurations`):
-   - **Removes hardcoded endpoints** from existing configurations
-   - **Updates MCP wrappers** with runtime environment variables
-   - **Updates all tool MCP configs** with dynamic ports
-   - **Clears detector cache** for immediate status refresh
+2. **MCP Configuration Update Process** (`updateAllMCPConfigurations`):
+   - Reads current tool tokens from `~/.hive/cli-tools-config.json`
+   - Updates MCP wrapper fallback endpoint with actual port
+   - Updates Claude Code MCP config with dynamic endpoint
+   - Updates Grok MCP config with dynamic endpoint
+   - Maintains existing authentication tokens
 
-4. **Runtime Port Discovery**:
-   - **Connection detection**: Tests actual Memory Service port from ProcessManager
-   - **MCP wrapper execution**: Gets endpoint via MEMORY_SERVICE_ENDPOINT environment variable
-   - **New tool setup**: Uses current Memory Service port automatically
-   - **Zero hardcoded assumptions**: Works regardless of port allocation
-
-5. **Complete Integration**:
+3. **Files Updated on Each Startup**:
    ```
-   Memory Service starts → Dynamic port (e.g., 3000)
-   ↓
-   updateAllMCPConfigurations(3000)
-   ├── Remove hardcoded endpoints from configs
-   ├── Update MCP wrapper environment variables
-   ├── Update Claude Code .mcp.json with port 3000
-   ├── Update Grok MCP config with port 3000
-   └── Clear detector cache
-   ↓
-   CLI tools test connection on port 3000 → All show "Connected ✓"
+   ~/.hive/memory-service-mcp-wrapper.js  - Fallback endpoint updated
+   ~/.claude/.mcp.json                    - Environment variables updated
+   ~/.grok/mcp-config.json               - Environment variables updated
    ```
-
-#### Intelligent CLI Tools with Hive Memory Integration (Future Enhancement)
-
-**Vision**: Transform CLI tools from isolated utilities into intelligent extensions of Hive's collective memory, making the development environment increasingly personalized and intelligent.
-
-**Current State**: CLI tools are "connected" (health checks) but not "intelligent" (no memory usage)
-
-**Enhanced Integration Design**:
-
-1. **Bidirectional Intelligence Flow**:
-   ```
-   User Query → CLI Tool → Hive Memory+Context → Enhanced Response → Success → Learning Contribution
-   ```
-
-2. **Memory+Context Pipeline for CLI Tools**:
-   ```typescript
-   // Reuse exact Consensus Memory+Context stages
-   async function enhanceCliToolQuery(query: string, toolId: string) {
-     // Stage 1: MEMORY - Same as Consensus
-     const relevantMemories = await optimizedMemory.retrieveMemories(query, conversationId);
-     
-     // Stage 2: CONTEXT - Same as Consensus  
-     const contextFramework = await buildContextFramework(query, relevantMemories);
-     
-     // Stage 3: MCP DELIVERY - Instead of routing to Consensus
-     return {
-       originalQuery: query,
-       memoryContext: contextFramework.summary,
-       patterns: contextFramework.patterns,
-       userPreferences: contextFramework.userPreferences,
-       relevantHistory: relevantMemories.map(m => m.content.substring(0, 200))
-     };
-   }
-   ```
-
-3. **Enhanced MCP Tools**:
-   ```typescript
-   // Current: Basic query_memory
-   query_memory(query) → basic search results
-   
-   // Enhanced: Full Memory+Context pipeline
-   query_memory_with_context(query) → {
-     originalQuery,
-     memoryContext,
-     patterns, 
-     userPreferences,
-     relevantHistory
-   }
-   
-   // New: Learning contribution
-   save_output(content, category, success) → stores successful patterns
-   contribute_solution(problem, solution, code) → builds collective intelligence
-   ```
-
-4. **Example Intelligence Enhancement**:
-   ```
-   User asks Gemini CLI: "How to implement React authentication?"
-   ↓
-   Hive Memory+Context: "User struggled with OAuth, prefers JWT+hooks, had CORS issues with auth0"
-   ↓
-   Gemini CLI receives: Question + Rich context about user's auth history & preferences  
-   ↓
-   Gemini CLI: Context-aware response avoiding known problems, using preferred patterns
-   ↓
-   User: "This worked perfectly!"
-   ↓
-   Gemini CLI: /save → Contributes successful React+JWT solution back to Hive memory
-   ↓
-   Future: All CLI tools benefit from this accumulated knowledge
-   ```
-
-5. **Learning Contribution Triggers**:
-   ```
-   // User trigger commands
-   "/save" → Save last response as valuable learning
-   "/remember this" → Contribute current output to memory  
-   "/worked" → Mark solution as successful and save
-   "/note: [category]" → Save with specific categorization
-   
-   // Automatic triggers (future)
-   - CLI tool detects successful code execution
-   - User uses solution without asking follow-ups
-   - Pattern recognition of positive user feedback
-   ```
-
-6. **Collective Intelligence Benefits**:
-   - **Personalized environment**: Tools learn user's preferences, coding style, common issues
-   - **Cross-tool learning**: Claude Code discoveries benefit Gemini CLI and vice versa
-   - **Accumulated expertise**: System gets smarter with every successful interaction
-   - **Context continuity**: Tools understand user's project context and history
-   - **Pattern recognition**: System learns what solutions work for this specific user/project
-
-**Implementation Status (v1.8.241+)**: ✅ COMPLETE - Automatic intelligent CLI tools with universal Memory+Context integration.
-
-**Available MCP Tools (v1.8.240+)**:
-```typescript
-// Enhanced intelligence tools
-query_memory_with_context(query) → Full Memory+Context pipeline results
-save_successful_output(content, category, code) → Professional learning contribution
-
-// User-friendly shortcuts  
-save(category?) → Quick save last response automatically
-remember(note?) → Save current conversation with note
-worked(details?) → Mark solution successful and save
-
-// Original tools (still available)
-query_memory(query) → Basic memory search
-contribute_learning(type, category, content, code) → Structured contribution
-```
-
-**User Experience (v1.8.240+)**:
-```bash
-# In any CLI tool (Gemini CLI, Claude Code, etc.):
-gemini "How to implement React authentication?"
-# → Gemini gets rich context about user's React auth history and preferences
-# → Provides context-aware response tailored to user's patterns
-
-# Easy save commands:
-/save                    # Save this response for future reference
-/remember jwt-solution   # Remember this JWT implementation
-/worked                  # Mark as successful solution
-/mcp                     # List all available memory tools
-```
-
-**Automatic Universal Integration (v1.8.241+)**:
-
-**Zero Manual Configuration**: All CLI tools automatically become intelligent when installed via Hive:
-
-```typescript
-// Prebuilt configurations deployed automatically for all 6 tools:
-
-// Gemini CLI: ~/.gemini/settings.json
-{
-  "mcpServers": {
-    "hive-memory-service": {
-      "autoInvoke": ["query_memory_with_context"],  // Automatic memory consultation
-      "env": { "MEMORY_SERVICE_ENDPOINT": "dynamic_port" }
-    }
-  }
-}
-
-// Claude Code: ~/.claude/.mcp.json (enhanced)
-// Qwen Code: ~/.qwen/config.json (intelligentQueries: true)  
-// OpenAI Codex: ~/.codex/config.json (autoEnabled: true)
-// Cline: ~/.cline/config.json (enhanced MCP integration)
-// Grok CLI: ~/.grok/mcp-config.json (enhanced)
-```
-
-**Universal Intelligence Activation**:
-- **ANY question** to **ANY CLI tool** triggers Memory+Context consultation
-- **All programming languages**: Python, JavaScript, TypeScript, SQL, etc.
-- **All task types**: Debugging, implementation, optimization, learning
-- **All technologies**: React, Docker, APIs, authentication, databases, etc.
-
-**Growing Intelligence Examples**:
-```
-User: "How to implement React auth?" → Gets context about user's JWT preferences, CORS issues
-User: "Debug this Python error" → Gets context about user's debugging patterns, common fixes
-User: "Create REST API" → Gets context about user's API frameworks, authentication patterns
-User: "Optimize SQL query" → Gets context about user's database preferences, performance patterns
-```
-
-**Expected Memory Service Activity**:
-```
-POST /api/v1/memory/query-with-context  ← ALL CLI tools getting enhanced context automatically
-POST /api/v1/memory/contribute          ← CLI tools saving valuable outputs via /save commands
-```
-
-**Result**: Every CLI tool becomes an intelligent extension of Hive's collective memory, automatically providing context-aware responses tailored to the user's specific experience, preferences, and coding patterns across ALL programming languages and technologies.
-
-### Enhanced Memory Views for AI CLI Tools (v1.8.281+)
-
-**Major Enhancement**: AI CLI tools now have access to sophisticated SQL views that replicate ~80% of the Consensus engine's memory and context capabilities.
-
-#### The MEMORY.md System
-
-**Overview**: A comprehensive guide file that teaches AI tools how to access and utilize the Hive memory system effectively.
-
-**Installation Process**:
-1. When users install CLI tools through Hive, two symlinks are created:
-   - `~/.hive-ai.db` → Points to the unified database
-   - `~/.MEMORY.md` → Points to the memory access guide
-
-2. The MEMORY.md file is bundled with the app at `resources/MEMORY.md`
-
-3. Symlink creation is dynamic and works for all users regardless of system paths:
-```typescript
-// From src/index.ts - CLI tool installation handler
-const memoryGuidePath = app.isPackaged 
-  ? path.join(process.resourcesPath, 'app', 'resources', 'MEMORY.md')
-  : path.join(__dirname, '..', 'resources', 'MEMORY.md');
-const memorySymlinkPath = path.join(os.homedir(), '.MEMORY.md');
-fs.symlinkSync(memoryGuidePath, memorySymlinkPath, 'file');
-```
-
-**User Workflow**:
-1. Install CLI tool through Hive
-2. Launch the tool
-3. Tell the AI: "Read ~/.MEMORY.md for context"
-4. AI gains full memory system access
-
-#### Enhanced Database Views
-
-**Temporal Memory Layers** (Replicating Consensus's 4-layer approach):
-
-1. **memory_recent** (Last 2 hours)
-   - Purpose: Conversation continuity
-   - Recency Score: 4 (highest priority)
-   - Use: Ongoing discussions, just-mentioned topics
-
-2. **memory_today** (Last 24 hours)
-   - Purpose: Recent working context
-   - Recency Score: 3
-   - Use: Today's work, recent problems and solutions
-
-3. **memory_week** (Last 7 days)
-   - Purpose: Pattern recognition
-   - Recency Score: 2
-   - Use: Weekly development patterns, common issues
-
-4. **memory_semantic** (All time)
-   - Purpose: Deep knowledge base
-   - Recency Score: 1
-   - Use: Historical context, similar past solutions
-
-**Context Building Views**:
-
-5. **memory_patterns**
-   - Tracks recurring code patterns and solutions
-   - Groups by frequency and last usage
-   - Helps maintain coding consistency
-
-6. **memory_preferences**
-   - Identifies user technology preferences
-   - Tracks: React vs Vue, TypeScript vs JavaScript, etc.
-   - Enables tailored responses
-
-7. **memory_themes**
-   - Thematic clustering of conversations
-   - Categories: Authentication, Database, API, React, Testing, etc.
-   - Shows message counts and time ranges
-
-8. **memory_solutions_enhanced**
-   - Links problems to successful solutions
-   - Tracks what worked and what didn't
-   - Prevents repeating failed approaches
-
-**Master Context Views**:
-
-9. **memory_context_full**
-   - Combines all 4 temporal layers
-   - Includes recency scores and relevance weights
-   - Provides comprehensive context
-
-10. **memory_context_summary**
-    - Quick statistics overview
-    - Shows counts per memory layer
-    - Provides last activity timestamp
-
-#### SQL Implementation
-
-```sql
--- Example: memory_recent view
-CREATE VIEW memory_recent AS
-    SELECT 
-        content,
-        timestamp,
-        role,
-        conversation_id,
-        4 as recency_score,
-        1.0 as relevance_weight
-    FROM messages
-    WHERE role IN ('user', 'assistant')
-      AND datetime(timestamp) > datetime('now', '-2 hours')
-    ORDER BY timestamp DESC
-    LIMIT 20;
-
--- Example: memory_preferences view
-CREATE VIEW memory_preferences AS
-    SELECT 
-        CASE
-            WHEN content LIKE '%React%' THEN 'React Framework'
-            WHEN content LIKE '%TypeScript%' THEN 'TypeScript'
-            WHEN content LIKE '%Python%' THEN 'Python'
-            -- ... more patterns
-        END as preference,
-        COUNT(*) as usage_count,
-        MAX(timestamp) as last_mentioned
-    FROM messages
-    WHERE role IN ('user', 'assistant')
-    GROUP BY preference
-    ORDER BY usage_count DESC;
-```
-
-#### How AI Tools Build Context (From MEMORY.md)
-
-**4-Stage Process** (Mimicking Consensus):
-
-1. **Retrieve Temporal Memories**
-```sql
-sqlite3 ~/.hive-ai.db "SELECT content FROM memory_recent"
-sqlite3 ~/.hive-ai.db "SELECT content FROM memory_today WHERE content LIKE '%keyword%'"
-sqlite3 ~/.hive-ai.db "SELECT content FROM memory_week WHERE content LIKE '%keyword%' LIMIT 10"
-sqlite3 ~/.hive-ai.db "SELECT content FROM memory_semantic WHERE content LIKE '%keyword%' LIMIT 10"
-```
-
-2. **Understand User Preferences**
-```sql
-sqlite3 ~/.hive-ai.db "SELECT * FROM memory_preferences"
-```
-
-3. **Identify Patterns & Solutions**
-```sql
-sqlite3 ~/.hive-ai.db "SELECT * FROM memory_patterns WHERE pattern_snippet LIKE '%topic%'"
-sqlite3 ~/.hive-ai.db "SELECT solution FROM memory_solutions_enhanced WHERE problem LIKE '%similar%'"
-sqlite3 ~/.hive-ai.db "SELECT * FROM memory_themes"
-```
-
-4. **Get Quick Overview**
-```sql
-sqlite3 ~/.hive-ai.db "SELECT * FROM memory_context_summary"
-```
-
-#### Critical Rules for AI Tools (From MEMORY.md)
-
-1. **Always Check Recent Context First** - Maintain conversation continuity
-2. **Match User's Technology Stack** - Use their preferred technologies
-3. **Reference Past Solutions** - Don't repeat failed approaches
-4. **Maintain Pattern Consistency** - Follow established patterns
-5. **Understand Project Context** - Align with current priorities
-
-#### Performance Characteristics
-
-- Views use LIMIT clauses to prevent large result sets
-- Temporal layering reduces query scope progressively
-- Pattern matching uses indexed columns
-- Recency scores enable weighted relevance ranking
-
-#### Comparison with Consensus Memory System
-
-| Feature | Consensus Engine | Enhanced Views | Coverage |
-|---------|-----------------|----------------|----------|
-| Temporal Layers (2hr, 24hr, 7d, all) | ✅ Full | ✅ Full | 100% |
-| Pattern Recognition | ✅ LLM-based | ✅ SQL-based | 80% |
-| User Preferences | ✅ Inferred | ✅ Tracked | 90% |
-| Thematic Clustering | ✅ LLM clustering | ✅ Keyword clustering | 70% |
-| Solution Tracking | ✅ Full | ✅ Full | 100% |
-| Context Synthesis | ✅ LLM synthesis | ❌ Manual combination | 60% |
-
-**Overall Context Capability**: ~80% of Consensus features using only SQL views
-
-#### Benefits Over Previous Approaches
-
-1. **No Memory Service Required** - Pure SQL, no additional processes
-2. **No MCP Complexity** - Direct database access via symlink
-3. **Universal Compatibility** - Works with any SQLite-capable tool
-4. **Zero Configuration** - Symlinks created automatically
-5. **Performance** - Direct database queries, no API overhead
-6. **Transparency** - AI tools can see exactly what they're querying
-
-#### Future Enhancements
-
-- Add full-text search indexes for better semantic matching
-- Implement weighted scoring algorithms in views
-- Create materialized views for frequently accessed patterns
-- Add custom SQLite functions for advanced pattern matching
 
 4. **Grok-Specific MCP Configuration**:
    
@@ -12331,469 +9925,6 @@ interface TerminalSettings {
 
 ---
 
-## Complete Guide: Adding New AI CLI Tools
-
-### Overview
-This section provides comprehensive step-by-step instructions for adding new AI CLI tools to the Hive Consensus IDE. Each tool appears in the activity bar and has a panel in the AI CLI Tools window, with full Memory Service integration.
-
-### Prerequisites
-- Tool name and description
-- NPM package name (or installation command)
-- Logo/icon for the tool (SVG format, 24x24)
-- Documentation URL
-- Version detection command and regex pattern
-
-### Step-by-Step Process
-
-#### Step 1: Create SVG Icon
-**Location:** `resources/ai-cli-icons/[tool-name].svg`
-
-Create a 24x24 SVG icon file with proper structure:
-```xml
-<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="none">
-  <!-- Tool icon paths here -->
-</svg>
-```
-
-**Naming convention:** Use lowercase with hyphens (e.g., `github-copilot.svg`, `aider.svg`, `v0.svg`)
-
-#### Step 2: Add Tool to Registry
-**File:** `src/shared/types/cli-tools.ts`
-
-Add the tool configuration to `CLI_TOOLS_REGISTRY` object (before the closing brace):
-
-```typescript
-'tool-id': {
-  id: 'tool-id',
-  name: 'Tool Display Name',
-  description: 'Brief description of the tool',
-  command: 'tool-command',  // Command to run in terminal
-  installCommand: 'npm install -g package-name',
-  updateCommand: 'npm update -g package-name',
-  versionCommand: 'tool-command --version',
-  versionRegex: /(\d+\.\d+\.\d+)/,
-  docsUrl: 'https://tool-documentation.com',
-  icon: '🔧',  // Emoji icon (optional)
-  requiresNode: true  // If it's an npm package
-},
-```
-
-#### Step 3: Import Icon in Renderer
-**File:** `src/renderer.ts`
-
-Add import statement with other icon imports (around line 62-67):
-```typescript
-import toolIcon from '../resources/ai-cli-icons/tool-name.svg';
-```
-
-#### Step 4: Add Activity Bar Button
-**File:** `src/renderer.ts`
-
-Find the activity bar buttons section (around line 440-455) and add button in desired position:
-```typescript
-<button class="activity-btn cli-quick-launch" data-tool="tool-id" aria-label="Tool Name">
-  <img src="${toolIcon}" width="24" height="24" alt="Tool Name" style="object-fit: contain;" />
-  <span class="activity-tooltip">Tool Name</span>
-</button>
-```
-
-**Note:** Place between existing buttons to control order on activity bar
-
-#### Step 5: Add Panel Card
-**File:** `src/renderer.ts`
-
-In the `renderCliToolsPanel` function (around line 3900-3980), add the tool card:
-```typescript
-// Tool Name - Description
-const toolStatus = await electronAPI.detectCliTool('tool-id');
-gridContainer.appendChild(createCliToolCard({
-  id: 'tool-id',
-  name: 'Tool Display Name',
-  description: 'Tool description for panel',
-  status: toolStatus,
-  docsUrl: 'https://tool-documentation.com',
-  badgeText: 'BADGE TEXT',  // Optional badge
-  badgeColor: '#COLOR'      // Optional badge color
-}));
-```
-
-#### Step 6: Update Install/Update/Uninstall All Arrays
-**File:** `src/renderer.ts`
-
-Update three arrays to include the new tool:
-
-1. **Install All** (around line 4441):
-```typescript
-const toolsToInstall = [
-  'claude-code',
-  'gemini-cli',
-  'qwen-code',
-  'openai-codex',
-  'github-copilot',
-  'tool-id',  // Add new tool
-  'grok'
-];
-```
-
-2. **Also update the refresh array** (around line 4526):
-```typescript
-const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'tool-id', 'grok'];
-```
-
-3. **Update All array** (around line 4547 and 4641):
-```typescript
-const toolsToUpdate = [
-  'claude-code',
-  'gemini-cli',
-  'qwen-code',
-  'openai-codex',
-  'github-copilot',
-  'tool-id',  // Add new tool
-  'grok'
-];
-```
-
-4. **Uninstall All array** (around line 4754 and 4833):
-```typescript
-const toolsToUninstall = [
-  'claude-code',
-  'gemini-cli',
-  'qwen-code',
-  'openai-codex',
-  'github-copilot',
-  'tool-id',  // Add new tool
-  'grok'
-];
-```
-
-#### Step 7: Update Main Process
-**File:** `src/index.ts`
-
-##### 7.1: Update Supported Tools Arrays (2 locations)
-Around line 2620:
-```typescript
-const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'tool-id', 'grok'];
-```
-
-Around line 2657:
-```typescript
-const supportedTools = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'github-copilot', 'tool-id', 'grok'];
-```
-
-##### 7.2: Add NPM Package Mapping (if different from registry)
-Around line 3210 and 3494:
-```typescript
-const npmPackages: Record<string, string> = {
-  'claude-code': '@anthropic-ai/claude-code',
-  'gemini-cli': '@google/gemini-cli',
-  'qwen-code': '@qwen-code/qwen-code',
-  'openai-codex': '@openai/codex',
-  'tool-id': 'npm-package-name',  // Add if package name differs
-  'grok': '@vibe-kit/grok-cli'
-};
-```
-
-##### 7.3: Add Version Detection
-Around line 3005-3012, add version extraction logic if needed:
-```typescript
-} else if (toolId === 'tool-id') {
-  // Tool-specific version extraction
-  const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
-  version = match ? match[1] : 'Unknown';
-```
-
-#### Step 8: Handle Special Cases (IMPORTANT)
-
-##### 8.1: Multi-word Commands (e.g., `gh copilot`, `aws codewhisperer`)
-When a tool uses a command with spaces:
-
-**In cli-tools.ts:**
-```typescript
-command: 'gh',  // Use base command only (for detection)
-// NOT: command: 'gh copilot' (breaks detection)
-```
-
-**In detector.ts (after line 108):**
-```typescript
-if (toolId === 'your-tool-id') {
-  // Additional validation for extensions/subcommands
-  const { stdout } = await execAsync('gh extension list');
-  if (!stdout.includes('extension-name')) {
-    toolInfo.installed = false;
-    toolInfo.status = CliToolStatus.NOT_INSTALLED;
-    return toolInfo;
-  }
-}
-```
-
-**In index.ts (launch handler, around line 3775):**
-```typescript
-} else if (toolId === 'your-tool-id') {
-  command = 'full command with spaces';  // For launching
-```
-
-##### 8.2: GitHub CLI Extensions
-- Install command: `gh extension install org/extension`
-- Update command: `gh extension upgrade extension`
-- Detection: Check `gh` exists, then verify extension
-- No npm package mapping needed
-
-##### 8.3: API Key Configuration
-Add logic in `cli-tool-launch` handler for first-time setup:
-```typescript
-if (toolId === 'your-tool' && !hasApiKey()) {
-  command = 'your-tool:setup';  // Special setup mode
-}
-```
-
-##### 8.4: Python-based Tools
-- Use pip for installation commands
-- May need special PATH handling
-- Version detection might differ
-
-##### 8.5: Tools That Don't Support Memory Service
-Not all tools support MCP/Memory Service. Exclude them from the check in detector.ts (line 157-162)
-
-#### Step 9: Testing Checklist
-
-##### 9.1: TypeScript Compilation Check
-```bash
-npx tsc --noEmit
-```
-
-##### 9.2: Full Production Build
-
-Run the comprehensive production build:
-
-```bash
-cd electron-poc
-npm run build:complete
-```
-
-**What the build does:**
-- Executes 17 phases including TypeScript compilation, webpack bundling, and DMG creation
-- Shows progress in the current terminal
-- Phase 11 (Application Build) is the longest, typically taking 2-5 minutes
-- Total build time: 5-10 minutes
-- Automatically opens the DMG when complete for testing
-
-**Note:** Always use `npm run build:complete` for production builds. This ensures all build phases are executed in the correct order with proper verification.
-
-##### 9.3: Verify Functionality
-After build completes and DMG opens:
-- [ ] Icon appears in activity bar in correct position
-- [ ] Tooltip shows on hover
-- [ ] Click opens AI CLI Tools panel
-- [ ] Tool card appears in panel
-- [ ] Detect button works
-- [ ] Install button works (if not installed)
-- [ ] Update button works (if installed)
-- [ ] Uninstall button works (if installed)
-- [ ] Launch button opens terminal with tool
-- [ ] Tool included in Install All
-- [ ] Tool included in Update All
-- [ ] Tool included in Uninstall All
-- [ ] Memory Service integration configured
-
-#### Step 10: Commit Changes
-```bash
-git add -A
-git commit -m "feat(cli-tools): add [Tool Name] integration
-
-- Add [Tool Name] to CLI_TOOLS_REGISTRY
-- Create [Tool Name] SVG icon
-- Add [Tool Name] button to activity bar
-- Add [Tool Name] panel card in AI CLI Tools window
-- Include [Tool Name] in Install/Update/Uninstall All operations
-- Add version detection for [Tool Name]
-- Update all supported tools arrays
-- Configure Memory Service integration
-
-[Tool Name] provides [brief description of functionality]"
-```
-
-### Common Issues & Solutions
-
-#### Issue: Icon not showing
-- Check SVG file path and name matches import
-- Ensure SVG is valid (viewBox="0 0 24 24")
-- Verify import statement in renderer.ts
-
-#### Issue: Tool not detected (CRITICAL)
-- **Check command vs detection**: The `command` field is used for detection via `which`
-- **Multi-word commands**: Tools like GitHub Copilot (`gh copilot`) need special handling
-- **Extension-based tools**: GitHub CLI extensions require checking both base command AND extension
-- Check tool ID consistency across all files
-- Verify command name in registry matches actual CLI command
-- Check npm package name in index.ts mappings
-
-**Example Fix for Multi-word Commands:**
-```typescript
-// In cli-tools.ts
-'github-copilot': {
-  command: 'gh',  // Base command for detection (single word)
-  // NOT: command: 'gh copilot' (which command can't handle this)
-}
-
-// In detector.ts - add special handling after base detection
-if (toolId === 'github-copilot') {
-  // Check if extension is installed
-  const { stdout } = await execAsync('gh extension list');
-  if (!stdout.includes('gh-copilot')) {
-    toolInfo.installed = false;
-    return toolInfo;
-  }
-}
-
-// In index.ts - add launch command override
-} else if (toolId === 'github-copilot') {
-  command = 'gh copilot';  // Full command for launching
-```
-
-#### Issue: Version not showing
-- Test version command manually: `tool-command --version`
-- Adjust regex pattern for version extraction
-- Add specific version detection logic in index.ts
-- For extensions, version command may differ from base command
-
-#### Issue: Install/Update fails
-- Verify npm package name is correct
-- Check if package requires special installation flags
-- Ensure package is published to npm
-- For GitHub CLI extensions, use `gh extension` commands
-- Python tools may need pip instead of npm
-
-#### Issue: Tool shows installed but immediately shows not installed
-- This is usually a detection problem - see "Tool not detected" above
-- Check system logs for actual error messages
-- Verify the detection command works in terminal
-- For extensions, ensure both base tool AND extension are checked
-
-#### Issue: Memory Service not connecting
-- Ensure tool is added to all supportedTools arrays
-- Check MCP configuration is created properly
-- Verify authentication token is generated
-- Check dynamic port discovery is working
-- Note: Some tools (like GitHub Copilot) don't support Memory Service
-
-### File Reference Summary
-
-| File | Purpose | Key Sections |
-|------|---------|--------------|
-| `src/shared/types/cli-tools.ts` | Tool registry | CLI_TOOLS_REGISTRY object |
-| `src/renderer.ts` | UI components | Imports, activity bar, panel cards, arrays |
-| `src/index.ts` | Backend logic | Supported tools, npm packages, version detection |
-| `resources/ai-cli-icons/` | Icon storage | SVG files |
-
-### Current Tool Order (as of latest update)
-1. Claude Code
-2. Gemini CLI
-3. Qwen Code
-4. OpenAI Codex
-5. GitHub Copilot (replaced DeepSeek)
-6. [Next position for new tool]
-7. Consensus (special - not a CLI tool)
-8. Grok CLI
-
-### Tool Integration Types
-
-#### NPM Package Tools
-Most tools are installed via npm and follow standard patterns:
-- Claude Code: `@anthropic-ai/claude-code`
-- Gemini CLI: `@google/gemini-cli`
-- Qwen Code: `@qwen-code/qwen-code`
-- OpenAI Codex: `@openai/codex`
-- Grok CLI: `@vibe-kit/grok-cli`
-
-#### GitHub CLI Extension Tools
-Some tools are GitHub CLI extensions with special handling:
-- GitHub Copilot: `gh extension install github/gh-copilot`
-  - Uses `gh copilot` command instead of direct binary
-  - No npm package mapping needed
-  - Version detection via `gh copilot --version`
-
-#### Python-based Tools
-Some tools require Python installation:
-- OpenAI Codex uses Python pip for installation
-- Requires special handling in install/update commands
-
-### Memory Service Integration
-All tools automatically receive Memory Service integration when installed through Hive:
-- Authentication token generated on first install
-- MCP configuration created automatically
-- Direct API access via helper commands
-- Dynamic port discovery for zero-hardcoded endpoints
-- SQLite views for direct database access
-
-### Build Script Details
-The production build uses a comprehensive 17-phase build system:
-- **Command**: `npm run build:complete`
-- Executes `scripts/build-production-dmg.js` with all verification steps
-- Shows progress in the current terminal
-- Phase 11 (Application Build with webpack) is typically the longest phase
-- Always use this command for consistent, reliable builds
-- Total build time: 5-10 minutes depending on system
-
-### Next Tools to Add
-- [ ] Aider - AI pair programming tool
-- [ ] v0 - Vercel's AI development tool
-- [ ] Cursor - AI-powered code editor CLI
-- [ ] Continue - Open-source AI code assistant
-- [ ] Tabnine - AI code completion CLI
-
-### Detection Troubleshooting Guide
-
-#### Understanding the Detection Flow
-1. **Detector checks command existence**: Uses `which ${command}` to find executable
-2. **Command must be single word**: `which` doesn't handle spaces (e.g., `gh copilot` fails)
-3. **Additional validation**: May need extra checks for extensions/subcommands
-4. **Version extraction**: Uses `versionCommand` to get version info
-5. **Memory Service check**: Only for supported tools
-
-#### Common Detection Pitfalls
-1. **Multi-word commands**: Split into base command + launch override
-2. **Extension-based tools**: Need two-phase detection (base + extension)
-3. **PATH issues**: Tool installed but not in PATH
-4. **Permission issues**: Tool exists but not executable
-5. **Version command failures**: Some tools hang or error on version check
-
-#### Testing Detection Manually
-```bash
-# Test what detector sees
-which [command]  # Should return path
-
-# Test version command
-[version-command]  # Should return version info
-
-# For extensions
-gh extension list  # Should show installed extensions
-```
-
-### Critical Implementation Checklist
-
-Before adding any new tool, verify:
-- [ ] Command field contains single executable name (no spaces)
-- [ ] Multi-word commands have launch override in index.ts
-- [ ] Extension-based tools have additional detection logic
-- [ ] Tool ID is consistent across ALL files
-- [ ] Tool is added to ALL required arrays (install, update, uninstall)
-- [ ] Version regex matches actual output format
-- [ ] Memory Service support is correctly configured
-- [ ] Icon file exists and is properly imported
-- [ ] TypeScript compilation passes
-
-### Notes
-- Always test TypeScript compilation before full build
-- Keep consistent naming across all files (tool ID)
-- Place new tools logically in UI (group similar tools)
-- Document any special requirements or configurations
-- The full build takes 5-10 minutes to complete
-- After DMG opens, drag to Applications if you want to install
-- Memory Service integration is automatic for supported tools
-- Test detection manually in terminal before building
-
----
-
 ## Global Folder Management System
 
 ### Overview
@@ -14026,11 +11157,9 @@ logger.info('Request received', {
 ```
 
 #### Log File Location:
-- **macOS**: `~/.hive/logs/`
-- **Windows**: `%USERPROFILE%/.hive/logs/`
-- **Linux**: `~/.hive/logs/`
-
-> **Note**: All logs are stored in the unified `~/.hive/` directory structure alongside the database.
+- **macOS**: `~/Library/Application Support/Hive Consensus/logs/`
+- **Windows**: `%APPDATA%/Hive Consensus/logs/`
+- **Linux**: `~/.config/Hive Consensus/logs/`
 
 #### Log File Format:
 ```
@@ -14341,35 +11470,11 @@ electron-poc/
 
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
-**Last Updated**: 2025-09-09
-**Version**: 1.8.248
+**Last Updated**: 2025-08-27
+**Version**: 1.8.20
 **Maintainer**: Hive Development Team
 
 ### Change Log
- - **v1.8.248 (2025-09-09)**: Direct API Integration - Eliminated MCP Complexity
-  - **Architectural Simplification**: Replaced complex MCP protocol with direct HTTP API calls
-  - **Eliminated Dependencies**: Removed all MCP wrapper scripts and external protocol dependencies
-  - **Faster Performance**: 2-5ms response times vs MCP protocol overhead
-  - **Improved Reliability**: Direct API calls eliminate connection issues and "Disconnected" states
-  - **Leveraged Existing Infrastructure**: Uses ProcessManager/PortManager for dynamic port discovery
-  - **Preserved Features**: All CLI tools maintain Memory Service connectivity and reporting
-  - **Universal Commands**: `hive-memory context "query"` and tool-specific shortcuts available
-  - **Same Quality**: Uses existing Memory+Context pipeline for enhanced responses
-- **v1.8.244 (2025-09-09)**: MCP v2.0 - Unified Commands & Enhanced User Experience (Superseded)
-  - **Unified Command System**: Same commands (@memory, @context, @recall) work across all 6 CLI tools
-  - **Natural Language Triggers**: "What have we...", "What did we..." auto-trigger memory queries
-  - **Smart Pattern Matching**: Regex-based detection with automatic prefix removal
-  - **Enhanced MCP Wrappers**: v2.0 wrappers with query enhancement and context injection
-  - **Tool-Specific Identification**: Each tool properly identified in Memory Service dashboard
-  - **Discovery Prompts**: /memory_help shows all available commands
-  - **Zero Configuration**: New users get everything configured automatically on tool install
-  - **User Documentation**: Created UNIFIED_MCP_COMMANDS.md with comprehensive usage guide
-  - **Backwards Compatible**: Maintains all existing MCP functionality while adding enhancements
-- **v1.8.242 (2025-09-09)**: Dynamic MCP Wrapper Generation
-  - **Tool-Specific Wrappers**: Each CLI tool gets unique wrapper in ~/.hive/mcp-wrappers/
-  - **User-Agnostic Paths**: All configurations use os.homedir() for portability
-  - **Precise Tracking**: Memory Service can identify which tool made each query
-  - **Enterprise Ready**: Works on any computer without hardcoded paths
 - **v1.8.20 (2025-08-27)**: Critical Production Crash Fixes
   - **Python Runtime Extraction**: Changed from symlink to full copy to fix dylib loading failures
   - **Memory Management**: Added environment variables to limit ML library thread spawning
@@ -14377,23 +11482,6 @@ electron-poc/
   - **Build Script Phase 13**: Added critical fix verification to ensure all fixes are applied
   - **Consensus Routing Fix**: Python subprocess now stays alive for routing decisions
 - **v1.8.0-1.8.3 (2025-08-27)**: Production Build System Enhancement & Memory Service Fixes
- - **v1.8.378 (2025-09-13)**: Panel Visibility & State Hardening
-   - Always-visible activity icons: scrollable middle (`.activity-bar-scroll`) + anchored bottom (`.sidebar-bottom-section`).
-   - Centralized center panel state via `setCenterView()` + `applyCenterView()` wrapper over `nextStateOnToggle()`.
-   - Idempotent activity clicks (no toggle-to-Welcome); exactly one visible center panel.
-   - On-demand creation of `#settings-panel`, `#memory-panel`, `#cli-tools-panel` when first used.
-   - `ensureEditorAreaReady()` hides overlays, expands center area, shows `#editor-area`; editors container hidden when panels show.
-   - Added integration test `tests/center-view.test.ts` to complement `tests/panel-state.test.ts`.
- - **v1.8.380 (2025-09-13)**: Enterprise SCM root + unified clone
-   - Auto‑detect nearest Git root for SCM (with .git walk‑up fallback) and show root in branch tooltip.
-   - New preference: "Prefer opened folder as Git root" — switch between repo‑root SCM and folder‑scoped SCM.
-   - Status bar SCM context menu: Switch to Git Root, Use Opened Folder, Reveal Root in Finder.
-   - SCM Welcome "Clone Repository" uses the same multi‑provider dialog as Welcome (URL/GitHub/GitLab), with validation and auto‑open.
- - **v1.8.394 (2025-09-14)**: Activity Bar Tooltip Visibility Fix
-   - Fixed tooltip clipping issue by setting `overflow: visible` on `.activity-bar-scroll`, `.activity-bar-unified`, and `.sidebar-panel`
-   - Tooltips now properly display for all activity bar icons (Explorer, Git, CLI Tools, Memory, Analytics)
-   - Updated CSS architecture to ensure tooltips render outside container boundaries with z-index: 10000
-   - Fixed Grok CLI tool installation by pinning to v0.0.28 (v0.0.29 has ESM module resolution error)
   - **Automatic Version Incrementing**: Build script now auto-increments version for tracking builds
   - **Port Scanning Timeout**: Added 3-second timeout to prevent app hanging during port initialization
   - **Environment Variable Fix**: Fixed PORT env var not being passed to Memory Service in production
@@ -14452,8 +11540,8 @@ electron-poc/
   - **Multi-Tool MCP**: Support for both Claude Code and Grok MCP configurations
   - **Setup Wizard Enhancement**: Interactive Grok API key configuration
   - **Token Persistence**: Unique authentication tokens maintained across restarts
-  - **updateAllMCPConfigurations**: Function to sync all tool configs with actual port (deprecated in v1.8.248)
-  - **Grok Auto-Creation Fix**: MCP config now created if missing on startup (deprecated in v1.8.248)
+  - **updateAllMCPConfigurations**: Function to sync all tool configs with actual port
+  - **Grok Auto-Creation Fix**: MCP config now created if missing on startup
   - **Grok Detection Fix**: Added 'grok' to memory service connection check list
 - **v1.7.2 (2025-08-23)**: AI CLI Tool Quick Launch Icons & UI Improvements
   - **Quick Launch Icons**: Implemented 6 AI tool icons in left sidebar for instant access
@@ -16753,1069 +13841,3 @@ for (const message of conversation.messages) {
 - Prepare for production release
 
 This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in the current MASTER_ARCHITECTURE.md while preserving all functionality and dramatically improving the user experience.
-
----
-
-## 📊 SQL Query Reference Library
-
-### Database Location
-**Primary Database**: `~/.hive/hive-ai.db`  
-**Description**: Unified SQLite database containing all application data, consensus history, memory, and analytics.
-
-### 🔍 Consensus Analysis Queries
-
-#### 1. Complete Consensus Journey Analysis (Memory → Context → Route → Consensus → Result)
-```sql
--- Trace the FULL journey: Memory retrieval, context building, routing, consensus rounds, and final result
-WITH latest_conversation AS (
-    SELECT c.id, c.title, c.created_at, c.total_cost, 
-           c.total_tokens_input + c.total_tokens_output as total_tokens,
-           cp.profile_name, cp.max_consensus_rounds
-    FROM conversations c
-    LEFT JOIN consensus_profiles cp ON c.profile_id = cp.id
-    WHERE c.title LIKE '%powershell%'
-    ORDER BY c.created_at DESC
-    LIMIT 1
-)
-SELECT 
-    lc.title as query,
-    lc.profile_name,
-    lc.max_consensus_rounds as max_rounds_allowed,
-    datetime(lc.created_at, 'localtime') as asked_at,
-    -- Memory Stage
-    mcl.memories_retrieved_recent,
-    mcl.memories_retrieved_semantic,
-    mcl.memory_search_query,
-    mcl.memory_stage_duration_ms,
-    -- Context Stage  
-    mcl.patterns_identified,
-    mcl.topics_extracted,
-    mcl.context_summary,
-    mcl.context_stage_duration_ms,
-    -- Routing Decision
-    mcl.routing_decision as route_taken,
-    mcl.routing_confidence,
-    -- Consensus Rounds
-    COUNT(DISTINCT ci.round_number) as consensus_rounds_used,
-    MAX(ci.round_number) as final_round,
-    GROUP_CONCAT(DISTINCT ci.stage_name || ' (R' || ci.round_number || ')') as stages_by_round,
-    SUM(ci.tokens_used) as consensus_tokens,
-    -- Consensus Decision Type
-    CASE 
-        WHEN m.consensus_path = 'unanimous' THEN '✅ Unanimous Agreement'
-        WHEN m.consensus_path = 'majority' THEN '🟡 Majority Vote'
-        WHEN m.consensus_path = 'curator_override' THEN '🟠 Curator Decision'
-        ELSE m.consensus_path
-    END as consensus_type,
-    -- Final Metrics
-    lc.total_tokens,
-    printf('$%.4f', lc.total_cost) as total_cost,
-    LENGTH(m.content) as response_length
-FROM latest_conversation lc
-LEFT JOIN memory_context_logs mcl ON lc.id = mcl.conversation_id
-LEFT JOIN consensus_iterations ci ON lc.id = ci.consensus_id
-LEFT JOIN messages m ON lc.id = m.conversation_id AND m.role = 'assistant'
-GROUP BY lc.id;
-```
-
-#### 1a. Basic Consensus Flow (Simplified)
-```sql
--- Simpler version focusing on key metrics
-SELECT 
-    c.id as conversation_id,
-    c.title as query,
-    c.created_at,
-    c.total_tokens_input + c.total_tokens_output as total_tokens,
-    c.total_cost,
-    ci.stage_name,
-    ci.model_id,
-    ci.round_number,
-    ci.tokens_used,
-    ci.flag as rejected_improvement,
-    m.consensus_path as consensus_type
-FROM conversations c
-LEFT JOIN consensus_iterations ci ON c.id = ci.consensus_id
-LEFT JOIN messages m ON c.id = m.conversation_id
-WHERE c.title LIKE '%PowerShell%'  -- Replace with your query
-ORDER BY c.created_at DESC, ci.round_number, ci.id;
-```
-
-#### 2. Analyze Consensus Round Performance
-```sql
--- See how many rounds were needed to reach consensus
-SELECT 
-    c.id,
-    c.title,
-    COUNT(DISTINCT ci.round_number) as rounds_used,
-    MAX(ci.round_number) as max_round,
-    SUM(ci.tokens_used) as total_tokens,
-    GROUP_CONCAT(DISTINCT ci.stage_name) as stages_involved
-FROM conversations c
-JOIN consensus_iterations ci ON c.id = ci.consensus_id
-GROUP BY c.id
-ORDER BY rounds_used DESC;
-```
-
-#### 3. Memory Context Retrieval Analysis
-```sql
--- Analyze memory retrieval for each query
-SELECT 
-    mcl.conversation_id,
-    mcl.timestamp,
-    mcl.memory_search_query,
-    mcl.memories_retrieved_recent,
-    mcl.memories_retrieved_today,
-    mcl.memories_retrieved_week,
-    mcl.memories_retrieved_semantic,
-    mcl.memory_stage_duration_ms,
-    mcl.context_stage_duration_ms,
-    mcl.patterns_identified,
-    mcl.topics_extracted,
-    mcl.routing_decision,
-    mcl.routing_confidence,
-    c.title as original_query
-FROM memory_context_logs mcl
-JOIN conversations c ON mcl.conversation_id = c.id
-WHERE c.created_at >= date('now', '-7 days')
-ORDER BY mcl.timestamp DESC;
-```
-
-#### 4. Route Analysis (Simple vs Complex)
-```sql
--- See which queries took which routes
-SELECT 
-    mcl.routing_decision,
-    COUNT(*) as query_count,
-    AVG(mcl.memory_stage_duration_ms + mcl.context_stage_duration_ms) as avg_duration_ms,
-    AVG(c.total_cost) as avg_cost,
-    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens
-FROM memory_context_logs mcl
-JOIN conversations c ON mcl.conversation_id = c.id
-GROUP BY mcl.route_taken;
-```
-
-### 📈 Performance & Cost Analytics
-
-#### 5. Daily Usage Statistics
-```sql
--- Complete daily statistics
-SELECT 
-    date(c.created_at) as query_date,
-    COUNT(DISTINCT c.id) as total_queries,
-    COUNT(DISTINCT cu.conversation_id) as tracked_conversations,
-    SUM(c.total_cost) as daily_cost,
-    SUM(c.total_tokens_input + c.total_tokens_output) as daily_tokens,
-    AVG(c.total_cost) as avg_cost_per_query,
-    COUNT(DISTINCT m.id) as memories_created
-FROM conversations c
-LEFT JOIN conversation_usage cu ON c.id = cu.conversation_id
-LEFT JOIN messages m ON c.id = m.conversation_id
-WHERE c.created_at >= date('now', '-30 days')
-GROUP BY date(c.created_at)
-ORDER BY query_date DESC;
-```
-
-#### 6. Model Performance Comparison
-```sql
--- Compare performance across different models
-SELECT 
-    ci.model_id,
-    ci.stage_name,
-    COUNT(*) as usage_count,
-    AVG(ci.tokens_used) as avg_tokens,
-    SUM(ci.tokens_used) as total_tokens,
-    AVG(CASE WHEN ci.flag = 1 THEN 1 ELSE 0 END) as rejection_rate
-FROM consensus_iterations ci
-GROUP BY ci.model_id, ci.stage_name
-ORDER BY usage_count DESC;
-```
-
-#### 7. Profile Effectiveness Analysis
-```sql
--- Analyze which profiles work best
-SELECT 
-    cp.profile_name,
-    COUNT(c.id) as queries_processed,
-    AVG(c.total_cost) as avg_cost,
-    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens,
-    AVG(c.performance_score) as avg_performance,
-    AVG(c.quality_rating) as avg_quality,
-    cp.generator_model,
-    cp.refiner_model,
-    cp.validator_model,
-    cp.curator_model,
-    cp.max_consensus_rounds
-FROM consensus_profiles cp
-LEFT JOIN conversations c ON c.profile_id = cp.id
-GROUP BY cp.id
-ORDER BY queries_processed DESC;
-```
-
-### 🧠 Memory & Context Queries
-
-#### 8. Memory Contribution Tracking
-```sql
--- Track memory contributions over time
-SELECT 
-    date(m.timestamp) as contribution_date,
-    COUNT(*) as memories_added,
-    COUNT(DISTINCT m.conversation_id) as unique_conversations,
-    AVG(m.tokens_used) as avg_tokens_per_memory,
-    SUM(m.cost) as total_memory_cost
-FROM messages m
-WHERE m.role = 'assistant'
-GROUP BY date(m.timestamp)
-ORDER BY contribution_date DESC;
-```
-
-#### 9. Semantic Search Effectiveness
-```sql
--- Analyze semantic search performance
-SELECT 
-    mcl.memory_search_query,
-    mcl.memories_retrieved_semantic,
-    mcl.memory_relevance_scores,
-    c.title as actual_query,
-    c.total_cost,
-    c.quality_rating
-FROM memory_context_logs mcl
-JOIN conversations c ON mcl.conversation_id = c.id
-WHERE mcl.memories_retrieved_semantic > 0
-ORDER BY mcl.timestamp DESC
-LIMIT 100;
-```
-
-#### 10. Context Pattern Detection
-```sql
--- Find common patterns and topics
-SELECT 
-    patterns_identified,
-    COUNT(*) as occurrence_count,
-    AVG(c.total_cost) as avg_cost_with_pattern,
-    AVG(c.quality_rating) as avg_quality_with_pattern
-FROM memory_context_logs mcl
-JOIN conversations c ON mcl.conversation_id = c.id
-WHERE patterns_identified IS NOT NULL
-GROUP BY patterns_identified
-ORDER BY occurrence_count DESC;
-```
-
-### 🎯 Consensus Quality Metrics
-
-#### 11. Consensus vs Single Model Comparison
-```sql
--- Compare consensus quality to baseline
-SELECT 
-    cm.question_complexity,
-    cm.question_category,
-    AVG(cm.improvement_score) as avg_improvement,
-    COUNT(*) as sample_size,
-    AVG(cm.user_rating) as avg_user_rating,
-    AVG(json_extract(cm.cost_comparison, '$.consensus_cost') / 
-        json_extract(cm.cost_comparison, '$.baseline_cost')) as cost_ratio
-FROM consensus_metrics cm
-GROUP BY cm.question_complexity, cm.question_category
-ORDER BY avg_improvement DESC;
-```
-
-#### 12. Curator Decision Analysis
-```sql
--- Analyze curator override patterns
-SELECT 
-    m.consensus_path,
-    COUNT(*) as decision_count,
-    AVG(c.total_cost) as avg_cost,
-    AVG(c.quality_rating) as avg_quality
-FROM messages m
-JOIN conversations c ON m.conversation_id = c.id
-WHERE m.consensus_path IN ('unanimous', 'majority', 'curator_override')
-GROUP BY m.consensus_path;
-```
-
-#### 12a. Consensus Type Distribution with User Settings
-```sql
--- See how consensus types relate to user-configured max rounds
-SELECT 
-    cp.profile_name,
-    cp.max_consensus_rounds as user_max_rounds_setting,
-    m.consensus_path,
-    COUNT(*) as occurrences,
-    AVG(CAST(json_extract(c.metadata, '$.rounds_used') as INTEGER)) as avg_rounds_used,
-    CASE 
-        WHEN m.consensus_path = 'unanimous' THEN 'Green (✅)'
-        WHEN m.consensus_path = 'majority' THEN 'Yellow (🟡)'
-        WHEN m.consensus_path = 'curator_override' THEN 'Orange (🟠)'
-        ELSE 'Unknown'
-    END as ui_color_indicator,
-    printf('%.2f%%', 100.0 * COUNT(*) / SUM(COUNT(*)) OVER()) as percentage_of_total
-FROM conversations c
-JOIN messages m ON c.id = m.conversation_id
-LEFT JOIN consensus_profiles cp ON c.profile_id = cp.id
-WHERE m.role = 'assistant' AND m.consensus_path IS NOT NULL
-GROUP BY cp.profile_name, cp.max_consensus_rounds, m.consensus_path
-ORDER BY cp.profile_name, occurrences DESC;
-```
-
-#### 12b. User Settings Impact Analysis
-```sql
--- Analyze how different max_consensus_rounds settings affect outcomes
-SELECT 
-    cp.max_consensus_rounds as max_rounds_setting,
-    COUNT(DISTINCT c.id) as queries_processed,
-    AVG(CASE WHEN m.consensus_path = 'unanimous' THEN 1 ELSE 0 END) * 100 as unanimous_percentage,
-    AVG(CASE WHEN m.consensus_path = 'majority' THEN 1 ELSE 0 END) * 100 as majority_percentage,
-    AVG(CASE WHEN m.consensus_path = 'curator_override' THEN 1 ELSE 0 END) * 100 as curator_percentage,
-    AVG(c.total_cost) as avg_cost,
-    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens
-FROM consensus_profiles cp
-LEFT JOIN conversations c ON c.profile_id = cp.id
-LEFT JOIN messages m ON c.id = m.conversation_id AND m.role = 'assistant'
-GROUP BY cp.max_consensus_rounds
-ORDER BY cp.max_consensus_rounds;
-```
-
-#### 12c. Recent Consensus Session Analysis (Working Query)
-```sql
--- Analyze most recent consensus sessions with round-by-round breakdown
--- Usage: Shows complete consensus journey without needing conversation IDs
-
--- Step 1: Get recent consensus sessions overview
-SELECT 
-    consensus_id,
-    COUNT(*) as total_iterations,
-    MAX(round_number) as rounds_completed,
-    GROUP_CONCAT(DISTINCT stage_name) as stages_used,
-    SUM(tokens_used) as total_tokens,
-    datetime(MAX(datetime), 'localtime') as completed_at
-FROM consensus_iterations 
-GROUP BY consensus_id 
-ORDER BY MAX(datetime) DESC 
-LIMIT 10;
-
--- Step 2: Detailed round-by-round analysis for specific session
--- Replace 'consensus_1757270905236_cl5rqa7zr' with actual consensus_id from Step 1
-SELECT 
-    round_number,
-    stage_name,
-    model_id,
-    tokens_used,
-    CASE flag WHEN 1 THEN 'Voted NO' ELSE 'Agreed' END as consensus_vote
-FROM consensus_iterations 
-WHERE consensus_id = 'consensus_1757270905236_cl5rqa7zr'
-ORDER BY id;
-
--- Step 3: Consensus outcome interpretation
--- Shows what type of consensus was achieved based on voting patterns
-WITH consensus_summary AS (
-    SELECT 
-        consensus_id,
-        round_number,
-        SUM(CASE WHEN stage_name LIKE 'consensus_check_%' AND flag = 0 THEN 1 ELSE 0 END) as votes_yes,
-        SUM(CASE WHEN stage_name LIKE 'consensus_check_%' AND flag = 1 THEN 1 ELSE 0 END) as votes_no,
-        MAX(CASE WHEN stage_name = 'curator' THEN 1 ELSE 0 END) as has_curator
-    FROM consensus_iterations
-    WHERE consensus_id = 'consensus_1757270905236_cl5rqa7zr'
-    GROUP BY consensus_id, round_number
-)
-SELECT 
-    round_number,
-    votes_yes || ' agreed, ' || votes_no || ' disagreed' as vote_breakdown,
-    CASE 
-        WHEN votes_yes = 3 THEN '✅ Unanimous (all agreed)'
-        WHEN votes_yes = 2 THEN '🟡 Majority (2/3 agreed)'  
-        WHEN votes_yes <= 1 AND has_curator = 1 THEN '🟠 Curator Override (no consensus)'
-        ELSE 'Continue to next round'
-    END as consensus_result
-FROM consensus_summary
-ORDER BY round_number;
-```
-
-### 🔧 Debugging & Troubleshooting Queries
-
-#### 13. Find Failed Consensus Attempts
-```sql
--- Identify problematic queries
-SELECT 
-    c.id,
-    c.title,
-    c.created_at,
-    COUNT(ci.id) as iteration_count,
-    MAX(ci.round_number) as max_rounds_attempted,
-    c.total_cost,
-    c.metadata
-FROM conversations c
-LEFT JOIN consensus_iterations ci ON c.id = ci.consensus_id
-WHERE c.total_cost > 0.5  -- High cost threshold
-   OR ci.round_number >= 3  -- Hit max rounds
-GROUP BY c.id
-ORDER BY c.total_cost DESC;
-```
-
-#### 14. Token Usage Analysis
-```sql
--- Detailed token usage breakdown
-SELECT 
-    date(c.created_at) as query_date,
-    SUM(c.total_tokens_input) as input_tokens,
-    SUM(c.total_tokens_output) as output_tokens,
-    SUM(c.total_tokens_input + c.total_tokens_output) as total_tokens,
-    COUNT(*) as query_count,
-    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens_per_query
-FROM conversations c
-WHERE c.created_at >= date('now', '-7 days')
-GROUP BY date(c.created_at)
-ORDER BY query_date DESC;
-```
-
-#### 15. Real-time Monitoring Query
-```sql
--- Monitor current day activity
-SELECT 
-    strftime('%H:00', c.created_at) as hour,
-    COUNT(*) as queries_this_hour,
-    SUM(c.total_cost) as hourly_cost,
-    AVG(c.total_tokens_input + c.total_tokens_output) as avg_tokens,
-    MAX(c.title) as last_query
-FROM conversations c
-WHERE date(c.created_at) = date('now')
-GROUP BY strftime('%H', c.created_at)
-ORDER BY hour DESC;
-```
-
-### 🚀 Quick Test Queries
-
-#### Basic Health Checks
-```sql
--- Total memories
-SELECT COUNT(*) as total_memories FROM messages;
-
--- Messages added today
-SELECT COUNT(*) as messages_today FROM messages 
-WHERE date(timestamp) = date('now');
-
--- Actual queries today
-SELECT COUNT(*) as queries_today FROM conversation_usage 
-WHERE date(timestamp, 'localtime') = date('now', 'localtime');
-
--- Current database size
-SELECT page_count * page_size / 1024.0 / 1024.0 as size_mb 
-FROM pragma_page_count(), pragma_page_size();
-
--- Active profiles
-SELECT profile_name, max_consensus_rounds 
-FROM consensus_profiles 
-ORDER BY profile_name;
-```
-
-### 📝 Usage Examples
-
-```bash
-# Run any query from command line
-sqlite3 ~/.hive/hive-ai.db "SELECT COUNT(*) FROM messages;"
-
-# Export results to CSV
-sqlite3 -header -csv ~/.hive/hive-ai.db "SELECT * FROM conversations WHERE date(created_at) = date('now');" > today_queries.csv
-
-# Interactive mode for exploration
-sqlite3 ~/.hive/hive-ai.db
-```
-
-### 🔑 Key Tables Reference
-
-- **conversations**: Main conversation records with cost and tokens
-- **consensus_iterations**: Individual consensus round details
-- **messages**: All messages including responses
-- **memory_context_logs**: Memory retrieval and context creation logs
-- **conversation_usage**: Usage tracking for analytics
-- **consensus_profiles**: Configuration profiles with max_consensus_rounds
-- **stage_outputs**: Per-stage output tracking
-- **consensus_metrics**: Quality comparison metrics
-
-This query library enables deep analysis of the consensus system, from tracing individual queries through their complete journey to analyzing system-wide patterns and performance metrics.
-
-## Critical Fixes and Working Design
-
-### Database Initialization Fix (v1.8.252 - v1.8.267)
-
-#### The Problem
-Starting in v1.8.252, the application would crash immediately on launch. The root cause was the addition of 256 lines of async database operations (`db.run()` calls) in `src/index.ts` that created SQL views without proper callbacks or error handling.
-
-#### Why It Failed
-The problematic code attempted to create multiple database views during the synchronous initialization phase:
-```typescript
-// PROBLEMATIC CODE - DO NOT USE
-db.run(`CREATE VIEW IF NOT EXISTS recent_work AS
-  SELECT content, created_at, role
-  FROM messages
-  WHERE role = 'assistant'
-  ORDER BY created_at DESC
-  LIMIT 100`);
-// ... 255 more similar db.run() calls without callbacks
-```
-
-These async operations created race conditions where:
-1. Database operations would execute without waiting for completion
-2. The app would try to access the database before it was ready
-3. SQLite would encounter conflicts with multiple simultaneous operations
-4. The entire initialization chain would fail, causing immediate crash
-
-#### The Solution
-The fix involved reverting `src/index.ts` to the working version from commit c0cb3d441f, which uses proper initialization patterns:
-
-1. **Synchronous Database Setup**: Core database initialization happens synchronously during `app.on('ready')`
-2. **Proper Async Handling**: Any async database operations use callbacks or promises correctly
-3. **Sequential Initialization**: Services initialize in proper order through StartupOrchestrator
-4. **No Race Conditions**: Database is fully ready before any operations attempt to use it
-
-#### Working Design Principles
-
-##### Application Initialization Pattern
-```typescript
-// CORRECT PATTERN - Use this approach
-app.on('ready', () => {
-  // 1. Synchronous setup first
-  initDatabase();  // Creates connection, basic setup
-  
-  // 2. Initialize process manager
-  initializeProcessManager();
-  
-  // 3. Register IPC handlers (can reference db safely)
-  registerHandlers();
-  
-  // 4. Use StartupOrchestrator for async operations
-  const orchestrator = new StartupOrchestrator(initFunctions);
-  orchestrator.showSplashAndInitialize(createMainWindow);
-});
-```
-
-##### Database Operation Best Practices
-1. **Never use fire-and-forget db.run()**: Always provide callbacks or use promises
-2. **Avoid database operations during sync init**: Defer to after app is ready
-3. **Use transactions for multiple operations**: Prevents conflicts and ensures atomicity
-4. **Implement proper error handling**: Every database operation needs error handling
-
-##### Correct Database View Creation
-```typescript
-// CORRECT PATTERN - With proper error handling and timing
-function createDatabaseViews(callback) {
-  const views = [
-    `CREATE VIEW IF NOT EXISTS recent_work AS ...`,
-    `CREATE VIEW IF NOT EXISTS solutions AS ...`,
-    // ... other views
-  ];
-  
-  db.serialize(() => {
-    views.forEach(viewSQL => {
-      db.run(viewSQL, (err) => {
-        if (err) {
-          logger.error('Failed to create view:', err);
-        }
-      });
-    });
-    callback();
-  });
-}
-
-// Call AFTER app is ready and database is initialized
-app.whenReady().then(() => {
-  createDatabaseViews(() => {
-    logger.info('Database views created successfully');
-  });
-});
-```
-
-#### Build Process
-Always use the production build script for testing:
-```bash
-node ./scripts/build-production-dmg.js
-```
-
-This ensures:
-- All modules are properly bundled
-- Native dependencies are correctly compiled
-- The app runs in production-like environment
-- Issues are caught before release
-
-#### Version History
-- **v1.8.251**: Last known stable version before issues
-- **v1.8.252-266**: Contained problematic database initialization code
-- **v1.8.267**: Fixed by reverting to proper initialization pattern
-- **Current**: Working design documented and maintained
-
-#### Key Takeaways
-1. **Electron's initialization is sensitive to timing**: Respect the app lifecycle
-2. **SQLite operations must be properly sequenced**: No concurrent writes
-3. **Async operations need careful handling**: Use callbacks, promises, or async/await
-4. **StartupOrchestrator manages complexity**: Let it handle service initialization
-5. **Test with production builds**: Development builds may hide timing issues
-
----
-
-## AI CLI Tools Memory Integration
-
-### Overview
-AI CLI tools (Claude, Gemini, Qwen, etc.) can access the Hive Consensus memory database through a symbolic link created during installation. This enables seamless memory queries and context retrieval across all AI tools.
-
-### Database Access Architecture
-
-#### 1. Symlink Creation
-When CLI tools are installed via Hive Consensus, a symbolic link is created:
-- **Source**: `~/.hive/hive-ai.db` (actual database)
-- **Symlink**: `~/.hive-ai.db` (in home directory)
-- **Created During**: Tool installation (not launch)
-
-The symlink creation logic (src/index.ts:2060-2089):
-- Checks if `~/.hive-ai.db` exists
-- If it's not a symlink or points to wrong location, removes it
-- Creates proper symlink to `~/.hive/hive-ai.db`
-- Handles empty files that may have been incorrectly created
-
-#### 2. Database Query Methods
-AI tools should use SQLite commands directly:
-
-```bash
-# List available tables and views
-sqlite3 ~/.hive-ai.db ".tables"
-
-# Query specific views
-sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work LIMIT 10"
-sqlite3 ~/.hive-ai.db "SELECT * FROM solutions WHERE category LIKE '%auth%'"
-sqlite3 ~/.hive-ai.db "SELECT * FROM messages ORDER BY created_at DESC LIMIT 5"
-```
-
-#### 3. Available Views
-- `recent_work` - Last 100 assistant responses
-- `solutions` - Successful problem resolutions  
-- `code_examples` - Code snippets by language
-- `patterns` - Common coding patterns
-- `messages` - All conversation messages
-- `conversations` - Conversation threads
-- `consensus_metrics` - Consensus engine performance
-
-### CLI Tool Launch Workflow
-
-#### 1. Installation Phase
-- Install CLI tool via npm/package manager
-- Create symlink at `~/.hive-ai.db` → `~/.hive/hive-ai.db`
-- Log installation in `ai_tool_launches` table
-
-#### 2. Launch Phase  
-- Show folder selection dialog
-- Update global folder context via `menu-open-folder` event
-- Check if tool was previously launched (for --resume flag)
-- Launch tool in selected directory
-- Update File Explorer, Source Control, Status Bar
-
-### Global Folder Management Integration
-When launching CLI tools, the selected folder becomes the global active folder:
-```typescript
-// Send menu-open-folder event to update global context
-mainWindow.webContents.send('menu-open-folder', selectedPath);
-```
-
-This ensures:
-- File Explorer shows the selected project
-- Source Control displays git status
-- Status Bar shows current branch
-- Window title reflects project name
-
-### Help Documentation
-The help system (src/help.html) provides:
-- Database access examples for AI tools
-- SQLite command syntax
-- Available views documentation
-- Query examples for common tasks
-
-### Troubleshooting
-
-#### Symlink Issues
-If AI tools report "no such table" errors:
-1. Check symlink exists: `ls -la ~/.hive-ai.db`
-2. Verify it points to correct location
-3. Reinstall tool through Hive Consensus to recreate symlink
-
-#### Query Syntax
-AI tools need explicit SQLite commands:
-- ❌ Wrong: "Query .hive-ai.db view 'recent_work'"
-- ✅ Correct: `sqlite3 ~/.hive-ai.db "SELECT * FROM recent_work"`
-
-### Version History
-- **v1.8.274**: Fixed symlink creation logic to handle empty files
-- **v1.8.273**: Moved symlink creation from launch to installation
-- **v1.8.267**: Fixed database initialization race conditions
-
----
-
-## Architecture Diagrams
-
-This section provides visual diagrams (with simple ASCII fallbacks) to give a holistic overview of Hive’s production architecture. Diagrams avoid hardcoded ports and reflect the zero‑fallback, IPC‑first design.
-
-<a id="diagram-system-overview"></a>
-### 1) System Overview (Processes & Data Flow)
-
-```mermaid
-flowchart LR
-  subgraph Renderer[Renderer (UI)]
-    R1[Chat/Consensus UI]
-    R2[File Explorer]
-    R3[Editor Tabs]
-    R4[Git UI]
-    R5[Memory Dashboard]
-    R6[Settings/Analytics]
-  end
-
-  subgraph Main[Electron Main]
-    PM[ProcessManager]
-    POR[PortManager]
-    DB[(SQLite ~/.hive/hive-ai.db)]
-    DCE[DirectConsensusEngine]
-    IPC[IPC Handlers]
-  end
-
-  subgraph Services[Child Processes]
-    MS[Memory Service (Node)]
-    T1[TTYD Terminal 1]
-    Tn[TTYD Terminal N]
-  end
-
-  OR[OpenRouter API]
-  D1[(Cloudflare D1 Sync)]
-
-  R1 -- IPC --> IPC
-  R2 -- IPC --> IPC
-  R3 -- IPC --> IPC
-  R4 -- IPC --> IPC
-  R5 -- IPC --> IPC
-  R6 -- IPC --> IPC
-
-  IPC --> PM
-  PM --- POR
-  PM -. spawn with env(PORT) .-> MS
-  PM -. spawn/assign .-> T1
-  PM -. spawn/assign .-> Tn
-  DCE -. http(s) .-> OR
-  DB <-. sync .-> D1
-
-  R5 <-. http/ws on dynamic port .-> MS
-  note right of R5: Renderer discovers service port via IPC
-```
-
-ASCII fallback
-
-```
-[Renderer] --IPC--> [Main: IPC/ProcessManager/PortManager/DB/DirectConsensus]
-   |                                          |
-   |                                          +-- spawn(env PORT) --> [Memory Service]
-   |                                          +-- spawn(assign) -----> [TTYD Terminals]
-   |                                          +-- D1 sync ----------- [Cloudflare D1]
-   +-- HTTP/WS (dynamic, via IPC discovery) --> [Memory Service]
-Main/DirectConsensus -- HTTP(S) --> OpenRouter API
-```
-
-<a id="diagram-startup-sequence"></a>
-### 2) Startup Sequence (No Timeouts, Event‑Driven)
-
-```mermaid
-sequenceDiagram
-  participant SO as StartupOrchestrator
-  participant POR as PortManager
-  participant PM as ProcessManager
-  participant MS as Memory Service
-  participant UI as Splash/Renderer
-
-  SO->>POR: initialize() (pre-scan ranges, build pools)
-  POR-->>SO: scan complete
-  SO->>PM: initialize + register configs/handlers
-  SO->>PM: start(memory-service)
-  PM->>POR: allocatePortForService("memory-service")
-  POR-->>PM: port (from pool or ephemeral)
-  PM->>MS: spawn with env PORT
-  MS-->>PM: IPC { type: 'ready', port }
-  PM-->>SO: process:progress {ready, port}
-  SO-->>UI: update progress UI (neural animation)
-  SO->>UI: transition to main window when complete
-```
-
-ASCII fallback
-
-```
-StartupOrchestrator -> PortManager: pre-scan
-PortManager -> StartupOrchestrator: pools ready
-StartupOrchestrator -> ProcessManager: init + start(memory-service)
-ProcessManager -> PortManager: allocate
-PortManager -> ProcessManager: port
-ProcessManager -> MemoryService: spawn with env(PORT)
-MemoryService -> ProcessManager: ready(port)
-ProcessManager -> StartupOrchestrator: progress(ready, port)
-StartupOrchestrator -> UI: update + transition
-```
-
-<a id="diagram-dynamic-port-allocation"></a>
-### 3) Dynamic Port Allocation (Zero‑Fallback)
-
-```mermaid
-flowchart TD
-  A[initialize()] --> B[discover ranges or seed defaults on timeout]
-  B --> C[parallel scan: build available pools]
-  C --> D[allocatePortForService(name)]
-  D -->|pool has port| E[pop + double-check availability]
-  D -->|pool empty| F[get ephemeral port from OS]
-  E --> G[record allocation for service]
-  F --> G
-  G --> H[spawn child with env PORT]
-  H --> I[service runs]
-  I -->|exit/crash| J[releasePort(name) + cleanup]
-  J --> C
-```
-
-ASCII fallback
-
-```
-pre-scan -> pools -> allocate(name)
-  -> pool hit => assign
-  -> pool miss => ephemeral
-spawn child with env(PORT)
-on exit => release allocation
-```
-
-<a id="diagram-consensus-pipeline"></a>
-### 4) Consensus Pipeline (Iterative, Profile‑Driven)
-
-```mermaid
-flowchart LR
-  UQ[User Question] --> CTX[Retrieve Context + Memories]
-  CTX --> GEN[Generator]
-  GEN --> REF[Refiner]
-  REF --> VAL[Validator]
-  VAL --> CC{Consensus Achieved?}
-  CC -- YES --> CUR[Curator]
-  CC -- NO  --> NEXT[Another Iteration]
-  NEXT --> GEN
-  CUR --> OUT[Final Answer]
-  OUT --> LOG[(consensus_iterations rows per stage/round)]
-```
-
-Notes
-- Models and prices resolved from DB profiles and model tables.
-- Each stage logs tokens/costs; flags record “NO” votes.
-
-<a id="diagram-data-model"></a>
-### 5) Data Model Overview
-
-```mermaid
-flowchart TB
-  U[(users)] --- C[(conversations)]
-  C --- M[(messages)]
-  C --- CU[(conversation_usage)]
-  CP[(consensus_profiles)]
-  CS[(consensus_settings)]
-  CI[(consensus_iterations)]
-  CFG[(configurations)]
-
-  CS --- CP
-  CI --- C
-  M --- C
-```
-
-Relationship highlights
-- conversations.user_id → users.id
-- messages.conversation_id → conversations.id
-- consensus_settings.value → consensus_profiles.id (active profile)
-- consensus_iterations.consensus_id groups all rounds for one conversation
-
-<a id="diagram-communication-ipc"></a>
-### 6) Communication & IPC Map
-
-```mermaid
-flowchart LR
-  R[Renderer] -- IPC --> M[Main]
-  M -- IPC --> MS[Memory Service]
-  R -- HTTP/WS (dynamic) --> MS
-  M -- sync --> D1[(Cloudflare D1)]
-  M -- https --> OR[OpenRouter]
-```
-
-Key points
-- Renderer discovers service ports via IPC; services never advertise fixed ports.
-- Memory Service DB access is via IPC to Main (no direct file I/O from child).
-
-<a id="diagram-ui-layout"></a>
-### 7) UI Layout (Panels & Behavior)
-
-ASCII layout
-
-```
-┌ Activity Bar ┐┌──────────────────────── Center Editor ───────────────────────┐┌ Consensus Panel ┐
-│  (icons)     ││  Tabs   │                                                │ │ (toggleable)   │
-├──────────────┤│─────────┼──────────────────────────────────────────────────│ ├────────────────┤
-│ File Explorer││ Editor  │                                                │ │   Status       │
-│ (tree)       ││         │                                                │ │   Details      │
-├──────────────┤│         │                                                │ └────────────────┘
-│ Isolated     ││         │                                                │
-│ Terminal(s)  ││         │                                                │
-└──────────────┘└───────────────────────────────────────────────────────────┘
-         ▲ fixed width; expands when center collapses; no resize jitter
-```
-
-Behavior
-- Fixed left terminal panel width; expands only when center collapses.
-- Panel collapse/expand preserves layout without ResizeObserver jitter.
-
-<a id="diagram-ai-cli-tools"></a>
-### 8) AI CLI Tools Integration (High‑Level)
-
-```mermaid
-flowchart LR
-  DET[Detector + Registry] --> UI[Tool Cards]
-  UI -->|Install| PKG[Package Manager / Binary Fetch]
-  UI -->|Configure| CFG[Wrapper + Paths + Env]
-  UI -->|Launch| TERM[Terminal (TTyD)]
-  TERM --> TOOL[AI CLI]
-  TOOL -->|HTTP/WS| MS[Memory Service]
-  MS --> DB[(~/.hive/hive-ai.db via IPC)]
-```
-
-Notes
-- Terminal launch uses ProcessManager + PortManager; tool names shown in terminal tabs.
-- Memory Service exposes universal API for all tools; status refreshes are event‑driven.
-## Unified Database Strategy (Production)
-
-We use a single ACID SQLite database as the source of truth for the IDE: `~/.hive/hive-ai.db`.
-
-Goals
-- Single backup/restore unit for all persistent data (settings, recents, sessions, memory, analytics).
-- ACID guarantees with WAL journaling for durability and performance.
-- Clean separation: main process owns the connection; renderers access via IPC only.
-
-Connection & PRAGMA
-- Single connection opened in main process (`src/index.ts`).
-- PRAGMA settings applied at init:
-  - `PRAGMA foreign_keys=ON;`
-  - `PRAGMA journal_mode=WAL;`
-  - `PRAGMA synchronous=NORMAL;` (use `FULL` for max durability if needed)
-  - `PRAGMA busy_timeout=5000;`
-
-Schema versioning & migrations
-- Maintain a `schema_version` (or equivalent) table; apply idempotent, forward-only migrations on startup.
-- Keep all `CREATE TABLE IF NOT EXISTS` statements centralized in init.
-
-Backup/Restore/Integrity
-- Provide commands (IPC + UI) for:
-  - Backup export (checkpoint WAL, then copy file) and restore.
-  - Integrity check: `PRAGMA integrity_check;`
-  - Compact DB: `VACUUM;`
-
-Testing and environment overrides
-- Never write tests against the production DB path.
-- Support `HIVE_DB_PATH` env var to override the DB location for tests and tooling.
-- Our test scripts use a local `electron-poc/hive-ai.db` for isolation.
-
-Tables used by Welcome
-
-## Backup & Restore (Production)
-
-### Goals
-- One-click manual backups; safe, consistent snapshots.
-- Automatic backups (On Exit, Daily, Weekly) with retention and user folder selection.
-- Optional encryption and compression for cloud-friendly backups.
-- Simple restore with integrity check and password prompt (if encrypted).
-
-### Operations & IPC
-- Backup: `db-backup` (opts: `{ destPath, password?, compress? }`) → WAL checkpoint + `VACUUM INTO` → optional gzip → optional AES‑256‑GCM encryption.
-- Restore: `db-restore` (opts: `{ srcPath, password? }`) → detect type → decrypt/decompress → integrity_check → replace DB and reinit.
-- Integrity: `db-integrity-check` → `PRAGMA integrity_check` result.
-- Compact: `db-compact` → `VACUUM`.
-- List backups: `list-backups` (reads configured folder; returns name, path, size, mtime).
-- Delete backup: `delete-backup`.
-- Reveal/Open: `reveal-in-folder`, `open-path`.
-
-### File formats
-- Plain: `*.sqlite`
-- Compressed: `*.sqlite.gz`
-- Encrypted: header `HIVEENC1` + salt + iv + tag + ciphertext (sqlite payload)
-- Encrypted+Compressed: header `HIVEENC2` + salt + iv + tag + ciphertext (gzip payload)
-
-### Settings (Backup)
-- `backup.autoEnabled` — '1'|'0'
-- `backup.frequency` — 'manual'|'on-exit'|'daily'|'weekly'
-- `backup.retentionCount` — number (default 7)
-- `backup.dir` — backup folder (user-selected; cloud-friendly)
-- `backup.alwaysEncrypt` — '1'|'0' (default OFF)
-- `backup.alwaysCompress` — '1'|'0' (default OFF)
-- `backup.lastBackupAt` — ISO timestamp of last completed backup
-- `backup.reminderDays` — number of days (default 7)
-- `backup.snoozeUntil` — ISO timestamp to snooze backup reminders
-
-### UX
-- Settings > Advanced: Backup/Restore/Integrity/Compact; Auto backup controls; Always encrypt/compress; Reminder interval; View Backups (manager).
-- Reminder (when disabled): Enable Auto Backup / Backup Now / Remind Me Later (snooze) / Dismiss.
-- View Backups: list, search filter, reveal, restore, delete, open backup folder.
-- `settings` — key/value for: `welcome.showOnStartup`, `welcome.lastSeenVersion`, `welcome.tourSeen`, `welcome.layoutMode`.
-- `recent_folders` — structured recents with `folder_path`, `last_opened`, `tab_count`.
-- `sessions` — stores folder session tabs and active tab for restoration.
-- `welcome_analytics` — event logging for feature usage (e.g., `click_recent`, `clone_success`, `dismissed`).
-- Git Root Auto‑Detection (v1.8.379)
-  - Detects nearest Git root above the opened folder (`rev-parse --show-toplevel` fallback to `.git` walk-up).
-  - Status bar shows branch with a tooltip indicating the active Git root.
-  - If the Git root differs from the opened folder, a repo badge appears in the status bar; clicking it switches SCM to the root without changing the opened folder.
-  - IPC `git-set-folder` updates the active Git manager to the chosen root; File Explorer remains at the user’s opened folder.
-  - Result: enterprise‑class SCM behavior across monorepos and nested worktrees.
-
----
-
-## Automated UI Regression Framework
-
-### Purpose
-- Deliver a quick smoke suite that validates the **shipping desktop build** via Playwright.
-- Keep automation in lock-step with the centralized `window.commandAPI.executeCommand` registry so UI navigation bugs surface once.
-- Allow humans or AI agents to launch/attach without re-triggering the 17-phase build workflow for every spec run.
-
-### Components
-- **`scripts/run-ui-tests.js`** – Orchestrates the suite, ensuring a packaged binary exists, selecting a remote debugging port, and invoking Playwright.
-  - Prefers `/Applications/Hive Consensus.app` (post-build install) but respects `ELECTRON_APP_PATH` for custom artifacts.
-  - Asks `PortManager.allocatePortForService('playwright-remote-debug')` for a fresh port so DevTools never collides with the memory service or prior runs (falls back to an OS ephemeral when PortManager is unavailable).
-  - Supports `--attach` to reuse an already running app started with remote debugging.
-- **`playwright.config.ts`** – Single-worker configuration with generous timeouts; keeps execution deterministic for Electron.
-- **`tests/ui/welcome-documentation.spec.ts`** – Chromium CDP harness that launches or attaches to the packaged binary, waits for `commandAPI`, and drives Welcome/Documentation flows with DOM assertions (no screenshots).
-- **`scripts/build-production-dmg.js` integration** – When the build runs with `PLAYWRIGHT_E2E=1` and `PLAYWRIGHT_REMOTE_DEBUG_PORT`, it auto-launches the `/Applications` app using those flags so tests can attach immediately.
-
-### Running the Suite
-1. **Build once:**
-   ```bash
-   PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 npm run build:complete
-   ```
-   Produces the DMG, installs to `/Applications`, and launches Hive with remote debugging enabled.
-   Set `PLAYWRIGHT_RUN_TESTS=1` alongside those variables and the build script will automatically run `npm run test:ui` after installation (skipping the auto-launch so Playwright can attach immediately).
-2. **Default (launch per run):**
-  ```bash
-  npm run test:ui
-  ```
-   Finds/launches the packaged app, allocates a debug port via `PortManager` (service name `playwright-remote-debug`), runs the suite, and shuts the app down afterwards.
-3. **Attach mode:**
-   ```bash
-   PLAYWRIGHT_E2E=1 PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 \
-     /Applications/Hive\ Consensus.app/Contents/MacOS/Hive\ Consensus &
-   PLAYWRIGHT_REMOTE_DEBUG_PORT=9450 npm run test:ui -- --attach
-   ```
-   Use when Hive is already running and you want to avoid spawning a second instance.
-
-### Current Coverage
-- Verifies we can boot the packaged binary, clear Gatekeeper quarantine, and expose `window.commandAPI` **plus** the test helper readiness flag.
-- Confirms Welcome → Documentation buttons trigger the right `view.*` commands and help content.
-- Exercises Help menu commands (`help.showGettingStarted`, `help.showMemoryGuide`, `help.showAbout`) with modal/dialog assertions.
-- Toggles Explorer/Git sidebars plus Settings/Memory/CLI Tools/Analytics panels through the command registry.
-- Validates TTYD terminal collapse/expand behaviour via the toggle button and `expandTTYDTerminal` helper.
-- Uses `__hiveTestHelpers` to drive the Go menu overlay, opening a temporary workspace file and jumping to a specific line through the Monaco API. The overlay selectors (`data-testid`) are verified for visibility and dismissal to guard against regressions in the prompt system.
-- Streams renderer logs during tests so missing IPC handlers or menu bindings surface in CI output.
-
-### Gaps & Next Steps
-- Add specs for CLI tool launch telemetry, consensus console logging, and memory dashboard widgets.
-- Silence or address renderer warnings (`window.electronAPI.onMenuFind`, backend IPC stubs) to remove noise and tighten pass/fail criteria.
-- Leverage the new PortManager integration in the test harness for additional orchestration scenarios (parallel suites, CI agents).
-- Wire the suite into CI after the 17-phase build so releases are blocked on smoke regressions.
-
-### Guidance for AI Agents
-- Always run the full build first with `PLAYWRIGHT_E2E=1` and a known `PLAYWRIGHT_REMOTE_DEBUG_PORT` so the packaged binary is fresh (or let `PortManager` allocate automatically when launching per run).
-- Use `npm run test:ui` (or `--attach`) to validate flows; watch the Playwright output for renderer warnings that may require fixes.
-- When adding scenarios, stay within the command registry—no direct DOM hacks or screenshots. Extend the shared harness helpers instead.
-- Wait for `__hiveTestHelpersReady` before invoking helpers and clean up lingering `.input-dialog-overlay` nodes between steps; the harness already exposes utilities for both patterns.

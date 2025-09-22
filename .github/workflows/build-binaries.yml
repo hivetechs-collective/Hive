@@ -1,0 +1,65 @@
+name: Build Binaries
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: build-binaries-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-electron-dmg:
+    name: Build Electron DMG (manual)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: electron-poc
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron-poc/package-lock.json
+
+      - name: Install build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          if ! command -v ttyd >/dev/null 2>&1; then
+            brew install ttyd
+          fi
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify build requirements
+        run: npm run requirements
+
+      - name: Build production DMG
+        env:
+          CI: true
+        run: npm run build:complete
+
+      - name: Upload macOS DMG artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-macos-dmg
+          path: |
+            electron-poc/out/make/*.dmg
+            electron-poc/out/build-report.json
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-build-logs
+          path: electron-poc/build-logs/**
+          if-no-files-found: ignore

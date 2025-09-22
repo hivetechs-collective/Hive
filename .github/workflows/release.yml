@@ -46,9 +46,18 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: npm
           cache-dependency-path: electron-poc/package-lock.json
+
+      - name: Install build prerequisites
+        run: |
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          if ! command -v ttyd >/dev/null 2>&1; then
+            brew install ttyd
+          fi
 
       - name: Install dependencies
         working-directory: electron-poc
@@ -71,8 +80,7 @@ jobs:
           name: hive-release-${{ github.run_number }}
           path: |
             electron-poc/out/make/*.dmg
-            electron-poc/out/make/*.zip
-            electron-poc/dist/releases.json
+            electron-poc/out/build-report.json
           if-no-files-found: warn
 
       - name: Create GitHub release (tags only)
@@ -81,7 +89,6 @@ jobs:
         with:
           files: |
             electron-poc/out/make/*.dmg
-            electron-poc/out/make/*.zip
-            electron-poc/dist/releases.json
+            electron-poc/out/build-report.json
           draft: false
           prerelease: false

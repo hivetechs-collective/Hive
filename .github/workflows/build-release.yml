@@ -1,0 +1,176 @@
+name: Build Release DMG
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/dependabot.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos:
+    name: Build macOS Electron DMG
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: electron-poc
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron-poc/package-lock.json
+
+      - name: Install build prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          if ! command -v ttyd >/dev/null 2>&1; then
+            brew install ttyd
+          fi
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify build requirements
+        run: npm run requirements
+
+      - name: Build production DMG
+        env:
+          CI: true
+        run: npm run build:complete
+
+      - name: List build outputs
+        if: always()
+        run: |
+          echo "Contents of out/make:"
+          ls -R out/make || true
+          echo "Generated build report:"
+          cat out/build-report.json || true
+
+      - name: Upload macOS DMG artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-macos-dmg
+          path: |
+            electron-poc/out/make/*.dmg
+            electron-poc/out/build-report.json
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-build-logs
+          path: electron-poc/build-logs/**
+          if-no-files-found: ignore
+
+  create-release:
+    name: Create Release and Upload to R2
+    needs: [build-macos]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download DMG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: hive-macos-dmg
+          path: artifacts
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+
+          DMG_SRC=$(find artifacts -maxdepth 1 -type f -name '*.dmg' | head -n 1)
+          if [[ -z "$DMG_SRC" ]]; then
+            echo "No DMG file found in artifacts" >&2
+            exit 1
+          fi
+
+          BUILD_REPORT_SRC="artifacts/build-report.json"
+          if [[ -f "$BUILD_REPORT_SRC" ]]; then
+            cp "$BUILD_REPORT_SRC" release/build-report.json
+          fi
+
+          DMG_NAME="Hive-Consensus.dmg"
+          if [[ -f release/build-report.json ]]; then
+            VERSION=$(python - <<'PY'
+import json
+try:
+    with open('release/build-report.json', 'r', encoding='utf-8') as fh:
+        data = json.load(fh)
+    version = data.get('buildTimings', {}).get('buildVersion')
+    if version:
+        print(version)
+except FileNotFoundError:
+    pass
+PY
+)
+            if [[ -n "$VERSION" ]]; then
+              DMG_NAME="Hive-Consensus-${VERSION}.dmg"
+              echo "Detected build version $VERSION"
+            fi
+          fi
+
+          cp "$DMG_SRC" "release/${DMG_NAME}"
+          (cd release && shasum -a 256 "$DMG_NAME" > "${DMG_NAME}.sha256")
+
+          echo "DMG_FILENAME=${DMG_NAME}" >> "$GITHUB_ENV"
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Upload to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DMG_FILENAME: ${{ env.DMG_FILENAME }}
+        run: |
+          set -euo pipefail
+          wrangler r2 object put "hivetechs-releases/stable/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+          wrangler r2 object put "hivetechs-releases/stable/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            wrangler r2 object put "hivetechs-releases/releases/${VERSION}/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+            wrangler r2 object put "hivetechs-releases/releases/${VERSION}/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+          fi
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/${{ env.DMG_FILENAME }}
+            release/${{ env.DMG_FILENAME }}.sha256
+            release/build-report.json
+          body: |
+            ## Hive Consensus Release
+
+            ### Installation
+            Download the macOS DMG (`${{ env.DMG_FILENAME }}`), open it, and drag **Hive Consensus** into _Applications_.
+
+            ### Requirements
+            - License key from hivetechs.io
+            - OpenRouter API key
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
