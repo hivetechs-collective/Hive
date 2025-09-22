@@ -66,18 +66,29 @@ export class ProcessManager extends EventEmitter {
         const useElectronMatch = envContent.match(/USE_ELECTRON_AS_NODE=true/);
         
         if (nodePathMatch && nodePathMatch[1]) {
-          const discoveredPath = nodePathMatch[1].trim();
+          let discoveredPath = nodePathMatch[1].trim();
+          const packagedNodePath = path.join(__dirname, 'binaries', process.platform === 'win32' ? 'node.exe' : 'node');
+
+          if (!fs.existsSync(discoveredPath)) {
+            if (fs.existsSync(packagedNodePath)) {
+              logger.warn(`[ProcessManager] Saved Node path ${discoveredPath} missing; using packaged binary at ${packagedNodePath}`);
+              discoveredPath = packagedNodePath;
+            } else {
+              logger.warn(`[ProcessManager] Saved Node path ${discoveredPath} missing and packaged binary unavailable; falling back to Electron`);
+              discoveredPath = process.execPath;
+            }
+          }
+
           logger.info(`[ProcessManager] Using Node.js from .env.production: ${discoveredPath}`);
-          
-          // If it's the Electron binary, we already handle ELECTRON_RUN_AS_NODE later
+
           if (useElectronMatch || discoveredPath === process.execPath) {
             logger.info(`[ProcessManager] Will use ELECTRON_RUN_AS_NODE=1 for Electron binary`);
           }
-          
+
           return discoveredPath;
         }
       }
-      
+
       // Fallback to Electron if no saved path
       logger.info(`[ProcessManager] No saved Node path, using Electron's Node.js: ${process.execPath}`);
       return process.execPath;
