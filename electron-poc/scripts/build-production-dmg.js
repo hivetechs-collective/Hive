@@ -1137,11 +1137,13 @@ if (fs.existsSync(envConfigPath)) {
   envConfig = fs.readFileSync(envConfigPath, 'utf8');
 }
 
-// Update or add NODE_PATH for production use
+// Update or add NODE_PATH for production use (always use bundled node)
+const nodePathToSave = `./binaries/${process.platform === 'win32' ? 'node.exe' : 'node'}`;
+
 if (envConfig.includes('NODE_PATH=')) {
-  envConfig = envConfig.replace(/NODE_PATH=.*\n/, `NODE_PATH=${nodePath}\n`);
+  envConfig = envConfig.replace(/NODE_PATH=.*\n/, `NODE_PATH=${nodePathToSave}\n`);
 } else {
-  envConfig += `\nNODE_PATH=${nodePath}\n`;
+  envConfig += `\nNODE_PATH=${nodePathToSave}\n`;
 }
 
 // Also save whether we need ELECTRON_RUN_AS_NODE
