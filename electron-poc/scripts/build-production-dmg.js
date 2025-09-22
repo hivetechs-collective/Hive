@@ -1130,21 +1130,15 @@ if (!nodePath) {
   nodePath = process.execPath; // Fallback to Electron
 }
 
-// Write discovered path to environment config for ProcessManager
+// Write configuration for ProcessManager
 const envConfigPath = path.join(__dirname, '..', '.env.production');
 let envConfig = '';
 if (fs.existsSync(envConfigPath)) {
   envConfig = fs.readFileSync(envConfigPath, 'utf8');
 }
 
-// Update or add NODE_PATH for production use (always use bundled node)
-const nodePathToSave = `./binaries/${process.platform === 'win32' ? 'node.exe' : 'node'}`;
-
-if (envConfig.includes('NODE_PATH=')) {
-  envConfig = envConfig.replace(/NODE_PATH=.*\n/, `NODE_PATH=${nodePathToSave}\n`);
-} else {
-  envConfig += `\nNODE_PATH=${nodePathToSave}\n`;
-}
+// Remove any previously stored NODE_PATH entries; we'll fall back to Electron's node at runtime
+envConfig = envConfig.replace(/NODE_PATH=.*\n/g, '');
 
 // Also save whether we need ELECTRON_RUN_AS_NODE
 if (nodePath === process.execPath) {
