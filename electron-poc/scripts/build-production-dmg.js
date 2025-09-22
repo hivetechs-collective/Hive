@@ -8,6 +8,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
+const os = require('os');
 const { execSync, spawn, spawnSync } = require('child_process');
 
 // Terminal colors
@@ -790,53 +791,58 @@ console.log(`${CYAN}Bundling Node.js runtime (for Memory Service)...${RESET}`);
 const nodeTargetPath = path.join(binariesDir, 'node');
 let nodeBundled = false;
 
-// Find Node.js to bundle
-const nodeSystemPaths = [
-  '/opt/homebrew/bin/node',     // Homebrew on Apple Silicon
-  '/usr/local/bin/node',         // Homebrew on Intel
-  process.execPath               // Current Node.js (might be Electron)
-];
+try {
+  const nodeVersionRaw = execSync('node --version', { encoding: 'utf8' }).trim();
+  const nodeVersion = nodeVersionRaw.replace(/^v/, '');
+  const nodeMajor = parseInt(nodeVersion.split('.')[0], 10);
 
-// Prefer non-Electron Node.js
-for (const nodePath of nodeSystemPaths) {
-  if (fs.existsSync(nodePath) && !nodePath.includes('Electron')) {
-    try {
-      // Copy node binary
-      fs.copyFileSync(nodePath, nodeTargetPath);
-      fs.chmodSync(nodeTargetPath, 0o755);
-      
-      // Verify it works and check version
-      const nodeVersion = execSync(`"${nodeTargetPath}" --version 2>&1`, { encoding: 'utf8' }).trim();
-      
-      // Check version compatibility
-      if (!checkVersionCompatibility('node', nodeVersion)) {
-        const req = binaryRequirements.node;
-        if (req && req.critical) {
-          console.error(`${RED}✗ node version incompatible and marked as critical!${RESET}`);
-          if (!process.env.ALLOW_VERSION_MISMATCH) {
-            process.exit(1);
-          }
-        }
-      }
-      
-      console.log(`${GREEN}✓ Bundled Node.js: ${nodeVersion}${RESET}`);
-      bundledBinaries.push('node');
-      nodeBundled = true;
-      break;
-    } catch (e) {
-      console.log(`${YELLOW}⚠ Found node at ${nodePath} but couldn't bundle it: ${e.message}${RESET}`);
-    }
+  const platform = process.platform;
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+
+  if (platform !== 'darwin' && platform !== 'linux') {
+    throw new Error(`Unsupported platform for Node runtime bundling: ${platform}`);
   }
+
+  const nodeFilename = `node-v${nodeVersion}-${platform}-${arch}`;
+  const nodeArchive = `${nodeFilename}.${platform === 'win32' ? 'zip' : 'tar.gz'}`;
+  const nodeUrl = `https://nodejs.org/dist/v${nodeVersion}/${nodeArchive}`;
+  const downloadPath = path.join(os.tmpdir(), nodeArchive);
+  const extractPath = path.join(os.tmpdir(), nodeFilename);
+
+  if (!fs.existsSync(downloadPath)) {
+    console.log(`${CYAN}  Downloading official Node.js ${nodeVersionRaw}...${RESET}`);
+    execSync(`curl -L "${nodeUrl}" -o "${downloadPath}"`, { stdio: 'inherit' });
+  } else {
+    console.log(`${CYAN}  Using cached Node.js archive at ${downloadPath}${RESET}`);
+  }
+
+  if (fs.existsSync(extractPath)) {
+    fs.rmSync(extractPath, { recursive: true, force: true });
+  }
+
+  console.log(`${CYAN}  Extracting Node.js archive...${RESET}`);
+  execSync(`tar -xzf "${downloadPath}" -C "${os.tmpdir()}"`, { stdio: 'inherit' });
+
+  const nodeBinarySource = path.join(extractPath, 'bin', platform === 'win32' ? 'node.exe' : 'node');
+  if (!fs.existsSync(nodeBinarySource)) {
+    throw new Error(`Failed to find node binary at ${nodeBinarySource}`);
+  }
+
+  fs.copyFileSync(nodeBinarySource, nodeTargetPath);
+  fs.chmodSync(nodeTargetPath, 0o755);
+  console.log(`${GREEN}✓ Bundled Node.js: ${nodeVersionRaw}${RESET}`);
+  bundledBinaries.push('node');
+  nodeBundled = true;
+
+  // Clean up extracted directory to save space
+  fs.rmSync(extractPath, { recursive: true, force: true });
+} catch (error) {
+  console.log(`${YELLOW}⚠ Failed to bundle standalone Node.js runtime: ${error.message}${RESET}`);
 }
 
 if (!nodeBundled) {
-  // Fall back to using Electron's Node.js (which is always available)
   console.log(`${YELLOW}Using Electron's built-in Node.js for Memory Service${RESET}`);
-  // Create a wrapper script that uses Electron's node
-  const nodeWrapperScript = `#!/bin/sh
-# Wrapper to use Electron's Node.js runtime
-ELECTRON_RUN_AS_NODE=1 exec "$(dirname "$0")/../MacOS/Hive Consensus" "$@"
-`;
+  const nodeWrapperScript = `#!/bin/sh\n# Wrapper to use Electron's Node.js runtime\nELECTRON_RUN_AS_NODE=1 exec \"$(dirname \"$0\")/../MacOS/Hive Consensus\" \"$@\"\n`;
   fs.writeFileSync(nodeTargetPath, nodeWrapperScript);
   fs.chmodSync(nodeTargetPath, 0o755);
   bundledBinaries.push('node');
@@ -1137,8 +1143,16 @@ if (fs.existsSync(envConfigPath)) {
   envConfig = fs.readFileSync(envConfigPath, 'utf8');
 }
 
-// Remove any previously stored NODE_PATH entries; we'll fall back to Electron's node at runtime
-envConfig = envConfig.replace(/NODE_PATH=.*\n/g, '');
+const nodePathToSave = './binaries/node';
+if (nodeBundled) {
+  if (envConfig.includes('NODE_PATH=')) {
+    envConfig = envConfig.replace(/NODE_PATH=.*\n/, `NODE_PATH=${nodePathToSave}\n`);
+  } else {
+    envConfig += `NODE_PATH=${nodePathToSave}\n`;
+  }
+} else {
+  envConfig = envConfig.replace(/NODE_PATH=.*\n/g, '');
+}
 
 // Also save whether we need ELECTRON_RUN_AS_NODE
 if (nodePath === process.execPath) {
