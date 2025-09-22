@@ -57,6 +57,9 @@ jobs:
           CI: true
         run: npm run build:complete
 
+      - name: Smoke test memory service /health
+        run: npm run smoke:memory-health
+
       - name: List build outputs
         if: always()
         run: |

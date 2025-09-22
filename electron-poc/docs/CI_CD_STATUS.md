@@ -33,7 +33,7 @@ Crash reports (`~/Library/Logs/DiagnosticReports/Hive Consensus-*.ips`) confirm 
 - **Failure point**: runtime abort inside `node_sqlite3` when the memory service issues its first database query. The addon we ship was built against the system/Homebrew node; when launched under the packaged runtime (Electron or the downloaded tarball), it throws `napi_fatal_error`.
 
 ## Immediate Adjustments
-- **Workflow guardrails (2025-09-22)**: `.github/workflows/build-release.yml` and `.github/workflows/build-binaries.yml` now run `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty` before the 17-phase script and capture `otool` + `shasum` metadata for `node_sqlite3.node` under `electron-poc/build-logs/native-modules/`. This ensures the native addon is rebuilt against Electron 37.3.1 on the runner and leaves an audit trail in the uploaded log artifact.
+- **Workflow guardrails (2025-09-22)**: `.github/workflows/build-release.yml` and `.github/workflows/build-binaries.yml` now run `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty` before the 17-phase script, capture `otool` + `shasum` metadata for `node_sqlite3.node` under `electron-poc/build-logs/native-modules/`, and execute `npm run smoke:memory-health`. The smoke step boots the packaged memory service via `ProcessManager` + `PortManager`, confirms `/health`, and exits, ensuring the DMG ships with a working sqlite bridge.
 
 ## Next Steps (for the new session)
 1. **Validate new CI artifact**: kick off `build-release.yml`, download `hive-macos-dmg`, and confirm the `native-modules` log shows the rebuilt module (ABI 136) while the DMG installs cleanly on a macOS test machine.

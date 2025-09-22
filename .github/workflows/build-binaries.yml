@@ -49,6 +49,9 @@ jobs:
           CI: true
         run: npm run build:complete
 
+      - name: Smoke test memory service /health
+        run: npm run smoke:memory-health
+
       - name: Upload macOS DMG artifact
         if: success()
         uses: actions/upload-artifact@v4

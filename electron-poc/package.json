@@ -19,6 +19,7 @@
     "make:production": "npm run verify:all && npm run make",
     "make:test": "npm run make:production && npm run test:dmg",
     "test:dmg": "node scripts/test-dmg.js",
+    "smoke:memory-health": "node scripts/smoke-memory-health.js",
     "clean": "rm -rf .webpack/ out/ node_modules/.cache/ dist/ .electron-forge/",
     "build:fresh": "npm run clean && npm run make:production",
     "build:complete": "node scripts/build-production-dmg.js",
