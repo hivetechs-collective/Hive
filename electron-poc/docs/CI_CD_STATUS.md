@@ -34,6 +34,7 @@ Crash reports (`~/Library/Logs/DiagnosticReports/Hive Consensus-*.ips`) confirm 
 
 ## Immediate Adjustments
 - **Workflow guardrails (2025-09-22)**: `.github/workflows/build-release.yml` and `.github/workflows/build-binaries.yml` now run `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty` before the 17-phase script, capture `otool` + `shasum` metadata for `node_sqlite3.node` under `electron-poc/build-logs/native-modules/`, and execute `npm run smoke:memory-health`. The smoke step boots the packaged memory service via `ProcessManager` + `PortManager`, confirms `/health`, and exits, ensuring the DMG ships with a working sqlite bridge.
+- **Runtime fallback fix (2025-09-22)**: `ProcessManager.findNodeExecutable()` now resolves `.env.production` whether it lives beside the unpacked files or inside `app.asar`, normalises relative paths against the unpacked bundle, and falls back to `app.asar.unpacked/.webpack/main/binaries/node` before ever using Electron’s own runtime. This prevents packaged builds from silently launching sqlite under the wrong ABI.
 
 ## Next Steps (for the new session)
 1. **Validate new CI artifact**: kick off `build-release.yml`, download `hive-macos-dmg`, and confirm the `native-modules` log shows the rebuilt module (ABI 136) while the DMG installs cleanly on a macOS test machine.
