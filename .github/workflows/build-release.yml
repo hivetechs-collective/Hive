@@ -46,6 +46,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Rebuild native modules for Electron
+        run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
+
       - name: Verify build requirements
         run: npm run requirements
 
@@ -61,6 +64,13 @@ jobs:
           ls -R out/make || true
           echo "Generated build report:"
           cat out/build-report.json || true
+
+      - name: Capture native module metadata
+        if: always()
+        run: |
+          mkdir -p build-logs/native-modules
+          otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
+          shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256
 
       - name: Upload macOS DMG artifact
         if: success()

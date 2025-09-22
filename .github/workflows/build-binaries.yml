@@ -38,6 +38,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Rebuild native modules for Electron
+        run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
+
       - name: Verify build requirements
         run: npm run requirements
 
@@ -63,3 +66,10 @@ jobs:
           name: hive-build-logs
           path: electron-poc/build-logs/**
           if-no-files-found: ignore
+
+      - name: Capture native module metadata
+        if: always()
+        run: |
+          mkdir -p build-logs/native-modules
+          otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
+          shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256

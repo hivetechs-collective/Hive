@@ -32,9 +32,12 @@ Crash reports (`~/Library/Logs/DiagnosticReports/Hive Consensus-*.ips`) confirm 
 - **PortManager/ProcessManager are functioning**: they allocate dynamic ports, restart on crash, and log the retries as expected.
 - **Failure point**: runtime abort inside `node_sqlite3` when the memory service issues its first database query. The addon we ship was built against the system/Homebrew node; when launched under the packaged runtime (Electron or the downloaded tarball), it throws `napi_fatal_error`.
 
+## Immediate Adjustments
+- **Workflow guardrails (2025-09-22)**: `.github/workflows/build-release.yml` and `.github/workflows/build-binaries.yml` now run `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty` before the 17-phase script and capture `otool` + `shasum` metadata for `node_sqlite3.node` under `electron-poc/build-logs/native-modules/`. This ensures the native addon is rebuilt against Electron 37.3.1 on the runner and leaves an audit trail in the uploaded log artifact.
+
 ## Next Steps (for the new session)
-1. **Rebuild native modules** (`node_sqlite3`, any other `native_modules`) explicitly for Electron’s V8/Node version during the CI build (`npx electron-rebuild` or manual `node-gyp` targeting Electron). Confirm the rebuilt `.node` files live under `.webpack/main/native_modules/...` in the DMG.
-2. **End-to-end test**: after rebuilding, reinstall the DMG on a clean macOS machine, verify the memory service reaches the `/health` endpoint, and run at least one consensus query.
+1. **Validate new CI artifact**: kick off `build-release.yml`, download `hive-macos-dmg`, and confirm the `native-modules` log shows the rebuilt module (ABI 136) while the DMG installs cleanly on a macOS test machine.
+2. **End-to-end test**: after installing the refreshed DMG, verify the memory service responds on `/health` and execute a representative consensus query to confirm sqlite access stays stable.
 3. **Version tracking**: with `package.json` baseline set to `1.8.447`, subsequent CI builds will auto-bump to `1.8.449`, `1.8.450`, etc. Keep the version bump committed whenever a release is shipped to avoid repeating the same number.
 
 ## References

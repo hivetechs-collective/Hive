@@ -5450,14 +5450,15 @@ jobs:
 
 **7.1 GitHub Actions Implementation (2025 Update)**
 
-- **macOS-only binary publishing** – `build-release.yml` builds the Intel and Apple Silicon binaries, stitches them into a universal executable, and packages `Hive-macOS.app`. Architecture-specific OpenSSL is provisioned (Rosetta Homebrew for Intel, `/opt/homebrew` for Arm) before the build so both targets link successfully.
-- **Manual binary smoke builds** – `build-binaries.yml` is now `workflow_dispatch`-only. Trigger it manually when you need single-arch artifacts for debugging without running the full release workflow.
-- **Rust + multi-language scanning** – `codeql.yml` still analyzes JavaScript/TypeScript, Python, and Rust, but it now triggers only on pushes to `main`/`master`, the weekly Saturday cron, or an explicit manual dispatch. Feature-branch pushes and pull requests no longer consume CodeQL minutes.
-- **Concurrency & caching** – All macOS and CodeQL workflows enable `cancel-in-progress` so superseded runs stop immediately. Shared Homebrew, Cargo, npm, and pip caches keep reruns fast without re-downloading toolchains on every job.
-- **Formatting + smoke checks** – `ci-simple.yml` (CI job) continues to enforce `cargo fmt --all -- --check` and quick health checks, ensuring formatting failures are caught before expensive macOS builds are started.
-- **Actions budget requirement** – GitHub Actions enforces the organization spending limit. A `$0` budget immediately blocks macOS runners, so the organization must keep a positive limit (we set `Actions` to `$30`) to allow Build/Release/CodeQL jobs to queue.
-- **Release gating** – `build-release.yml` pushes artifacts to Cloudflare R2 only for pushes to `main`/`master` or `v*` tags. Manual dispatches and dry runs build the binaries and attach workflow artifacts but skip the R2 upload step.
-- **Operational reminder** – If macOS jobs stall with "recent account payments have failed" warnings, raise the Actions budget before retrying. The pipelines now surface these failures quickly during the dependency installation step.
+- **Hermetic macOS build** – `build-release.yml` and the manual `build-binaries.yml` now mirror the 17-phase `npm run build:complete` flow used locally. Each run installs dependencies with `npm ci`, executes `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty`, and then drives the full script so native modules, Python runtime, and bundled Node align exactly with the shipped DMG.
+- **Native-module attestations** – After rebuilding, both workflows capture `otool -L` and `shasum -a 256` fingerprints for `node_sqlite3.node` into `electron-poc/build-logs/native-modules/` and upload them as artifacts. We can now verify ABI 136 alignment (Electron 37.3.1 / Node 22.18.0) before promoting a release.
+- **Manual binary smoke builds** – `build-binaries.yml` remains `workflow_dispatch`-only for ad-hoc verification but inherits the same rebuild/fingerprint guardrails so every artifact matches production expectations.
+- **Rust + multi-language scanning** – `codeql.yml` continues to analyze JavaScript/TypeScript, Python, and Rust only on pushes to `main`/`master`, the Saturday cron, or manual dispatches to conserve GitHub minutes.
+- **Concurrency & caching** – All macOS and CodeQL workflows enable `cancel-in-progress`; npm caching (scoped to `electron-poc/package-lock.json`) keeps re-runs fast without reinstalling the toolchain.
+- **Formatting + smoke checks** – `ci-simple.yml` still owns `cargo fmt` + fast health checks, ensuring style/quick regressions fail cheaply before the macOS jobs spin up.
+- **Actions budget requirement** – macOS runners respect the organization spending limit. Keep a non-zero Actions budget (currently `$30`) otherwise jobs fail during dependency installation with the billing warning surfaced directly in the logs.
+- **Release gating & deprecation guard** – Cloudflare R2 uploads only occur for pushes to `main`/`master` or version tags. The workflows intentionally omit any legacy Dioxos Rust app or deprecated TUI build steps; those artifacts stay archived in the repo but are never compiled or published.
+- **Operational reminder** – If a run stalls on billing or toolchain provisioning, adjust the Actions budget and rerun; the guardrails log native-module status early so we can cancel quickly if prerequisites are missing.
 
 **8. Comprehensive Build Requirements Check System & Build Order**
 
