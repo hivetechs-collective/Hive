@@ -197,6 +197,15 @@ jobs:
 
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
+          echo "Available code signing identities:" >&2
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+          SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' '/Developer ID Application/ {print $2; exit}')
+          if [[ -z "$SIGN_IDENTITY" ]]; then
+            echo "Developer ID Application identity not found in keychain $KEYCHAIN_PATH" >&2
+            exit 1
+          fi
+          echo "Using signing identity: $SIGN_IDENTITY"
+
           mkdir -p "$RUNNER_TEMP/notary"
           echo "$ASC_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
           xcrun notarytool store-credentials "HiveNotaryProfile" \
@@ -212,6 +221,7 @@ jobs:
           {
             echo "HIVE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH"
             echo "HIVE_SIGNING_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+            echo "SIGN_ID=$SIGN_IDENTITY"
           } >> "$GITHUB_ENV"
 
           echo "enabled=true" >> "$GITHUB_OUTPUT"
@@ -219,7 +229,7 @@ jobs:
       - name: Sign and notarize macOS artifacts
         if: ${{ success() && steps.setup-signing.outputs.enabled == 'true' }}
         env:
-          SIGN_ID: 'Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)'
+          SIGN_ID: ${{ env.SIGN_ID }}
           NOTARY_PROFILE: HiveNotaryProfile
         run: |
           set -euo pipefail
