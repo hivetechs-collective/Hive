@@ -5462,6 +5462,139 @@ jobs:
 - **Release gating & deprecation guard** – Cloudflare R2 uploads only occur for pushes to `main`/`master` or version tags. The workflows intentionally omit any legacy Dioxos Rust app or deprecated TUI build steps; those artifacts stay archived in the repo but are never compiled or published.
 - **Operational reminder** – If a run stalls on billing or toolchain provisioning, adjust the Actions budget and rerun; the guardrails log native-module status early so we can cancel quickly if prerequisites are missing.
 
+**7.2 Operations Playbook (GitHub, Workflows, and Deployment Control)**
+
+_This section captures the exact command sequences the automation agent uses so we never again assume “GitHub access is unavailable.” Every example below is verified in production._
+
+**Repository connectivity & branch hygiene**
+
+- Authenticate once with the GitHub CLI using a PAT that scopes to `repo` + `workflow`:
+  ```bash
+  gh auth login --with-token < ~/.config/hive/github-token.txt
+  gh auth status
+  ```
+- Clone or refresh the repo; never work from a shallow download:
+  ```bash
+  git clone git@github.com:hivetechs-collective/Hive.git
+  cd Hive
+  git remote -v
+  ```
+- Daily branch setup for automation work:
+  ```bash
+  git fetch origin
+  git checkout memory-context-cicd
+  git pull --ff-only origin memory-context-cicd
+  ```
+- Staging changes and committing:
+  ```bash
+  git status -sb
+  git add path/to/file.ts electron-poc/MASTER_ARCHITECTURE.md
+  git commit -m "feat: describe new consensus hook"
+  git push origin memory-context-cicd
+  ```
+- `master` is protected. To land changes the agent either (a) opens a PR via `gh pr create --base master --head memory-context-cicd --fill` or (b) lets a maintainer merge. Never attempt `git push origin master` directly (the hook rejects it, as seen during the notarization refactor).
+
+**CI/CD workflow control**
+
+- Enumerate workflows so we know the canonical names:
+  ```bash
+  gh workflow list
+  ```
+- Run the modular release pipeline end-to-end (push with defaults)
+  ```bash
+  gh workflow run "Build Release DMG" -r memory-context-cicd
+  ```
+- Focus on signing only (reuse an existing build artifact):
+  ```bash
+  gh workflow run "Build Release DMG" -r memory-context-cicd \
+    --field sign_only=true \
+    --field reuse_artifact_run_id=17946991023 \
+    --field skip_publish=true
+  ```
+- Skip signing or publishing when debugging build phases:
+  ```bash
+  gh workflow run "Build Release DMG" -r memory-context-cicd \
+    --field skip_sign=true
+  gh workflow run "Build Release DMG" -r memory-context-cicd \
+    --field skip_publish=true
+  ```
+- Monitor an in-flight run with structured status (used heavily during notarization triage):
+  ```bash
+  RUN_ID=$(gh run list --workflow "Build Release DMG" --limit 1 --json databaseId --jq '.[0].databaseId')
+  while true; do
+    gh run view "$RUN_ID" \
+      --json status,conclusion,jobs \
+      --jq '{status: .status, jobs: [.jobs[] | {name: .name, status: .status, conclusion: .conclusion}]}'
+    sleep 60
+  done
+  ```
+- Cancel or rerun quickly:
+  ```bash
+  gh run cancel 17946502364
+  gh run rerun 17959967757 --failed
+  ```
+
+**Artifact inspection & notarization debugging**
+
+- Download build artifacts (defaults to ZIP – plan to rehydrate symlinks):
+  ```bash
+  gh run download 17946991023 --name hive-macos-dmg --dir /tmp/hive_artifacts
+  ```
+- When signing, always mount the DMG to preserve framework symlinks before resigning:
+  ```bash
+  DMG="/tmp/hive_artifacts/make/Hive\ Consensus.dmg"
+  APP_MOUNT=$(mktemp -d)
+  APP_WORKDIR=$(mktemp -d)
+  hdiutil attach "$DMG" -mountpoint "$APP_MOUNT" -nobrowse
+  ditto "$APP_MOUNT/Hive Consensus.app" "$APP_WORKDIR/Hive Consensus.app"
+  hdiutil detach "$APP_MOUNT"
+  scripts/sign-notarize-macos.sh "$APP_WORKDIR/Hive Consensus.app" "$DMG"
+  ```
+- Pull notarization submission logs without waiting for the workflow footer:
+  ```bash
+  SUBMISSION_ID=$(rg '"id":' /tmp/sign_job_latest.log -o -r '$1')
+  xcrun notarytool log "$SUBMISSION_ID" --keychain-profile HiveNotaryProfile notarization-log.json
+  ```
+
+**Publish stage validation**
+
+- Check that the R2 upload step wrote the expected versioned file and checksum:
+  ```bash
+  gh run view 17959967757 --json jobs \
+    --jq '.jobs[] | select(.name=="Publish DMG to R2 / GitHub Release").databaseId'
+  gh api repos/hivetechs-collective/Hive/actions/jobs/51082601737/logs > /tmp/publish_job.log
+  rg "Hive-Consensus" /tmp/publish_job.log
+  ```
+- Confirm the workflow detected and published the correct semantic version (from `out/build-report.json`):
+  ```bash
+  gh run download 17959967757 --name hive-macos-dmg-ready --dir /tmp/latest_ready
+  jq '.buildTimings.buildVersion' /tmp/latest_ready/build-report.json
+  ```
+
+**Disabling or freezing workflows when necessary**
+
+- Temporarily disable a workflow by renaming it to `*.disabled` (see `release-legacy.yml.disabled`) or by editing the `on:` block to remove triggers. Example:
+  ```bash
+  mv .github/workflows/ci-simple.yml .github/workflows/ci-simple.yml.disabled
+  git add .github/workflows/ci-simple.yml.disabled
+  git commit -m "chore: pause ci-simple workflow"
+  ```
+- Re-enable by renaming back and `git push`.
+
+**Quick reference table**
+
+| Task | Command |
+| --- | --- |
+| View recent runs | `gh run list --workflow "Build Release DMG" --limit 5` |
+| Inspect job log | `gh api repos/<owner>/<repo>/actions/jobs/<job_id>/logs` |
+| Cancel stuck macOS runner | `gh run cancel <run_id>` |
+| Trigger CodeQL scan | `gh workflow run codeql.yml` |
+| Trigger build-only | `gh workflow run "Build Release DMG" --field skip_sign=true --field skip_publish=true` |
+| Trigger publish-only with existing artifact | `gh workflow run "Build Release DMG" --field sign_only=true --field reuse_artifact_run_id=<id>` |
+| Download notarized DMG | `gh run download <run_id> --name hive-macos-dmg-ready --dir ./artifacts` |
+
+This operational checklist is the same process that drove the successful end-to-end run (`actions/runs/17959967757`) that produced `hivetechs-releases/stable/Hive-Consensus-1.8.448.dmg`. Automation can follow it step-for-step to reproduce or debug any stage of the pipeline.
+
 **8. Comprehensive Build Requirements Check System & Build Order**
 
 To prevent recurring production issues (like missing binary permissions, Node.js not found, etc.), we have implemented a comprehensive build system that ensures all dependencies are met AND executes the build in the EXACT CORRECT ORDER.
