@@ -45,15 +45,26 @@ jobs:
   build-dmg:
     name: Build macOS DMG
     runs-on: macos-latest
-    if: ${{ !(github.event_name == 'workflow_dispatch' && (github.event.inputs.sign_only == 'true' || github.event.inputs.reuse_artifact_run_id != '')) }}
+    # Always instantiate the job so downstream sign job has a dependency,
+    # but gate heavy steps when we are doing a sign-only dispatch that reuses an artifact.
     defaults:
       run:
         working-directory: electron-poc
     steps:
+      - name: Build mode summary
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.sign_only }}" == "true" ]]; then
+            echo "Sign-only dispatch: skipping fresh Electron build."
+          else
+            echo "Performing full macOS DMG build."
+          fi
+
       - name: Check out repository
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         uses: actions/checkout@v4
 
       - name: Set up Node.js
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -61,6 +72,7 @@ jobs:
           cache-dependency-path: electron-poc/package-lock.json
 
       - name: Install build prerequisites
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -71,39 +83,50 @@ jobs:
           fi
 
       - name: Install npm dependencies
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         run: npm ci
 
       - name: Rebuild native modules for Electron
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
 
       - name: Verify build requirements
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         run: npm run requirements
 
       - name: Build production DMG
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         env:
           CI: true
         run: npm run build:complete
 
       - name: Smoke test memory service /health
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         run: npm run smoke:memory-health
 
       - name: List build outputs
         if: always()
+        env:
+          SKIP_BUILD: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.sign_only == 'true') }}
         run: |
-          echo "Contents of out/make:"
-          ls -R out/make || true
-          echo "Generated build report:"
-          cat out/build-report.json || true
+          if [[ "$SKIP_BUILD" == "true" ]]; then
+            echo "Build skipped; no new artifacts generated."
+          else
+            echo "Contents of out/make:"
+            ls -R out/make || true
+            echo "Generated build report:"
+            cat out/build-report.json || true
+          fi
 
       - name: Capture native module metadata
-        if: always()
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         run: |
           mkdir -p build-logs/native-modules
           otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
           shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256
 
       - name: Upload macOS build artifact
-        if: success()
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true') }}
         uses: actions/upload-artifact@v4
         with:
           name: hive-macos-dmg
@@ -114,7 +137,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload build logs
-        if: always()
+        if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true') }}
         uses: actions/upload-artifact@v4
         with:
           name: hive-build-logs
