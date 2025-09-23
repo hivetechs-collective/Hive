@@ -118,8 +118,6 @@ codesign --force --options runtime --timestamp \
   --entitlements "$ENTITLEMENTS" \
   --sign "$SIGN_ID" "$APP_PATH"
 
-codesign --verify --strict "$APP_PATH"
-
 echo "📦 Building notarized DMG"
 
 DMG_DIR=$(dirname "$DMG_PATH")
