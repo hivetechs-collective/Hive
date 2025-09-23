@@ -10,15 +10,42 @@ on:
       - '**/*.md'
       - '.github/dependabot.yml'
   workflow_dispatch:
+    inputs:
+      sign_only:
+        description: 'Skip build/publish and only run the signing job against an existing artifact'
+        required: false
+        default: false
+        type: boolean
+      skip_sign:
+        description: 'Skip the signing job (useful for build-only iterations)'
+        required: false
+        default: false
+        type: boolean
+      skip_publish:
+        description: 'Skip the publish job (e.g. while debugging build/sign)'
+        required: false
+        default: false
+        type: boolean
+      reuse_artifact_run_id:
+        description: 'Optional run ID containing an existing macOS DMG artifact to reuse'
+        required: false
+        default: ''
+        type: string
+      reuse_artifact_name:
+        description: 'Artifact name to download when reusing (defaults to hive-macos-dmg)'
+        required: false
+        default: 'hive-macos-dmg'
+        type: string
 
 concurrency:
   group: build-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-macos:
-    name: Build macOS Electron DMG
+  build-dmg:
+    name: Build macOS DMG
     runs-on: macos-latest
+    if: ${{ !(github.event_name == 'workflow_dispatch' && (github.event.inputs.sign_only == 'true' || github.event.inputs.reuse_artifact_run_id != '')) }}
     defaults:
       run:
         working-directory: electron-poc
@@ -59,6 +86,83 @@ jobs:
 
       - name: Smoke test memory service /health
         run: npm run smoke:memory-health
+
+      - name: List build outputs
+        if: always()
+        run: |
+          echo "Contents of out/make:"
+          ls -R out/make || true
+          echo "Generated build report:"
+          cat out/build-report.json || true
+
+      - name: Capture native module metadata
+        if: always()
+        run: |
+          mkdir -p build-logs/native-modules
+          otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
+          shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256
+
+      - name: Upload macOS build artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-macos-dmg
+          path: |
+            electron-poc/out/make/*.dmg
+            electron-poc/out/build-report.json
+            electron-poc/out/Hive Consensus-darwin-arm64/Hive Consensus.app
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-build-logs
+          path: electron-poc/build-logs/**
+          if-no-files-found: ignore
+
+  sign-macos:
+    name: Sign & Notarize macOS DMG
+    needs: [build-dmg]
+    runs-on: macos-latest
+    if: ${{ needs.build-dmg.result != 'failure' && (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_sign != 'true') }}
+    outputs:
+      artifact-name: hive-macos-dmg-ready
+      signing-enabled: ${{ steps.setup-signing.outputs.enabled }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Determine artifact source
+        id: artifact-source
+        env:
+          REUSE_RUN_ID: ${{ github.event.inputs.reuse_artifact_run_id || '' }}
+          REUSE_ARTIFACT: ${{ github.event.inputs.reuse_artifact_name || 'hive-macos-dmg' }}
+        run: |
+          if [[ -n "$REUSE_RUN_ID" ]]; then
+            echo "Using existing artifact $REUSE_ARTIFACT from run $REUSE_RUN_ID"
+            echo "run-id=$REUSE_RUN_ID" >> "$GITHUB_OUTPUT"
+          else
+            echo "Using artifact from current run $GITHUB_RUN_ID"
+            echo "run-id=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -n "$REUSE_ARTIFACT" ]]; then
+            echo "artifact-name=$REUSE_ARTIFACT" >> "$GITHUB_OUTPUT"
+          else
+            echo "artifact-name=hive-macos-dmg" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download DMG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.artifact-source.outputs.artifact-name }}
+          run-id: ${{ steps.artifact-source.outputs['run-id'] }}
+          path: signed-input
+
+      - name: Show downloaded contents
+        run: |
+          echo "Downloaded artifact tree:"
+          ls -R signed-input || true
 
       - name: Configure macOS signing keychain
         id: setup-signing
@@ -119,48 +223,48 @@ jobs:
           NOTARY_PROFILE: HiveNotaryProfile
         run: |
           set -euo pipefail
-          ../scripts/sign-notarize-macos.sh \
-            "out/Hive Consensus-darwin-arm64/Hive Consensus.app" \
-            "out/make/Hive Consensus.dmg"
+          APP_PATH="$(find signed-input -path '*Hive Consensus-darwin-arm64/Hive Consensus.app' -type d | head -n 1)"
+          DMG_PATH="$(find signed-input -maxdepth 5 -name 'Hive Consensus.dmg' -type f | head -n 1)"
+          if [[ -z "$APP_PATH" || -z "$DMG_PATH" ]]; then
+            echo "Could not locate app bundle or DMG within downloaded artifact" >&2
+            exit 1
+          fi
+          echo "Signing app at $APP_PATH using DMG $DMG_PATH"
+          scripts/sign-notarize-macos.sh "$APP_PATH" "$DMG_PATH"
 
-      - name: List build outputs
+      - name: Stage release artifacts
         if: always()
         run: |
-          echo "Contents of out/make:"
-          ls -R out/make || true
-          echo "Generated build report:"
-          cat out/build-report.json || true
+          set -euo pipefail
+          mkdir -p signed-output
+          DMG_SRC="$(find signed-input -maxdepth 5 -name '*.dmg' -type f | head -n 1)"
+          if [[ -z "$DMG_SRC" ]]; then
+            echo "No DMG found to stage" >&2
+            exit 1
+          fi
+          cp "$DMG_SRC" signed-output/
+          BUILD_REPORT_SRC="$(find signed-input -maxdepth 5 -name 'build-report.json' -type f | head -n 1)"
+          if [[ -n "$BUILD_REPORT_SRC" ]]; then
+            cp "$BUILD_REPORT_SRC" signed-output/build-report.json
+          fi
 
-      - name: Capture native module metadata
+      - name: Upload ready DMG artifact
         if: always()
-        run: |
-          mkdir -p build-logs/native-modules
-          otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
-          shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256
-
-      - name: Upload macOS DMG artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: hive-macos-dmg
+          name: hive-macos-dmg-ready
           path: |
-            electron-poc/out/make/*.dmg
-            electron-poc/out/build-report.json
+            signed-output/*.dmg
+            signed-output/build-report.json
           if-no-files-found: error
 
-      - name: Upload build logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: hive-build-logs
-          path: electron-poc/build-logs/**
-          if-no-files-found: ignore
-
-  create-release:
-    name: Create Release and Upload to R2
-    needs: [build-macos]
+  publish:
+    name: Publish DMG to R2 / GitHub Release
+    needs: [sign-macos]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_publish != 'true' && github.event.inputs.sign_only != 'true')
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -168,7 +272,7 @@ jobs:
       - name: Download DMG artifact
         uses: actions/download-artifact@v4
         with:
-          name: hive-macos-dmg
+          name: hive-macos-dmg-ready
           path: artifacts
 
       - name: Prepare release files

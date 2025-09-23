@@ -13931,7 +13931,11 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
   ```
 - Capture SHA-256 for release notes: `shasum -a 256 /tmp/Hive-Consensus-signed.dmg`.
 - Publish via the existing CI/CD workflow once notarization reports "Accepted" and Gatekeeper assessments return "Notarized Developer ID".
-- GitHub Actions uses `scripts/sign-notarize-macos.sh` in `build-release.yml`; keep secrets (`APPLE_CERT_P12`, `APPLE_CERT_PASSWORD`, `ASC_API_KEY`, `ASC_KEY_ID`, `ASC_ISSUER_ID`) current so the automated job can import the certificate and submit to notarization.
+- GitHub Actions runs `scripts/sign-notarize-macos.sh` from the dedicated **sign-macos** job in `build-release.yml`. The job consumes the unsigned DMG artifact produced by the build job, signs/notarizes it, and re-uploads a `hive-macos-dmg-ready` artifact for the publish stage.
+- Keep secrets (`APPLE_CERT_P12`, `APPLE_CERT_PASSWORD`, `ASC_API_KEY`, `ASC_KEY_ID`, `ASC_ISSUER_ID`) current so the automated job can import the certificate and submit to notarization.
+- Manual reruns can target individual phases via `workflow_dispatch` inputs:
+  - `sign_only=true` with `reuse_artifact_run_id` / `reuse_artifact_name` replays the signing pipeline without rebuilding the Electron bundle.
+  - `skip_sign=true` or `skip_publish=true` let you isolate the build or signing steps while iterating.
 - Required GitHub secrets for the build-release workflow:
   - `APPLE_CERT_P12`: Base64 of the exported Developer ID Application `.p12` (cert + private key).
   - `APPLE_CERT_PASSWORD`: Export password for the `.p12` bundle.
