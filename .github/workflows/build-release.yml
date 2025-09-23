@@ -41,6 +41,10 @@ concurrency:
   group: build-release-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build-dmg:
     name: Build macOS DMG
@@ -180,6 +184,7 @@ jobs:
           name: ${{ steps.artifact-source.outputs.artifact-name }}
           run-id: ${{ steps.artifact-source.outputs['run-id'] }}
           path: signed-input
+          github-token: ${{ github.token }}
 
       - name: Show downloaded contents
         run: |
@@ -265,7 +270,7 @@ jobs:
           scripts/sign-notarize-macos.sh "$APP_PATH" "$DMG_PATH"
 
       - name: Stage release artifacts
-        if: always()
+        if: ${{ success() }}
         run: |
           set -euo pipefail
           mkdir -p signed-output
@@ -281,7 +286,7 @@ jobs:
           fi
 
       - name: Upload ready DMG artifact
-        if: always()
+        if: ${{ success() }}
         uses: actions/upload-artifact@v4
         with:
           name: hive-macos-dmg-ready
