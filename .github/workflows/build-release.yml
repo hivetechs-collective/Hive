@@ -51,6 +51,9 @@ jobs:
       run:
         working-directory: electron-poc
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Build mode summary
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.sign_only }}" == "true" ]]; then
@@ -58,9 +61,6 @@ jobs:
           else
             echo "Performing full macOS DMG build."
           fi
-
-      - name: Check out repository
-        uses: actions/checkout@v4
 
       - name: Set up Node.js
         if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
