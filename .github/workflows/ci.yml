@@ -17,9 +17,18 @@ defaults:
 jobs:
   electron-verify:
     name: Electron Verify
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install macOS tooling
+        run: |
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          if ! command -v ttyd >/dev/null 2>&1; then
+            brew install ttyd
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -31,6 +40,24 @@ jobs:
       - name: Install dependencies
         working-directory: electron-poc
         run: npm ci
+
+      - name: Rebuild native modules
+        working-directory: electron-poc
+        run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
+
+      - name: Verify build prerequisites
+        working-directory: electron-poc
+        run: npm run requirements
+
+      - name: Build production bundle
+        working-directory: electron-poc
+        env:
+          CI: true
+        run: npm run build:complete
+
+      - name: Smoke test memory service
+        working-directory: electron-poc
+        run: npm run smoke:memory-health
 
       - name: Static checks
         working-directory: electron-poc
