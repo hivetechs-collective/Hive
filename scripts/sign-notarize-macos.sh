@@ -111,12 +111,12 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
         fi
 
         if [[ -d "$FRAMEWORK_VERSION_DIR" ]]; then
-          codesign --force --options runtime --timestamp \
+          codesign --force --options runtime --timestamp --deep \
             "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
+        else
+          codesign --force --options runtime --timestamp \
+            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
         fi
-
-        codesign --force --options runtime --timestamp --deep \
-          "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
       else
         codesign --force --options runtime --timestamp \
           "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
