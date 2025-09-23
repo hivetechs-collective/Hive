@@ -96,7 +96,7 @@ if [[ -d "$APP_PATH/Contents/PlugIns" ]]; then
 fi
 
 # Sign the app bundle with entitlements
-codesign --force --options runtime --timestamp --deep \
+codesign --force --options runtime --timestamp \
   --entitlements "$ENTITLEMENTS" \
   --sign "$SIGN_ID" "$APP_PATH"
 
