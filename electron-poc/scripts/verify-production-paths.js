@@ -13,44 +13,69 @@ console.log('🔍 Verifying production paths...\n');
 let hasErrors = false;
 
 // Check if webpack output exists
-const webpackMainPath = path.join(__dirname, '../.webpack/main');
-if (!fs.existsSync(webpackMainPath)) {
-  console.error('❌ Webpack main output not found at:', webpackMainPath);
+function firstExisting(...candidates) {
+  return candidates.find((p) => p && fs.existsSync(p));
+}
+
+const packagedAppRoot = firstExisting(
+  path.join(__dirname, '../out/Hive Consensus-darwin-arm64/Hive Consensus.app/Contents/Resources/app.asar.unpacked'),
+  path.join(__dirname, '../out/Hive Consensus-darwin-arm64/Hive Consensus.app/Contents/Resources/default_app.asar.unpacked')
+);
+
+const webpackMainPath = firstExisting(
+  path.join(__dirname, '../.webpack/main'),
+  packagedAppRoot && path.join(packagedAppRoot, '.webpack/main')
+);
+if (!webpackMainPath) {
+  const expected = path.join(__dirname, '../.webpack/main');
+  console.error('❌ Webpack main output not found at:', expected);
   console.log('   Run "npm run build" first');
   hasErrors = true;
 } else {
-  console.log('✅ Webpack main output found');
+  console.log('✅ Webpack main output found at:', webpackMainPath);
 }
 
 // Check if memory service is built
-const memoryServicePath = path.join(__dirname, '../.webpack/main/memory-service/index.js');
-if (!fs.existsSync(memoryServicePath)) {
-  console.error('❌ Memory service not built at:', memoryServicePath);
+const memoryServicePath = firstExisting(
+  path.join(__dirname, '../.webpack/main/memory-service/index.js'),
+  packagedAppRoot && path.join(packagedAppRoot, '.webpack/main/memory-service/index.js')
+);
+if (!memoryServicePath) {
+  const expected = path.join(__dirname, '../.webpack/main/memory-service/index.js');
+  console.error('❌ Memory service not built at:', expected);
   console.log('   The BuildMemoryServicePlugin should build this automatically');
   hasErrors = true;
 } else {
-  console.log('✅ Memory service built');
+  console.log('✅ Memory service built at:', memoryServicePath);
 }
 
 // Check if binaries exist
-const backendBinaryPath = path.join(__dirname, '../binaries/hive-backend-server-enhanced');
-if (!fs.existsSync(backendBinaryPath)) {
-  console.error('❌ Backend binary not found at:', backendBinaryPath);
+const backendBinaryPath = firstExisting(
+  path.join(__dirname, '../binaries/hive-backend-server-enhanced'),
+  packagedAppRoot && path.join(packagedAppRoot, '.webpack/main/binaries/hive-backend-server-enhanced')
+);
+if (!backendBinaryPath) {
+  const expected = path.join(__dirname, '../binaries/hive-backend-server-enhanced');
+  console.error('❌ Backend binary not found at:', expected);
   console.log('   Build it with: cd ../../hive && cargo build --release --bin hive-backend-server-enhanced');
   console.log('   Then copy it: cp target/release/hive-backend-server-enhanced ../electron-poc/binaries/');
   hasErrors = true;
 } else {
-  console.log('✅ Backend binary found');
+  console.log('✅ Backend binary found at:', backendBinaryPath);
 }
 
 // Check if Python runtime exists
-const pythonRuntimePath = path.join(__dirname, '../resources/python-runtime/python');
-if (!fs.existsSync(pythonRuntimePath)) {
-  console.error('❌ Python runtime not found at:', pythonRuntimePath);
+const pythonRuntimePath = firstExisting(
+  path.join(__dirname, '../resources/python-runtime/python'),
+  packagedAppRoot && path.join(packagedAppRoot, 'resources/python-runtime/python')
+);
+if (!pythonRuntimePath) {
+  const expected = path.join(__dirname, '../resources/python-runtime/python');
+  console.error('❌ Python runtime not found at:', expected);
   console.log('   Bundle it with: npm run bundle-python');
   hasErrors = true;
 } else {
-  console.log('✅ Python runtime found');
+  console.log('✅ Python runtime found at:', pythonRuntimePath);
 }
 
 // Check package.json has correct productName
