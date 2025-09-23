@@ -28,6 +28,10 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
 NOTARY_PROFILE=${NOTARY_PROFILE:-HiveNotaryProfile}
 ENTITLEMENTS=${ENTITLEMENTS_PATH:-$REPO_ROOT/scripts/entitlements.plist}
+KEYCHAIN_ARGS=()
+if [[ -n "${HIVE_SIGNING_KEYCHAIN:-}" ]]; then
+  KEYCHAIN_ARGS+=(--keychain "$HIVE_SIGNING_KEYCHAIN")
+fi
 
 if [[ ! -f "$ENTITLEMENTS" ]]; then
   echo "Entitlements file not found at $ENTITLEMENTS" >&2
@@ -66,7 +70,7 @@ find "$APP_PATH" -type f -print0 |
     if file "$file" | grep -q 'Mach-O'; then
       echo "  • codesign $(basename "$file")"
       codesign --force --options runtime --timestamp \
-        --sign "$SIGN_ID" "$file"
+        "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$file"
     fi
   done
 
@@ -75,7 +79,7 @@ APP_MAIN_BINARY="$APP_PATH/Contents/MacOS/$APP_DISPLAY_NAME"
 if [[ -f "$APP_MAIN_BINARY" ]]; then
   echo "  • sealing main binary $(basename \"$APP_MAIN_BINARY\")"
   codesign --force --options runtime --timestamp \
-    --sign "$SIGN_ID" "$APP_MAIN_BINARY"
+    "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$APP_MAIN_BINARY"
 fi
 
 # Sign frameworks and helper apps at the directory level
@@ -90,12 +94,12 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
 
         if [[ -f "$FRAMEWORK_VERSION_BINARY" ]]; then
           codesign --force --options runtime --timestamp \
-            --sign "$SIGN_ID" "$FRAMEWORK_VERSION_BINARY"
+            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_BINARY"
         fi
 
         if [[ -d "$FRAMEWORK_VERSION_DIR" ]]; then
           codesign --force --options runtime --timestamp \
-            --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
+            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
         fi
 
         # Skip signing the root directory explicitly; version directories carry the signature.
@@ -103,7 +107,7 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
       fi
 
       codesign --force --options runtime --timestamp \
-        --sign "$SIGN_ID" "$bundle"
+        "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
     done
 fi
 
@@ -113,13 +117,13 @@ if [[ -d "$APP_PATH/Contents/PlugIns" ]]; then
     while IFS= read -r -d '' plugin; do
       echo "  • sealing plugin $(basename "$plugin")"
       codesign --force --options runtime --timestamp \
-        --sign "$SIGN_ID" "$plugin"
+        "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$plugin"
     done
 fi
 
 # Sign the app bundle with entitlements
 codesign --force --options runtime --timestamp \
-  --entitlements "$ENTITLEMENTS" \
+  "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
   --sign "$SIGN_ID" "$APP_PATH"
 
 echo "📦 Building notarized DMG"
@@ -135,7 +139,8 @@ rsync -a "$APP_PATH" "$STAGING_DIR/"
 hdiutil create -volname "$VOLUME_NAME" \
   -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
 
-codesign --force --sign "$SIGN_ID" --timestamp "$DMG_PATH"
+codesign --force --sign "$SIGN_ID" --timestamp \
+  "${KEYCHAIN_ARGS[@]}" "$DMG_PATH"
 
 echo "📨 Submitting DMG for notarization..."
 SUBMISSION_INFO=$(mktemp)
