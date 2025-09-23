@@ -62,7 +62,6 @@ jobs:
 
       - name: Configure macOS signing keychain
         id: setup-signing
-        if: ${{ success() && secrets.APPLE_CERT_P12 != '' && secrets.APPLE_CERT_PASSWORD != '' && secrets.ASC_API_KEY != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' }}
         env:
           APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
@@ -71,6 +70,12 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           set -euo pipefail
+
+          if [[ -z "${APPLE_CERT_P12}" || -z "${APPLE_CERT_PASSWORD}" || -z "${ASC_API_KEY}" || -z "${ASC_KEY_ID}" || -z "${ASC_ISSUER_ID}" ]]; then
+            echo "Mac signing secrets not fully configured. Skipping notarization setup."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           KEYCHAIN_PATH="$RUNNER_TEMP/hive-signing.keychain-db"
           KEYCHAIN_PASSWORD=$(uuidgen)
