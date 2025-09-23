@@ -111,7 +111,7 @@ jobs:
       - name: Sign and notarize macOS artifacts
         if: ${{ success() && steps.setup-signing.outputs.enabled == 'true' }}
         env:
-          SIGN_ID: Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)
+          SIGN_ID: 'Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)'
           NOTARY_PROFILE: HiveNotaryProfile
         run: |
           set -euo pipefail
