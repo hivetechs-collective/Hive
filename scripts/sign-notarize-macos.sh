@@ -78,8 +78,6 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
           codesign --force --options runtime --timestamp \
             --sign "$SIGN_ID" "$FRAMEWORK_BINARY"
         fi
-        codesign --force --options runtime --timestamp --deep \
-          --sign "$SIGN_ID" "$bundle/"
         continue
       fi
       codesign --force --options runtime --timestamp \
@@ -98,7 +96,7 @@ if [[ -d "$APP_PATH/Contents/PlugIns" ]]; then
 fi
 
 # Sign the app bundle with entitlements
-codesign --force --options runtime --timestamp \
+codesign --force --options runtime --timestamp --deep \
   --entitlements "$ENTITLEMENTS" \
   --sign "$SIGN_ID" "$APP_PATH"
 
