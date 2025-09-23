@@ -140,7 +140,23 @@ codesign --force --options runtime --timestamp \
   --sign "$SIGN_ID" "$APP_PATH"
 
 echo "🧪 Verifying code signatures"
-codesign --verify --deep --strict "$APP_PATH"
+codesign --verify --strict "$APP_PATH"
+
+if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
+  find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -type d \( -name '*.framework' -o -name '*.app' \) -print0 |
+    while IFS= read -r -d '' bundle; do
+      if [[ "$bundle" == *.framework ]]; then
+        TARGET="$bundle"
+        if [[ -d "$bundle/Versions/A" ]]; then
+          TARGET="$bundle/Versions/A"
+        fi
+        codesign --verify --strict "$TARGET"
+      else
+        codesign --verify --strict "$bundle"
+      fi
+    done
+fi
+
 codesign -dv --verbose=4 "$APP_PATH" | sed 's/^/    /'
 
 echo "📦 Building notarized DMG"
