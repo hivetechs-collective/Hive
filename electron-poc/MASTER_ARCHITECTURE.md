@@ -8,6 +8,7 @@
 5. [Communication Architecture](#communication-architecture)
 6. [User Interface Architecture](#user-interface-architecture)
 7. [Consensus Engine Architecture](#consensus-engine-architecture)
+8. [macOS Signing & Notarization Checklist](#macos-signing--notarization-checklist)
 8. [Visual Progress System](#visual-progress-system)
 9. [Memory Service Infrastructure](#memory-service-infrastructure)
 10. [Git Integration Architecture](#git-integration-architecture)
@@ -13843,3 +13844,90 @@ for (const message of conversation.messages) {
 - Prepare for production release
 
 This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in the current MASTER_ARCHITECTURE.md while preserving all functionality and dramatically improving the user experience.
+
+---
+
+### 🛡️ macOS Signing & Notarization Checklist
+
+**Prerequisites**
+- Apple Developer Program membership (Team ID `FWBLB27H52`).
+- Downloaded **Developer ID Application** certificate (`developerID_application.cer`) and installed into the *login* keychain alongside its private key.
+- Downloaded Apple trust chain certificates (`AppleWWDRCAG4.cer`, `DeveloperIDG2CA.cer`).
+
+**Install & Trust Certificates**
+- Import `DeveloperIDG2CA.cer` and `AppleWWDRCAG4.cer` into the **System** keychain (Keychain Access ▸ File ▸ Import Items…) and set them to **Always Trust**.
+- Keep the Developer ID Application cert set to *Always Trust* in the login keychain, with its private key access control allowing `codesign`.
+
+**One-time CLI Setup**
+- Move the App Store Connect API key to `~/Documents/AppleKeys/HiveNotary.p8`.
+- Register it with Notary Tool:
+  ```bash
+  xcrun notarytool store-credentials "HiveNotaryProfile" \
+    --key ~/Documents/AppleKeys/HiveNotary.p8 \
+    --key-id PYR945459Z \
+    --issuer 9a13d40a-4835-47f1-af97-dc9ee8440241
+  ```
+- Verify the login keychain ACL once per machine:
+  ```bash
+  security unlock-keychain ~/Library/Keychains/login.keychain-db
+  security set-key-partition-list -S apple-tool:,apple: -s \
+    ~/Library/Keychains/login.keychain-db
+  ```
+
+**Post-Reboot Quick Start**
+- After any reboot, rerun the two `security` commands above to unlock the keychain and refresh the ACL before signing.
+- Confirm the toolchain can sign by testing a throwaway binary:
+  ```bash
+  cp /usr/bin/true /tmp/true_copy
+  codesign --force --sign "Developer ID Application: Verone Lazio (FWBLB27H52)" /tmp/true_copy
+  rm /tmp/true_copy
+  ```
+
+**Next Actions (when ready to sign releases)**
+- Set the signing identity once per shell: `export SIGN_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"`.
+- Recursively sign every Mach-O inside the bundle (Python runtime, torch, SciPy, helper binaries, etc.):
+  ```bash
+  find /tmp/HiveSigned.app -type f \
+    | while read -r file; do
+        if file "$file" | grep -q "Mach-O"; then
+          codesign --force --options runtime --sign "$SIGN_ID" "$file"
+        fi
+      done
+  ```
+- Re-sign frameworks, helpers, and the app root with entitlements:
+  ```bash
+  for fw in 'Electron Framework.framework' 'Mantle.framework' \
+            'ReactiveObjC.framework' 'Squirrel.framework'; do
+    codesign --force --options runtime --sign "$SIGN_ID" \
+      "/tmp/HiveSigned.app/Contents/Frameworks/$fw"
+  done
+  for helper in "Hive Consensus Helper.app" \
+                 "Hive Consensus Helper (Renderer).app" \
+                 "Hive Consensus Helper (GPU).app" \
+                 "Hive Consensus Helper (Plugin).app"; do
+    codesign --force --options runtime --sign "$SIGN_ID" \
+      "/tmp/HiveSigned.app/Contents/Frameworks/$helper"
+  done
+  codesign --force --options runtime \
+    --entitlements scripts/entitlements.plist \
+    --sign "$SIGN_ID" /tmp/HiveSigned.app
+  codesign --verify --deep --strict /tmp/HiveSigned.app
+  ```
+- Package and sign the DMG:
+  ```bash
+  rm -rf /tmp/hive_dmg_signed && mkdir -p /tmp/hive_dmg_signed
+  cp -R /tmp/HiveSigned.app /tmp/hive_dmg_signed/
+  hdiutil create -volname "Hive Consensus" -srcfolder /tmp/hive_dmg_signed \
+    -ov -format UDZO /tmp/Hive-Consensus-signed.dmg
+  codesign --force --sign "$SIGN_ID" /tmp/Hive-Consensus-signed.dmg
+  ```
+- Notarize, staple, and verify:
+  ```bash
+  xcrun notarytool submit /tmp/Hive-Consensus-signed.dmg \
+    --keychain-profile HiveNotaryProfile --wait
+  xcrun stapler staple /tmp/HiveSigned.app
+  xcrun stapler staple /tmp/Hive-Consensus-signed.dmg
+  spctl --assess --type exec --verbose /tmp/HiveSigned.app
+  ```
+- Capture SHA-256 for release notes: `shasum -a 256 /tmp/Hive-Consensus-signed.dmg`.
+- Publish via the existing CI/CD workflow once notarization reports "Accepted" and Gatekeeper assessments return "Notarized Developer ID".
