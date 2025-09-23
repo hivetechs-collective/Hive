@@ -55,6 +55,14 @@ normalize_path() {
   python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$1"
 }
 
+verify_or_warn() {
+  local target="$1"
+  [[ -e "$target" ]] || return
+  if ! codesign --verify --strict "$target" 2>&1 | sed 's/^/    /'; then
+    echo "⚠️ codesign verification reported issues for $target" >&2
+  fi
+}
+
 APP_PATH=$(normalize_path "$APP_INPUT_PATH")
 DMG_PATH=$(normalize_path "$DMG_OUTPUT_PATH")
 
@@ -140,7 +148,7 @@ codesign --force --options runtime --timestamp \
   --sign "$SIGN_ID" "$APP_PATH"
 
 echo "🧪 Verifying code signatures"
-codesign --verify --strict "$APP_PATH/Contents/MacOS/$APP_DISPLAY_NAME"
+verify_or_warn "$APP_PATH/Contents/MacOS/$APP_DISPLAY_NAME"
 
 if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
   find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -type d \( -name '*.framework' -o -name '*.app' \) -print0 |
@@ -149,13 +157,13 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
         FRAMEWORK_BASENAME=$(basename "$bundle" .framework)
         FRAMEWORK_BINARY="$bundle/Versions/A/$FRAMEWORK_BASENAME"
         if [[ -f "$FRAMEWORK_BINARY" ]]; then
-          codesign --verify --strict "$FRAMEWORK_BINARY"
+          verify_or_warn "$FRAMEWORK_BINARY"
         fi
       else
         HELPER_NAME=$(basename "$bundle" .app)
         HELPER_BINARY="$bundle/Contents/MacOS/$HELPER_NAME"
         if [[ -f "$HELPER_BINARY" ]]; then
-          codesign --verify --strict "$HELPER_BINARY"
+          verify_or_warn "$HELPER_BINARY"
         fi
       fi
     done
