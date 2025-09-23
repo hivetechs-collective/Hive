@@ -60,6 +60,65 @@ jobs:
       - name: Smoke test memory service /health
         run: npm run smoke:memory-health
 
+      - name: Configure macOS signing keychain
+        id: setup-signing
+        if: ${{ success() && secrets.APPLE_CERT_P12 != '' && secrets.APPLE_CERT_PASSWORD != '' && secrets.ASC_API_KEY != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' }}
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/hive-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/apple-cert.p12"
+          security import "$RUNNER_TEMP/apple-cert.p12" \
+            -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcrun
+          rm -f "$RUNNER_TEMP/apple-cert.p12"
+
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          mkdir -p "$RUNNER_TEMP/notary"
+          echo "$ASC_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
+          xcrun notarytool store-credentials "HiveNotaryProfile" \
+            --key "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8" \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --keychain "$KEYCHAIN_PATH" \
+            --keychain-password "$KEYCHAIN_PASSWORD"
+          rm -f "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
+
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          {
+            echo "HIVE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH"
+            echo "HIVE_SIGNING_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Sign and notarize macOS artifacts
+        if: ${{ success() && steps.setup-signing.outputs.enabled == 'true' }}
+        env:
+          SIGN_ID: Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)
+          NOTARY_PROFILE: HiveNotaryProfile
+        run: |
+          set -euo pipefail
+          ../scripts/sign-notarize-macos.sh \
+            "out/Hive Consensus-darwin-arm64/Hive Consensus.app" \
+            "out/make/Hive Consensus.dmg"
+
       - name: List build outputs
         if: always()
         run: |

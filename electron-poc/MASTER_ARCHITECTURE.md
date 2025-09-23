@@ -13931,3 +13931,4 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
   ```
 - Capture SHA-256 for release notes: `shasum -a 256 /tmp/Hive-Consensus-signed.dmg`.
 - Publish via the existing CI/CD workflow once notarization reports "Accepted" and Gatekeeper assessments return "Notarized Developer ID".
+- GitHub Actions uses `scripts/sign-notarize-macos.sh` in `build-release.yml`; keep secrets (`APPLE_CERT_P12`, `APPLE_CERT_PASSWORD`, `ASC_API_KEY`, `ASC_KEY_ID`, `ASC_ISSUER_ID`) current so the automated job can import the certificate and submit to notarization.
