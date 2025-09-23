@@ -33,6 +33,19 @@ if [[ -n "${HIVE_SIGNING_KEYCHAIN:-}" ]]; then
   KEYCHAIN_ARGS+=(--keychain "$HIVE_SIGNING_KEYCHAIN")
 fi
 
+IDENTITY_SEARCH_ARGS=(-v -p codesigning)
+if [[ -n "${HIVE_SIGNING_KEYCHAIN:-}" ]]; then
+  IDENTITY_SEARCH_ARGS+=("$HIVE_SIGNING_KEYCHAIN")
+fi
+
+SIGN_IDENTITY=$(security find-identity "${IDENTITY_SEARCH_ARGS[@]}" | awk -F '"' -v wanted="$SIGN_ID" '($2 == wanted) {print $2}')
+if [[ -z "$SIGN_IDENTITY" ]]; then
+  echo "Developer ID identity '$SIGN_ID' not found in code-signing identities" >&2
+  security find-identity "${IDENTITY_SEARCH_ARGS[@]}" >&2 || true
+  exit 1
+fi
+echo "Using signing identity: $SIGN_IDENTITY"
+
 if [[ ! -f "$ENTITLEMENTS" ]]; then
   echo "Entitlements file not found at $ENTITLEMENTS" >&2
   exit 66
@@ -102,12 +115,12 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
             "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
         fi
 
-        # Skip signing the root directory explicitly; version directories carry the signature.
-        continue
+        codesign --force --options runtime --timestamp --deep \
+          "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
+      else
+        codesign --force --options runtime --timestamp \
+          "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
       fi
-
-      codesign --force --options runtime --timestamp \
-        "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
     done
 fi
 
