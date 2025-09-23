@@ -66,6 +66,14 @@ find "$APP_PATH" -type f -print0 |
     fi
   done
 
+APP_DISPLAY_NAME=${APP_DISPLAY_NAME:-${APP_NAME%.app}}
+APP_MAIN_BINARY="$APP_PATH/Contents/MacOS/$APP_DISPLAY_NAME"
+if [[ -f "$APP_MAIN_BINARY" ]]; then
+  echo "  • sealing main binary $(basename \"$APP_MAIN_BINARY\")"
+  codesign --force --options runtime --timestamp \
+    --sign "$SIGN_ID" "$APP_MAIN_BINARY"
+fi
+
 # Sign frameworks and helper apps at the directory level
 if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
   find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -type d \( -name '*.framework' -o -name '*.app' \) -print0 |
