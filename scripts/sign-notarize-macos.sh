@@ -56,8 +56,12 @@ echo "🔐 Signing app bundle: $APP_PATH"
 echo "🔍 Scanning for Mach-O binaries..."
 find "$APP_PATH" -type f -print0 |
   while IFS= read -r -d '' file; do
-    if [[ "$file" == *.framework/* && "$file" != *.framework/Versions/* ]]; then
-      continue
+    if [[ "$file" == *.framework/* ]]; then
+      framework_dir="${file%%.framework/*}.framework"
+      framework_name=$(basename "$framework_dir" .framework)
+      if [[ "$file" == "$framework_dir/$framework_name" && "$file" != *"/Versions/"* ]]; then
+        continue
+      fi
     fi
     if file "$file" | grep -q 'Mach-O'; then
       echo "  • codesign $(basename "$file")"
