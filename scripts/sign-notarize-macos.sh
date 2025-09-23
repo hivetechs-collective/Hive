@@ -95,7 +95,7 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
             --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
         fi
 
-        if [[ -f "$FRAMEWORK_FLAT_BINARY" ]]; then
+        if [[ -f "$FRAMEWORK_FLAT_BINARY" && ! -L "$FRAMEWORK_FLAT_BINARY" ]]; then
           codesign --force --options runtime --timestamp \
             --sign "$SIGN_ID" "$FRAMEWORK_FLAT_BINARY"
         fi
