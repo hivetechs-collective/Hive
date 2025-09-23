@@ -81,18 +81,26 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
       echo "  • sealing $(basename "$bundle")"
       if [[ "$bundle" == *.framework ]]; then
         FRAMEWORK_BASENAME=$(basename "$bundle" .framework)
-        FRAMEWORK_BINARY="$bundle/Versions/A/$FRAMEWORK_BASENAME"
-        if [[ -f "$FRAMEWORK_BINARY" ]]; then
-          codesign --force --options runtime --timestamp \
-            --sign "$SIGN_ID" "$FRAMEWORK_BINARY"
-        fi
         FRAMEWORK_VERSION_DIR="$bundle/Versions/A"
+        FRAMEWORK_VERSION_BINARY="$FRAMEWORK_VERSION_DIR/$FRAMEWORK_BASENAME"
+        FRAMEWORK_FLAT_BINARY="$bundle/$FRAMEWORK_BASENAME"
+
+        if [[ -f "$FRAMEWORK_VERSION_BINARY" ]]; then
+          codesign --force --options runtime --timestamp \
+            --sign "$SIGN_ID" "$FRAMEWORK_VERSION_BINARY"
+        fi
+
         if [[ -d "$FRAMEWORK_VERSION_DIR" ]]; then
           codesign --force --options runtime --timestamp \
             --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
         fi
-        continue
+
+        if [[ -f "$FRAMEWORK_FLAT_BINARY" ]]; then
+          codesign --force --options runtime --timestamp \
+            --sign "$SIGN_ID" "$FRAMEWORK_FLAT_BINARY"
+        fi
       fi
+
       codesign --force --options runtime --timestamp \
         --sign "$SIGN_ID" "$bundle"
     done
