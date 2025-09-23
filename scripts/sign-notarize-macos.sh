@@ -134,7 +134,28 @@ hdiutil create -volname "$VOLUME_NAME" \
 codesign --force --sign "$SIGN_ID" --timestamp "$DMG_PATH"
 
 echo "📨 Submitting DMG for notarization..."
-xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+SUBMISSION_INFO=$(mktemp)
+if ! xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait | tee "$SUBMISSION_INFO"; then
+  echo "Notarization submission failed" >&2
+  if grep -q '^id:' "$SUBMISSION_INFO"; then
+    SUBMISSION_ID=$(grep '^id:' "$SUBMISSION_INFO" | awk '{print $2}')
+    if [[ -n "$SUBMISSION_ID" ]]; then
+      echo "Fetching notarization log for submission $SUBMISSION_ID"
+      xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$NOTARY_PROFILE" || true
+    fi
+  fi
+  exit 1
+fi
+
+SUBMISSION_ID=$(grep '^id:' "$SUBMISSION_INFO" | awk '{print $2}')
+if grep -q '^status: Invalid' "$SUBMISSION_INFO"; then
+  echo "Notarization returned Invalid" >&2
+  if [[ -n "$SUBMISSION_ID" ]]; then
+    echo "Fetching notarization log for submission $SUBMISSION_ID"
+    xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$NOTARY_PROFILE" || true
+  fi
+  exit 1
+fi
 
 echo "📎 Stapling tickets..."
 xcrun stapler staple "$APP_PATH"
