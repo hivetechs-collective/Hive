@@ -71,6 +71,14 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
   find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -type d \( -name '*.framework' -o -name '*.app' \) -print0 |
     while IFS= read -r -d '' bundle; do
       echo "  • sealing $(basename "$bundle")"
+      if [[ "$bundle" == *.framework ]]; then
+        FRAMEWORK_BASENAME=$(basename "$bundle" .framework)
+        FRAMEWORK_BINARY="$bundle/Versions/A/$FRAMEWORK_BASENAME"
+        if [[ -f "$FRAMEWORK_BINARY" ]]; then
+          codesign --force --options runtime --timestamp \
+            --sign "$SIGN_ID" "$FRAMEWORK_BINARY"
+        fi
+      fi
       codesign --force --options runtime --timestamp \
         --sign "$SIGN_ID" "$bundle"
     done
