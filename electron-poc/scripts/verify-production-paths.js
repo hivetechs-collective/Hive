@@ -52,14 +52,19 @@ if (!memoryServicePath) {
 // Check if binaries exist
 const backendBinaryPath = firstExisting(
   path.join(__dirname, '../binaries/hive-backend-server-enhanced'),
-  packagedAppRoot && path.join(packagedAppRoot, '.webpack/main/binaries/hive-backend-server-enhanced')
+  packagedAppRoot && path.join(packagedAppRoot, '.webpack/main/binaries/hive-backend-server-enhanced'),
+  process.env.BACKEND_BINARY_PATH
 );
 if (!backendBinaryPath) {
-  const expected = path.join(__dirname, '../binaries/hive-backend-server-enhanced');
-  console.error('❌ Backend binary not found at:', expected);
-  console.log('   Build it with: cd ../../hive && cargo build --release --bin hive-backend-server-enhanced');
-  console.log('   Then copy it: cp target/release/hive-backend-server-enhanced ../electron-poc/binaries/');
-  hasErrors = true;
+  if (process.env.CI) {
+    console.warn('⚠ Backend binary not found (expected in CI). Release workflow will embed it.');
+  } else {
+    const expected = path.join(__dirname, '../binaries/hive-backend-server-enhanced');
+    console.error('❌ Backend binary not found at:', expected);
+    console.log('   Build it with: cd ../../hive && cargo build --release --bin hive-backend-server-enhanced');
+    console.log('   Then copy it: cp target/release/hive-backend-server-enhanced ../electron-poc/binaries/');
+    hasErrors = true;
+  }
 } else {
   console.log('✅ Backend binary found at:', backendBinaryPath);
 }
