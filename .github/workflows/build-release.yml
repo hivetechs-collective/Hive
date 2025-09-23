@@ -60,7 +60,6 @@ jobs:
           fi
 
       - name: Check out repository
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         uses: actions/checkout@v4
 
       - name: Set up Node.js
