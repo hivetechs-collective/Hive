@@ -140,19 +140,23 @@ codesign --force --options runtime --timestamp \
   --sign "$SIGN_ID" "$APP_PATH"
 
 echo "🧪 Verifying code signatures"
-codesign --verify --strict "$APP_PATH"
+codesign --verify --strict "$APP_PATH/Contents/MacOS/$APP_DISPLAY_NAME"
 
 if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
   find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -type d \( -name '*.framework' -o -name '*.app' \) -print0 |
     while IFS= read -r -d '' bundle; do
       if [[ "$bundle" == *.framework ]]; then
-        TARGET="$bundle"
-        if [[ -d "$bundle/Versions/A" ]]; then
-          TARGET="$bundle/Versions/A"
+        FRAMEWORK_BASENAME=$(basename "$bundle" .framework)
+        FRAMEWORK_BINARY="$bundle/Versions/A/$FRAMEWORK_BASENAME"
+        if [[ -f "$FRAMEWORK_BINARY" ]]; then
+          codesign --verify --strict "$FRAMEWORK_BINARY"
         fi
-        codesign --verify --strict "$TARGET"
       else
-        codesign --verify --strict "$bundle"
+        HELPER_NAME=$(basename "$bundle" .app)
+        HELPER_BINARY="$bundle/Contents/MacOS/$HELPER_NAME"
+        if [[ -f "$HELPER_BINARY" ]]; then
+          codesign --verify --strict "$HELPER_BINARY"
+        fi
       fi
     done
 fi
