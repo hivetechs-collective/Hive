@@ -94,7 +94,8 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
             --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
         fi
 
-        # For versioned frameworks the top-level binary is a symlink; we skip signing it.
+        # Skip signing the root directory explicitly; version directories carry the signature.
+        continue
       fi
 
       codesign --force --options runtime --timestamp \
