@@ -99,8 +99,7 @@ jobs:
             --key "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8" \
             --key-id "$ASC_KEY_ID" \
             --issuer "$ASC_ISSUER_ID" \
-            --keychain "$KEYCHAIN_PATH" \
-            --keychain-password "$KEYCHAIN_PASSWORD"
+            --keychain "$KEYCHAIN_PATH"
           rm -f "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
 
           security default-keychain -s "$KEYCHAIN_PATH"

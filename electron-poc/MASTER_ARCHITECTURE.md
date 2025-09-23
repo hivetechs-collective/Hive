@@ -13852,10 +13852,10 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
 **Prerequisites**
 - Apple Developer Program membership (Team ID `FWBLB27H52`).
 - Downloaded **Developer ID Application** certificate (`developerID_application.cer`) and installed into the *login* keychain alongside its private key.
-- Downloaded Apple trust chain certificates (`AppleWWDRCAG4.cer`, `DeveloperIDG2CA.cer`).
+- Downloaded Apple trust chain certificates (`AppleWWDRCAG3.cer`, `DeveloperIDG2CA.cer`).
 
 **Install & Trust Certificates**
-- Import `DeveloperIDG2CA.cer` and `AppleWWDRCAG4.cer` into the **System** keychain (Keychain Access ▸ File ▸ Import Items…) and set them to **Always Trust**.
+- Import `DeveloperIDG2CA.cer` and `AppleWWDRCAG3.cer` into the **System** keychain (Keychain Access ▸ File ▸ Import Items…) and set them to **Always Trust**.
 - Keep the Developer ID Application cert set to *Always Trust* in the login keychain, with its private key access control allowing `codesign`.
 
 **One-time CLI Setup**
