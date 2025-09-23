@@ -139,6 +139,10 @@ codesign --force --options runtime --timestamp \
   "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
   --sign "$SIGN_ID" "$APP_PATH"
 
+echo "🧪 Verifying code signatures"
+codesign --verify --deep --strict "$APP_PATH"
+codesign -dv --verbose=4 "$APP_PATH" | sed 's/^/    /'
+
 echo "📦 Building notarized DMG"
 
 DMG_DIR=$(dirname "$DMG_PATH")
