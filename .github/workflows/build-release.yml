@@ -226,9 +226,10 @@ jobs:
 
           echo "Available code signing identities:" >&2
           security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
-          SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' '/Developer ID Application/ {print $2; exit}')
+          EXPECTED_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"
+          SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' -v expected="$EXPECTED_ID" '($2 == expected) {print $2}')
           if [[ -z "$SIGN_IDENTITY" ]]; then
-            echo "Developer ID Application identity not found in keychain $KEYCHAIN_PATH" >&2
+            echo "Expected signing identity '$EXPECTED_ID' not found in keychain $KEYCHAIN_PATH" >&2
             exit 1
           fi
           echo "Using signing identity: $SIGN_IDENTITY"
