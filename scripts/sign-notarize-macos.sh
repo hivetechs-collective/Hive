@@ -141,7 +141,11 @@ if ! xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --
     SUBMISSION_ID=$(grep -E '^[[:space:]]*id:' "$SUBMISSION_INFO" | head -n1 | awk '{print $2}' | tr -d '[:space:]')
     if [[ -n "$SUBMISSION_ID" ]]; then
       echo "Fetching notarization log for submission $SUBMISSION_ID"
-      xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$NOTARY_PROFILE" || true
+      NOTARY_LOG=$(mktemp)
+      if xcrun notarytool log "$SUBMISSION_ID" "$NOTARY_LOG" --keychain-profile "$NOTARY_PROFILE" --output-format json; then
+        cat "$NOTARY_LOG"
+      fi
+      rm -f "$NOTARY_LOG"
     fi
   fi
   exit 1
@@ -152,7 +156,11 @@ if grep -Eq '^[[:space:]]*status:[[:space:]]+Invalid' "$SUBMISSION_INFO"; then
   echo "Notarization returned Invalid" >&2
   if [[ -n "$SUBMISSION_ID" ]]; then
     echo "Fetching notarization log for submission $SUBMISSION_ID"
-    xcrun notarytool log "$SUBMISSION_ID" --keychain-profile "$NOTARY_PROFILE" || true
+    NOTARY_LOG=$(mktemp)
+    if xcrun notarytool log "$SUBMISSION_ID" "$NOTARY_LOG" --keychain-profile "$NOTARY_PROFILE" --output-format json; then
+      cat "$NOTARY_LOG"
+    fi
+    rm -f "$NOTARY_LOG"
   fi
   exit 1
 fi
