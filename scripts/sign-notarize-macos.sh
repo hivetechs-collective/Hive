@@ -83,7 +83,6 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
         FRAMEWORK_BASENAME=$(basename "$bundle" .framework)
         FRAMEWORK_VERSION_DIR="$bundle/Versions/A"
         FRAMEWORK_VERSION_BINARY="$FRAMEWORK_VERSION_DIR/$FRAMEWORK_BASENAME"
-        FRAMEWORK_FLAT_BINARY="$bundle/$FRAMEWORK_BASENAME"
 
         if [[ -f "$FRAMEWORK_VERSION_BINARY" ]]; then
           codesign --force --options runtime --timestamp \
@@ -95,10 +94,7 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
             --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
         fi
 
-        if [[ -f "$FRAMEWORK_FLAT_BINARY" && ! -L "$FRAMEWORK_FLAT_BINARY" ]]; then
-          codesign --force --options runtime --timestamp \
-            --sign "$SIGN_ID" "$FRAMEWORK_FLAT_BINARY"
-        fi
+        # For versioned frameworks the top-level binary is a symlink; we skip signing it.
       fi
 
       codesign --force --options runtime --timestamp \
