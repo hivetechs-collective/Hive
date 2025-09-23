@@ -86,6 +86,11 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
           codesign --force --options runtime --timestamp \
             --sign "$SIGN_ID" "$FRAMEWORK_BINARY"
         fi
+        FRAMEWORK_VERSION_DIR="$bundle/Versions/A"
+        if [[ -d "$FRAMEWORK_VERSION_DIR" ]]; then
+          codesign --force --options runtime --timestamp \
+            --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
+        fi
         continue
       fi
       codesign --force --options runtime --timestamp \
