@@ -13932,3 +13932,10 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
 - Capture SHA-256 for release notes: `shasum -a 256 /tmp/Hive-Consensus-signed.dmg`.
 - Publish via the existing CI/CD workflow once notarization reports "Accepted" and Gatekeeper assessments return "Notarized Developer ID".
 - GitHub Actions uses `scripts/sign-notarize-macos.sh` in `build-release.yml`; keep secrets (`APPLE_CERT_P12`, `APPLE_CERT_PASSWORD`, `ASC_API_KEY`, `ASC_KEY_ID`, `ASC_ISSUER_ID`) current so the automated job can import the certificate and submit to notarization.
+- Required GitHub secrets for the build-release workflow:
+  - `APPLE_CERT_P12`: Base64 of the exported Developer ID Application `.p12` (cert + private key).
+  - `APPLE_CERT_PASSWORD`: Export password for the `.p12` bundle.
+  - `ASC_API_KEY`: Base64-encoded App Store Connect API key (`AuthKey_<ID>.p8`).
+  - `ASC_KEY_ID`: App Store Connect Key ID (e.g. `PYR945459Z`).
+  - `ASC_ISSUER_ID`: App Store Connect Issuer ID (e.g. `9a13d40a-4835-47f1-af97-dc9ee8440241`).
+  - `CLOUDFLARE_API_TOKEN`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` remain unchanged for the R2 publish step.
