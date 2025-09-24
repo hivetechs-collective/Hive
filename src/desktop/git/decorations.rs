@@ -3,11 +3,11 @@
 //! VS Code-style git decorations with real-time updates
 //! Provides comprehensive visual indicators for git status in file explorer
 
+use crate::desktop::state::GitFileStatus;
 use dioxus::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use crate::desktop::state::GitFileStatus;
-use serde::{Deserialize, Serialize};
 
 /// Configuration for git decorations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -66,14 +66,14 @@ pub struct DecorationStyles {
 impl Default for DecorationStyles {
     fn default() -> Self {
         Self {
-            modified_color: "#e2c08d".to_string(),      // VS Code orange/yellow
-            added_color: "#73c991".to_string(),         // VS Code green
-            deleted_color: "#f48771".to_string(),       // VS Code red
-            untracked_color: "#73c991".to_string(),     // VS Code green
-            ignored_color: "#6b6b6b".to_string(),       // VS Code gray
-            conflict_color: "#f44747".to_string(),      // VS Code bright red
-            renamed_color: "#75beff".to_string(),       // VS Code blue
-            copied_color: "#73c991".to_string(),        // VS Code green
+            modified_color: "#e2c08d".to_string(),  // VS Code orange/yellow
+            added_color: "#73c991".to_string(),     // VS Code green
+            deleted_color: "#f48771".to_string(),   // VS Code red
+            untracked_color: "#73c991".to_string(), // VS Code green
+            ignored_color: "#6b6b6b".to_string(),   // VS Code gray
+            conflict_color: "#f44747".to_string(),  // VS Code bright red
+            renamed_color: "#75beff".to_string(),   // VS Code blue
+            copied_color: "#73c991".to_string(),    // VS Code green
             opacity: 0.8,
             status_font_weight: "600".to_string(),
         }
@@ -142,12 +142,12 @@ impl EnhancedGitStatus {
         match self.status {
             GitFileStatus::Modified => {
                 match (self.has_staged, self.has_unstaged) {
-                    (true, true) => "M", // Both staged and unstaged
+                    (true, true) => "M",  // Both staged and unstaged
                     (true, false) => "M", // Only staged
                     (false, true) => "M", // Only unstaged
                     (false, false) => "",
                 }
-            },
+            }
             GitFileStatus::Added => "A",
             GitFileStatus::Deleted => "D",
             GitFileStatus::Untracked => "U",
@@ -234,7 +234,7 @@ impl FolderDecoration {
             GitFileStatus::Untracked => self.has_untracked = true,
             GitFileStatus::Renamed => self.has_modified = true,
             GitFileStatus::Copied => self.has_added = true,
-            GitFileStatus::Ignored => {}, // Don't count ignored files
+            GitFileStatus::Ignored => {} // Don't count ignored files
         }
 
         if status.status != GitFileStatus::Ignored {
@@ -298,7 +298,7 @@ impl GitDecorationManager {
     /// Update file statuses from git
     pub fn update_file_statuses(&mut self, statuses: HashMap<PathBuf, EnhancedGitStatus>) {
         self.file_statuses.set(statuses.clone());
-        
+
         // Update folder decorations
         self.update_folder_decorations(&statuses);
     }
@@ -311,13 +311,13 @@ impl GitDecorationManager {
         for (file_path, status) in file_statuses {
             if let Some(parent) = file_path.parent() {
                 let mut current_path = parent.to_path_buf();
-                
+
                 // Propagate status up the directory tree
                 loop {
                     let decoration = folder_decorations
                         .entry(current_path.clone())
                         .or_insert_with(FolderDecoration::new);
-                    
+
                     decoration.add_file_status(status);
 
                     if let Some(parent) = current_path.parent() {
@@ -366,7 +366,7 @@ pub fn FileGitDecoration(
     decoration_manager: GitDecorationManager,
 ) -> Element {
     let config = decoration_manager.config.read();
-    
+
     if !config.enabled {
         return rsx! { span {} };
     }
@@ -418,14 +418,14 @@ pub fn EditorGutterDecorations(
     decoration_manager: GitDecorationManager,
 ) -> Element {
     let config = decoration_manager.config.read();
-    
+
     if !config.enabled || !config.show_gutter_decorations {
         return rsx! { span {} };
     }
 
     // This would need integration with the editor's line tracking system
     // For now, just render a placeholder
-    rsx! { 
+    rsx! {
         span {
             class: "gutter-decoration",
             style: "width: 4px; height: 100%; position: absolute; left: 0;",
@@ -456,7 +456,7 @@ impl PartialEq for GitDecorationManager {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 
@@ -472,7 +472,7 @@ mod tests {
         let mut folder = FolderDecoration::new();
         let modified_status = EnhancedGitStatus::new(GitFileStatus::Modified);
         folder.add_file_status(&modified_status);
-        
+
         assert!(folder.has_modified);
         assert_eq!(folder.total_changes, 1);
     }

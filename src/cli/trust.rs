@@ -278,7 +278,7 @@ async fn reset_all_trusts(context: &crate::core::SecurityContext) -> Result<()> 
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

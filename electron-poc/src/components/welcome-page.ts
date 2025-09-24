@@ -1,0 +1,1265 @@
+import { computeLayout, LayoutMode } from '../utils/welcome-layout';
+import { shouldShowOnStartup } from '../utils/welcome-prefs';
+import { executeCommand } from '../commands';
+
+export class WelcomePage {
+  private container: HTMLElement;
+  private recentItems: Array<{path: string, name: string, type: 'file' | 'folder', lastOpened?: Date}> = [];
+  private hasRestorableSession: boolean = false;
+  private currentLayoutMode: LayoutMode = 'balanced';
+
+  constructor(container: HTMLElement) {
+    this.container = container;
+    this.loadRecentItems();
+  }
+
+  private async loadRecentItems() {
+    // Load recent folders from both structured table and legacy JSON, then merge
+    try {
+      if (!window.databaseAPI) {
+        this.recentItems = [];
+        return;
+      }
+
+      const mergedMap = new Map<string, { path: string; name: string; type: 'file' | 'folder'; lastOpened?: Date }>();
+
+      // Structured: recent_folders table
+      try {
+        const api: any = window.databaseAPI as any;
+        if (api.getRecentFolders) {
+          const rows = await api.getRecentFolders();
+          if (Array.isArray(rows)) {
+            for (const row of rows) {
+              const p = row.folder_path as string;
+              const n = (p || '').split('/').pop() || p;
+              const lo = row.last_opened ? new Date(row.last_opened) : undefined;
+              mergedMap.set(p, { path: p, name: n, type: 'folder', lastOpened: lo });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Welcome] Structured recent folders failed, will merge with legacy:', e);
+      }
+
+      // Legacy JSON: settings key recent.folders
+      try {
+        const recentFoldersJson = await window.databaseAPI.getSetting('recent.folders');
+        if (recentFoldersJson) {
+          const list = JSON.parse(recentFoldersJson);
+          if (Array.isArray(list)) {
+            for (const item of list) {
+              if (!item || !item.path) continue;
+              const p = String(item.path);
+              const n = item.name || p.split('/').pop() || p;
+              const lo = item.lastOpened ? new Date(item.lastOpened) : undefined;
+              const existing = mergedMap.get(p);
+              // Prefer the most recent lastOpened across sources
+              const newer = (!existing?.lastOpened || (lo && lo > (existing.lastOpened as Date))) ? lo : existing?.lastOpened;
+              mergedMap.set(p, { path: p, name: n, type: 'folder', lastOpened: newer });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Welcome] Legacy recent.folders load failed:', e);
+      }
+
+      // Build sorted list by lastOpened desc (undefined at end), limit 20
+      const all = Array.from(mergedMap.values());
+      all.sort((a, b) => {
+        const at = a.lastOpened ? a.lastOpened.getTime() : 0;
+        const bt = b.lastOpened ? b.lastOpened.getTime() : 0;
+        return bt - at;
+      });
+      this.recentItems = all.slice(0, 20);
+    } catch (error) {
+      console.error('Failed to load recent folders:', error);
+      this.recentItems = [];
+    }
+  }
+
+  async render() {
+    // Ensure recents are loaded before rendering UI
+    await this.loadRecentItems();
+    // Add styles
+    const existingStyle = document.getElementById('welcome-page-styles');
+    if (!existingStyle) {
+      const style = document.createElement('style');
+      style.id = 'welcome-page-styles';
+      style.textContent = this.getStyles();
+      document.head.appendChild(style);
+    }
+
+    // Load persisted layout mode before computing layout
+    try {
+      if ((window as any).databaseAPI?.getSetting) {
+        const modeVal = await (window as any).databaseAPI.getSetting('welcome.layoutMode');
+        if (modeVal === 'minimal' || modeVal === 'balanced' || modeVal === 'full') {
+          this.currentLayoutMode = modeVal;
+        }
+      }
+    } catch {}
+
+    // Determine layout based on current mode. Apply layout regardless of recents to make toggle visible
+    const layout = computeLayout(this.currentLayoutMode, true);
+    const startColumnWidth = layout.startWidth;
+    const recentColumnWidth = layout.recentWidth;
+    const learnColumnWidth = layout.learnWidth;
+
+    this.container.innerHTML = `
+      <div class="welcome-page">
+        <div class="welcome-header">
+          <button class="settings-btn" id="welcome-settings-btn" title="Settings">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v6m0 6v6m4.22-13.22l4.24 4.24M1.54 1.54l4.24 4.24M20.46 20.46l-4.24-4.24M1.54 20.46l4.24-4.24M21 12h-6m-6 0H3"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="welcome-columns">
+          <div class="welcome-column start-column" style="width: ${startColumnWidth}">
+            <h2 class="column-title">START</h2>
+            <div class="column-content">
+                <button class="action-item" id="new-project-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14m7-7H5"/>
+                </svg>
+                <span>New Project</span>
+              </button>
+              <button class="action-item" id="clone-repo-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 7h18M3 12h18M3 17h18"/>
+                </svg>
+                <span>Clone Repository</span>
+              </button>
+              <button class="action-item" id="open-terminal-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 17l6-6-6-6"/><path d="M14 19h6"/>
+                </svg>
+                <span>Open Terminal…</span>
+              </button>
+              <button class="action-item" id="open-folder-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                </svg>
+                <span>Open Folder</span>
+              </button>
+              <button class="action-item" id="getting-started-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 19V6l12-3v13M9 12l12-3"/>
+                </svg>
+                <span>Getting Started</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="welcome-column recent-column" style="width: ${recentColumnWidth}">
+            <h2 class="column-title">RECENT</h2>
+            <div class="column-content recent-list">
+              ${this.recentItems.length > 0 ? this.recentItems.map(item => `
+                <button class="recent-item" data-path="${item.path}">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                  </svg>
+                  <div class="recent-item-info">
+                    <span class="recent-item-name">${item.name}</span>
+                    <span class="recent-item-path">${item.path}</span>
+                  </div>
+                </button>
+              `).join('') : `
+                <div class="empty-state">
+                  <p>No recent folders</p>
+                  <p class="empty-hint">Open a folder to get started</p>
+                </div>
+              `}
+              ${this.recentItems.length > 20 ? `
+                <button class="show-all-btn">Show all ${this.recentItems.length} items...</button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="welcome-column learn-column" style="width: ${learnColumnWidth}; ${layout.showLearn ? '' : 'display:none;'}">
+            <h2 class="column-title">LEARN</h2>
+            <div class="column-content">
+              <button class="action-item" id="shortcuts-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="7"/>
+                  <rect x="14" y="3" width="7" height="7"/>
+                  <rect x="14" y="14" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+                <span>Keyboard Shortcuts</span>
+              </button>
+              <button class="action-item" id="workflows-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="16 18 22 12 16 6"/>
+                  <polyline points="8 6 2 12 8 18"/>
+                </svg>
+                <span>AI Workflows</span>
+              </button>
+              <button class="action-item whats-new-btn" id="whats-new-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <span>What's New</span>
+                <span class="badge" id="whats-new-badge" style="display:none"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="welcome-footer">
+          <div class="footer-left">
+            <label class="checkbox-container">
+              <input type="checkbox" id="show-on-startup" checked>
+              <span class="checkbox-label">Show on startup</span>
+            </label>
+          </div>
+          <div class="footer-right">
+            <button class="footer-btn" id="restore-session-btn" style="display:none">Restore Session</button>
+            <button class="footer-btn" id="open-recent-btn">Open Recent ▾</button>
+            <button class="footer-btn" id="show-all-recents-btn">Show All…</button>
+            <button class="footer-btn" id="clear-recents-btn">Clear</button>
+            <button class="footer-btn" id="layout-toggle-btn">Layout: ${this.currentLayoutMode[0].toUpperCase()}${this.currentLayoutMode.slice(1)}</button>
+          </div>
+        </div>
+
+        <!-- Popover for Open Recent -->
+        <div class="recent-popover" id="recent-popover" style="display:none"></div>
+      </div>
+    `;
+
+    this.attachEventListeners();
+    await this.loadPreferences();
+    await this.updateWhatsNewBadge();
+    await this.computeRestoreSessionAvailability();
+    this.updateRestoreButtonVisibility();
+    await this.maybeShowBasicsTourPrompt();
+  }
+
+  private getStyles(): string {
+    return `
+      .welcome-page {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: #1e1e1e;
+        color: #cccccc;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        user-select: none;
+      }
+
+      .welcome-header {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        padding: 15px 20px;
+        border-bottom: 1px solid #2d2d30;
+      }
+
+
+      .settings-btn {
+        background: none;
+        border: none;
+        color: #858585;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+
+      .settings-btn:hover {
+        background: #2d2d30;
+        color: #cccccc;
+      }
+
+      .welcome-columns {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+      }
+
+      .welcome-column {
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        border-right: 1px solid #2d2d30;
+      }
+
+      .welcome-column:last-child {
+        border-right: none;
+      }
+
+      .column-title {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        color: #858585;
+        margin: 0 0 20px 0;
+        text-transform: uppercase;
+      }
+
+      .column-content {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .action-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        background: none;
+        border: none;
+        color: #cccccc;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.2s;
+        text-align: left;
+        font-size: 13px;
+      }
+
+      .action-item:hover {
+        background: #2d2d30;
+      }
+
+      .recent-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        background: none;
+        border: none;
+        color: #cccccc;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.2s;
+        text-align: left;
+        width: 100%;
+      }
+
+      .recent-item:hover {
+        background: #2d2d30;
+      }
+
+      .recent-item-info {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .recent-item-name {
+        font-size: 13px;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .recent-item-path {
+        font-size: 11px;
+        color: #858585;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        color: #858585;
+        text-align: center;
+        padding: 40px 20px;
+      }
+
+      .empty-state p {
+        margin: 5px 0;
+      }
+
+      .empty-hint {
+        font-size: 12px;
+        opacity: 0.7;
+      }
+
+      .show-all-btn {
+        margin-top: 10px;
+        padding: 6px 12px;
+        background: none;
+        border: 1px solid #2d2d30;
+        color: #858585;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 12px;
+        transition: all 0.2s;
+      }
+
+      .show-all-btn:hover {
+        background: #2d2d30;
+        color: #cccccc;
+      }
+
+      .whats-new-btn {
+        position: relative;
+      }
+
+      .badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background: #FFC107;
+        color: #1e1e1e;
+        font-size: 9px;
+        padding: 2px 4px;
+        border-radius: 2px;
+        font-weight: 600;
+      }
+
+      .welcome-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 30px;
+        border-top: 1px solid #2d2d30;
+        background: #252526;
+      }
+      .footer-right {
+        display: flex;
+        gap: 8px;
+      }
+      .footer-btn {
+        background: #2d2d30;
+        border: 1px solid #3a3a3a;
+        color: #ccc;
+        padding: 6px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .footer-btn:hover {
+        background: #38383b;
+      }
+
+      .recent-popover {
+        position: absolute;
+        bottom: 58px;
+        right: 30px;
+        background: #1f1f1f;
+        border: 1px solid #2d2d30;
+        border-radius: 6px;
+        min-width: 360px;
+        max-width: 520px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        z-index: 1000;
+      }
+      .recent-popover ul {
+        list-style: none;
+        margin: 0;
+        padding: 6px 0;
+        max-height: 300px;
+        overflow: auto;
+      }
+      .recent-popover li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .recent-popover li:hover {
+        background: #2d2d30;
+      }
+      .recent-popover .item-main {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+      }
+      .recent-popover .item-name {
+        font-size: 13px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .recent-popover .item-path {
+        font-size: 11px; color: #858585;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .recent-popover .remove-btn {
+        color: #999; border: none; background: transparent; cursor: pointer;
+      }
+
+      /* Drag-and-drop dropzone removed intentionally */
+
+      .checkbox-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #cccccc;
+      }
+
+      .checkbox-container input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 800px) {
+        .welcome-columns {
+          flex-direction: column;
+        }
+        
+        .welcome-column {
+          width: 100% !important;
+          border-right: none;
+          border-bottom: 1px solid #2d2d30;
+        }
+      }
+
+      /* Scrollbar styling */
+      .column-content::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .column-content::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .column-content::-webkit-scrollbar-thumb {
+        background: #424242;
+        border-radius: 5px;
+      }
+
+      .column-content::-webkit-scrollbar-thumb:hover {
+        background: #4a4a4d;
+      }
+    `;
+  }
+
+  private attachEventListeners() {
+    // Settings button
+    const settingsBtn = document.getElementById('welcome-settings-btn');
+    settingsBtn?.addEventListener('click', () => {
+      const event = new CustomEvent('showSettings');
+      window.dispatchEvent(event);
+    });
+
+    // Start column actions
+    document.getElementById('new-project-btn')?.addEventListener('click', () => {
+      this.showNewProjectDialog();
+    });
+
+    document.getElementById('clone-repo-btn')?.addEventListener('click', () => {
+      this.showCloneDialog();
+    });
+
+    document.getElementById('open-folder-btn')?.addEventListener('click', () => {
+      this.openFolder();
+    });
+
+    document.getElementById('open-terminal-btn')?.addEventListener('click', async () => {
+      try {
+        const result = await (window as any).electronAPI.showOpenDialog({ properties: ['openDirectory'] });
+        if (result && !result.canceled && result.filePaths && result.filePaths[0]) {
+          const cwd = result.filePaths[0];
+          // Set current folder context for terminal panel
+          (window as any).currentOpenedFolder = cwd;
+          // Hide welcome and expand terminal panel if available
+          const hideEvt = new CustomEvent('close-welcome');
+          window.dispatchEvent(hideEvt);
+          try { (window as any).expandTTYDTerminal?.(); } catch {}
+          // Prefer creating a terminal tab via TTYD panel so UI shows immediately
+          if ((window as any).isolatedTerminal && (window as any).isolatedTerminal.createTerminalTab) {
+            await (window as any).isolatedTerminal.createTerminalTab();
+          } else {
+            // Fallback: create process directly
+            const id = `term-${Date.now()}`;
+            await (window as any).terminalAPI?.createTerminalProcess?.({ terminalId: id, cwd });
+          }
+        }
+      } catch (e) { console.error('Failed to open terminal:', e); }
+    });
+
+    document.getElementById('getting-started-btn')?.addEventListener('click', () => {
+      this.showGettingStarted();
+    });
+
+    // Recent folders
+    document.querySelectorAll('.recent-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const path = target.dataset.path;
+        if (path) {
+          try { (window as any).databaseAPI?.logWelcomeAction?.('click_recent'); } catch {}
+          this.openRecentFolder(path);
+        }
+      });
+    });
+
+    // Learn column actions
+    document.getElementById('shortcuts-btn')?.addEventListener('click', () => {
+      try { (window as any).databaseAPI?.logWelcomeAction?.('open_shortcuts'); } catch {}
+      this.showShortcuts();
+    });
+
+    document.getElementById('workflows-btn')?.addEventListener('click', () => {
+      try { (window as any).databaseAPI?.logWelcomeAction?.('open_workflows'); } catch {}
+      this.showWorkflows();
+    });
+
+    document.getElementById('whats-new-btn')?.addEventListener('click', () => {
+      try { (window as any).databaseAPI?.logWelcomeAction?.('open_whats_new'); } catch {}
+      this.showWhatsNew();
+      // Mark current version as seen to clear badge
+      (async () => {
+        try {
+          const version = await (window as any).electronAPI?.getVersion?.();
+          if (version && (window as any).databaseAPI?.setSetting) {
+            await (window as any).databaseAPI.setSetting('welcome.lastSeenVersion', version);
+          }
+          await this.updateWhatsNewBadge();
+        } catch {}
+      })();
+    });
+
+    // Footer checkbox only
+
+    // Show on startup checkbox
+    const checkbox = document.getElementById('show-on-startup') as HTMLInputElement;
+    checkbox?.addEventListener('change', async (e) => {
+      const target = e.target as HTMLInputElement;
+      await this.savePreference(target.checked);
+    });
+
+    // Open Recent popover
+    const openRecentBtn = document.getElementById('open-recent-btn');
+    const popover = document.getElementById('recent-popover');
+    openRecentBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!popover) return;
+      if (popover.style.display === 'none' || !popover.style.display) {
+        this.renderRecentPopover();
+        popover.style.display = 'block';
+      } else {
+        popover.style.display = 'none';
+      }
+    });
+    // Hide popover when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!popover) return;
+      const target = e.target as HTMLElement;
+      if (popover.style.display === 'block' && !popover.contains(target) && target.id !== 'open-recent-btn') {
+        popover.style.display = 'none';
+      }
+    });
+
+    // Show All recents modal
+    document.getElementById('show-all-recents-btn')?.addEventListener('click', () => {
+      try { (window as any).databaseAPI?.logWelcomeAction?.('open_recents_modal'); } catch {}
+      this.showAllRecentsModal();
+    });
+
+    // Clear recents
+    document.getElementById('clear-recents-btn')?.addEventListener('click', async () => {
+      try {
+        if ((window as any).databaseAPI?.clearRecentFolders) {
+          await (window as any).databaseAPI.clearRecentFolders();
+        }
+        this.recentItems = [];
+        this.render();
+        try { (window as any).databaseAPI?.logWelcomeAction?.('clear_recents'); } catch {}
+      } catch (err) {
+        console.error('Failed to clear recent folders:', err);
+      }
+    });
+
+    // Restore last session (most recent folder)
+    document.getElementById('restore-session-btn')?.addEventListener('click', () => {
+      if (this.recentItems.length > 0) {
+        const p = this.recentItems[0].path;
+        try { (window as any).databaseAPI?.logWelcomeAction?.('restore_session'); } catch {}
+        this.openRecentFolder(p);
+      }
+    });
+
+    // Toggle layout mode
+    document.getElementById('layout-toggle-btn')?.addEventListener('click', async () => {
+      const next = this.nextLayoutMode(this.currentLayoutMode);
+      this.currentLayoutMode = next;
+      try {
+        await (window as any).databaseAPI?.setSetting('welcome.layoutMode', next);
+        (window as any).databaseAPI?.logWelcomeAction?.(`layout_toggle_${next}`);
+      } catch {}
+      // Re-render welcome to apply new widths/visibility
+      this.render();
+    });
+  }
+
+  private nextLayoutMode(m: LayoutMode): LayoutMode {
+    if (m === 'minimal') return 'balanced';
+    if (m === 'balanced') return 'full';
+    return 'minimal';
+  }
+
+  private renderRecentPopover() {
+    const pop = document.getElementById('recent-popover');
+    if (!pop) return;
+    const items = this.recentItems.slice(0, 10);
+    if (items.length === 0) {
+      pop.innerHTML = '<div style="padding:10px;color:#858585">No recent folders</div>';
+      return;
+    }
+    const list = items.map(item => `
+      <li data-path="${item.path}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+        </svg>
+        <div class="item-main">
+          <div class="item-name">${item.name}</div>
+          <div class="item-path">${item.path}</div>
+        </div>
+        <button class="remove-btn" title="Remove" data-remove="${item.path}">✕</button>
+      </li>
+    `).join('');
+    pop.innerHTML = `<ul>${list}</ul>`;
+    // Wire clicks
+    pop.querySelectorAll('li').forEach(li => {
+      li.addEventListener('click', (e) => {
+        const path = (e.currentTarget as HTMLElement).dataset.path;
+        if (!path) return;
+        this.openRecentFolder(path);
+        pop.style.display = 'none';
+      });
+    });
+    pop.querySelectorAll('button[data-remove]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const path = (e.currentTarget as HTMLElement).getAttribute('data-remove');
+        if (!path) return;
+        try {
+          if ((window as any).databaseAPI?.removeRecentFolder) {
+            await (window as any).databaseAPI.removeRecentFolder(path);
+          }
+          this.recentItems = this.recentItems.filter(i => i.path !== path);
+          this.renderRecentPopover();
+        } catch (err) {
+          console.error('Failed to remove recent folder:', err);
+        }
+      });
+    });
+  }
+
+  private showAllRecentsModal() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.zIndex = '2000';
+
+    const modal = document.createElement('div');
+    modal.style.width = '700px';
+    modal.style.maxHeight = '70vh';
+    modal.style.overflow = 'auto';
+    modal.style.background = '#1f1f1f';
+    modal.style.border = '1px solid #2d2d30';
+    modal.style.borderRadius = '8px';
+    modal.style.margin = '10vh auto';
+    modal.style.padding = '16px';
+
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.innerHTML = `
+      <div style="font-weight:600">All Recent Folders</div>
+      <input id="recent-search" placeholder="Search…" style="background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;width: 260px;" />
+    `;
+
+    const list = document.createElement('div');
+    const renderList = (q: string = '') => {
+      const ql = q.toLowerCase();
+      const items = this.recentItems.filter(i => i.name.toLowerCase().includes(ql) || i.path.toLowerCase().includes(ql));
+      list.innerHTML = items.map(i => `
+        <div class="recent-row" data-path="${i.path}" style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid #2d2d30;cursor:pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          <div style="flex:1; min-width:0">
+            <div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.name}</div>
+            <div style="font-size:11px;color:#858585;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.path}</div>
+          </div>
+          <button class="footer-btn" data-open="${i.path}">Open</button>
+          <button class="footer-btn" data-terminal="${i.path}">Terminal</button>
+          <button class="footer-btn" data-remove="${i.path}">Remove</button>
+        </div>
+      `).join('');
+      list.querySelectorAll('button[data-open]').forEach(btn => btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const p = (e.currentTarget as HTMLElement).getAttribute('data-open');
+        if (p) this.openRecentFolder(p);
+        document.body.removeChild(overlay);
+      }));
+      list.querySelectorAll('button[data-terminal]').forEach(btn => btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const p = (e.currentTarget as HTMLElement).getAttribute('data-terminal');
+        if (!p) return;
+        try {
+          // Set context and show terminal panel
+          (window as any).currentOpenedFolder = p;
+          try { (window as any).expandTTYDTerminal?.(); } catch {}
+          if ((window as any).isolatedTerminal?.createTerminalTab) {
+            await (window as any).isolatedTerminal.createTerminalTab();
+          } else {
+            const id = `term-${Date.now()}`;
+            await (window as any).terminalAPI?.createTerminalProcess?.({ terminalId: id, cwd: p, command: undefined });
+          }
+        } catch (err) { console.error('Failed to open terminal:', err); }
+      }));
+
+      list.querySelectorAll('button[data-remove]').forEach(btn => btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const p = (e.currentTarget as HTMLElement).getAttribute('data-remove');
+        if (!p) return;
+        try {
+          if ((window as any).databaseAPI?.removeRecentFolder) {
+            await (window as any).databaseAPI.removeRecentFolder(p);
+          }
+          this.recentItems = this.recentItems.filter(i => i.path !== p);
+          renderList((document.getElementById('recent-search') as HTMLInputElement)?.value || '');
+        } catch (err) { console.error(err); }
+      }));
+      list.querySelectorAll('.recent-row').forEach(row => row.addEventListener('click', (e) => {
+        const p = (e.currentTarget as HTMLElement).getAttribute('data-path');
+        if (p) this.openRecentFolder(p);
+        document.body.removeChild(overlay);
+      }));
+    };
+
+    modal.appendChild(header);
+    modal.appendChild(list);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    (document.getElementById('recent-search') as HTMLInputElement)?.addEventListener('input', (e) => {
+      renderList((e.target as HTMLInputElement).value);
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) document.body.removeChild(overlay);
+    });
+
+    renderList('');
+  }
+
+  private async loadPreferences() {
+    try {
+      if (window.databaseAPI) {
+        const value = await window.databaseAPI.getSetting('welcome.showOnStartup');
+        const showOnStartup = shouldShowOnStartup(value as any);
+        const checkbox = this.container.querySelector('#show-on-startup') as HTMLInputElement;
+        if (checkbox) checkbox.checked = showOnStartup;
+        // Load layout mode preference
+        const modeVal = await window.databaseAPI.getSetting('welcome.layoutMode');
+        const m = (modeVal as any) as string | null;
+        if (m === 'minimal' || m === 'balanced' || m === 'full') {
+          this.currentLayoutMode = m;
+        } else {
+          this.currentLayoutMode = 'balanced';
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load welcome preferences:', error);
+      const checkbox = this.container.querySelector('#show-on-startup') as HTMLInputElement;
+      if (checkbox) checkbox.checked = true;
+      this.currentLayoutMode = 'balanced';
+    }
+  }
+
+  private async savePreference(showOnStartup: boolean): Promise<void> {
+    try {
+      if (window.databaseAPI) {
+        await window.databaseAPI.setSetting(
+          'welcome.showOnStartup',
+          showOnStartup ? '1' : '0'
+        );
+        console.log('Welcome preference saved:', showOnStartup);
+      }
+    } catch (error) {
+      console.error('Failed to save welcome preference:', error);
+    }
+  }
+
+  private async updateWhatsNewBadge() {
+    try {
+      const version = await (window as any).electronAPI?.getVersion?.();
+      if (!version) return;
+      const lastSeen = await window.databaseAPI.getSetting('welcome.lastSeenVersion');
+      const badge = document.getElementById('whats-new-badge') as HTMLElement;
+      if (!badge) return;
+      if (lastSeen !== version) {
+        badge.textContent = `v${version}`;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (e) {
+      // On error, hide badge
+      const badge = document.getElementById('whats-new-badge') as HTMLElement;
+      if (badge) badge.style.display = 'none';
+    }
+  }
+
+  private async computeRestoreSessionAvailability() {
+    try {
+      if (this.recentItems.length > 0 && (window as any).databaseAPI?.loadSession) {
+        const first = this.recentItems[0].path;
+        const session = await (window as any).databaseAPI.loadSession(first);
+        this.hasRestorableSession = !!(session && session.tabs && session.tabs.length > 0);
+      } else {
+        this.hasRestorableSession = false;
+      }
+    } catch {
+      this.hasRestorableSession = false;
+    }
+  }
+
+  private createNewProject() {
+    console.log('Creating new project...');
+    // Guided flow with minimal prompts + optional template scaffold
+    (async () => {
+      try {
+        const name = await (window as any).electronAPI.showInputDialog('New Project', 'Enter project name:');
+        if (!name) return;
+        const template = await (window as any).electronAPI.showInputDialog('Project Template', 'Enter template (node|python|rust|empty):');
+        const tpl = ((template || 'empty').trim().toLowerCase()) as any;
+        const destSel = await (window as any).electronAPI.showOpenDialog({
+          properties: ['openDirectory', 'createDirectory'],
+          title: 'Select location for project'
+        });
+        if (destSel.canceled || destSel.filePaths.length === 0) return;
+        const parent = destSel.filePaths[0];
+        const projectPath = `${parent}/${name}`;
+        
+        const exists = await (window as any).fileAPI.fileExists(projectPath);
+        if (!exists) {
+          await (window as any).fileAPI.createFolder(parent, name);
+        }
+        
+        // Scaffold using shared helper
+        try {
+          const { getScaffoldFiles } = await import('../utils/template-scaffold');
+          const files = getScaffoldFiles(tpl, name);
+          for (const f of files) {
+            if (f.isDir) {
+              await (window as any).fileAPI.createFolder(projectPath, f.path.replace(/\/$/, ''));
+            } else if (typeof f.content === 'string') {
+              const full = `${projectPath}/${f.path}`;
+              const dir = full.split('/').slice(0, -1).join('/');
+              if (dir) {
+                const existsDir = await (window as any).fileAPI.fileExists(dir);
+                if (!existsDir) {
+                  // Best-effort: create intermediate folder one level deep if needed
+                  const parentDir = dir.split('/').slice(0, -1).join('/');
+                  const folderName = dir.split('/').pop();
+                  if (parentDir && folderName) await (window as any).fileAPI.createFolder(parentDir, folderName);
+                }
+              }
+              await (window as any).fileAPI.writeFile(full, f.content);
+            }
+          }
+        } catch (e) {
+          console.warn('[Welcome] Template scaffold failed:', e);
+        }
+
+        try { await (window as any).gitAPI.initRepo(projectPath); } catch {}
+        
+        this.openRecentFolder(projectPath);
+      } catch (e) {
+        console.error('New project flow failed:', e);
+      }
+    })();
+  }
+
+  private async showNewProjectDialog() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '2200';
+    const modal = document.createElement('div');
+    modal.style.width = '640px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '12vh auto'; modal.style.padding = '16px';
+    modal.innerHTML = `
+      <div style="font-weight:600; margin-bottom:8px">Create New Project</div>
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px;">
+        <button class="footer-btn tpl" data-tpl="node">Node</button>
+        <button class="footer-btn tpl" data-tpl="python">Python</button>
+        <button class="footer-btn tpl" data-tpl="rust">Rust</button>
+        <button class="footer-btn tpl" data-tpl="empty">Empty</button>
+      </div>
+      <input id="np-name" placeholder="Project name" style="width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px" />
+      <div style="display:flex; gap:8px; margin-bottom:8px">
+        <input id="np-dir" placeholder="Choose location..." style="flex:1;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
+        <button id="np-choose" class="footer-btn">Choose…</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px; margin-bottom:12px"><input id="np-git" type="checkbox" checked /> Initialize Git</label>
+      <div style="display:flex; gap:8px; justify-content:flex-end">
+        <button id="np-cancel" class="footer-btn">Cancel</button>
+        <button id="np-create" class="footer-btn">Create</button>
+      </div>
+    `;
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    let selectedTpl: 'node'|'python'|'rust'|'empty' = 'empty';
+    modal.querySelectorAll('.tpl').forEach(btn => btn.addEventListener('click', (e) => {
+      modal.querySelectorAll('.tpl').forEach(b => (b as HTMLElement).style.background = '#2d2d30');
+      const el = e.currentTarget as HTMLElement; el.style.background = '#38383b';
+      selectedTpl = el.getAttribute('data-tpl') as any;
+    }));
+    (modal.querySelector('#np-choose') as HTMLElement).addEventListener('click', async () => {
+      const res = await (window as any).electronAPI?.showOpenDialog?.({ properties: ['openDirectory', 'createDirectory'] });
+      if (res && !res.canceled && res.filePaths && res.filePaths[0]) {
+        (modal.querySelector('#np-dir') as HTMLInputElement).value = res.filePaths[0];
+      }
+    });
+    (modal.querySelector('#np-cancel') as HTMLElement).addEventListener('click', () => document.body.removeChild(overlay));
+    (modal.querySelector('#np-create') as HTMLElement).addEventListener('click', async () => {
+      try {
+        const name = (modal.querySelector('#np-name') as HTMLInputElement).value.trim();
+        const parent = (modal.querySelector('#np-dir') as HTMLInputElement).value.trim();
+        const doGit = (modal.querySelector('#np-git') as HTMLInputElement).checked;
+        if (!name || !parent) {
+          await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'New Project', message: 'Please enter a name and choose a location.' });
+          return;
+        }
+        const projectPath = `${parent.replace(/\/$/, '')}/${name}`;
+        const exists = await (window as any).fileAPI.fileExists(projectPath);
+        if (!exists) await (window as any).fileAPI.createFolder(parent, name);
+        try {
+          const { getScaffoldFiles } = await import('../utils/template-scaffold');
+          const files = getScaffoldFiles(selectedTpl, name);
+          for (const f of files) {
+            if (f.isDir) {
+              await (window as any).fileAPI.createFolder(projectPath, f.path.replace(/\/$/, ''));
+            } else if (typeof f.content === 'string') {
+              const full = `${projectPath}/${f.path}`;
+              const dir = full.split('/').slice(0, -1).join('/');
+              const dirExists = await (window as any).fileAPI.fileExists(dir);
+              if (!dirExists) {
+                const parentDir = dir.split('/').slice(0, -1).join('/');
+                const folderName = dir.split('/').pop();
+                if (parentDir && folderName) await (window as any).fileAPI.createFolder(parentDir, folderName);
+              }
+              await (window as any).fileAPI.writeFile(full, f.content);
+            }
+          }
+        } catch (e) { console.warn('[Welcome] Template scaffold failed:', e); }
+        if (doGit) { try { await (window as any).gitAPI.initRepo(projectPath); } catch {} }
+        try { (window as any).databaseAPI?.logWelcomeAction?.(`create_template_${selectedTpl}`); } catch {}
+        document.body.removeChild(overlay);
+        this.openRecentFolder(projectPath);
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'New Project', message: String(e) });
+      }
+    });
+  }
+
+  private showGettingStarted() {
+    console.log('Showing getting started guide...');
+    void executeCommand('view.help.open', {
+      section: 'getting-started',
+      forceFocus: true,
+    });
+  }
+
+  private async openFolder() {
+    console.log('Open folder...');
+    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
+    if (typeof (window as any).openFolder === 'function') {
+      await (window as any).openFolder();
+      return;
+    }
+    const event = new CustomEvent('showExplorerWithDialog');
+    window.dispatchEvent(event);
+  }
+
+  private openRecentFolder(path: string) {
+    console.log(`Opening folder: ${path}`);
+    try { window.dispatchEvent(new CustomEvent('close-welcome')); } catch {}
+    if (typeof (window as any).openFolder === 'function') {
+      (window as any).openFolder(path);
+      return;
+    }
+    const event = new CustomEvent('openFolderInExplorer', { detail: { path } });
+    window.dispatchEvent(event);
+  }
+
+  private showShortcuts() {
+    // Lightweight in-app shortcuts modal
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.zIndex = '2000';
+
+    const modal = document.createElement('div');
+    modal.style.width = '560px';
+    modal.style.background = '#1f1f1f';
+    modal.style.border = '1px solid #2d2d30';
+    modal.style.borderRadius = '8px';
+    modal.style.margin = '15vh auto';
+    modal.style.padding = '16px';
+    modal.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:600">Keyboard Shortcuts</div>
+        <button class="footer-btn" id="shortcuts-open-docs">Open Full Cheatsheet</button>
+      </div>
+      <div style="display:grid;grid-template-columns: 1fr auto;gap:6px 16px">
+        <div>Open Folder</div><div>Cmd/Ctrl+O</div>
+        <div>Show Welcome</div><div>Cmd/Ctrl+Shift+W</div>
+        <div>Go to File</div><div>Cmd/Ctrl+P</div>
+        <div>Go to Line</div><div>Cmd/Ctrl+G</div>
+        <div>Toggle Terminal</div><div>Cmd/Ctrl+&#96;</div>
+        <div>Save</div><div>Cmd/Ctrl+S</div>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
+    document.getElementById('shortcuts-open-docs')?.addEventListener('click', () => {
+      const event = new CustomEvent('showDocumentation', { detail: { section: 'shortcuts' } });
+      window.dispatchEvent(event);
+      document.body.removeChild(overlay);
+    });
+  }
+
+  private showWorkflows() {
+    // Open Help panel to the AI Workflows section
+    void executeCommand('view.help.open', {
+      section: 'ai-workflows',
+      forceFocus: true,
+    });
+  }
+
+  private showWhatsNew() {
+    // Open Help panel to the What's New section
+    void executeCommand('view.help.open', {
+      section: 'whats-new',
+      forceFocus: true,
+    });
+  }
+  
+  private async showCloneDialog() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.5)'; overlay.style.zIndex = '2000';
+    const modal = document.createElement('div');
+    modal.style.width = '560px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '12vh auto'; modal.style.padding = '16px';
+    modal.innerHTML = `
+      <div style="font-weight:600; margin-bottom:8px">Clone Repository</div>
+      <div style=\"display:flex; gap:8px; margin-bottom:8px\">
+        <button class=\"footer-btn\" id=\"tab-url\">URL</button>
+        <button class=\"footer-btn\" id=\"tab-github\">GitHub</button>
+        <button class=\"footer-btn\" id=\"tab-gitlab\">GitLab</button>
+      </div>
+      <div id="pane-url">
+        <input id="clone-url" placeholder="https://github.com/org/repo(.git) or git@github.com:org/repo(.git)" style="width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px" />
+      </div>
+      <div id=\"pane-github\" style=\"display:none\">
+        <div style=\"display:flex; gap:8px\">
+          <input id=\"gh-owner\" placeholder=\"owner\" style=\"flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px\" />
+          <input id=\"gh-repo\" placeholder=\"repo\" style=\"flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px\" />
+        </div>
+      </div>
+      <div id=\"pane-gitlab\" style=\"display:none\">
+        <div style=\"display:flex; gap:8px\">
+          <input id=\"gl-group\" placeholder=\"group\" style=\"flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px\" />
+          <input id=\"gl-repo\" placeholder=\"repo\" style=\"flex:1; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px\" />
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px">
+        <button class="footer-btn" id="clone-cancel">Cancel</button>
+        <button class="footer-btn" id="clone-confirm">Clone…</button>
+      </div>
+    `;
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    const byId = (id: string) => modal.querySelector(`#${id}`) as HTMLElement;
+    const paneUrl = byId('pane-url') as HTMLElement; const paneGh = byId('pane-github') as HTMLElement; const paneGl = byId('pane-gitlab') as HTMLElement;
+    byId('tab-url').addEventListener('click', () => { paneUrl.style.display = 'block'; paneGh.style.display = 'none'; paneGl.style.display = 'none'; });
+    byId('tab-github').addEventListener('click', () => { paneUrl.style.display = 'none'; paneGh.style.display = 'block'; paneGl.style.display = 'none'; });
+    byId('tab-gitlab').addEventListener('click', () => { paneUrl.style.display = 'none'; paneGh.style.display = 'none'; paneGl.style.display = 'block'; });
+    byId('clone-cancel').addEventListener('click', () => document.body.removeChild(overlay));
+    byId('clone-confirm').addEventListener('click', async () => {
+      try {
+        let url = (modal.querySelector('#clone-url') as HTMLInputElement)?.value?.trim();
+        if (paneGh.style.display !== 'none') {
+          const owner = (modal.querySelector('#gh-owner') as HTMLInputElement)?.value?.trim();
+          const repo = (modal.querySelector('#gh-repo') as HTMLInputElement)?.value?.trim();
+          if (owner && repo) url = `https://github.com/${owner}/${repo}.git`;
+        } else if (paneGl.style.display !== 'none') {
+          const group = (modal.querySelector('#gl-group') as HTMLInputElement)?.value?.trim();
+          const repo = (modal.querySelector('#gl-repo') as HTMLInputElement)?.value?.trim();
+          if (group && repo) url = `https://gitlab.com/${group}/${repo}.git`;
+        }
+        const { isValidRepoUrl } = await import('../utils/clone-validate');
+        if (!isValidRepoUrl(url)) { await (window as any).electronAPI.showMessageBox({ type: 'error', title: 'Invalid URL', message: 'Please enter a valid Git repository URL.' }); return; }
+        const result = await (window as any).electronAPI.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Select destination' });
+        if (result.canceled || result.filePaths.length === 0) return;
+        const parentDir = result.filePaths[0];
+        const notice = document.createElement('div'); notice.className = 'status-toast cloning'; notice.textContent = 'Cloning repository...'; document.body.appendChild(notice);
+        try {
+          const cloneResult = await (window as any).gitAPI.clone(url, parentDir);
+          notice.remove();
+          if (!cloneResult || !cloneResult.success) {
+            try { (window as any).databaseAPI?.logWelcomeAction?.('clone_fail'); } catch {}
+            await (window as any).electronAPI.showMessageBox({ type: 'error', title: 'Clone Failed', message: cloneResult?.error || 'Clone failed' });
+            return;
+          }
+          const destPath = cloneResult.destination;
+          try { (window as any).databaseAPI?.logWelcomeAction?.('clone_success'); } catch {}
+          this.openRecentFolder(destPath);
+          document.body.removeChild(overlay);
+        } catch (e) { notice.remove(); throw e; }
+      } catch (e) { console.error('Clone dialog error:', e); }
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
+  }
+  
+  // Drag-and-drop to open folders removed by design
+
+  private updateRestoreButtonVisibility() {
+    const btn = document.getElementById('restore-session-btn') as HTMLElement;
+    if (!btn) return;
+    btn.style.display = this.hasRestorableSession ? 'inline-block' : 'none';
+  }
+
+  private async maybeShowBasicsTourPrompt() {
+    try {
+      const seen = await window.databaseAPI.getSetting('welcome.tourSeen');
+      if (seen === '1') return;
+    } catch {}
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '1500';
+    const modal = document.createElement('div');
+    modal.style.width = '520px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '18vh auto'; modal.style.padding = '16px';
+    modal.innerHTML = `
+      <div style="font-weight:600; margin-bottom:4px">Welcome to Hive Consensus</div>
+      <div style="color:#bcbcbc; margin-bottom:12px">Quick tour of basics? You can always find docs later under Help.</div>
+      <div style="display:flex; gap:8px; justify-content:flex-end">
+        <button class="footer-btn" id="tour-skip">Skip</button>
+        <button class="footer-btn" id="tour-start">Start Tour</button>
+      </div>
+    `;
+    overlay.appendChild(modal); document.body.appendChild(overlay);
+    const done = async () => { try { await window.databaseAPI.setSetting('welcome.tourSeen', '1'); } catch {}; document.body.removeChild(overlay); };
+    (modal.querySelector('#tour-skip') as HTMLElement)?.addEventListener('click', done);
+    (modal.querySelector('#tour-start') as HTMLElement)?.addEventListener('click', () => {
+      const event = new CustomEvent('showDocumentation', { detail: { section: 'getting-started' } });
+      window.dispatchEvent(event);
+      done();
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) done(); });
+  }
+}

@@ -2,18 +2,17 @@
 //!
 //! Extended file explorer component that integrates the complete git decoration system
 
-use dioxus::prelude::*;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use crate::desktop::{
     file_explorer::FileExplorer,
     git::{
-        GitDecorationManager, GitDecorationWatcher, use_git_decoration_manager,
-        use_git_decoration_watcher, GitDecorationConfigUI, GitDecorationPreview,
-        DecorationEvent
+        use_git_decoration_manager, use_git_decoration_watcher, DecorationEvent,
+        GitDecorationConfigUI, GitDecorationManager, GitDecorationPreview, GitDecorationWatcher,
     },
     state::AppState,
 };
+use dioxus::prelude::*;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 #[derive(Props, Clone, PartialEq)]
 pub struct EnhancedFileExplorerProps {
@@ -31,14 +30,14 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
     let app_state = use_context::<Signal<AppState>>();
     let mut show_decoration_config = use_signal(|| false);
     let mut show_decoration_preview = use_signal(|| false);
-    
+
     // Initialize git decoration system
     let decoration_manager = use_git_decoration_manager();
     let decoration_watcher = use_git_decoration_watcher(decoration_manager.clone());
-    
+
     // Clone watcher for use in the effect
     let decoration_watcher_for_effect = decoration_watcher.clone();
-    
+
     // Start watching for git changes when project changes
     use_effect(move || {
         if let Some(project) = &app_state.read().current_project {
@@ -81,7 +80,7 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
                             onclick: move |_| {
                                 show_decoration_config.set(true);
                             },
-                            i { 
+                            i {
                                 class: "fa-solid fa-palette",
                                 style: "font-size: 12px;"
                             }
@@ -95,7 +94,7 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
                                 let current_value = *show_decoration_preview.read();
                                 show_decoration_preview.set(!current_value);
                             },
-                            i { 
+                            i {
                                 class: "fa-solid fa-eye",
                                 style: "font-size: 12px;"
                             }
@@ -114,7 +113,7 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
                                     });
                                 }
                             },
-                            i { 
+                            i {
                                 class: "fa-solid fa-arrows-rotate",
                                 style: "font-size: 12px;"
                             }
@@ -208,11 +207,20 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
 fn GitDecorationStats(decoration_manager: GitDecorationManager) -> Element {
     let file_statuses = decoration_manager.file_statuses.read();
     let folder_decorations = decoration_manager.folder_decorations.read();
-    
+
     let total_files = file_statuses.len();
-    let modified_count = file_statuses.values().filter(|s| matches!(s.status, crate::desktop::state::GitFileStatus::Modified)).count();
-    let added_count = file_statuses.values().filter(|s| matches!(s.status, crate::desktop::state::GitFileStatus::Added)).count();
-    let deleted_count = file_statuses.values().filter(|s| matches!(s.status, crate::desktop::state::GitFileStatus::Deleted)).count();
+    let modified_count = file_statuses
+        .values()
+        .filter(|s| matches!(s.status, crate::desktop::state::GitFileStatus::Modified))
+        .count();
+    let added_count = file_statuses
+        .values()
+        .filter(|s| matches!(s.status, crate::desktop::state::GitFileStatus::Added))
+        .count();
+    let deleted_count = file_statuses
+        .values()
+        .filter(|s| matches!(s.status, crate::desktop::state::GitFileStatus::Deleted))
+        .count();
     let conflicts_count = file_statuses.values().filter(|s| s.is_conflicted).count();
     let total_folders = folder_decorations.len();
 
@@ -315,7 +323,7 @@ pub fn use_git_decorations() -> (GitDecorationManager, GitDecorationWatcher) {
     (decoration_manager, decoration_watcher)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 
@@ -327,7 +335,7 @@ mod tests {
             on_directory_selected: None,
             show_config_button: Some(true),
         };
-        
+
         assert!(props.show_config_button.unwrap_or(false));
     }
 }

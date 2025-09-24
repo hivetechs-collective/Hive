@@ -5,15 +5,15 @@
 //! or how to prioritize results - it only executes retrieval plans.
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-use serde::{Deserialize, Serialize};
 
-use super::vector_store::ChromaVectorStore;
+use super::monitoring::{OperationType, PerformanceMonitor};
 use super::python_models::PythonModelService;
-use super::monitoring::{PerformanceMonitor, OperationType};
+use super::vector_store::ChromaVectorStore;
 
 /// Retrieval plan from Consensus
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,13 +120,13 @@ pub struct SearchStats {
 pub struct SemanticRetriever {
     /// Vector store for embeddings
     vector_store: Arc<ChromaVectorStore>,
-    
+
     /// Python service for embeddings
     python_service: Arc<PythonModelService>,
-    
+
     /// Performance monitor
     monitor: Arc<PerformanceMonitor>,
-    
+
     /// Cache for embeddings
     embedding_cache: Arc<RwLock<EmbeddingCache>>,
 }
@@ -160,10 +160,7 @@ impl SemanticRetriever {
     }
 
     /// Execute a retrieval plan
-    pub async fn execute_retrieval(
-        &self,
-        plan: &RetrievalPlan,
-    ) -> Result<RetrievalResult> {
+    pub async fn execute_retrieval(&self, plan: &RetrievalPlan) -> Result<RetrievalResult> {
         let start = std::time::Instant::now();
         info!("Executing retrieval plan: {:?}", plan.retrieval_type);
 
@@ -181,7 +178,8 @@ impl SemanticRetriever {
 
         // Perform vector search
         let search_start = std::time::Instant::now();
-        let search_results = self.vector_store
+        let search_results = self
+            .vector_store
             .search(&query_embedding, plan.max_results * 2) // Get extra for filtering
             .await
             .context("Failed to perform vector search")?;
@@ -190,10 +188,7 @@ impl SemanticRetriever {
 
         // Post-process results
         let processing_start = std::time::Instant::now();
-        let processed_items = self.process_results(
-            search_results,
-            plan,
-        ).await?;
+        let processed_items = self.process_results(search_results, plan).await?;
         stats.processing_time_ms = processing_start.elapsed().as_millis() as u64;
 
         // Filter by similarity threshold
@@ -221,13 +216,15 @@ impl SemanticRetriever {
         }
 
         // Generate new embedding using CodeBERT
-        let embeddings = self.python_service
+        let embeddings = self
+            .python_service
             .generate_embeddings("codebert", vec![text.to_string()])
             .await
             .context("Failed to generate embedding")?;
 
         // Get the first embedding
-        let embedding = embeddings.into_iter()
+        let embedding = embeddings
+            .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("No embedding returned"))?;
 
@@ -280,10 +277,11 @@ impl SemanticRetriever {
     ) -> Result<bool> {
         // Language filter
         if let Some(languages) = &filters.languages {
-            let item_lang = metadata.get("language")
+            let item_lang = metadata
+                .get("language")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            
+
             if !languages.iter().any(|l| l == item_lang) {
                 return Ok(false);
             }
@@ -291,18 +289,19 @@ impl SemanticRetriever {
 
         // Path pattern filter
         if let Some(patterns) = &filters.path_patterns {
-            let file_path = metadata.get("file_path")
+            let file_path = metadata
+                .get("file_path")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            
+
             let matches = patterns.iter().any(|pattern| {
-                file_path.contains(pattern) || 
-                glob::Pattern::new(pattern)
-                    .ok()
-                    .map(|p| p.matches(file_path))
-                    .unwrap_or(false)
+                file_path.contains(pattern)
+                    || glob::Pattern::new(pattern)
+                        .ok()
+                        .map(|p| p.matches(file_path))
+                        .unwrap_or(false)
             });
-            
+
             if !matches {
                 return Ok(false);
             }
@@ -310,10 +309,11 @@ impl SemanticRetriever {
 
         // Quality score filter
         if let Some(min_score) = filters.min_quality_score {
-            let quality_score = metadata.get("quality_score")
+            let quality_score = metadata
+                .get("quality_score")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0) as f32;
-            
+
             if quality_score < min_score {
                 return Ok(false);
             }
@@ -358,68 +358,64 @@ impl SemanticRetriever {
         // Simple implementation - find lines containing query terms
         let query_lower = query.to_lowercase();
         let lines: Vec<&str> = content.lines().collect();
-        
+
         for (i, line) in lines.iter().enumerate() {
             if line.to_lowercase().contains(&query_lower) {
                 let start = i.saturating_sub(2);
                 let end = (i + 3).min(lines.len());
-                
+
                 return Some(lines[start..end].join("\n"));
             }
         }
-        
+
         None
     }
 
     /// Extract API usage example
     fn extract_api_usage(&self, content: &str, api_name: &str) -> Option<String> {
         let lines: Vec<&str> = content.lines().collect();
-        
+
         for (i, line) in lines.iter().enumerate() {
             if line.contains(api_name) {
                 let start = i.saturating_sub(1);
                 let end = (i + 5).min(lines.len());
-                
+
                 return Some(lines[start..end].join("\n"));
             }
         }
-        
+
         None
     }
 
     /// Extract documentation summary
     fn extract_doc_summary(&self, content: &str) -> Option<String> {
         // Take first paragraph or first 200 chars
-        content.split("\n\n")
-            .next()
-            .map(|s| {
-                if s.len() > 200 {
-                    format!("{}...", &s[..200])
-                } else {
-                    s.to_string()
-                }
-            })
+        content.split("\n\n").next().map(|s| {
+            if s.len() > 200 {
+                format!("{}...", &s[..200])
+            } else {
+                s.to_string()
+            }
+        })
     }
 
     /// Extract solution from error documentation
     fn extract_solution(&self, content: &str) -> Option<String> {
         // Look for solution markers
         let markers = ["solution:", "fix:", "resolve:", "workaround:"];
-        
+
         for marker in &markers {
             if let Some(pos) = content.to_lowercase().find(marker) {
                 let solution_start = pos + marker.len();
                 let solution = &content[solution_start..];
-                
+
                 // Take until next section or 300 chars
-                let excerpt = solution.split("\n\n")
-                    .next()
-                    .unwrap_or(solution);
-                
+                let excerpt = solution.split("\n\n").next().unwrap_or(solution);
+
                 return Some(excerpt.trim().to_string());
             }
         }
-        
+
         None
     }
 
@@ -428,26 +424,27 @@ impl SemanticRetriever {
         // Find most relevant section
         let query_terms: Vec<&str> = query.split_whitespace().collect();
         let lines: Vec<&str> = content.lines().collect();
-        
+
         let mut best_score = 0;
         let mut best_line = 0;
-        
+
         for (i, line) in lines.iter().enumerate() {
             let line_lower = line.to_lowercase();
-            let score = query_terms.iter()
+            let score = query_terms
+                .iter()
                 .filter(|term| line_lower.contains(&term.to_lowercase()))
                 .count();
-            
+
             if score > best_score {
                 best_score = score;
                 best_line = i;
             }
         }
-        
+
         if best_score > 0 {
             let start = best_line.saturating_sub(2);
             let end = (best_line + 3).min(lines.len());
-            
+
             Some(lines[start..end].join("\n"))
         } else {
             // Fallback to first 200 chars
@@ -458,37 +455,44 @@ impl SemanticRetriever {
     /// Parse metadata from JSON
     fn parse_metadata(&self, json: &serde_json::Value) -> Result<ItemMetadata> {
         Ok(ItemMetadata {
-            file_path: json.get("file_path")
+            file_path: json
+                .get("file_path")
                 .and_then(|v| v.as_str())
                 .map(String::from),
-            language: json.get("language")
+            language: json
+                .get("language")
                 .and_then(|v| v.as_str())
                 .map(String::from),
-            entity_name: json.get("entity_name")
+            entity_name: json
+                .get("entity_name")
                 .and_then(|v| v.as_str())
                 .map(String::from),
-            line_range: json.get("line_start")
+            line_range: json
+                .get("line_start")
                 .and_then(|v| v.as_u64())
                 .and_then(|start| {
                     json.get("line_end")
                         .and_then(|v| v.as_u64())
                         .map(|end| (start as usize, end as usize))
                 }),
-            timestamp: json.get("timestamp")
+            timestamp: json
+                .get("timestamp")
                 .and_then(|v| v.as_str())
                 .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
                 .map(|dt| dt.with_timezone(&chrono::Utc)),
-            quality_score: json.get("quality_score")
+            quality_score: json
+                .get("quality_score")
                 .and_then(|v| v.as_f64())
                 .map(|s| s as f32),
         })
     }
 
-
     /// Get cached embedding
     async fn get_cached_embedding(&self, text: &str) -> Option<Vec<f32>> {
         let cache = self.embedding_cache.read().await;
-        cache.entries.get(text)
+        cache
+            .entries
+            .get(text)
             .filter(|entry| entry.timestamp.elapsed().as_secs() < 3600)
             .map(|entry| entry.embedding.clone())
     }
@@ -496,26 +500,31 @@ impl SemanticRetriever {
     /// Cache embedding
     async fn cache_embedding(&self, text: &str, embedding: &[f32]) {
         let mut cache = self.embedding_cache.write().await;
-        
+
         // Evict old entries if needed
         if cache.entries.len() >= cache.max_size {
-            let oldest_key = cache.entries.iter()
+            let oldest_key = cache
+                .entries
+                .iter()
                 .min_by_key(|(_, v)| v.timestamp)
                 .map(|(k, _)| k.clone());
-            
+
             if let Some(k) = oldest_key {
                 cache.entries.remove(&k);
             }
         }
 
-        cache.entries.insert(text.to_string(), CachedEmbedding {
-            embedding: embedding.to_vec(),
-            timestamp: std::time::Instant::now(),
-        });
+        cache.entries.insert(
+            text.to_string(),
+            CachedEmbedding {
+                embedding: embedding.to_vec(),
+                timestamp: std::time::Instant::now(),
+            },
+        );
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

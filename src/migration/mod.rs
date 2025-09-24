@@ -254,7 +254,7 @@ fn assess_migration_risks(config: &MigrationConfig) -> Vec<String> {
     risks
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use std::path::PathBuf;

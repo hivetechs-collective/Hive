@@ -1,20 +1,20 @@
 // Rollback Execution System for Failed Operations
-use crate::consensus::rollback_planner::{
-    RollbackPlan, RollbackStep, RollbackStrategy, RollbackOperation, RiskLevel
-};
-use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
 use crate::consensus::operation_history::OperationHistoryDatabase;
+use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
 use crate::consensus::operation_intelligence::OperationOutcome;
+use crate::consensus::rollback_planner::{
+    RiskLevel, RollbackOperation, RollbackPlan, RollbackStep, RollbackStrategy,
+};
 use crate::consensus::stages::file_aware_curator::FileOperation;
-use anyhow::{Result, Context, bail};
+use anyhow::{bail, Context, Result};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::time::{Duration, Instant, sleep};
 use tokio::fs;
-use tracing::{info, warn, error, debug};
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
-use chrono::{DateTime, Utc};
+use tokio::time::{sleep, Duration, Instant};
+use tracing::{debug, error, info, warn};
 
 /// Main rollback execution engine for failed operations
 pub struct RollbackExecutor {
@@ -50,7 +50,7 @@ pub struct RollbackExecutionConfig {
 impl Default for RollbackExecutionConfig {
     fn default() -> Self {
         Self {
-            max_step_timeout: 300, // 5 minutes
+            max_step_timeout: 300,   // 5 minutes
             max_total_timeout: 1800, // 30 minutes
             verify_steps: true,
             create_safety_backups: true,
@@ -179,10 +179,7 @@ impl RollbackExecutor {
     }
 
     /// Execute a rollback plan with comprehensive error handling and progress tracking
-    pub async fn execute_rollback(
-        &self,
-        plan: RollbackPlan,
-    ) -> Result<RollbackExecution> {
+    pub async fn execute_rollback(&self, plan: RollbackPlan) -> Result<RollbackExecution> {
         let execution_id = generate_execution_id();
         info!("Starting rollback execution: {}", execution_id);
 
@@ -223,7 +220,7 @@ impl RollbackExecutor {
         // Execute each step with comprehensive error handling
         for (index, step) in plan.steps.iter().enumerate() {
             let step_start = Instant::now();
-            
+
             // Check timeout
             if start_time.elapsed().as_secs() > self.execution_config.max_total_timeout {
                 error!("Rollback execution timeout exceeded");
@@ -234,17 +231,30 @@ impl RollbackExecutor {
                     step_number: Some(step.step_number as u32),
                     timestamp: Utc::now(),
                     is_recoverable: false,
-                    suggested_action: Some("Increase timeout or simplify rollback plan".to_string()),
+                    suggested_action: Some(
+                        "Increase timeout or simplify rollback plan".to_string(),
+                    ),
                 });
                 break;
             }
 
             // Update progress
-            self.update_progress(&execution_id, step.step_number as u32, plan.steps.len() as u32, &step.description).await;
+            self.update_progress(
+                &execution_id,
+                step.step_number as u32,
+                plan.steps.len() as u32,
+                &step.description,
+            )
+            .await;
 
             // Handle high-risk steps
-            if matches!(step.risk_level, RiskLevel::High | RiskLevel::Critical) && self.execution_config.pause_on_high_risk {
-                info!("Pausing for user confirmation on high-risk step: {}", step.description);
+            if matches!(step.risk_level, RiskLevel::High | RiskLevel::Critical)
+                && self.execution_config.pause_on_high_risk
+            {
+                info!(
+                    "Pausing for user confirmation on high-risk step: {}",
+                    step.description
+                );
                 execution.status = RollbackExecutionStatus::WaitingForUserConfirmation;
                 // In a real implementation, this would wait for user input
                 // For now, we'll continue automatically
@@ -252,7 +262,7 @@ impl RollbackExecutor {
 
             // Execute the step with retries
             let step_result = self.execute_step_with_retries(step).await;
-            
+
             match step_result.status {
                 RollbackStepStatus::Completed => {
                     successful_steps += 1;
@@ -260,15 +270,19 @@ impl RollbackExecutor {
                 }
                 RollbackStepStatus::Failed => {
                     failed_steps += 1;
-                    warn!("Step {} failed: {:?}", step.step_number, step_result.error_message);
-                    
+                    warn!(
+                        "Step {} failed: {:?}",
+                        step.step_number, step_result.error_message
+                    );
+
                     if let Some(ref error_msg) = step_result.error_message {
                         execution.errors.push(RollbackError {
                             error_type: RollbackErrorType::InternalError,
                             message: error_msg.clone(),
                             step_number: Some(step.step_number as u32),
                             timestamp: Utc::now(),
-                            is_recoverable: step_result.retry_count < self.execution_config.max_retries,
+                            is_recoverable: step_result.retry_count
+                                < self.execution_config.max_retries,
                             suggested_action: self.suggest_action_for_step_failure(step, error_msg),
                         });
                     }
@@ -302,11 +316,10 @@ impl RollbackExecutor {
         };
 
         // Generate summary
-        execution.rollback_summary = Some(self.generate_rollback_summary(
-            &plan,
-            &execution,
-            total_duration,
-        ).await);
+        execution.rollback_summary = Some(
+            self.generate_rollback_summary(&plan, &execution, total_duration)
+                .await,
+        );
 
         // Record final execution state
         self.track_execution_completion(&execution).await?;
@@ -321,10 +334,7 @@ impl RollbackExecutor {
     }
 
     /// Execute a single rollback step with retry logic
-    async fn execute_step_with_retries(
-        &self,
-        step: &RollbackStep,
-    ) -> RollbackStepResult {
+    async fn execute_step_with_retries(&self, step: &RollbackStep) -> RollbackStepResult {
         let mut result = RollbackStepResult {
             step_number: step.step_number as u32,
             status: RollbackStepStatus::InProgress,
@@ -341,14 +351,18 @@ impl RollbackExecutor {
 
         for attempt in 0..=self.execution_config.max_retries {
             result.retry_count = attempt;
-            
-            debug!("Executing step {} (attempt {})", step.step_number, attempt + 1);
+
+            debug!(
+                "Executing step {} (attempt {})",
+                step.step_number,
+                attempt + 1
+            );
 
             match self.execute_single_step(step).await {
                 Ok(files_affected) => {
                     result.status = RollbackStepStatus::Completed;
                     result.files_affected = files_affected;
-                    
+
                     // Verify step if configured
                     if self.execution_config.verify_steps {
                         match self.verification_system.verify_step_completion(step).await {
@@ -371,18 +385,28 @@ impl RollbackExecutor {
                             }
                         }
                     }
-                    
+
                     break; // Success
                 }
                 Err(e) => {
                     result.status = RollbackStepStatus::Failed;
                     result.error_message = Some(e.to_string());
-                    
+
                     if attempt < self.execution_config.max_retries {
-                        warn!("Step {} failed (attempt {}), retrying: {}", step.step_number, attempt + 1, e);
+                        warn!(
+                            "Step {} failed (attempt {}), retrying: {}",
+                            step.step_number,
+                            attempt + 1,
+                            e
+                        );
                         sleep(Duration::from_secs(self.execution_config.retry_delay)).await;
                     } else {
-                        error!("Step {} failed after {} attempts: {}", step.step_number, attempt + 1, e);
+                        error!(
+                            "Step {} failed after {} attempts: {}",
+                            step.step_number,
+                            attempt + 1,
+                            e
+                        );
                     }
                 }
             }
@@ -395,13 +419,16 @@ impl RollbackExecutor {
     }
 
     /// Execute a single rollback step based on its type
-    async fn execute_single_step(
-        &self,
-        step: &RollbackStep,
-    ) -> Result<Vec<PathBuf>> {
+    async fn execute_single_step(&self, step: &RollbackStep) -> Result<Vec<PathBuf>> {
         match &step.operation {
-            RollbackOperation::RestoreFile { source, destination, .. } => {
-                self.backup_manager.restore_from_backup(source, destination).await
+            RollbackOperation::RestoreFile {
+                source,
+                destination,
+                ..
+            } => {
+                self.backup_manager
+                    .restore_from_backup(source, destination)
+                    .await
             }
             RollbackOperation::GitCommand { command, args, .. } => {
                 if command == "revert" && !args.is_empty() {
@@ -410,16 +437,18 @@ impl RollbackExecutor {
                     bail!("Unsupported Git command: {}", command)
                 }
             }
-            RollbackOperation::ReverseOperation { operation } => {
-                match operation {
-                    FileOperation::Create { path, .. } => self.delete_file_safely(path).await,
-                    _ => bail!("Unsupported reverse operation")
-                }
-            }
+            RollbackOperation::ReverseOperation { operation } => match operation {
+                FileOperation::Create { path, .. } => self.delete_file_safely(path).await,
+                _ => bail!("Unsupported reverse operation"),
+            },
             RollbackOperation::ExecuteScript { script_path, args } => {
                 self.run_rollback_script(script_path, args).await
             }
-            RollbackOperation::VerifyState { file, expected_exists, .. } => {
+            RollbackOperation::VerifyState {
+                file,
+                expected_exists,
+                ..
+            } => {
                 if *expected_exists {
                     if tokio::fs::metadata(file).await.is_ok() {
                         Ok(vec![file.clone()])
@@ -438,16 +467,17 @@ impl RollbackExecutor {
     }
 
     /// Perform pre-execution safety checks
-    async fn perform_pre_execution_checks(
-        &self,
-        plan: &RollbackPlan,
-    ) -> Result<()> {
+    async fn perform_pre_execution_checks(&self, plan: &RollbackPlan) -> Result<()> {
         info!("Performing pre-execution safety checks");
 
         // Check if all required files and paths exist
         for step in &plan.steps {
             match &step.operation {
-                RollbackOperation::RestoreFile { source, destination, .. } => {
+                RollbackOperation::RestoreFile {
+                    source,
+                    destination,
+                    ..
+                } => {
                     if !source.exists() {
                         bail!("Backup file does not exist: {}", source.display());
                     }
@@ -471,15 +501,21 @@ impl RollbackExecutor {
         // Check available disk space
         // This is a simplified check - in practice, you'd use system-specific APIs
         let estimated_space_needed = self.estimate_space_requirements(plan).await?;
-        debug!("Estimated space requirements: {} bytes", estimated_space_needed);
+        debug!(
+            "Estimated space requirements: {} bytes",
+            estimated_space_needed
+        );
 
         // Check Git repository state if Git operations are involved
-        let has_git_operations = plan.steps.iter().any(|step| {
-            matches!(step.operation, RollbackOperation::GitCommand { .. })
-        });
-        
+        let has_git_operations = plan
+            .steps
+            .iter()
+            .any(|step| matches!(step.operation, RollbackOperation::GitCommand { .. }));
+
         if has_git_operations {
-            self.git_manager.verify_repository_state().await
+            self.git_manager
+                .verify_repository_state()
+                .await
                 .context("Git repository state verification failed")?;
         }
 
@@ -494,21 +530,27 @@ impl RollbackExecutor {
         execution: &RollbackExecution,
         total_duration_ms: u64,
     ) -> RollbackSummary {
-        let successful_steps = execution.steps_completed.iter()
+        let successful_steps = execution
+            .steps_completed
+            .iter()
             .filter(|step| matches!(step.status, RollbackStepStatus::Completed))
             .count();
-        
+
         let success_rate = if execution.total_steps > 0 {
             (successful_steps as f32 / execution.total_steps as f32) * 100.0
         } else {
             0.0
         };
 
-        let files_restored: Vec<PathBuf> = execution.steps_completed.iter()
+        let files_restored: Vec<PathBuf> = execution
+            .steps_completed
+            .iter()
             .flat_map(|step| step.files_affected.clone())
             .collect();
 
-        let git_commits_reverted: Vec<String> = plan.steps.iter()
+        let git_commits_reverted: Vec<String> = plan
+            .steps
+            .iter()
             .filter_map(|step| {
                 if let RollbackOperation::GitCommand { args, .. } = &step.operation {
                     // Extract commit hash from git args if present
@@ -519,7 +561,9 @@ impl RollbackExecutor {
             })
             .collect();
 
-        let backups_used: Vec<String> = plan.steps.iter()
+        let backups_used: Vec<String> = plan
+            .steps
+            .iter()
             .filter_map(|step| {
                 if let RollbackOperation::RestoreFile { source, .. } = &step.operation {
                     Some(source.display().to_string())
@@ -529,14 +573,18 @@ impl RollbackExecutor {
             })
             .collect();
 
-        let issues_encountered: Vec<String> = execution.errors.iter()
+        let issues_encountered: Vec<String> = execution
+            .errors
+            .iter()
             .map(|error| format!("{:?}: {}", error.error_type, error.message))
             .collect();
 
         let recommendations = self.generate_recommendations(execution, success_rate).await;
 
         RollbackSummary {
-            original_operations: plan.operations.iter()
+            original_operations: plan
+                .operations
+                .iter()
                 .map(|op| format!("{:?}", op.operation))
                 .collect(),
             files_restored,
@@ -558,29 +606,40 @@ impl RollbackExecutor {
         let mut recommendations = Vec::new();
 
         if success_rate < 50.0 {
-            recommendations.push("Consider reviewing the rollback strategy for future operations".to_string());
-            recommendations.push("Verify that all backup systems are functioning correctly".to_string());
+            recommendations
+                .push("Consider reviewing the rollback strategy for future operations".to_string());
+            recommendations
+                .push("Verify that all backup systems are functioning correctly".to_string());
         } else if success_rate < 80.0 {
-            recommendations.push("Some steps failed - review error logs for improvement opportunities".to_string());
+            recommendations.push(
+                "Some steps failed - review error logs for improvement opportunities".to_string(),
+            );
         } else {
             recommendations.push("Rollback completed successfully".to_string());
         }
 
         // Add specific recommendations based on error types
-        let error_types: std::collections::HashSet<RollbackErrorType> = execution.errors.iter()
+        let error_types: std::collections::HashSet<RollbackErrorType> = execution
+            .errors
+            .iter()
             .map(|e| e.error_type.clone())
             .collect();
 
         if error_types.contains(&RollbackErrorType::FileSystemError) {
-            recommendations.push("Check file system permissions and available disk space".to_string());
+            recommendations
+                .push("Check file system permissions and available disk space".to_string());
         }
 
         if error_types.contains(&RollbackErrorType::GitError) {
-            recommendations.push("Verify Git repository state and consider manual conflict resolution".to_string());
+            recommendations.push(
+                "Verify Git repository state and consider manual conflict resolution".to_string(),
+            );
         }
 
         if error_types.contains(&RollbackErrorType::TimeoutError) {
-            recommendations.push("Consider increasing timeout values or optimizing rollback operations".to_string());
+            recommendations.push(
+                "Consider increasing timeout values or optimizing rollback operations".to_string(),
+            );
         }
 
         recommendations
@@ -590,7 +649,8 @@ impl RollbackExecutor {
 
     async fn delete_file_safely(&self, file_path: &Path) -> Result<Vec<PathBuf>> {
         if file_path.exists() {
-            fs::remove_file(file_path).await
+            fs::remove_file(file_path)
+                .await
                 .with_context(|| format!("Failed to delete file: {}", file_path.display()))?;
             Ok(vec![file_path.to_path_buf()])
         } else {
@@ -600,13 +660,15 @@ impl RollbackExecutor {
 
     async fn recreate_file(&self, file_path: &Path, content: &str) -> Result<Vec<PathBuf>> {
         if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).await
+            fs::create_dir_all(parent)
+                .await
                 .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
         }
 
-        fs::write(file_path, content).await
+        fs::write(file_path, content)
+            .await
             .with_context(|| format!("Failed to write file: {}", file_path.display()))?;
-        
+
         Ok(vec![file_path.to_path_buf()])
     }
 
@@ -614,14 +676,26 @@ impl RollbackExecutor {
         self.recreate_file(file_path, content).await
     }
 
-    async fn run_rollback_script(&self, script_path: &Path, args: &[String]) -> Result<Vec<PathBuf>> {
+    async fn run_rollback_script(
+        &self,
+        script_path: &Path,
+        args: &[String],
+    ) -> Result<Vec<PathBuf>> {
         // In a real implementation, this would execute the script
         // For now, we'll just log the operation
-        info!("Would execute rollback script: {} with args: {:?}", script_path.display(), args);
+        info!(
+            "Would execute rollback script: {} with args: {:?}",
+            script_path.display(),
+            args
+        );
         Ok(Vec::new())
     }
 
-    async fn handle_user_action(&self, description: &str, instructions: &str) -> Result<Vec<PathBuf>> {
+    async fn handle_user_action(
+        &self,
+        description: &str,
+        instructions: &str,
+    ) -> Result<Vec<PathBuf>> {
         // In a real implementation, this would prompt the user
         // For now, we'll just log the requirement
         info!("User action required: {} - {}", description, instructions);
@@ -631,10 +705,14 @@ impl RollbackExecutor {
     async fn estimate_space_requirements(&self, plan: &RollbackPlan) -> Result<u64> {
         // Simplified space estimation
         let mut total_size = 0u64;
-        
+
         for step in &plan.steps {
             match &step.operation {
-                RollbackOperation::RestoreFile { source, destination, .. } => {
+                RollbackOperation::RestoreFile {
+                    source,
+                    destination,
+                    ..
+                } => {
                     if source.exists() {
                         if let Ok(metadata) = fs::metadata(source).await {
                             total_size += metadata.len();
@@ -646,11 +724,15 @@ impl RollbackExecutor {
                 }
             }
         }
-        
+
         Ok(total_size)
     }
 
-    fn suggest_action_for_step_failure(&self, step: &RollbackStep, error_msg: &str) -> Option<String> {
+    fn suggest_action_for_step_failure(
+        &self,
+        step: &RollbackStep,
+        error_msg: &str,
+    ) -> Option<String> {
         match &step.operation {
             RollbackOperation::RestoreFile { .. } => {
                 Some("Verify backup file integrity and permissions".to_string())
@@ -658,19 +740,24 @@ impl RollbackExecutor {
             RollbackOperation::GitCommand { .. } => {
                 Some("Check Git repository state and resolve any conflicts manually".to_string())
             }
-            RollbackOperation::ReverseOperation { .. } => {
-                Some("Check file permissions and ensure file is not locked by another process".to_string())
-            }
-            _ => {
-                Some(format!("Review error message and system state: {}", error_msg))
-            }
+            RollbackOperation::ReverseOperation { .. } => Some(
+                "Check file permissions and ensure file is not locked by another process"
+                    .to_string(),
+            ),
+            _ => Some(format!(
+                "Review error message and system state: {}",
+                error_msg
+            )),
         }
     }
 
     async fn track_execution_start(&self, execution: &RollbackExecution) -> Result<()> {
         if let Some(ref db) = self.history_database {
             // Record execution start in database
-            debug!("Recording rollback execution start: {}", execution.execution_id);
+            debug!(
+                "Recording rollback execution start: {}",
+                execution.execution_id
+            );
         }
         Ok(())
     }
@@ -678,7 +765,10 @@ impl RollbackExecutor {
     async fn track_execution_completion(&self, execution: &RollbackExecution) -> Result<()> {
         if let Some(ref db) = self.history_database {
             // Record execution completion in database
-            debug!("Recording rollback execution completion: {}", execution.execution_id);
+            debug!(
+                "Recording rollback execution completion: {}",
+                execution.execution_id
+            );
         }
         Ok(())
     }
@@ -727,21 +817,31 @@ impl BackupManager {
         backup_path: &Path,
         target_path: &Path,
     ) -> Result<Vec<PathBuf>> {
-        info!("Restoring from backup: {} -> {}", backup_path.display(), target_path.display());
-        
+        info!(
+            "Restoring from backup: {} -> {}",
+            backup_path.display(),
+            target_path.display()
+        );
+
         if !backup_path.exists() {
             bail!("Backup file does not exist: {}", backup_path.display());
         }
 
         // Create target directory if needed
         if let Some(parent) = target_path.parent() {
-            fs::create_dir_all(parent).await
-                .with_context(|| format!("Failed to create target directory: {}", parent.display()))?;
+            fs::create_dir_all(parent).await.with_context(|| {
+                format!("Failed to create target directory: {}", parent.display())
+            })?;
         }
 
         // Copy backup to target
-        fs::copy(backup_path, target_path).await
-            .with_context(|| format!("Failed to restore backup: {} -> {}", backup_path.display(), target_path.display()))?;
+        fs::copy(backup_path, target_path).await.with_context(|| {
+            format!(
+                "Failed to restore backup: {} -> {}",
+                backup_path.display(),
+                target_path.display()
+            )
+        })?;
 
         Ok(vec![target_path.to_path_buf()])
     }
@@ -769,10 +869,10 @@ impl GitManager {
         file_paths: Option<&[PathBuf]>,
     ) -> Result<Vec<PathBuf>> {
         info!("Reverting Git commit: {}", commit_hash);
-        
+
         // In a real implementation, this would execute git revert
         // For now, we'll simulate the operation
-        
+
         if let Some(paths) = file_paths {
             Ok(paths.to_vec())
         } else {
@@ -809,10 +909,7 @@ impl VerificationSystem {
         Self {}
     }
 
-    pub async fn verify_step_completion(
-        &self,
-        step: &RollbackStep,
-    ) -> Result<VerificationResult> {
+    pub async fn verify_step_completion(&self, step: &RollbackStep) -> Result<VerificationResult> {
         match &step.operation {
             RollbackOperation::RestoreFile { destination, .. } => {
                 let exists = destination.exists();
@@ -820,7 +917,10 @@ impl VerificationSystem {
                     is_successful: exists,
                     verification_type: VerificationType::FileExists,
                     error_message: if !exists {
-                        Some(format!("Target file was not restored: {}", destination.display()))
+                        Some(format!(
+                            "Target file was not restored: {}",
+                            destination.display()
+                        ))
                     } else {
                         None
                     },
@@ -845,7 +945,9 @@ impl VerificationSystem {
                 } else {
                     Ok(VerificationResult {
                         is_successful: true,
-                        verification_type: VerificationType::Custom("reverse_operation".to_string()),
+                        verification_type: VerificationType::Custom(
+                            "reverse_operation".to_string(),
+                        ),
                         error_message: None,
                         warnings: vec!["Unsupported reverse operation type".to_string()],
                         verified_at: Utc::now(),

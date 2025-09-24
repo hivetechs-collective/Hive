@@ -1,0 +1,114 @@
+# For most projects, this workflow file will not need changing; you simply need
+# to commit it to your repository.
+#
+# You may wish to alter this file to override the set of languages analyzed,
+# or to provide custom queries or build logic.
+#
+# ******** NOTE ********
+# We have attempted to detect the languages in your repository. Please check
+# the `language` matrix defined below to confirm you have the correct set of
+# supported CodeQL languages.
+#
+name: CodeQL Security Scan
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'electron-poc/MASTER_ARCHITECTURE.md'
+      - '.github/dependabot.yml'
+  schedule:
+    - cron: '18 22 * * 6'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  precheck:
+    name: Check Advanced Security
+    runs-on: ubuntu-latest
+    outputs:
+      advanced-security-enabled: ${{ steps.detect.outputs.enabled }}
+    steps:
+      - name: Detect advanced security status
+        id: detect
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const { data } = await github.rest.repos.get({ owner, repo });
+            const analysis = data.security_and_analysis || {};
+            const statuses = [
+              analysis.advanced_security?.status,
+              analysis.code_scanning?.status,
+              analysis.code_security?.status,
+            ].filter(status => typeof status === 'string');
+            const enabled = statuses.includes('enabled') || statuses.length === 0;
+            const status = statuses[0] || (statuses.length === 0 ? 'unknown (defaulting to enabled)' : 'disabled');
+            const value = enabled ? 'true' : 'false';
+            core.info(`Code scanning/advanced security status: ${status}`);
+            core.setOutput('enabled', value);
+            return { enabled: value };
+
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: precheck
+    if: needs.precheck.outputs.advanced-security-enabled == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            working-directory: electron-poc
+          - language: python
+            working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: matrix.language == 'javascript-typescript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: electron-poc/package-lock.json
+
+      - name: Install Node dependencies
+        if: matrix.language == 'javascript-typescript'
+        working-directory: ${{ matrix.working-directory }}
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Setup Python
+        if: matrix.language == 'python' && hashFiles('python/requirements.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+          cache-dependency-path: python/requirements.txt
+
+      - name: Install Python dependencies
+        if: matrix.language == 'python' && hashFiles('python/requirements.txt') != ''
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r python/requirements.txt
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

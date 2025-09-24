@@ -1,14 +1,17 @@
 //! Inline diff actions component
-//! 
+//!
 //! Provides VS Code-style inline action buttons for staging, reverting, and managing hunks and lines
 
-use dioxus::prelude::*;
-use crate::desktop::git::{DiffHunk, DiffLine, DiffAction, DiffActionResult, DiffGitOperations, HunkStageStatus, DiffLineType};
+use crate::desktop::git::{
+    DiffAction, DiffActionResult, DiffGitOperations, DiffHunk, DiffLine, DiffLineType,
+    HunkStageStatus,
+};
 use anyhow::Result;
+use dioxus::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Props for inline action components
 #[derive(Props, Clone, PartialEq)]
@@ -58,17 +61,17 @@ pub struct LineActionsProps {
 pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
     let mut is_hovered = use_signal(|| false);
     let is_visible = !props.show_on_hover || is_hovered();
-    
+
     // Clone values for closures
     let hunk_id_1 = props.hunk.hunk_id.clone();
     let hunk_id_2 = props.hunk.hunk_id.clone();
     let hunk_id_3 = props.hunk.hunk_id.clone();
-    
+
     // Determine available actions based on hunk status
     let can_stage = !props.hunk.is_staged && props.hunk.is_stageable;
     let can_unstage = props.hunk.is_staged;
     let can_revert = props.hunk.stage_status != HunkStageStatus::Conflicted;
-    
+
     rsx! {
         div {
             class: "hunk-inline-actions",
@@ -78,7 +81,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
             ),
             onmouseenter: move |_| is_hovered.set(true),
             onmouseleave: move |_| is_hovered.set(false),
-            
+
             // Processing indicator
             if props.is_processing {
                 div {
@@ -87,7 +90,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                     "Processing..."
                 }
             }
-            
+
             // Stage hunk button
             if can_stage && !props.is_processing {
                 button {
@@ -102,7 +105,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                     onmouseenter: move |_| {
                         // Add subtle highlight effect
                     },
-                    
+
                     // Stage icon (plus symbol)
                     span {
                         style: "font-weight: bold; font-size: 8px;",
@@ -111,7 +114,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                     "Stage"
                 }
             }
-            
+
             // Unstage hunk button
             if can_unstage && !props.is_processing {
                 button {
@@ -123,7 +126,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                             handler.call(DiffAction::UnstageHunk(hunk_id_2.clone()));
                         }
                     },
-                    
+
                     // Unstage icon (minus symbol)
                     span {
                         style: "font-weight: bold; font-size: 8px;",
@@ -132,7 +135,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                     "Unstage"
                 }
             }
-            
+
             // Revert hunk button
             if can_revert && !props.is_processing {
                 button {
@@ -144,7 +147,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                             handler.call(DiffAction::RevertHunk(hunk_id_3.clone()));
                         }
                     },
-                    
+
                     // Revert icon (undo symbol)
                     span {
                         style: "font-weight: bold; font-size: 8px;",
@@ -153,7 +156,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                     "Revert"
                 }
             }
-            
+
             // Hunk status indicator
             div {
                 class: "hunk-status",
@@ -178,26 +181,29 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
 }
 
 /// Inline line actions component - shows stage/unstage buttons for individual lines
-#[component]  
+#[component]
 pub fn LineInlineActions(props: LineActionsProps) -> Element {
     let mut is_hovered = use_signal(|| false);
     let is_visible = !props.show_on_hover || is_hovered();
-    
+
     // Clone values for closures
     let line_id_1 = props.line.line_id.clone();
     let line_id_2 = props.line.line_id.clone();
-    
+
     // Only show for stageable lines (added/deleted, not unchanged)
-    let is_stageable = props.line.is_stageable && 
-        matches!(props.line.line_type, crate::desktop::git::DiffLineType::Added | crate::desktop::git::DiffLineType::Deleted);
-    
+    let is_stageable = props.line.is_stageable
+        && matches!(
+            props.line.line_type,
+            crate::desktop::git::DiffLineType::Added | crate::desktop::git::DiffLineType::Deleted
+        );
+
     if !is_stageable {
         return rsx! { div {} };
     }
-    
+
     let can_stage = !props.line.is_staged;
     let can_unstage = props.line.is_staged;
-    
+
     rsx! {
         div {
             class: "line-inline-actions",
@@ -207,7 +213,7 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
             ),
             onmouseenter: move |_| is_hovered.set(true),
             onmouseleave: move |_| is_hovered.set(false),
-            
+
             // Processing indicator
             if props.is_processing {
                 div {
@@ -215,7 +221,7 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
                     style: "width: 8px; height: 8px; background: #007acc; border-radius: 50%; animation: pulse 1.5s infinite;",
                 }
             }
-            
+
             // Stage line button
             if can_stage && !props.is_processing {
                 button {
@@ -227,11 +233,11 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
                             handler.call(DiffAction::StageLine(line_id_1.clone()));
                         }
                     },
-                    
+
                     "+"
                 }
             }
-            
+
             // Unstage line button
             if can_unstage && !props.is_processing {
                 button {
@@ -243,7 +249,7 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
                             handler.call(DiffAction::UnstageLine(line_id_2.clone()));
                         }
                     },
-                    
+
                     "−"
                 }
             }
@@ -256,9 +262,12 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
 pub fn EnhancedDiffHunk(props: EnhancedDiffHunkProps) -> Element {
     let mut processing_lines = use_signal(|| std::collections::HashSet::<String>::new());
     let mut processing_hunk = use_signal(|| false);
-    
+
     // Pre-process lines to extract IDs for use in closures
-    let lines_with_ids: Vec<(String, String, crate::desktop::git::DiffLine)> = props.hunk.lines.clone()
+    let lines_with_ids: Vec<(String, String, crate::desktop::git::DiffLine)> = props
+        .hunk
+        .lines
+        .clone()
         .into_iter()
         .map(|line| {
             let id_for_key = line.line_id.clone();
@@ -266,132 +275,132 @@ pub fn EnhancedDiffHunk(props: EnhancedDiffHunkProps) -> Element {
             (id_for_key, id_for_processing, line)
         })
         .collect();
-    
+
     rsx! {
+    div {
+        class: "enhanced-diff-hunk",
+        style: "position: relative; margin-bottom: 16px;",
+
+        // Hunk header with inline actions
         div {
-            class: "enhanced-diff-hunk",
-            style: "position: relative; margin-bottom: 16px;",
-            
-            // Hunk header with inline actions
-            div {
-                class: "hunk-header",
-                style: "position: relative; color: #3794ff; background: #2d2d30; padding: 4px 8px; margin-bottom: 8px; font-size: 11px;",
-                onmouseenter: move |_| {
-                    // Show hunk actions on hover
+            class: "hunk-header",
+            style: "position: relative; color: #3794ff; background: #2d2d30; padding: 4px 8px; margin-bottom: 8px; font-size: 11px;",
+            onmouseenter: move |_| {
+                // Show hunk actions on hover
+            },
+
+            "@@ -{props.hunk.original_start},{props.hunk.original_count} +{props.hunk.modified_start},{props.hunk.modified_count} @@"
+
+            // Hunk inline actions
+            HunkInlineActions {
+                hunk: props.hunk.clone(),
+                file_path: props.file_path.clone(),
+                repo_path: props.repo_path.clone(),
+                is_processing: processing_hunk(),
+                on_action: move |action| {
+                    processing_hunk.set(true);
+                    if let Some(handler) = &props.on_hunk_action {
+                        handler.call(action);
+                    }
+                    // Reset processing state after a delay
+                    spawn(async move {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                        processing_hunk.set(false);
+                    });
                 },
-                
-                "@@ -{props.hunk.original_start},{props.hunk.original_count} +{props.hunk.modified_start},{props.hunk.modified_count} @@"
-                
-                // Hunk inline actions
-                HunkInlineActions {
-                    hunk: props.hunk.clone(),
-                    file_path: props.file_path.clone(),
-                    repo_path: props.repo_path.clone(),
-                    is_processing: processing_hunk(),
-                    on_action: move |action| {
-                        processing_hunk.set(true);
-                        if let Some(handler) = &props.on_hunk_action {
-                            handler.call(action);
-                        }
-                        // Reset processing state after a delay
-                        spawn(async move {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                            processing_hunk.set(false);
-                        });
-                    },
-                }
             }
-            
-            // Hunk lines with line-level actions  
-            for (line_id_for_key, line_id_for_processing, line) in lines_with_ids {
-                div {
-                        key: "{line_id_for_key}",
-                        class: "enhanced-diff-line",
+        }
+
+        // Hunk lines with line-level actions
+        for (line_id_for_key, line_id_for_processing, line) in lines_with_ids {
+            div {
+                    key: "{line_id_for_key}",
+                    class: "enhanced-diff-line",
+                    style: format!(
+                        "position: relative; display: flex; min-height: 20px; {}",
+                        match line.line_type {
+                            crate::desktop::git::DiffLineType::Added => "background-color: rgba(155, 185, 85, 0.2);",
+                            crate::desktop::git::DiffLineType::Deleted => "background-color: rgba(255, 97, 136, 0.2);",
+                            crate::desktop::git::DiffLineType::Modified => "background-color: rgba(97, 175, 239, 0.2);",
+                            crate::desktop::git::DiffLineType::Unchanged => "",
+                        }
+                    ),
+                    onmouseenter: move |_| {
+                        // Show line actions on hover
+                    },
+
+                    // Line type indicator
+                    span {
                         style: format!(
-                            "position: relative; display: flex; min-height: 20px; {}",
+                            "width: 20px; text-align: center; user-select: none; color: {};",
                             match line.line_type {
-                                crate::desktop::git::DiffLineType::Added => "background-color: rgba(155, 185, 85, 0.2);",
-                                crate::desktop::git::DiffLineType::Deleted => "background-color: rgba(255, 97, 136, 0.2);",
-                                crate::desktop::git::DiffLineType::Modified => "background-color: rgba(97, 175, 239, 0.2);",
-                                crate::desktop::git::DiffLineType::Unchanged => "",
+                                crate::desktop::git::DiffLineType::Added => "#9bb955",
+                                crate::desktop::git::DiffLineType::Deleted => "#ff6188",
+                                _ => "transparent",
                             }
                         ),
-                        onmouseenter: move |_| {
-                            // Show line actions on hover
-                        },
-                        
-                        // Line type indicator
-                        span {
-                            style: format!(
-                                "width: 20px; text-align: center; user-select: none; color: {};",
-                                match line.line_type {
-                                    crate::desktop::git::DiffLineType::Added => "#9bb955",
-                                    crate::desktop::git::DiffLineType::Deleted => "#ff6188",
-                                    _ => "transparent",
-                                }
-                            ),
-                            match line.line_type {
-                                crate::desktop::git::DiffLineType::Added => "+",
-                                crate::desktop::git::DiffLineType::Deleted => "-",
-                                _ => " ",
+                        match line.line_type {
+                            crate::desktop::git::DiffLineType::Added => "+",
+                            crate::desktop::git::DiffLineType::Deleted => "-",
+                            _ => " ",
+                        }
+                    }
+
+                    // Line numbers
+                    span {
+                        style: "color: #858585; width: 40px; text-align: right; padding-right: 8px; user-select: none;",
+                        if let Some(num) = line.original_line_number {
+                            "{num}"
+                        } else {
+                            ""
+                        }
+                    }
+
+                    span {
+                        style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
+                        if let Some(num) = line.modified_line_number {
+                            "{num}"
+                        } else {
+                            ""
+                        }
+                    }
+
+                    // Line content
+                    span {
+                        style: "flex: 1; white-space: pre; padding-right: 60px;", // Extra padding for action buttons
+                        "{line.content}"
+                    }
+
+                    // Line inline actions
+                    LineInlineActions {
+                        line: line.clone(),
+                        file_path: props.file_path.clone(),
+                        repo_path: props.repo_path.clone(),
+                        is_processing: processing_lines().contains(&line_id_for_processing),
+                        on_action: move |action| {
+                            let line_id = line_id_for_processing.clone();
+                            processing_lines.with_mut(|lines| {
+                                lines.insert(line_id.clone());
+                            });
+
+                            if let Some(handler) = &props.on_line_action {
+                                handler.call(action);
                             }
-                        }
-                        
-                        // Line numbers
-                        span {
-                            style: "color: #858585; width: 40px; text-align: right; padding-right: 8px; user-select: none;",
-                            if let Some(num) = line.original_line_number {
-                                "{num}"
-                            } else {
-                                ""
-                            }
-                        }
-                        
-                        span {
-                            style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
-                            if let Some(num) = line.modified_line_number {
-                                "{num}"
-                            } else {
-                                ""
-                            }
-                        }
-                        
-                        // Line content
-                        span {
-                            style: "flex: 1; white-space: pre; padding-right: 60px;", // Extra padding for action buttons
-                            "{line.content}"
-                        }
-                        
-                        // Line inline actions
-                        LineInlineActions {
-                            line: line.clone(),
-                            file_path: props.file_path.clone(),
-                            repo_path: props.repo_path.clone(),
-                            is_processing: processing_lines().contains(&line_id_for_processing),
-                            on_action: move |action| {
-                                let line_id = line_id_for_processing.clone();
+
+                            // Reset processing state after a delay
+                            spawn(async move {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
                                 processing_lines.with_mut(|lines| {
-                                    lines.insert(line_id.clone());
+                                    lines.remove(&line_id);
                                 });
-                                
-                                if let Some(handler) = &props.on_line_action {
-                                    handler.call(action);
-                                }
-                                
-                                // Reset processing state after a delay
-                                spawn(async move {
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                                    processing_lines.with_mut(|lines| {
-                                        lines.remove(&line_id);
-                                    });
-                                });
-                            },
-                        }
+                            });
+                        },
                     }
                 }
             }
         }
     }
+}
 
 /// Props for enhanced diff hunk component
 #[derive(Props, Clone, PartialEq)]
@@ -417,7 +426,7 @@ pub fn DiffKeyboardHandler(props: DiffKeyboardHandlerProps) -> Element {
     // This is a placeholder implementation
     rsx! {
         // This component handles keyboard shortcuts globally
-        div { 
+        div {
             style: "display: none;",
             // Desktop keyboard handling would be implemented here
         }
@@ -455,9 +464,9 @@ pub fn ActionTooltip(props: ActionTooltipProps) -> Element {
                  display: {};",
                 if props.visible { "block" } else { "none" }
             ),
-            
+
             "{props.text}"
-            
+
             // Tooltip arrow
             div {
                 style: "position: absolute; top: 100%; left: 50%; transform: translateX(-50%); \

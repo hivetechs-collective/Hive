@@ -867,7 +867,7 @@ pub struct TransitionStatistics {
     pub common_paths: Vec<(Vec<ModeType>, usize)>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

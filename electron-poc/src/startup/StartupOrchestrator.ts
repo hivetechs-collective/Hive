@@ -4,6 +4,8 @@ import { logger } from '../utils/SafeLogger';
 import { PidTracker } from '../utils/PidTracker';
 import { PortManager } from '../utils/PortManager';
 
+// Reference diagram: electron-poc/MASTER_ARCHITECTURE.md#diagram-startup-sequence
+
 interface ServiceCheck {
     id: string;
     name: string;
@@ -126,15 +128,22 @@ export class StartupOrchestrator {
     
     async showSplashAndInitialize(createMainWindow: (show: boolean) => BrowserWindow): Promise<StartupResult> {
         try {
+            logger.info('[StartupOrchestrator] Starting showSplashAndInitialize');
+            
             // Create splash window
+            logger.info('[StartupOrchestrator] Creating splash window...');
             this.createSplashWindow();
             
             // Pre-scan ports for optimized allocation (MUST complete before services start)
+            logger.info('[StartupOrchestrator] Scanning available ports...');
             this.updateSplash(5, 'Scanning available ports...');
             await PortManager.initialize(); // Wait for port scan to complete FIRST
+            logger.info('[StartupOrchestrator] Port scanning complete');
             
             // NOW initialize services with pre-scanned ports available
+            logger.info('[StartupOrchestrator] Starting service initialization...');
             await this.initializeServices();
+            logger.info('[StartupOrchestrator] Service initialization complete');
             
             // Final preparation
             this.updateSplash(95, 'Preparing workspace...');
@@ -144,6 +153,7 @@ export class StartupOrchestrator {
             await this.delay(200);
             
             // Create and show main window
+            logger.info('[StartupOrchestrator] Transitioning to main window...');
             await this.transitionToMain(createMainWindow);
             
             const totalTime = Date.now() - this.startTime;
@@ -153,6 +163,7 @@ export class StartupOrchestrator {
             
         } catch (error) {
             logger.error('[Startup] Initialization failed:', error);
+            logger.error('[Startup] Error stack:', (error as Error).stack);
             this.showError(error as Error);
             return { 
                 success: false, 
@@ -162,24 +173,30 @@ export class StartupOrchestrator {
     }
     
     private createSplashWindow(): void {
-        // In production, startup files are in the unpacked directory
-        const isPackaged = app.isPackaged;
-        let preloadPath: string;
-        let startupPath: string;
+        try {
+            // In production, startup files are in the unpacked directory
+            const isPackaged = app.isPackaged;
+            let preloadPath: string;
+            let startupPath: string;
+            
+            logger.info(`[StartupOrchestrator] Creating splash window, isPackaged: ${isPackaged}`);
+            
+            if (isPackaged) {
+                // Production: files are in .webpack/renderer/ inside the asar
+                // Electron can load directly from asar, no need to unpack
+                const appPath = app.getAppPath();
+                preloadPath = path.join(appPath, '.webpack', 'renderer', 'startup-preload.js');
+                startupPath = path.join(appPath, '.webpack', 'renderer', 'startup.html');
+            } else {
+                // Development: files are in .webpack/renderer/
+                preloadPath = path.join(__dirname, '..', '..', 'startup-preload.js');
+                startupPath = path.join(__dirname, '..', '..', 'startup.html');
+            }
+            
+            logger.info(`[StartupOrchestrator] Splash preload path: ${preloadPath}`);
+            logger.info(`[StartupOrchestrator] Splash HTML path: ${startupPath}`);
         
-        if (isPackaged) {
-            // Production: files are in .webpack/renderer/ inside the asar
-            // Electron can load directly from asar, no need to unpack
-            const appPath = app.getAppPath();
-            preloadPath = path.join(appPath, '.webpack', 'renderer', 'startup-preload.js');
-            startupPath = path.join(appPath, '.webpack', 'renderer', 'startup.html');
-        } else {
-            // Development: files are in .webpack/renderer/
-            preloadPath = path.join(__dirname, '..', '..', 'startup-preload.js');
-            startupPath = path.join(__dirname, '..', '..', 'startup.html');
-        }
-        
-        this.splashWindow = new BrowserWindow({
+            this.splashWindow = new BrowserWindow({
             width: 600,
             height: 500,
             frame: false,
@@ -203,6 +220,13 @@ export class StartupOrchestrator {
                 e.preventDefault();
             }
         });
+            
+            logger.info('[StartupOrchestrator] Splash window created successfully');
+        } catch (error) {
+            logger.error('[StartupOrchestrator] Failed to create splash window:', error);
+            logger.error('[StartupOrchestrator] Error stack:', (error as Error).stack);
+            throw error;
+        }
     }
     
     private async initializeServices(): Promise<void> {

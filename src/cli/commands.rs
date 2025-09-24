@@ -7,6 +7,7 @@ use crate::cli::args::*;
 use crate::core::config::{
     get_config, get_config_value, get_hive_config_dir, reset_config, set_config_value,
 };
+use crate::core::error::HiveError;
 use crate::migration::{
     analyzer,
     live_test::{LiveMigrationTester, LiveTestConfig, TestDatabaseSize, TestScenario},
@@ -18,7 +19,6 @@ use crate::migration::{
 };
 use anyhow::Result;
 use console::style;
-use crate::core::error::HiveError;
 use rusqlite::params;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -2949,7 +2949,9 @@ async fn handle_interactive(mode: String, no_tui: bool) -> Result<()> {
 
     // Interactive mode removed - GUI only
     eprintln!("Interactive CLI mode has been removed. Please use the GUI with --desktop flag.");
-    return Err(HiveError::config_invalid("Interactive CLI mode not available in GUI-only build").into());
+    return Err(
+        HiveError::config_invalid("Interactive CLI mode not available in GUI-only build").into(),
+    );
 
     Ok(())
 }

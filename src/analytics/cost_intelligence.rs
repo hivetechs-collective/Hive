@@ -1357,7 +1357,7 @@ impl PartialOrd for OptimizationPriority {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

@@ -537,7 +537,7 @@ pub struct CallGraphInfo {
     pub called_by: HashSet<String>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

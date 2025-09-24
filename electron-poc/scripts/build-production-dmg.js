@@ -8,6 +8,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
+const os = require('os');
 const { execSync, spawn, spawnSync } = require('child_process');
 
 // Terminal colors
@@ -18,6 +19,63 @@ const BLUE = '\x1b[34m';
 const CYAN = '\x1b[36m';
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
+
+const INSTALLED_APP_BINARY = path.join(
+  '/Applications',
+  'Hive Consensus.app',
+  'Contents',
+  'MacOS',
+  'Hive Consensus',
+);
+
+const SHOULD_RUN_UI_SMOKE = process.env.PLAYWRIGHT_RUN_TESTS === '1';
+const IS_CI = process.env.CI === 'true';
+
+function launchInstalledApp() {
+  if (process.env.HIVE_SKIP_AUTO_LAUNCH === '1') {
+    console.log(`${YELLOW}Skipping automatic launch (HIVE_SKIP_AUTO_LAUNCH=1)${RESET}`);
+    return;
+  }
+
+  if (!fs.existsSync(INSTALLED_APP_BINARY)) {
+    console.log(`${YELLOW}Installed app not found at ${INSTALLED_APP_BINARY}, skipping auto launch${RESET}`);
+    return;
+  }
+
+  const env = { ...process.env };
+  const automationRequested = env.PLAYWRIGHT_E2E === '1' || env.PLAYWRIGHT_REMOTE_DEBUG_PORT;
+
+  if (automationRequested) {
+    if (!env.PLAYWRIGHT_REMOTE_DEBUG_PORT) {
+      console.log(
+        `${YELLOW}PLAYWRIGHT_E2E=1 but PLAYWRIGHT_REMOTE_DEBUG_PORT missing; tests should set both${RESET}`,
+      );
+    } else {
+      console.log(
+        `${CYAN}Launching Hive Consensus with remote debugging on port ${env.PLAYWRIGHT_REMOTE_DEBUG_PORT}${RESET}`,
+      );
+    }
+  } else {
+    console.log(`${CYAN}Launching Hive Consensus for post-build verification${RESET}`);
+  }
+
+  try {
+    const child = spawn(INSTALLED_APP_BINARY, [], {
+      env,
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    console.log(`${GREEN}✓ Hive Consensus launched from Applications${RESET}`);
+    if (automationRequested && env.PLAYWRIGHT_REMOTE_DEBUG_PORT) {
+      console.log(
+        `${CYAN}  Playwright attach URL: ws://127.0.0.1:${env.PLAYWRIGHT_REMOTE_DEBUG_PORT}${RESET}`,
+      );
+    }
+  } catch (error) {
+    console.log(`${YELLOW}⚠ Failed to launch Hive Consensus automatically: ${error.message}${RESET}`);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // PATH CONFIGURATION AND VERIFICATION
@@ -104,8 +162,11 @@ class BuildLogger {
       fs.mkdirSync(this.logDir, { recursive: true });
     }
     
-    // Visual terminal already spawned at script start
-    console.log(`${GREEN}✓ Visual progress monitor active (16 phases)${RESET}`);
+    if (IS_CI) {
+      console.log(`${YELLOW}Visual progress monitor disabled in CI${RESET}`);
+    } else {
+      console.log(`${GREEN}✓ Visual progress monitor active (16 phases)${RESET}`);
+    }
     
     this.currentPhase = 0;
     this.totalPhases = 17; // Total phases including binary bundling and installation
@@ -124,9 +185,13 @@ class BuildLogger {
   }
   
   spawnVisualLogger() {
+    if (IS_CI) {
+      console.log(`${YELLOW}Skipping visual progress monitor in CI${RESET}`);
+      return;
+    }
     try {
       const BUILD_LOG = '/tmp/hive-build-progress.log';
-      
+
       // Kill any existing tail processes
       execSync(`pkill -f "tail -f ${BUILD_LOG}" 2>/dev/null || true`);
       
@@ -288,17 +353,18 @@ EOF`;
   }
 }
 
-// Spawn visual terminal FIRST before anything else
+// Spawn visual terminal FIRST before anything else (local runs only)
 const BUILD_LOG = '/tmp/hive-build-progress.log';
-try {
-  // Clear the log file first to remove old content
-  fs.writeFileSync(BUILD_LOG, 'Starting build...\n');
-  
-  // Kill any existing tail processes
-  execSync(`pkill -f "tail -f ${BUILD_LOG}" 2>/dev/null || true`);
-  
-  // Launch Terminal window to show progress
-  const appleScriptCmd = `osascript <<EOF
+if (!IS_CI) {
+  try {
+    // Clear the log file first to remove old content
+    fs.writeFileSync(BUILD_LOG, 'Starting build...\n');
+
+    // Kill any existing tail processes
+    execSync(`pkill -f "tail -f ${BUILD_LOG}" 2>/dev/null || true`);
+
+    // Launch Terminal window to show progress
+    const appleScriptCmd = `osascript <<EOF
 tell application "Terminal"
     activate
     set newWindow to do script "echo '🏗️  Hive Consensus Build Progress' && echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' && echo '' && tail -f ${BUILD_LOG}"
@@ -306,10 +372,14 @@ tell application "Terminal"
     set custom title of front window to "Build Progress"
 end tell
 EOF`;
-  execSync(appleScriptCmd, { shell: '/bin/bash' });
-  execSync('sleep 0.5'); // Ensure Terminal is ready
-} catch (error) {
-  // Continue even if visual terminal fails
+    execSync(appleScriptCmd, { shell: '/bin/bash' });
+    execSync('sleep 0.5'); // Ensure Terminal is ready
+  } catch (error) {
+    // Continue even if visual terminal fails
+  }
+} else {
+  // Ensure log file exists even when not streaming to Terminal
+  fs.writeFileSync(BUILD_LOG, 'CI build: visual monitor disabled.\n');
 }
 
 // Initialize build logger (which will now skip spawning since we already did it)
@@ -721,53 +791,58 @@ console.log(`${CYAN}Bundling Node.js runtime (for Memory Service)...${RESET}`);
 const nodeTargetPath = path.join(binariesDir, 'node');
 let nodeBundled = false;
 
-// Find Node.js to bundle
-const nodeSystemPaths = [
-  '/opt/homebrew/bin/node',     // Homebrew on Apple Silicon
-  '/usr/local/bin/node',         // Homebrew on Intel
-  process.execPath               // Current Node.js (might be Electron)
-];
+try {
+  const nodeVersionRaw = execSync('node --version', { encoding: 'utf8' }).trim();
+  const nodeVersion = nodeVersionRaw.replace(/^v/, '');
+  const nodeMajor = parseInt(nodeVersion.split('.')[0], 10);
 
-// Prefer non-Electron Node.js
-for (const nodePath of nodeSystemPaths) {
-  if (fs.existsSync(nodePath) && !nodePath.includes('Electron')) {
-    try {
-      // Copy node binary
-      fs.copyFileSync(nodePath, nodeTargetPath);
-      fs.chmodSync(nodeTargetPath, 0o755);
-      
-      // Verify it works and check version
-      const nodeVersion = execSync(`"${nodeTargetPath}" --version 2>&1`, { encoding: 'utf8' }).trim();
-      
-      // Check version compatibility
-      if (!checkVersionCompatibility('node', nodeVersion)) {
-        const req = binaryRequirements.node;
-        if (req && req.critical) {
-          console.error(`${RED}✗ node version incompatible and marked as critical!${RESET}`);
-          if (!process.env.ALLOW_VERSION_MISMATCH) {
-            process.exit(1);
-          }
-        }
-      }
-      
-      console.log(`${GREEN}✓ Bundled Node.js: ${nodeVersion}${RESET}`);
-      bundledBinaries.push('node');
-      nodeBundled = true;
-      break;
-    } catch (e) {
-      console.log(`${YELLOW}⚠ Found node at ${nodePath} but couldn't bundle it: ${e.message}${RESET}`);
-    }
+  const platform = process.platform;
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+
+  if (platform !== 'darwin' && platform !== 'linux') {
+    throw new Error(`Unsupported platform for Node runtime bundling: ${platform}`);
   }
+
+  const nodeFilename = `node-v${nodeVersion}-${platform}-${arch}`;
+  const nodeArchive = `${nodeFilename}.${platform === 'win32' ? 'zip' : 'tar.gz'}`;
+  const nodeUrl = `https://nodejs.org/dist/v${nodeVersion}/${nodeArchive}`;
+  const downloadPath = path.join(os.tmpdir(), nodeArchive);
+  const extractPath = path.join(os.tmpdir(), nodeFilename);
+
+  if (!fs.existsSync(downloadPath)) {
+    console.log(`${CYAN}  Downloading official Node.js ${nodeVersionRaw}...${RESET}`);
+    execSync(`curl -L "${nodeUrl}" -o "${downloadPath}"`, { stdio: 'inherit' });
+  } else {
+    console.log(`${CYAN}  Using cached Node.js archive at ${downloadPath}${RESET}`);
+  }
+
+  if (fs.existsSync(extractPath)) {
+    fs.rmSync(extractPath, { recursive: true, force: true });
+  }
+
+  console.log(`${CYAN}  Extracting Node.js archive...${RESET}`);
+  execSync(`tar -xzf "${downloadPath}" -C "${os.tmpdir()}"`, { stdio: 'inherit' });
+
+  const nodeBinarySource = path.join(extractPath, 'bin', platform === 'win32' ? 'node.exe' : 'node');
+  if (!fs.existsSync(nodeBinarySource)) {
+    throw new Error(`Failed to find node binary at ${nodeBinarySource}`);
+  }
+
+  fs.copyFileSync(nodeBinarySource, nodeTargetPath);
+  fs.chmodSync(nodeTargetPath, 0o755);
+  console.log(`${GREEN}✓ Bundled Node.js: ${nodeVersionRaw}${RESET}`);
+  bundledBinaries.push('node');
+  nodeBundled = true;
+
+  // Clean up extracted directory to save space
+  fs.rmSync(extractPath, { recursive: true, force: true });
+} catch (error) {
+  console.log(`${YELLOW}⚠ Failed to bundle standalone Node.js runtime: ${error.message}${RESET}`);
 }
 
 if (!nodeBundled) {
-  // Fall back to using Electron's Node.js (which is always available)
   console.log(`${YELLOW}Using Electron's built-in Node.js for Memory Service${RESET}`);
-  // Create a wrapper script that uses Electron's node
-  const nodeWrapperScript = `#!/bin/sh
-# Wrapper to use Electron's Node.js runtime
-ELECTRON_RUN_AS_NODE=1 exec "$(dirname "$0")/../MacOS/Hive Consensus" "$@"
-`;
+  const nodeWrapperScript = `#!/bin/sh\n# Wrapper to use Electron's Node.js runtime\nELECTRON_RUN_AS_NODE=1 exec \"$(dirname \"$0\")/../MacOS/Hive Consensus\" \"$@\"\n`;
   fs.writeFileSync(nodeTargetPath, nodeWrapperScript);
   fs.chmodSync(nodeTargetPath, 0o755);
   bundledBinaries.push('node');
@@ -1061,18 +1136,22 @@ if (!nodePath) {
   nodePath = process.execPath; // Fallback to Electron
 }
 
-// Write discovered path to environment config for ProcessManager
+// Write configuration for ProcessManager
 const envConfigPath = path.join(__dirname, '..', '.env.production');
 let envConfig = '';
 if (fs.existsSync(envConfigPath)) {
   envConfig = fs.readFileSync(envConfigPath, 'utf8');
 }
 
-// Update or add NODE_PATH for production use
-if (envConfig.includes('NODE_PATH=')) {
-  envConfig = envConfig.replace(/NODE_PATH=.*\n/, `NODE_PATH=${nodePath}\n`);
+const nodePathToSave = './binaries/node';
+if (nodeBundled) {
+  if (envConfig.includes('NODE_PATH=')) {
+    envConfig = envConfig.replace(/NODE_PATH=.*\n/, `NODE_PATH=${nodePathToSave}\n`);
+  } else {
+    envConfig += `NODE_PATH=${nodePathToSave}\n`;
+  }
 } else {
-  envConfig += `\nNODE_PATH=${nodePath}\n`;
+  envConfig = envConfig.replace(/NODE_PATH=.*\n/g, '');
 }
 
 // Also save whether we need ELECTRON_RUN_AS_NODE
@@ -1795,55 +1874,108 @@ logPhase('INSTALLATION GUIDE', 'How to test the production build');
 console.log(`${GREEN}${BOLD}✅ BUILD SUCCESSFUL!${RESET}\n`);
 
 // Auto-install the DMG for immediate testing
-console.log(`${CYAN}${BOLD}Auto-installing DMG for testing...${RESET}`);
-try {
-  // First, eject any existing Hive Consensus volumes
+if (IS_CI) {
+  console.log(`${YELLOW}Skipping DMG auto-install in CI environment${RESET}`);
+  console.log(`${CYAN}Manual installation steps:${RESET}\n`);
+  console.log(`  ${BOLD}1.${RESET} Download the DMG artifact from the workflow run`);
+  console.log(`  ${BOLD}2.${RESET} Mount the DMG locally and drag "Hive Consensus" to Applications\n`);
+} else {
+  console.log(`${CYAN}${BOLD}Auto-installing DMG for testing...${RESET}`);
   try {
-    execCommand('hdiutil detach "/Volumes/Hive Consensus" 2>/dev/null || true', 'Eject existing volume', { silent: true });
+    if (SHOULD_RUN_UI_SMOKE) {
+      process.env.HIVE_SKIP_AUTO_LAUNCH = '1';
+    }
+    // First, kill any running app
+    console.log(`${YELLOW}➤ Stopping any running Hive Consensus${RESET}`);
+    try {
+      execCommand('pkill -f "Hive Consensus" || true', 'Stop running app', { silent: true });
+      execCommand('sleep 1', 'Wait for app to quit', { silent: true });
+    } catch (error) {
+      // Ignore errors - app might not be running
+    }
+
+    // Eject any existing Hive Consensus volumes
+    try {
+      execCommand('hdiutil detach "/Volumes/Hive Consensus" 2>/dev/null || true', 'Eject existing volume', { silent: true });
+      execCommand('sleep 0.5', 'Wait for volume to eject', { silent: true });
+    } catch (error) {
+      // Ignore errors - volume might not exist
+    }
+
+    // Mount DMG fresh
+    console.log(`${YELLOW}➤ Mounting DMG${RESET}`);
+    execCommand(`hdiutil attach "${dmgPath}" -nobrowse`, 'Mounting DMG for auto-install');
+
+    // Wait for mount to complete
+    execCommand('sleep 1', 'Wait for DMG to mount', { silent: true });
+
+    // Use standard volume path
+    const volumePath = '/Volumes/Hive Consensus';
+
+    // Verify the app exists
+    if (!fs.existsSync(`${volumePath}/Hive Consensus.app`)) {
+      throw new Error(`Could not find Hive Consensus.app in ${volumePath}`);
+    }
+
+    console.log(`${CYAN}  Found app at: ${volumePath}/Hive Consensus.app${RESET}`);
+
+    console.log(`${YELLOW}➤ Removing old version from Applications${RESET}`);
+
+    // Force remove old app first
+    try {
+      execCommand('pkill -f "Hive Consensus" || true', 'Stop running app');
+      execCommand('sleep 1', 'Wait for app to quit');
+      execCommand('rm -rf "/Applications/Hive Consensus.app"', 'Remove old app');
+    } catch (error) {
+      console.log(`${YELLOW}  Note: Old app might not exist or be in use${RESET}`);
+    }
+
+    console.log(`${YELLOW}➤ Installing new version to Applications${RESET}`);
+
+    // Copy new app (force overwrite)
+    execCommand(`cp -Rf "${volumePath}/Hive Consensus.app" /Applications/`, 'Installing app to Applications');
+
+    // Verify installation
+    if (!fs.existsSync('/Applications/Hive Consensus.app')) {
+      throw new Error('Failed to install app to Applications');
+    }
+
+    // Unmount DMG
+    console.log(`${YELLOW}➤ Ejecting DMG${RESET}`);
+    execCommand(`hdiutil detach "${volumePath}"`, 'Ejecting DMG');
+
+    console.log(`${GREEN}✅ Auto-installation complete!${RESET}`);
+    console.log(`${GREEN}  App installed to: /Applications/Hive Consensus.app${RESET}\n`);
+    if (!SHOULD_RUN_UI_SMOKE) {
+      launchInstalledApp();
+    }
+
   } catch (error) {
-    // Ignore errors - volume might not exist
+    console.log(`${YELLOW}⚠ Auto-install failed: ${error.message}${RESET}`);
+    console.log(`${CYAN}Manual installation required:${RESET}\n`);
+    console.log(`  ${BOLD}1.${RESET} Mount the DMG:`);
+    console.log(`     ${YELLOW}open "${dmgPath}"${RESET}\n`);
+    console.log(`  ${BOLD}2.${RESET} Drag "Hive Consensus" to Applications folder`);
+    console.log(`     ${RED}⚠️  IMPORTANT: Do NOT launch from the DMG!${RESET}\n`);
+    console.log(`  ${BOLD}3.${RESET} Eject the DMG after copying\n`);
   }
-  
-  // Mount DMG fresh
-  console.log(`${YELLOW}➤ Mounting DMG${RESET}`);
-  execCommand(`hdiutil attach "${dmgPath}" -nobrowse`, 'Mounting DMG for auto-install', { silent: true });
-  
-  // Use standard volume path
-  const volumePath = '/Volumes/Hive Consensus';
-  
-  // Verify the app exists
-  if (!fs.existsSync(`${volumePath}/Hive Consensus.app`)) {
-    throw new Error(`Could not find Hive Consensus.app in ${volumePath}`);
+}
+
+if (SHOULD_RUN_UI_SMOKE) {
+  console.log(`${CYAN}${BOLD}Running UI smoke tests (npm run test:ui)...${RESET}`);
+  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const testEnv = {
+    ...process.env,
+    PLAYWRIGHT_ATTACH: '0',
+  };
+  const result = spawnSync(npmCmd, ['run', 'test:ui'], {
+    cwd: ELECTRON_ROOT,
+    env: testEnv,
+    stdio: 'inherit',
+  });
+  if (result.status !== 0) {
+    throw new Error('UI smoke suite failed');
   }
-  
-  console.log(`${CYAN}  Found app at: ${volumePath}/Hive Consensus.app${RESET}`);
-  
-  console.log(`${YELLOW}➤ Installing to Applications${RESET}`);
-  
-  // Force remove old app first (in case the earlier removal failed)
-  try {
-    execCommand('rm -rf "/Applications/Hive Consensus.app"', 'Force remove old app', { silent: true });
-  } catch (error) {
-    // Ignore errors
-  }
-  
-  // Copy new app
-  execCommand(`cp -R "${volumePath}/Hive Consensus.app" /Applications/`, 'Installing app to Applications', { silent: true });
-  
-  // Unmount DMG
-  console.log(`${YELLOW}➤ Ejecting DMG${RESET}`);
-  execCommand(`hdiutil detach "${volumePath}"`, 'Ejecting DMG', { silent: true });
-  
-  console.log(`${GREEN}✅ Auto-installation complete!${RESET}\n`);
-  
-} catch (error) {
-  console.log(`${YELLOW}⚠ Auto-install failed: ${error.message}${RESET}`);
-  console.log(`${CYAN}Manual installation required:${RESET}\n`);
-  console.log(`  ${BOLD}1.${RESET} Mount the DMG:`);
-  console.log(`     ${YELLOW}open "${dmgPath}"${RESET}\n`);
-  console.log(`  ${BOLD}2.${RESET} Drag "Hive Consensus" to Applications folder`);
-  console.log(`     ${RED}⚠️  IMPORTANT: Do NOT launch from the DMG!${RESET}\n`);
-  console.log(`  ${BOLD}3.${RESET} Eject the DMG after copying\n`);
 }
 
 console.log(`${CYAN}${BOLD}Ready for testing:${RESET}`);

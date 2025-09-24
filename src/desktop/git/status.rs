@@ -1,5 +1,5 @@
 //! Git file status tracking
-//! 
+//!
 //! Types and operations for tracking file changes
 
 use git2::{Status, StatusShow};
@@ -53,7 +53,7 @@ impl StatusType {
     pub fn from_git2_status(status: git2::Status) -> Self {
         Self::from(status)
     }
-    
+
     /// Get the icon for this status type (VS Code style)
     pub fn icon(&self) -> &'static str {
         match self {
@@ -67,17 +67,17 @@ impl StatusType {
             StatusType::Conflicted => "⚠",
         }
     }
-    
+
     /// Get the color for this status type
     pub fn color(&self) -> &'static str {
         match self {
-            StatusType::Modified => "#e2c08d", // Yellow
-            StatusType::Added => "#73c991",    // Green
-            StatusType::Deleted => "#f44747",  // Red
-            StatusType::Renamed => "#c586c0",  // Purple
-            StatusType::Copied => "#c586c0",   // Purple
-            StatusType::Untracked => "#73c991", // Green
-            StatusType::Ignored => "#6b737c",  // Gray
+            StatusType::Modified => "#e2c08d",   // Yellow
+            StatusType::Added => "#73c991",      // Green
+            StatusType::Deleted => "#f44747",    // Red
+            StatusType::Renamed => "#c586c0",    // Purple
+            StatusType::Copied => "#c586c0",     // Purple
+            StatusType::Untracked => "#73c991",  // Green
+            StatusType::Ignored => "#6b737c",    // Gray
             StatusType::Conflicted => "#f44747", // Red
         }
     }
@@ -109,11 +109,11 @@ impl SyncStatus {
         if !self.has_upstream {
             return String::new();
         }
-        
+
         if self.is_syncing {
             return "⟳".to_string();
         }
-        
+
         // VS Code style: only show non-zero counts
         let mut parts = Vec::new();
         if self.behind > 0 {
@@ -122,7 +122,7 @@ impl SyncStatus {
         if self.ahead > 0 {
             parts.push(format!("↑{}", self.ahead));
         }
-        
+
         parts.join(" ")
     }
 }

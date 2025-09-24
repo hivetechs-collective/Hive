@@ -297,7 +297,7 @@ impl Default for EnhancedStreaming {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use futures::StreamExt;

@@ -27,42 +27,42 @@ pub mod logo_svg;
 pub mod markdown;
 pub mod menu_bar;
 pub mod model_browser;
+pub mod problems;
+pub mod profile_service;
 pub mod simple_db;
 pub mod state;
 pub mod status_bar_enhanced;
-pub mod profile_service;
 pub mod styles;
-pub mod problems;
 pub mod terminal;
 pub mod terminal_pty;
 pub mod terminal_tabs;
 // pub mod terminal_emulator; // Disabled - API incompatibilities
-pub mod terminal_xterm_simple;
-pub mod terminal_cwd_tracker;
-pub mod welcome_enhanced;
-pub mod resizable_panels;
 pub mod code_editor;
-pub mod response_coordinator;
-pub mod terminal_registry;
-pub mod terminal_buffer;
-pub mod git;
 pub mod diff_viewer;
+pub mod git;
 pub mod git_ui_wrapper;
+pub mod resizable_panels;
+pub mod response_coordinator;
+pub mod terminal_buffer;
+pub mod terminal_cwd_tracker;
+pub mod terminal_registry;
+pub mod terminal_xterm_simple;
+pub mod welcome_enhanced;
 pub mod workspace;
 
 // Re-export commonly used styling components
 pub use dialogs::OperationConfirmationDialog;
 pub use menu_bar::{MenuAction, MenuBar};
+pub use problems::{
+    ProblemItem, ProblemSeverity, ProblemSource, ProblemsPanel, ProblemsState,
+    PROBLEMS_PANEL_STYLES,
+};
 pub use styles::components::{
     ButtonVariant, FileTreeItem, IconSize, PanelStyle, StatusBarItem, VsCodeButton, VsCodePanel,
     VsCodeTab,
 };
-pub use problems::{
-    ProblemsPanel, ProblemItem, ProblemSeverity, ProblemSource, ProblemsState,
-    PROBLEMS_PANEL_STYLES,
-};
 pub use styles::theme::{use_theme, Theme, ThemeProvider, ThemeSwitcher};
-pub use workspace::{WorkspaceState, FileState, WorkspaceSettings};
+pub use workspace::{FileState, WorkspaceSettings, WorkspaceState};
 
 use crate::core::config::Config as HiveConfig;
 use anyhow::Result;

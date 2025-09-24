@@ -426,17 +426,22 @@ export class EditorTabs {
     const editorEl = document.getElementById(`editor-${tabId}`);
     if (editorEl) {
       editorEl.style.display = 'block';
+      
+      // Force Monaco editor to recalculate its layout after becoming visible
+      // This fixes the black content issue
+      const editor = this.editors.get(tabId);
+      if (editor) {
+        // Use setTimeout to ensure the DOM has updated before layout
+        setTimeout(() => {
+          editor.layout();
+          editor.focus();
+        }, 0);
+      }
     }
 
     // Update active tab
     this.activeTabId = tabId;
     this.renderTabs();
-
-    // Focus editor
-    const editor = this.editors.get(tabId);
-    if (editor) {
-      editor.focus();
-    }
   }
 
   /**
@@ -517,6 +522,11 @@ export class EditorTabs {
     console.log('[EditorTabs] saveTab called for:', tabId, 'tab:', tab?.name, 'isDirty:', tab?.isDirty);
     if (!tab || !tab.isDirty) return;
 
+    if (!tab.path) {
+      alert('Use "Save As" to choose a file location before saving.');
+      return;
+    }
+
     const editor = this.editors.get(tabId);
     if (!editor) return;
 
@@ -530,8 +540,6 @@ export class EditorTabs {
       tab.content = content;
       this.renderTabs();
       
-      // Immediately refresh Git status after save
-      // This ensures the file shows as modified in Git
       if (window.scmView) {
         window.scmView.refresh();
       }
@@ -539,13 +547,75 @@ export class EditorTabs {
         window.fileExplorer.refreshGitStatus();
       }
       
-      // Notify callbacks
       this.saveCallbacks.forEach(cb => cb(tab.path, content));
     } catch (error) {
       console.error('Failed to save file:', error);
       alert(`Failed to save ${tab.name}`);
     }
   }
+
+  private async saveTabAs(tabId: string, targetPath: string): Promise<void> {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+
+    const editor = this.editors.get(tabId);
+    if (!editor) return;
+
+    const content = editor.getValue();
+    const previousPath = tab.path;
+
+    try {
+      await window.fileAPI.writeFile(targetPath, content);
+
+      if (previousPath && previousPath !== targetPath) {
+        try {
+          await window.fileAPI.unwatchFile(previousPath);
+        } catch (error) {
+          console.warn('[EditorTabs] Failed to unwatch previous file:', error);
+        }
+      }
+
+      tab.path = targetPath;
+      tab.name = targetPath.split('/').pop() || targetPath;
+      tab.content = content;
+      tab.isDirty = false;
+      tab.language = this.detectLanguage(tab.name);
+
+      const model = editor.getModel();
+      if (model) {
+        monaco.editor.setModelLanguage(model, tab.language);
+      }
+
+      if (previousPath && previousPath !== targetPath) {
+        const existingModel = this.models.get(previousPath);
+        if (existingModel) {
+          this.models.delete(previousPath);
+          this.models.set(targetPath, existingModel);
+        }
+      }
+
+      try {
+        await window.fileAPI.watchFile(targetPath);
+      } catch (error) {
+        console.warn('[EditorTabs] Failed to watch new file:', error);
+      }
+
+      this.renderTabs();
+
+      if (window.scmView) {
+        window.scmView.refresh();
+      }
+      if (window.fileExplorer?.refreshGitStatus) {
+        window.fileExplorer.refreshGitStatus();
+      }
+
+      this.saveCallbacks.forEach(cb => cb(targetPath, content));
+    } catch (error) {
+      console.error('Failed to save file:', error);
+      alert(`Failed to save ${tab.name}`);
+    }
+  }
+
 
   /**
    * Render tabs UI
@@ -980,6 +1050,72 @@ export class EditorTabs {
   }
   
   /**
+   * Get current session data for persistence
+   */
+  public getSessionData(): { tabs: any[], activeTab: string | null } {
+    const sessionTabs = this.tabs.map(tab => ({
+      id: tab.id,
+      path: tab.path,
+      name: tab.name,
+      isDirty: tab.isDirty,
+      language: tab.language
+    }));
+    
+    return {
+      tabs: sessionTabs,
+      activeTab: this.activeTabId
+    };
+  }
+  
+  /**
+   * Restore session from saved data
+   */
+  public async restoreSession(sessionData: { tabs: any[], activeTab: string | null }): Promise<void> {
+    console.log('[EditorTabs] Restoring session with', sessionData.tabs.length, 'tabs');
+    
+    // Clear existing tabs first
+    this.closeAllTabsSync();
+    
+    // Restore each tab
+    for (const tabData of sessionData.tabs) {
+      try {
+        // Read file content if it's a file tab
+        if (tabData.path && window.fileAPI) {
+          // Just pass the path, openFile will read the content
+          await this.openFile(tabData.path);
+        }
+      } catch (error) {
+        console.error('[EditorTabs] Failed to restore tab:', tabData.path, error);
+      }
+    }
+    
+    // Restore active tab
+    if (sessionData.activeTab && this.tabs.find(t => t.id === sessionData.activeTab)) {
+      this.activateTab(sessionData.activeTab);
+    }
+    
+    console.log('[EditorTabs] Session restored successfully');
+  }
+  
+  /**
+   * Close all tabs (sync version for immediate cleanup)
+   */
+  public closeAllTabsSync(): void {
+    // Close each tab
+    while (this.tabs.length > 0) {
+      const tab = this.tabs[0];
+      this.closeTab(tab.id);
+    }
+  }
+  
+  /**
+   * Get the count of open tabs
+   */
+  public getTabCount(): number {
+    return this.tabs.length;
+  }
+  
+  /**
    * Get auto-save status
    */
   public getAutoSaveStatus(): { enabled: boolean; delay: number } {
@@ -1005,6 +1141,11 @@ export class EditorTabs {
       await this.saveTab(this.activeTabId);
     }
   }
+
+  public async saveActiveTabAs(targetPath: string): Promise<void> {
+    if (!this.activeTabId) return;
+    await this.saveTabAs(this.activeTabId, targetPath);
+  }
   
   /**
    * Create a new untitled file
@@ -1025,6 +1166,11 @@ export class EditorTabs {
     this.renderTabs();
     this.createEditor(tab);
     this.activateTab(tab.id);
+  }
+
+  public async closeCurrentTab(): Promise<void> {
+    if (!this.activeTabId) return;
+    await this.closeTab(this.activeTabId);
   }
   
 }

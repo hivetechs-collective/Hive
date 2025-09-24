@@ -2,15 +2,15 @@
 //!
 //! VS Code-like integrated terminal experience
 
-use dioxus::prelude::*;
+use super::terminal_pty::PtyProcess;
+use chrono::Local;
 use dioxus::document::eval;
+use dioxus::prelude::*;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::process::Command;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use chrono::Local;
-use super::terminal_pty::PtyProcess;
+use tokio::process::Command;
+use tokio::sync::Mutex;
 
 const MAX_OUTPUT_LINES: usize = 1000;
 const MAX_HISTORY: usize = 100;
@@ -35,25 +35,25 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
 
     // Auto-scroll to bottom flag
     let mut should_scroll = use_signal(|| true);
-    
+
     // Claude Code installation state
     let mut claude_installed = use_signal(|| false);
     let mut checked_claude = use_signal(|| false);
-    
+
     // PTY process for interactive commands
     let mut pty_process: Signal<Option<Arc<Mutex<PtyProcess>>>> = use_signal(|| None);
 
     // Initialize terminal only once
     let mut initialized = use_signal(|| false);
-    
+
     // Clone terminal_id for use in effects
     let terminal_id_for_init = terminal_id.clone();
-    
+
     // Initialize with prompt and check for Claude Code
     use_effect(move || {
         if !*initialized.read() {
             initialized.set(true);
-            
+
             // Welcome message
             if terminal_id_for_init == "claude-code" {
                 output_lines.write().push_back(TerminalLine {
@@ -78,7 +78,12 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                 });
             } else {
                 output_lines.write().push_back(TerminalLine {
-                    text: format!("🐝 HiveTechs {} - VS Code Style", terminal_id_for_init.replace("-", " ").replace("terminal", "Terminal")),
+                    text: format!(
+                        "🐝 HiveTechs {} - VS Code Style",
+                        terminal_id_for_init
+                            .replace("-", " ")
+                            .replace("terminal", "Terminal")
+                    ),
                     line_type: LineType::Success,
                     timestamp: Local::now(),
                 });
@@ -93,7 +98,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                 line_type: LineType::Output,
                 timestamp: Local::now(),
             });
-            
+
             // Check for Claude Code installation
             if !*checked_claude.read() {
                 checked_claude.set(true);
@@ -101,11 +106,12 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                 let mut claude_installed = claude_installed.clone();
                 let mut current_directory = current_directory.clone();
                 let is_claude_terminal = terminal_id_for_init == "claude-code";
-                
+
                 spawn(async move {
                     if is_claude_terminal {
                         output_lines.write().push_back(TerminalLine {
-                            text: "🔍 Checking Claude Code installation for optimal experience...".to_string(),
+                            text: "🔍 Checking Claude Code installation for optimal experience..."
+                                .to_string(),
                             line_type: LineType::Output,
                             timestamp: Local::now(),
                         });
@@ -116,13 +122,9 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                             timestamp: Local::now(),
                         });
                     }
-                    
+
                     // Check if claude command exists
-                    match Command::new("claude")
-                        .arg("--version")
-                        .output()
-                        .await
-                    {
+                    match Command::new("claude").arg("--version").output().await {
                         Ok(output) if output.status.success() => {
                             let version = String::from_utf8_lossy(&output.stdout);
                             output_lines.write().push_back(TerminalLine {
@@ -131,7 +133,8 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                                 timestamp: Local::now(),
                             });
                             output_lines.write().push_back(TerminalLine {
-                                text: "💡 Try: claude \"What files are in this directory?\"".to_string(),
+                                text: "💡 Try: claude \"What files are in this directory?\""
+                                    .to_string(),
                                 line_type: LineType::Output,
                                 timestamp: Local::now(),
                             });
@@ -139,24 +142,26 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                         }
                         _ => {
                             output_lines.write().push_back(TerminalLine {
-                                text: "⚠️ Claude Code not found. Would you like to install it?".to_string(),
+                                text: "⚠️ Claude Code not found. Would you like to install it?"
+                                    .to_string(),
                                 line_type: LineType::Error,
                                 timestamp: Local::now(),
                             });
                             output_lines.write().push_back(TerminalLine {
-                                text: "Run 'install-claude' to set up Claude Code automatically.".to_string(),
+                                text: "Run 'install-claude' to set up Claude Code automatically."
+                                    .to_string(),
                                 line_type: LineType::Output,
                                 timestamp: Local::now(),
                             });
                         }
                     }
-                    
+
                     output_lines.write().push_back(TerminalLine {
                         text: String::new(),
                         line_type: LineType::Output,
                         timestamp: Local::now(),
                     });
-                    
+
                     // Add initial prompt
                     output_lines.write().push_back(TerminalLine {
                         text: format!("{}> ", current_directory.read()),
@@ -244,7 +249,8 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                     timestamp: Local::now(),
                 });
                 output_lines.write().push_back(TerminalLine {
-                    text: "  claude \"prompt\"   - Ask Claude a question (use straight quotes!)".to_string(),
+                    text: "  claude \"prompt\"   - Ask Claude a question (use straight quotes!)"
+                        .to_string(),
                     line_type: LineType::Output,
                     timestamp: Local::now(),
                 });
@@ -277,11 +283,11 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                     line_type: LineType::Success,
                     timestamp: Local::now(),
                 });
-                
+
                 let mut output_lines_clone = output_lines.clone();
                 let mut claude_installed_clone = claude_installed.clone();
                 let current_dir = current_directory.read().clone();
-                
+
                 is_running.set(true);
                 spawn(async move {
                     // Try npm install first
@@ -290,7 +296,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                         line_type: LineType::Output,
                         timestamp: Local::now(),
                     });
-                    
+
                     match Command::new("npm")
                         .args(&["install", "-g", "@anthropic-ai/claude-code"])
                         .output()
@@ -307,7 +313,8 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                         _ => {
                             // If npm fails, provide manual instructions
                             output_lines_clone.write().push_back(TerminalLine {
-                                text: "⚠️ Automatic installation failed. Please install manually:".to_string(),
+                                text: "⚠️ Automatic installation failed. Please install manually:"
+                                    .to_string(),
                                 line_type: LineType::Error,
                                 timestamp: Local::now(),
                             });
@@ -317,7 +324,8 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                                 timestamp: Local::now(),
                             });
                             output_lines_clone.write().push_back(TerminalLine {
-                                text: "2. Download and install Claude Code for your platform".to_string(),
+                                text: "2. Download and install Claude Code for your platform"
+                                    .to_string(),
                                 line_type: LineType::Output,
                                 timestamp: Local::now(),
                             });
@@ -328,7 +336,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                             });
                         }
                     }
-                    
+
                     output_lines_clone.write().push_back(TerminalLine {
                         text: String::new(),
                         line_type: LineType::Output,
@@ -340,7 +348,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                         timestamp: Local::now(),
                     });
                 });
-                
+
                 is_running.set(false);
                 should_scroll.set(true);
                 return;
@@ -415,12 +423,18 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
         }
 
         // Special handling for Claude interactive mode
-        let is_claude_interactive = command.trim() == "claude" || command.trim().starts_with("claude ");
-        
+        let is_claude_interactive =
+            command.trim() == "claude" || command.trim().starts_with("claude ");
+
         // Check for common quote mistakes
-        if command.contains('\u{201C}') || command.contains('\u{201D}') || command.contains('\u{2018}') || command.contains('\u{2019}') {
+        if command.contains('\u{201C}')
+            || command.contains('\u{201D}')
+            || command.contains('\u{2018}')
+            || command.contains('\u{2019}')
+        {
             output_lines.write().push_back(TerminalLine {
-                text: "⚠️ Error: You're using curly/smart quotes. Please use straight quotes (\")".to_string(),
+                text: "⚠️ Error: You're using curly/smart quotes. Please use straight quotes (\")"
+                    .to_string(),
                 line_type: LineType::Error,
                 timestamp: Local::now(),
             });
@@ -442,7 +456,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
             should_scroll.set(true);
             return;
         }
-        
+
         // Execute external command
         is_running.set(true);
         spawn(async move {
@@ -452,17 +466,17 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
             // For Claude interactive mode, use PTY
             if is_claude_interactive && command.trim() == "claude" {
                 let current_dir = current_directory.read().clone();
-                
+
                 // Try to spawn Claude in PTY
                 match PtyProcess::spawn("claude", &[], &current_dir) {
                     Ok((mut pty, mut rx)) => {
                         // Store the PTY process
                         let pty_arc = Arc::new(Mutex::new(pty));
                         pty_process.set(Some(pty_arc.clone()));
-                        
+
                         // Clear the prompt line since Claude will handle its own
                         output_lines.write().clear();
-                        
+
                         // Spawn a task to read PTY output
                         let mut output_lines_clone = output_lines.clone();
                         let mut should_scroll_clone = should_scroll.clone();
@@ -476,7 +490,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                                         line_type: LineType::Output,
                                         timestamp: Local::now(),
                                     });
-                                    
+
                                     // Limit output size
                                     while output_lines_clone.read().len() > MAX_OUTPUT_LINES {
                                         output_lines_clone.write().pop_front();
@@ -484,7 +498,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                                 }
                                 should_scroll_clone.set(true);
                             }
-                            
+
                             // Claude exited, clear PTY process and show prompt again
                             pty_process_clone.set(None);
                             output_lines_clone.write().push_back(TerminalLine {
@@ -493,7 +507,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                                 timestamp: Local::now(),
                             });
                         });
-                        
+
                         is_running.set(false);
                         should_scroll.set(true);
                         return;
@@ -617,12 +631,15 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
         let terminal_input_id_for_spawn = terminal_input_id_for_effect.clone();
         spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            let script = format!(r#"
+            let script = format!(
+                r#"
                 const input = document.getElementById('{}');
                 if (input) {{
                     input.focus();
                 }}
-            "#, terminal_input_id_for_spawn);
+            "#,
+                terminal_input_id_for_spawn
+            );
             if let Ok(_) = eval(&script).await {
                 tracing::debug!("Terminal input focused for {}", terminal_input_id_for_spawn);
             }
@@ -724,7 +741,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                                 Key::Enter => {
                                     evt.prevent_default();
                                     let command = input_text.read().clone();
-                                    
+
                                     // Check if we have an active PTY process
                                     if let Some(pty_arc) = pty_process.read().as_ref() {
                                         // Send input to PTY

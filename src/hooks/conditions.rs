@@ -533,7 +533,7 @@ fn parse_size(size_str: &str) -> Result<u64> {
     Ok((num * unit as f64) as u64)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

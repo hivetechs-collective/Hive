@@ -44,11 +44,24 @@ plugins.push(new CopyWebpackPlugin({
     { from: 'startup.html', to: 'startup.html' },
     { from: 'startup-neural.js', to: 'startup-neural.js' },
     { from: 'startup-preload.js', to: 'startup-preload.js' },
+    // Help is now integrated into the main window via TypeScript component
+    // Copy MEMORY.md guide for AI CLI tools
+    { from: 'resources/MEMORY.md', to: 'resources/MEMORY.md' },
     // Copy .env.production with discovered Node.js path (if exists)
-    { 
-      from: '.env.production', 
+    {
+      from: '.env.production',
       to: '.env.production',
       noErrorOnMissing: true  // Don't fail if file doesn't exist
+    },
+    // Copy CLI tool wrappers (like Cline wrapper that fixes VS Code API issues)
+    {
+      from: 'src/cli-tools',
+      to: 'cli-tools',  // Copy to root of output dir, not nested in src
+      noErrorOnMissing: true,
+      filter: (resourcePath) => {
+        // Only copy .js wrapper files
+        return resourcePath.endsWith('.js');
+      }
     }
   ],
 }));

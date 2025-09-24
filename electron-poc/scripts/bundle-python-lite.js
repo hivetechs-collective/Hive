@@ -362,13 +362,14 @@ async function main() {
       console.log('  ✅ Using model_service.py from resources');
       modelServiceCopied = true;
     } else {
-      // Try to find it in main hive repo (absolute path for reliability)
-      const mainModelService = '/Users/veronelazio/Developer/Private/hive/python/model_service.py';
-      if (await fs.pathExists(mainModelService)) {
-        await fs.copy(mainModelService, destModelService);
+      // Try to find it relative to repository root or via environment override
+      const repoModelService = process.env.HIVE_MODEL_SERVICE_PATH
+        || path.resolve(__dirname, '..', '..', 'python', 'model_service.py');
+      if (await fs.pathExists(repoModelService)) {
+        await fs.copy(repoModelService, destModelService);
         // Also copy to resources for next time
-        await fs.copy(mainModelService, resourceModelService);
-        console.log('  ✅ Copied model_service.py from hive repo');
+        await fs.copy(repoModelService, resourceModelService);
+        console.log('  ✅ Copied model_service.py from repository');
         modelServiceCopied = true;
       }
     }

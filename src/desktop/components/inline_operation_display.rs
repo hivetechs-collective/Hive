@@ -37,19 +37,19 @@ pub fn InlineOperationDisplay(
     rsx! {
         div {
             style: "margin: 8px 0; padding: 8px 12px; background: {theme.background_secondary}; border: 1px solid {theme.border}; border-radius: 4px; font-family: monospace; font-size: 13px; display: flex; align-items: center; gap: 8px;",
-            
+
             // Status icon
             span {
                 style: "font-size: 14px;",
                 "{icon}"
             }
-            
+
             // Operation description
             span {
                 style: "flex: 1; color: {theme.text};",
                 "{operation_desc}"
             }
-            
+
             // Status text
             if !status_text.is_empty() {
                 span {
@@ -81,7 +81,7 @@ pub fn ResponseSection(
     rsx! {
         div {
             style: "margin: 0; padding: 0;",
-            
+
             // Split content by operation markers and interleave
             for (idx, section) in split_content_with_operations(&content, &operations).into_iter().enumerate() {
                 match section {
@@ -120,9 +120,9 @@ fn split_content_with_operations(
 ) -> Vec<ContentSection> {
     // For now, simple implementation - just interleave text and operations
     // In a real implementation, we'd parse the content for operation markers
-    
+
     let mut sections = Vec::new();
-    
+
     // If we have operations, show them inline
     if !operations.is_empty() {
         // Add initial text if any
@@ -130,12 +130,12 @@ fn split_content_with_operations(
         if !parts.is_empty() && !parts[0].trim().is_empty() {
             sections.push(ContentSection::Text(parts[0].to_string()));
         }
-        
+
         // Add operations
         for (op, status) in operations {
             sections.push(ContentSection::Operation(op.clone(), status.clone()));
         }
-        
+
         // Add remaining text if any
         if parts.len() > 1 {
             let remaining = parts[1..].join("```");
@@ -147,24 +147,25 @@ fn split_content_with_operations(
         // No operations, just show the text
         sections.push(ContentSection::Text(content.to_string()));
     }
-    
+
     sections
 }
 
 /// Parse operations from streaming content
 pub fn parse_operations_from_content(content: &str) -> Vec<FileOperation> {
     let mut operations = Vec::new();
-    
+
     // Look for operation patterns in the content
     let operation_pattern = regex::Regex::new(
-        r"(?i)(Creating|Updating|Modifying|Deleting|Writing to|Adding to)\s+`([^`]+)`"
-    ).unwrap();
-    
+        r"(?i)(Creating|Updating|Modifying|Deleting|Writing to|Adding to)\s+`([^`]+)`",
+    )
+    .unwrap();
+
     for capture in operation_pattern.captures_iter(content) {
         if let (Some(action), Some(path)) = (capture.get(1), capture.get(2)) {
             let path_str = path.as_str();
             let path_buf = PathBuf::from(path_str);
-            
+
             match action.as_str().to_lowercase().as_str() {
                 "creating" | "writing to" | "adding to" => {
                     // Extract content after the operation line
@@ -172,7 +173,8 @@ pub fn parse_operations_from_content(content: &str) -> Vec<FileOperation> {
                         if let Some(code_start) = content[code_block_start..].find("```") {
                             let content_start = code_block_start + code_start + 3;
                             if let Some(code_end) = content[content_start..].find("```") {
-                                let file_content = content[content_start..content_start + code_end].trim();
+                                let file_content =
+                                    content[content_start..content_start + code_end].trim();
                                 operations.push(FileOperation::Create {
                                     path: path_buf,
                                     content: file_content.to_string(),
@@ -195,6 +197,6 @@ pub fn parse_operations_from_content(content: &str) -> Vec<FileOperation> {
             }
         }
     }
-    
+
     operations
 }

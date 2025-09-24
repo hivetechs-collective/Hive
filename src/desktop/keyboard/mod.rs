@@ -2,6 +2,6 @@
 pub mod auto_accept_shortcuts;
 
 pub use auto_accept_shortcuts::{
-    AutoAcceptShortcuts, KeyboardShortcutDisplay, ShortcutNotification, 
-    ShortcutGroup, ModeStatusIndicator, GlobalKeyboardListener, KeyboardEvent
+    AutoAcceptShortcuts, GlobalKeyboardListener, KeyboardEvent, KeyboardShortcutDisplay,
+    ModeStatusIndicator, ShortcutGroup, ShortcutNotification,
 };

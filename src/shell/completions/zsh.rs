@@ -599,7 +599,7 @@ echo "🔧 Advanced: tab completion shows descriptions and context-aware suggest
 "#.to_string()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

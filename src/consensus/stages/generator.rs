@@ -38,7 +38,7 @@ impl ConsensusStage for GeneratorStage {
                 content: enhanced_context,
             });
         }
-        
+
         // Add the user's question with enhanced formatting
         messages.push(Message {
             role: "user".to_string(),
@@ -122,13 +122,18 @@ impl GeneratorStage {
         } else if context.contains("IMPORTANT: Today's date is") {
             structured.push_str("🕒 TEMPORAL CONTEXT:\n");
             structured.push_str(context);
-        } else if context.contains("symbols:") || context.contains("dependencies:") || context.contains("Repository Path:") {
+        } else if context.contains("symbols:")
+            || context.contains("dependencies:")
+            || context.contains("Repository Path:")
+        {
             structured.push_str("🧠 REPOSITORY CONTEXT:\n");
             structured.push_str(&self.format_repository_context(context));
         } else if context.contains("File-Based Repository Analysis") {
             structured.push_str("📁 FILE-BASED REPOSITORY ANALYSIS:\n");
             structured.push_str(context);
-            structured.push_str("\n\n⚠️ CRITICAL: The above contains ACTUAL FILE CONTENTS from the repository. ");
+            structured.push_str(
+                "\n\n⚠️ CRITICAL: The above contains ACTUAL FILE CONTENTS from the repository. ",
+            );
             structured.push_str("You MUST use these real code snippets in your response. ");
             structured.push_str("DO NOT make up generic examples - use the provided code!\n");
         } else {

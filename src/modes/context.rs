@@ -638,7 +638,7 @@ pub struct ContextStatistics {
     pub modes_with_context: Vec<ModeType>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

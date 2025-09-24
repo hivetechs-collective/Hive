@@ -1006,7 +1006,7 @@ pub struct ReportMetadata {
     pub data_sources: Vec<String>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

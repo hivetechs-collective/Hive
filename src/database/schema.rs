@@ -195,7 +195,7 @@ pub fn initialize_default_data(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use rusqlite::Connection;

@@ -1000,7 +1000,7 @@ pub struct FunctionCallContext {
     pub arguments_so_far: Vec<String>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

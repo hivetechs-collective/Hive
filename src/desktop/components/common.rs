@@ -1,29 +1,29 @@
 // Common UI Components
 // Reusable components for the desktop UI
 
-use dioxus::prelude::*;
 use crate::desktop::styles::theme::ThemeColors;
+use dioxus::prelude::*;
 
 /// Button component props
 #[derive(Props, Clone, PartialEq)]
 pub struct ButtonProps {
     /// Button label
     pub label: String,
-    
+
     /// Button variant
     #[props(default = "primary")]
     pub variant: &'static str,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Click handler
     pub on_click: EventHandler<()>,
-    
+
     /// Whether the button is disabled
     #[props(default = false)]
     pub disabled: bool,
-    
+
     /// Additional CSS classes
     #[props(default = "")]
     pub class: &'static str,
@@ -33,17 +33,45 @@ pub struct ButtonProps {
 #[component]
 pub fn Button(props: ButtonProps) -> Element {
     let (bg_color, text_color, hover_color) = match props.variant {
-        "primary" => (props.theme.primary.clone(), props.theme.background.clone(), darken_color(&props.theme.primary, 0.1)),
-        "secondary" => (props.theme.background_secondary.clone(), props.theme.text.clone(), darken_color(&props.theme.background_secondary, 0.1)),
-        "success" => (props.theme.success.clone(), props.theme.background.clone(), darken_color(&props.theme.success, 0.1)),
-        "danger" => (props.theme.error.clone(), props.theme.background.clone(), darken_color(&props.theme.error, 0.1)),
-        "warning" => (props.theme.warning.clone(), props.theme.background.clone(), darken_color(&props.theme.warning, 0.1)),
-        _ => (props.theme.primary.clone(), props.theme.background.clone(), darken_color(&props.theme.primary, 0.1)),
+        "primary" => (
+            props.theme.primary.clone(),
+            props.theme.background.clone(),
+            darken_color(&props.theme.primary, 0.1),
+        ),
+        "secondary" => (
+            props.theme.background_secondary.clone(),
+            props.theme.text.clone(),
+            darken_color(&props.theme.background_secondary, 0.1),
+        ),
+        "success" => (
+            props.theme.success.clone(),
+            props.theme.background.clone(),
+            darken_color(&props.theme.success, 0.1),
+        ),
+        "danger" => (
+            props.theme.error.clone(),
+            props.theme.background.clone(),
+            darken_color(&props.theme.error, 0.1),
+        ),
+        "warning" => (
+            props.theme.warning.clone(),
+            props.theme.background.clone(),
+            darken_color(&props.theme.warning, 0.1),
+        ),
+        _ => (
+            props.theme.primary.clone(),
+            props.theme.background.clone(),
+            darken_color(&props.theme.primary, 0.1),
+        ),
     };
-    
+
     let opacity = if props.disabled { "0.5" } else { "1" };
-    let cursor = if props.disabled { "not-allowed" } else { "pointer" };
-    
+    let cursor = if props.disabled {
+        "not-allowed"
+    } else {
+        "pointer"
+    };
+
     rsx! {
         button {
             class: "button {props.class}",
@@ -76,16 +104,16 @@ pub fn Button(props: ButtonProps) -> Element {
 pub struct ToggleProps {
     /// Toggle label
     pub label: String,
-    
+
     /// Whether the toggle is checked
     pub checked: bool,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Change handler
     pub on_change: EventHandler<bool>,
-    
+
     /// Whether the toggle is disabled
     #[props(default = false)]
     pub disabled: bool,
@@ -99,11 +127,15 @@ pub fn Toggle(props: ToggleProps) -> Element {
     } else {
         props.theme.border.clone()
     };
-    
-    let cursor = if props.disabled { "not-allowed" } else { "pointer" };
+
+    let cursor = if props.disabled {
+        "not-allowed"
+    } else {
+        "pointer"
+    };
     let opacity = if props.disabled { "0.5" } else { "1" };
     let left_position = if props.checked { "22px" } else { "2px" };
-    
+
     rsx! {
         label {
             style: "
@@ -114,7 +146,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
                 opacity: {opacity};
                 user-select: none;
             ",
-            
+
             div {
                 style: "
                     position: relative;
@@ -130,7 +162,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
                         props.on_change.call(!props.checked);
                     }
                 },
-                
+
                 div {
                     style: "
                         position: absolute;
@@ -145,7 +177,7 @@ pub fn Toggle(props: ToggleProps) -> Element {
                     ",
                 }
             }
-            
+
             span {
                 style: "
                     color: {props.theme.text};
@@ -162,17 +194,17 @@ pub fn Toggle(props: ToggleProps) -> Element {
 pub struct SelectProps {
     /// Options (value, label)
     pub options: Vec<(&'static str, &'static str)>,
-    
+
     /// Currently selected value
     #[props(default = "")]
     pub value: &'static str,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Change handler
     pub on_change: EventHandler<String>,
-    
+
     /// Whether the select is disabled
     #[props(default = false)]
     pub disabled: bool,
@@ -201,7 +233,7 @@ pub fn Select(props: SelectProps) -> Element {
             value: props.value,
             onchange: move |evt| props.on_change.call(evt.value()),
             disabled: props.disabled,
-            
+
             for (value, label) in props.options {
                 option {
                     value: "{value}",
@@ -219,20 +251,20 @@ pub struct InputProps {
     /// Input placeholder
     #[props(default = "")]
     pub placeholder: &'static str,
-    
+
     /// Input value
     pub value: String,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Change handler
     pub on_change: EventHandler<String>,
-    
+
     /// Input type
     #[props(default = "text")]
     pub input_type: &'static str,
-    
+
     /// Whether the input is disabled
     #[props(default = false)]
     pub disabled: bool,
@@ -268,17 +300,17 @@ pub struct CardProps {
     /// Card title
     #[props(default = "")]
     pub title: &'static str,
-    
+
     /// Card content
     pub content: Element,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Whether the card has a border
     #[props(default = true)]
     pub bordered: bool,
-    
+
     /// Additional CSS classes
     #[props(default = "")]
     pub class: &'static str,
@@ -292,7 +324,7 @@ pub fn Card(props: CardProps) -> Element {
     } else {
         "none".to_string()
     };
-    
+
     rsx! {
         div {
             class: "card {props.class}",
@@ -303,7 +335,7 @@ pub fn Card(props: CardProps) -> Element {
                 padding: 20px;
                 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
             ",
-            
+
             if !props.title.is_empty() {
                 h3 {
                     style: "
@@ -315,7 +347,7 @@ pub fn Card(props: CardProps) -> Element {
                     "{props.title}"
                 }
             }
-            
+
             div {
                 class: "card-content",
                 {props.content}
@@ -348,7 +380,7 @@ pub struct SpinnerProps {
     /// Spinner size in pixels
     #[props(default = 24)]
     pub size: u32,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
 }
@@ -375,14 +407,14 @@ pub fn Spinner(props: SpinnerProps) -> Element {
 pub struct ProgressBarProps {
     /// Progress value (0-100)
     pub value: f32,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Whether to show percentage
     #[props(default = true)]
     pub show_percentage: bool,
-    
+
     /// Progress bar height
     #[props(default = 8)]
     pub height: u32,
@@ -392,11 +424,11 @@ pub struct ProgressBarProps {
 #[component]
 pub fn ProgressBar(props: ProgressBarProps) -> Element {
     let value = props.value.clamp(0.0, 100.0);
-    
+
     rsx! {
         div {
             style: "width: 100%;",
-            
+
             div {
                 style: "
                     height: {props.height}px;
@@ -405,7 +437,7 @@ pub fn ProgressBar(props: ProgressBarProps) -> Element {
                     overflow: hidden;
                     position: relative;
                 ",
-                
+
                 div {
                     style: "
                         height: 100%;
@@ -415,7 +447,7 @@ pub fn ProgressBar(props: ProgressBarProps) -> Element {
                     ",
                 }
             }
-            
+
             if props.show_percentage {
                 div {
                     style: "

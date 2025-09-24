@@ -42,21 +42,22 @@ pub mod common;
 pub mod icon;
 
 // New AI-Enhanced Auto-Accept components
-pub mod auto_accept_settings;
-pub mod operation_preview;
 pub mod approval_interface;
-pub mod progress_indicators;
-pub mod notifications;
+pub mod auto_accept_settings;
 pub mod inline_operation_display;
+pub mod notifications;
+pub mod operation_preview;
+pub mod progress_indicators;
 
 // Progress indicator is already included above
 // pub mod progress_indicator;
 
+pub use approval_interface::{ApprovalDecision, ApprovalInterface};
 pub use auto_accept_settings::AutoAcceptSettings;
-pub use operation_preview::OperationPreview;
-pub use approval_interface::{ApprovalInterface, ApprovalDecision};
-pub use progress_indicators::{ProgressIndicators, OperationProgress};
-pub use notifications::{NotificationSystem, Notification, NotificationType};
-pub use inline_operation_display::{InlineOperationDisplay, OperationStatus, ResponseSection, parse_operations_from_content};
 pub use icon::{Icon, IconProps, IconSize, IconWithLabel, IconWithLabelProps};
-
+pub use inline_operation_display::{
+    parse_operations_from_content, InlineOperationDisplay, OperationStatus, ResponseSection,
+};
+pub use notifications::{Notification, NotificationSystem, NotificationType};
+pub use operation_preview::OperationPreview;
+pub use progress_indicators::{OperationProgress, ProgressIndicators};

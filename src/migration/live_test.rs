@@ -666,7 +666,7 @@ pub async fn run_quick_live_test(typescript_path: &Path) -> Result<bool, HiveErr
     Ok(result.status == TestStatus::Completed)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::tempdir;

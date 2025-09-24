@@ -8,6 +8,7 @@
 5. [Communication Architecture](#communication-architecture)
 6. [User Interface Architecture](#user-interface-architecture)
 7. [Consensus Engine Architecture](#consensus-engine-architecture)
+8. [macOS Signing & Notarization Checklist](#macos-signing--notarization-checklist)
 8. [Visual Progress System](#visual-progress-system)
 9. [Memory Service Infrastructure](#memory-service-infrastructure)
 10. [Git Integration Architecture](#git-integration-architecture)
@@ -5447,6 +5448,152 @@ jobs:
           name: exe-release-windows
           path: out/make/**/*.exe
 ```
+
+**7.1 GitHub Actions Implementation (2025 Update)**
+
+- **Hermetic macOS build** – `build-release.yml` and the manual `build-binaries.yml` now mirror the 17-phase `npm run build:complete` flow used locally. Each run installs dependencies with `npm ci`, executes `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty`, and then drives the full script so native modules, Python runtime, and bundled Node align exactly with the shipped DMG.
+- **Native-module attestations** – After rebuilding, both workflows capture `otool -L` and `shasum -a 256` fingerprints for `node_sqlite3.node` into `electron-poc/build-logs/native-modules/` and upload them as artifacts. We can now verify ABI 136 alignment (Electron 37.3.1 / Node 22.18.0) before promoting a release.
+- **Post-build smoke test** – `npm run smoke:memory-health` loads the packaged memory-service entry through the same PortManager allocation used in production, verifies the `/health` endpoint responds, and tears the process down so every artifact proves sqlite bindings work before upload.
+- **Manual binary smoke builds** – `build-binaries.yml` remains `workflow_dispatch`-only for ad-hoc verification but inherits the same rebuild/fingerprint guardrails so every artifact matches production expectations.
+- **Rust + multi-language scanning** – `codeql.yml` continues to analyze JavaScript/TypeScript, Python, and Rust only on pushes to `main`/`master`, the Saturday cron, or manual dispatches to conserve GitHub minutes.
+- **Concurrency & caching** – All macOS and CodeQL workflows enable `cancel-in-progress`; npm caching (scoped to `electron-poc/package-lock.json`) keeps re-runs fast without reinstalling the toolchain.
+- **Formatting + smoke checks** – `ci-simple.yml` still owns `cargo fmt` + fast health checks, ensuring style/quick regressions fail cheaply before the macOS jobs spin up.
+- **Actions budget requirement** – macOS runners respect the organization spending limit. Keep a non-zero Actions budget (currently `$30`) otherwise jobs fail during dependency installation with the billing warning surfaced directly in the logs.
+- **Release gating & deprecation guard** – Cloudflare R2 uploads only occur for pushes to `main`/`master` or version tags. The workflows intentionally omit any legacy Dioxos Rust app or deprecated TUI build steps; those artifacts stay archived in the repo but are never compiled or published.
+- **Operational reminder** – If a run stalls on billing or toolchain provisioning, adjust the Actions budget and rerun; the guardrails log native-module status early so we can cancel quickly if prerequisites are missing.
+
+**7.2 Operations Playbook (GitHub, Workflows, and Deployment Control)**
+
+_This section captures the exact command sequences the automation agent uses so we never again assume “GitHub access is unavailable.” Every example below is verified in production._
+
+**Repository connectivity & branch hygiene**
+
+- Authenticate once with the GitHub CLI using a PAT that scopes to `repo` + `workflow`:
+  ```bash
+  gh auth login --with-token < ~/.config/hive/github-token.txt
+  gh auth status
+  ```
+- Clone or refresh the repo; never work from a shallow download:
+  ```bash
+  git clone git@github.com:hivetechs-collective/Hive.git
+  cd Hive
+  git remote -v
+  ```
+- Daily branch setup for automation work:
+  ```bash
+  git fetch origin
+  git checkout memory-context-cicd
+  git pull --ff-only origin memory-context-cicd
+  ```
+- Staging changes and committing:
+  ```bash
+  git status -sb
+  git add path/to/file.ts electron-poc/MASTER_ARCHITECTURE.md
+  git commit -m "feat: describe new consensus hook"
+  git push origin memory-context-cicd
+  ```
+- `master` is protected. To land changes the agent either (a) opens a PR via `gh pr create --base master --head memory-context-cicd --fill` or (b) lets a maintainer merge. Never attempt `git push origin master` directly (the hook rejects it, as seen during the notarization refactor).
+
+**CI/CD workflow control**
+
+- Enumerate workflows so we know the canonical names:
+  ```bash
+  gh workflow list
+  ```
+- Run the modular release pipeline end-to-end (push with defaults)
+  ```bash
+  gh workflow run "Build Release DMG" -r memory-context-cicd
+  ```
+- Focus on signing only (reuse an existing build artifact):
+  ```bash
+  gh workflow run "Build Release DMG" -r memory-context-cicd \
+    --field sign_only=true \
+    --field reuse_artifact_run_id=17946991023 \
+    --field skip_publish=true
+  ```
+- Skip signing or publishing when debugging build phases:
+  ```bash
+  gh workflow run "Build Release DMG" -r memory-context-cicd \
+    --field skip_sign=true
+  gh workflow run "Build Release DMG" -r memory-context-cicd \
+    --field skip_publish=true
+  ```
+- Monitor an in-flight run with structured status (used heavily during notarization triage):
+  ```bash
+  RUN_ID=$(gh run list --workflow "Build Release DMG" --limit 1 --json databaseId --jq '.[0].databaseId')
+  while true; do
+    gh run view "$RUN_ID" \
+      --json status,conclusion,jobs \
+      --jq '{status: .status, jobs: [.jobs[] | {name: .name, status: .status, conclusion: .conclusion}]}'
+    sleep 60
+  done
+  ```
+- Cancel or rerun quickly:
+  ```bash
+  gh run cancel 17946502364
+  gh run rerun 17959967757 --failed
+  ```
+
+**Artifact inspection & notarization debugging**
+
+- Download build artifacts (defaults to ZIP – plan to rehydrate symlinks):
+  ```bash
+  gh run download 17946991023 --name hive-macos-dmg --dir /tmp/hive_artifacts
+  ```
+- When signing, always mount the DMG to preserve framework symlinks before resigning:
+  ```bash
+  DMG="/tmp/hive_artifacts/make/Hive\ Consensus.dmg"
+  APP_MOUNT=$(mktemp -d)
+  APP_WORKDIR=$(mktemp -d)
+  hdiutil attach "$DMG" -mountpoint "$APP_MOUNT" -nobrowse
+  ditto "$APP_MOUNT/Hive Consensus.app" "$APP_WORKDIR/Hive Consensus.app"
+  hdiutil detach "$APP_MOUNT"
+  scripts/sign-notarize-macos.sh "$APP_WORKDIR/Hive Consensus.app" "$DMG"
+  ```
+- Pull notarization submission logs without waiting for the workflow footer:
+  ```bash
+  SUBMISSION_ID=$(rg '"id":' /tmp/sign_job_latest.log -o -r '$1')
+  xcrun notarytool log "$SUBMISSION_ID" --keychain-profile HiveNotaryProfile notarization-log.json
+  ```
+
+**Publish stage validation**
+
+- Check that the R2 upload step wrote the expected versioned file and checksum:
+  ```bash
+  gh run view 17959967757 --json jobs \
+    --jq '.jobs[] | select(.name=="Publish DMG to R2 / GitHub Release").databaseId'
+  gh api repos/hivetechs-collective/Hive/actions/jobs/51082601737/logs > /tmp/publish_job.log
+  rg "Hive-Consensus" /tmp/publish_job.log
+  ```
+- Confirm the workflow detected and published the correct semantic version (from `out/build-report.json`):
+  ```bash
+  gh run download 17959967757 --name hive-macos-dmg-ready --dir /tmp/latest_ready
+  jq '.buildTimings.buildVersion' /tmp/latest_ready/build-report.json
+  ```
+
+**Disabling or freezing workflows when necessary**
+
+- Temporarily disable a workflow by renaming it to `*.disabled` (see `release-legacy.yml.disabled`) or by editing the `on:` block to remove triggers. Example:
+  ```bash
+  mv .github/workflows/ci-simple.yml .github/workflows/ci-simple.yml.disabled
+  git add .github/workflows/ci-simple.yml.disabled
+  git commit -m "chore: pause ci-simple workflow"
+  ```
+- Re-enable by renaming back and `git push`.
+
+**Quick reference table**
+
+| Task | Command |
+| --- | --- |
+| View recent runs | `gh run list --workflow "Build Release DMG" --limit 5` |
+| Inspect job log | `gh api repos/<owner>/<repo>/actions/jobs/<job_id>/logs` |
+| Cancel stuck macOS runner | `gh run cancel <run_id>` |
+| Trigger CodeQL scan | `gh workflow run codeql.yml` |
+| Trigger build-only | `gh workflow run "Build Release DMG" --field skip_sign=true --field skip_publish=true` |
+| Trigger publish-only with existing artifact | `gh workflow run "Build Release DMG" --field sign_only=true --field reuse_artifact_run_id=<id>` |
+| Download notarized DMG | `gh run download <run_id> --name hive-macos-dmg-ready --dir ./artifacts` |
+
+This operational checklist is the same process that drove the successful end-to-end run (`actions/runs/17959967757`) that produced `hivetechs-releases/stable/Hive-Consensus-1.8.448.dmg`. Automation can follow it step-for-step to reproduce or debug any stage of the pipeline.
 
 **8. Comprehensive Build Requirements Check System & Build Order**
 
@@ -13830,3 +13977,102 @@ for (const message of conversation.messages) {
 - Prepare for production release
 
 This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in the current MASTER_ARCHITECTURE.md while preserving all functionality and dramatically improving the user experience.
+
+---
+
+### 🛡️ macOS Signing & Notarization Checklist
+
+**Prerequisites**
+- Apple Developer Program membership (Team ID `FWBLB27H52`).
+- Downloaded **Developer ID Application** certificate (`developerID_application.cer`) and installed into the *login* keychain alongside its private key.
+- Downloaded Apple trust chain certificates (`AppleWWDRCAG3.cer`, `DeveloperIDG2CA.cer`).
+
+**Install & Trust Certificates**
+- Import `DeveloperIDG2CA.cer` and `AppleWWDRCAG3.cer` into the **System** keychain (Keychain Access ▸ File ▸ Import Items…) and set them to **Always Trust**.
+- Keep the Developer ID Application cert set to *Always Trust* in the login keychain, with its private key access control allowing `codesign`.
+
+**One-time CLI Setup**
+- Move the App Store Connect API key to `~/Documents/AppleKeys/HiveNotary.p8`.
+- Register it with Notary Tool:
+  ```bash
+  xcrun notarytool store-credentials "HiveNotaryProfile" \
+    --key ~/Documents/AppleKeys/HiveNotary.p8 \
+    --key-id PYR945459Z \
+    --issuer 9a13d40a-4835-47f1-af97-dc9ee8440241
+  ```
+- Verify the login keychain ACL once per machine:
+  ```bash
+  security unlock-keychain ~/Library/Keychains/login.keychain-db
+  security set-key-partition-list -S apple-tool:,apple: -s \
+    ~/Library/Keychains/login.keychain-db
+  ```
+
+**Post-Reboot Quick Start**
+- After any reboot, rerun the two `security` commands above to unlock the keychain and refresh the ACL before signing.
+- Confirm the toolchain can sign by testing a throwaway binary:
+  ```bash
+  cp /usr/bin/true /tmp/true_copy
+  codesign --force --sign "Developer ID Application: Verone Lazio (FWBLB27H52)" /tmp/true_copy
+  rm /tmp/true_copy
+  ```
+
+**Next Actions (when ready to sign releases)**
+- Set the signing identity once per shell: `export SIGN_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"`.
+- Recursively sign every Mach-O inside the bundle (Python runtime, torch, SciPy, helper binaries, etc.):
+  ```bash
+  find /tmp/HiveSigned.app -type f \
+    | while read -r file; do
+        if file "$file" | grep -q "Mach-O"; then
+          codesign --force --options runtime --sign "$SIGN_ID" "$file"
+        fi
+      done
+  ```
+- Re-sign frameworks, helpers, and the app root with entitlements:
+  ```bash
+  for fw in 'Electron Framework.framework' 'Mantle.framework' \
+            'ReactiveObjC.framework' 'Squirrel.framework'; do
+    codesign --force --options runtime --sign "$SIGN_ID" \
+      "/tmp/HiveSigned.app/Contents/Frameworks/$fw"
+  done
+  for helper in "Hive Consensus Helper.app" \
+                 "Hive Consensus Helper (Renderer).app" \
+                 "Hive Consensus Helper (GPU).app" \
+                 "Hive Consensus Helper (Plugin).app"; do
+    codesign --force --options runtime --sign "$SIGN_ID" \
+      "/tmp/HiveSigned.app/Contents/Frameworks/$helper"
+  done
+  codesign --force --options runtime \
+    --entitlements scripts/entitlements.plist \
+    --sign "$SIGN_ID" /tmp/HiveSigned.app
+  codesign --verify --deep --strict /tmp/HiveSigned.app
+  ```
+- Package and sign the DMG:
+  ```bash
+  rm -rf /tmp/hive_dmg_signed && mkdir -p /tmp/hive_dmg_signed
+  cp -R /tmp/HiveSigned.app /tmp/hive_dmg_signed/
+  hdiutil create -volname "Hive Consensus" -srcfolder /tmp/hive_dmg_signed \
+    -ov -format UDZO /tmp/Hive-Consensus-signed.dmg
+  codesign --force --sign "$SIGN_ID" /tmp/Hive-Consensus-signed.dmg
+  ```
+- Notarize, staple, and verify:
+  ```bash
+  xcrun notarytool submit /tmp/Hive-Consensus-signed.dmg \
+    --keychain-profile HiveNotaryProfile --wait
+  xcrun stapler staple /tmp/HiveSigned.app
+  xcrun stapler staple /tmp/Hive-Consensus-signed.dmg
+  spctl --assess --type exec --verbose /tmp/HiveSigned.app
+  ```
+- Capture SHA-256 for release notes: `shasum -a 256 /tmp/Hive-Consensus-signed.dmg`.
+- Publish via the existing CI/CD workflow once notarization reports "Accepted" and Gatekeeper assessments return "Notarized Developer ID".
+- GitHub Actions runs `scripts/sign-notarize-macos.sh` from the dedicated **sign-macos** job in `build-release.yml`. The job now mounts the unsigned DMG and copies the bundled app with `ditto` before signing so Electron’s framework symlinks stay intact, auto-detects the imported Developer ID Application identity, signs/notarizes the DMG, and re-uploads a `hive-macos-dmg-ready` artifact for the publish stage.
+- Keep secrets (`APPLE_CERT_P12`, `APPLE_CERT_PASSWORD`, `ASC_API_KEY`, `ASC_KEY_ID`, `ASC_ISSUER_ID`) current so the automated job can import the certificate and submit to notarization.
+- Manual reruns can target individual phases via `workflow_dispatch` inputs:
+  - `sign_only=true` with `reuse_artifact_run_id` / `reuse_artifact_name` replays the signing pipeline without rebuilding the Electron bundle.
+  - `skip_sign=true` or `skip_publish=true` let you isolate the build or signing steps while iterating.
+- Required GitHub secrets for the build-release workflow:
+  - `APPLE_CERT_P12`: Base64 of the exported Developer ID Application `.p12` (cert + private key).
+  - `APPLE_CERT_PASSWORD`: Export password for the `.p12` bundle.
+  - `ASC_API_KEY`: Base64-encoded App Store Connect API key (`AuthKey_<ID>.p8`).
+  - `ASC_KEY_ID`: App Store Connect Key ID (e.g. `PYR945459Z`).
+  - `ASC_ISSUER_ID`: App Store Connect Issuer ID (e.g. `9a13d40a-4835-47f1-af97-dc9ee8440241`).
+  - `CLOUDFLARE_API_TOKEN`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` remain unchanged for the R2 publish step.

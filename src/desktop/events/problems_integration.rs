@@ -22,12 +22,18 @@ pub async fn publish_problems_update(
 /// Example: Build system integration
 pub async fn setup_build_problems_publisher() -> Result<()> {
     let bus = event_bus();
-    
+
     // Subscribe to build completed events
     bus.subscribe_async(EventType::BuildCompleted, |event| async move {
-        if let super::EventPayload::BuildResult { success, errors, warnings, .. } = event.payload {
+        if let super::EventPayload::BuildResult {
+            success,
+            errors,
+            warnings,
+            ..
+        } = event.payload
+        {
             let mut problems = Vec::new();
-            
+
             // Convert build errors to problems
             for (idx, error) in errors.into_iter().enumerate() {
                 // Parse error message for file location
@@ -37,14 +43,14 @@ pub async fn setup_build_problems_publisher() -> Result<()> {
                     severity: ProblemSeverity::Error,
                     source: "rustc".to_string(),
                     file_path: PathBuf::from("src/main.rs"), // Would be parsed from error
-                    line: 1, // Would be parsed
-                    column: 1, // Would be parsed
+                    line: 1,                                 // Would be parsed
+                    column: 1,                               // Would be parsed
                     message: error,
                     code: None,
                 };
                 problems.push(problem);
             }
-            
+
             // Convert build warnings to problems
             for (idx, warning) in warnings.into_iter().enumerate() {
                 let problem = Problem {
@@ -59,7 +65,7 @@ pub async fn setup_build_problems_publisher() -> Result<()> {
                 };
                 problems.push(problem);
             }
-            
+
             if !problems.is_empty() {
                 publish_problems_update(problems, vec![], problems.len()).await?;
             }
@@ -67,14 +73,14 @@ pub async fn setup_build_problems_publisher() -> Result<()> {
         Ok(())
     })
     .await;
-    
+
     Ok(())
 }
 
 /// Example: Language server integration
 pub mod lsp_integration {
     use super::*;
-    
+
     /// Handle diagnostics from language server
     pub async fn handle_lsp_diagnostics(
         file_path: PathBuf,
@@ -82,7 +88,7 @@ pub mod lsp_integration {
     ) -> Result<()> {
         let mut added = Vec::new();
         let mut removed = Vec::new();
-        
+
         // Convert LSP diagnostics to problems
         for diag in diagnostics {
             let severity = match diag.severity {
@@ -92,7 +98,7 @@ pub mod lsp_integration {
                 4 => ProblemSeverity::Hint,
                 _ => ProblemSeverity::Information,
             };
-            
+
             let problem = Problem {
                 id: format!("lsp-{}-{}-{}", file_path.display(), diag.line, diag.column),
                 severity,
@@ -103,18 +109,18 @@ pub mod lsp_integration {
                 message: diag.message,
                 code: diag.code,
             };
-            
+
             added.push(problem);
         }
-        
+
         // In real implementation, would track previous diagnostics to compute removed
-        
+
         let total_count = added.len(); // Would be actual total across all files
         publish_problems_update(added, removed, total_count).await?;
-        
+
         Ok(())
     }
-    
+
     /// Mock LSP diagnostic type
     pub struct LspDiagnostic {
         pub severity: u8,
@@ -128,19 +134,19 @@ pub mod lsp_integration {
 /// Example: File watcher integration for linting
 pub async fn setup_lint_on_save() -> Result<()> {
     let bus = event_bus();
-    
+
     bus.subscribe_async(EventType::FileChanged, |event| async move {
         if let super::EventPayload::FileChange { path, change_type } = &event.payload {
             if matches!(change_type, super::FileChangeType::Modified) {
                 if path.extension().map_or(false, |ext| ext == "rs") {
                     debug!("Running linter on {:?}", path);
-                    
+
                     // In real implementation:
                     // 1. Run clippy or other linter
                     // 2. Parse output
                     // 3. Convert to problems
                     // 4. Publish problems update
-                    
+
                     // Example:
                     // let lint_output = run_clippy(path).await?;
                     // let problems = parse_clippy_output(lint_output);
@@ -151,6 +157,6 @@ pub async fn setup_lint_on_save() -> Result<()> {
         Ok(())
     })
     .await;
-    
+
     Ok(())
 }

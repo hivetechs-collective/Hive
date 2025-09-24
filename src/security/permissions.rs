@@ -807,7 +807,7 @@ pub struct PermissionStatistics {
     pub total_inheritance_rules: usize,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

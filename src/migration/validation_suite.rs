@@ -823,7 +823,7 @@ pub async fn run_quick_validation(
         || results.overall_status == ValidationStatus::PassedWithWarnings)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::tempdir;

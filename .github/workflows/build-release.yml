@@ -1,237 +1,396 @@
-name: Build Release Binaries
+name: Build Release DMG
 
 on:
   push:
     branches: [ main, master ]
     tags:
       - 'v*'
-  pull_request:
-    branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/dependabot.yml'
   workflow_dispatch:
+    inputs:
+      sign_only:
+        description: 'Skip build/publish and only run the signing job against an existing artifact'
+        required: false
+        default: false
+        type: boolean
+      skip_sign:
+        description: 'Skip the signing job (useful for build-only iterations)'
+        required: false
+        default: false
+        type: boolean
+      skip_publish:
+        description: 'Skip the publish job (e.g. while debugging build/sign)'
+        required: false
+        default: false
+        type: boolean
+      reuse_artifact_run_id:
+        description: 'Optional run ID containing an existing macOS DMG artifact to reuse'
+        required: false
+        default: ''
+        type: string
+      reuse_artifact_name:
+        description: 'Artifact name to download when reusing (defaults to hive-macos-dmg)'
+        required: false
+        default: 'hive-macos-dmg'
+        type: string
 
-env:
-  CARGO_TERM_COLOR: always
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: read
 
 jobs:
-  build-macos:
-    name: Build macOS Universal Binary
+  build-dmg:
+    name: Build macOS DMG
     runs-on: macos-latest
+    # Always instantiate the job so downstream sign job has a dependency,
+    # but gate heavy steps when we are doing a sign-only dispatch that reuses an artifact.
+    defaults:
+      run:
+        working-directory: electron-poc
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin,aarch64-apple-darwin
-      
-      - name: Build Intel binary
-        run: cargo build --bin hive-consensus --release --target x86_64-apple-darwin
-      
-      - name: Build Apple Silicon binary
-        run: cargo build --bin hive-consensus --release --target aarch64-apple-darwin
-      
-      - name: Create universal binary
-        run: |
-          mkdir -p dist
-          lipo -create \
-            target/x86_64-apple-darwin/release/hive-consensus \
-            target/aarch64-apple-darwin/release/hive-consensus \
-            -output dist/hive-macos-universal
-          chmod +x dist/hive-macos-universal
-          
-      - name: Create macOS app bundle
-        run: |
-          ./scripts/package-macos.sh
-          mv dist/Hive.app dist/Hive-macOS.app
-          
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-binaries
-          path: |
-            dist/hive-macos-universal
-            dist/Hive-macOS.app
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-  build-windows:
-    name: Build Windows Binary
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Build mode summary
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.sign_only }}" == "true" ]]; then
+            echo "Sign-only dispatch: skipping fresh Electron build."
+          else
+            echo "Performing full macOS DMG build."
+          fi
+
+      - name: Set up Node.js
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        uses: actions/setup-node@v4
         with:
-          targets: x86_64-pc-windows-msvc
-      
-      - name: Build Windows binary
-        run: cargo build --bin hive-consensus --release
-      
-      - name: Prepare Windows artifact
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron-poc/package-lock.json
+
+      - name: Install build prerequisites
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         shell: bash
         run: |
-          mkdir -p dist
-          cp target/release/hive-consensus.exe dist/hive-windows-x64.exe
-          
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-binary
-          path: dist/hive-windows-x64.exe
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          if ! command -v ttyd >/dev/null 2>&1; then
+            brew install ttyd
+          fi
 
-  build-linux:
-    name: Build Linux Binary
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install dependencies
+      - name: Install npm dependencies
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        run: npm ci
+
+      - name: Rebuild native modules for Electron
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
+
+      - name: Verify build requirements
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        run: npm run requirements
+
+      - name: Build production DMG
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        env:
+          CI: true
+        run: npm run build:complete
+
+      - name: Smoke test memory service /health
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        run: npm run smoke:memory-health
+
+      - name: List build outputs
+        if: always()
+        env:
+          SKIP_BUILD: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.sign_only == 'true') }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libssl-dev \
-            pkg-config \
-            libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libsoup2.4-dev \
-            libjavascriptcoregtk-4.0-dev
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
-      
-      - name: Build Linux binary
-        run: cargo build --bin hive-consensus --release
-      
-      - name: Prepare Linux artifact
+          if [[ "$SKIP_BUILD" == "true" ]]; then
+            echo "Build skipped; no new artifacts generated."
+          else
+            echo "Contents of out/make:"
+            ls -R out/make || true
+            echo "Generated build report:"
+            cat out/build-report.json || true
+          fi
+
+      - name: Capture native module metadata
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
         run: |
-          mkdir -p dist
-          cp target/release/hive-consensus dist/hive-linux-x64
-          chmod +x dist/hive-linux-x64
-          
-      - name: Create AppImage
-        run: |
-          # Download appimagetool
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
-          
-          # Create AppDir structure
-          mkdir -p Hive.AppDir/usr/bin
-          mkdir -p Hive.AppDir/usr/share/applications
-          mkdir -p Hive.AppDir/usr/share/icons/hicolor/256x256/apps
-          
-          # Copy binary
-          cp dist/hive-linux-x64 Hive.AppDir/usr/bin/hive
-          
-          # Create desktop file
-          cat > Hive.AppDir/usr/share/applications/hive.desktop << 'EOF'
-          [Desktop Entry]
-          Name=Hive IDE
-          Exec=hive
-          Icon=hive
-          Type=Application
-          Categories=Development;IDE;
-          Comment=AI-powered development environment
-          EOF
-          
-          # Create AppRun
-          cat > Hive.AppDir/AppRun << 'EOF'
-          #!/bin/bash
-          HERE="$(dirname "$(readlink -f "${0}")")"
-          exec "${HERE}/usr/bin/hive" "$@"
-          EOF
-          chmod +x Hive.AppDir/AppRun
-          
-          # Create AppImage
-          ./appimagetool-x86_64.AppImage Hive.AppDir dist/Hive-linux-x64.AppImage
-          
-      - name: Upload Linux artifacts
+          mkdir -p build-logs/native-modules
+          otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
+          shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256
+
+      - name: Upload macOS build artifact
+        if: ${{ success() && (github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true') }}
         uses: actions/upload-artifact@v4
         with:
-          name: linux-binaries
+          name: hive-macos-dmg
           path: |
-            dist/hive-linux-x64
-            dist/Hive-linux-x64.AppImage
+            electron-poc/out/make/*.dmg
+            electron-poc/out/build-report.json
+            electron-poc/out/Hive Consensus-darwin-arm64/Hive Consensus.app
+          if-no-files-found: error
 
-  create-release:
-    name: Create Release and Upload to R2
-    needs: [build-macos, build-windows, build-linux]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
-    
+      - name: Upload build logs
+        if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-build-logs
+          path: electron-poc/build-logs/**
+          if-no-files-found: ignore
+
+  sign-macos:
+    name: Sign & Notarize macOS DMG
+    needs: [build-dmg]
+    runs-on: macos-latest
+    if: ${{ needs.build-dmg.result != 'failure' && (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_sign != 'true') }}
+    outputs:
+      artifact-name: hive-macos-dmg-ready
+      signing-enabled: ${{ steps.setup-signing.outputs.enabled }}
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download all artifacts
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Determine artifact source
+        id: artifact-source
+        env:
+          REUSE_RUN_ID: ${{ github.event.inputs.reuse_artifact_run_id || '' }}
+          REUSE_ARTIFACT: ${{ github.event.inputs.reuse_artifact_name || 'hive-macos-dmg' }}
+        run: |
+          if [[ -n "$REUSE_RUN_ID" ]]; then
+            echo "Using existing artifact $REUSE_ARTIFACT from run $REUSE_RUN_ID"
+            echo "run-id=$REUSE_RUN_ID" >> "$GITHUB_OUTPUT"
+          else
+            echo "Using artifact from current run $GITHUB_RUN_ID"
+            echo "run-id=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ -n "$REUSE_ARTIFACT" ]]; then
+            echo "artifact-name=$REUSE_ARTIFACT" >> "$GITHUB_OUTPUT"
+          else
+            echo "artifact-name=hive-macos-dmg" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download DMG artifact
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-      
-      - name: Prepare release files
+          name: ${{ steps.artifact-source.outputs.artifact-name }}
+          run-id: ${{ steps.artifact-source.outputs['run-id'] }}
+          path: signed-input
+          github-token: ${{ github.token }}
+
+      - name: Show downloaded contents
         run: |
+          echo "Downloaded artifact tree:"
+          ls -R signed-input || true
+
+      - name: Configure macOS signing keychain
+        id: setup-signing
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${APPLE_CERT_P12}" || -z "${APPLE_CERT_PASSWORD}" || -z "${ASC_API_KEY}" || -z "${ASC_KEY_ID}" || -z "${ASC_ISSUER_ID}" ]]; then
+            echo "Mac signing secrets not fully configured. Skipping notarization setup."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/hive-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/apple-cert.p12"
+          security import "$RUNNER_TEMP/apple-cert.p12" \
+            -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcrun
+          rm -f "$RUNNER_TEMP/apple-cert.p12"
+
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "Available code signing identities:" >&2
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+          EXPECTED_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"
+          SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' -v expected="$EXPECTED_ID" '($2 == expected) {print $2}')
+          if [[ -z "$SIGN_IDENTITY" ]]; then
+            echo "Expected signing identity '$EXPECTED_ID' not found in keychain $KEYCHAIN_PATH" >&2
+            exit 1
+          fi
+          echo "Using signing identity: $SIGN_IDENTITY"
+
+          mkdir -p "$RUNNER_TEMP/notary"
+          echo "$ASC_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
+          xcrun notarytool store-credentials "HiveNotaryProfile" \
+            --key "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8" \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --keychain "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
+
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          {
+            echo "HIVE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH"
+            echo "HIVE_SIGNING_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+            echo "SIGN_ID=$SIGN_IDENTITY"
+          } >> "$GITHUB_ENV"
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Sign and notarize macOS artifacts
+        if: ${{ success() && steps.setup-signing.outputs.enabled == 'true' }}
+        env:
+          SIGN_ID: ${{ env.SIGN_ID }}
+          NOTARY_PROFILE: HiveNotaryProfile
+        run: |
+          set -euo pipefail
+
+          DMG_PATH="$(find signed-input -maxdepth 5 -name 'Hive Consensus.dmg' -type f | head -n 1)"
+          if [[ -z "$DMG_PATH" ]]; then
+            echo "Could not locate DMG within downloaded artifact" >&2
+            exit 1
+          fi
+
+          APP_MOUNT_DIR="$(mktemp -d)"
+          APP_WORK_DIR="$(mktemp -d)"
+          trap 'hdiutil detach "$APP_MOUNT_DIR" >/dev/null 2>&1 || true; rm -rf "$APP_MOUNT_DIR" "$APP_WORK_DIR"' EXIT
+
+          hdiutil attach "$DMG_PATH" -mountpoint "$APP_MOUNT_DIR" -nobrowse
+          if [[ ! -d "$APP_MOUNT_DIR/Hive Consensus.app" ]]; then
+            echo "Mounted DMG does not contain Hive Consensus.app" >&2
+            exit 1
+          fi
+
+          ditto "$APP_MOUNT_DIR/Hive Consensus.app" "$APP_WORK_DIR/Hive Consensus.app"
+          hdiutil detach "$APP_MOUNT_DIR"
+
+          APP_PATH="$APP_WORK_DIR/Hive Consensus.app"
+          echo "Signing app at $APP_PATH using DMG $DMG_PATH"
+          scripts/sign-notarize-macos.sh "$APP_PATH" "$DMG_PATH"
+
+      - name: Stage release artifacts
+        if: ${{ success() }}
+        run: |
+          set -euo pipefail
+          mkdir -p signed-output
+          DMG_SRC="$(find signed-input -maxdepth 5 -name '*.dmg' -type f | head -n 1)"
+          if [[ -z "$DMG_SRC" ]]; then
+            echo "No DMG found to stage" >&2
+            exit 1
+          fi
+          cp "$DMG_SRC" signed-output/
+          BUILD_REPORT_SRC="$(find signed-input -maxdepth 5 -name 'build-report.json' -type f | head -n 1)"
+          if [[ -n "$BUILD_REPORT_SRC" ]]; then
+            cp "$BUILD_REPORT_SRC" signed-output/build-report.json
+          fi
+
+      - name: Upload ready DMG artifact
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-macos-dmg-ready
+          path: |
+            signed-output/*.dmg
+            signed-output/build-report.json
+          if-no-files-found: error
+
+  publish:
+    name: Publish DMG to R2 / GitHub Release
+    needs: [sign-macos]
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_publish != 'true' && github.event.inputs.sign_only != 'true')
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download DMG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: hive-macos-dmg-ready
+          path: artifacts
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p release
-          
-          # Copy macOS files
-          cp artifacts/macos-binaries/hive-macos-universal release/
-          cp -r artifacts/macos-binaries/Hive-macOS.app release/
-          
-          # Copy Windows file
-          cp artifacts/windows-binary/hive-windows-x64.exe release/
-          
-          # Copy Linux files
-          cp artifacts/linux-binaries/hive-linux-x64 release/
-          cp artifacts/linux-binaries/Hive-linux-x64.AppImage release/
-          
-          # Generate checksums
-          cd release
-          sha256sum * > checksums.sha256
-          cd ..
-          
+
+          DMG_SRC=$(find artifacts -maxdepth 1 -type f -name '*.dmg' | head -n 1)
+          if [[ -z "$DMG_SRC" ]]; then
+            echo "No DMG file found in artifacts" >&2
+            exit 1
+          fi
+
+          BUILD_REPORT_SRC="artifacts/build-report.json"
+          if [[ -f "$BUILD_REPORT_SRC" ]]; then
+            cp "$BUILD_REPORT_SRC" release/build-report.json
+          fi
+
+          DMG_NAME="Hive-Consensus.dmg"
+          if [[ -f release/build-report.json ]]; then
+            VERSION=$(python -c "import json, pathlib; path = pathlib.Path('release/build-report.json'); data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}; print(data.get('buildTimings', {}).get('buildVersion', ''))")
+            if [[ -n "$VERSION" ]]; then
+              DMG_NAME="Hive-Consensus-${VERSION}.dmg"
+              echo "Detected build version $VERSION"
+            fi
+          fi
+
+          cp "$DMG_SRC" "release/${DMG_NAME}"
+          (cd release && shasum -a 256 "$DMG_NAME" > "${DMG_NAME}.sha256")
+
+          echo "DMG_FILENAME=${DMG_NAME}" >> "$GITHUB_ENV"
+
       - name: Install Wrangler
         run: npm install -g wrangler
-        
+
       - name: Upload to R2
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DMG_FILENAME: ${{ env.DMG_FILENAME }}
         run: |
-          # Upload to stable channel
-          wrangler r2 object put hivetechs-releases/stable/hive-macos-universal --file=release/hive-macos-universal
-          wrangler r2 object put hivetechs-releases/stable/hive-windows-x64.exe --file=release/hive-windows-x64.exe
-          wrangler r2 object put hivetechs-releases/stable/hive-linux-x64 --file=release/hive-linux-x64
-          wrangler r2 object put hivetechs-releases/stable/Hive-linux-x64.AppImage --file=release/Hive-linux-x64.AppImage
-          wrangler r2 object put hivetechs-releases/stable/checksums.sha256 --file=release/checksums.sha256
-          
-          # If this is a tag, also create a versioned release
+          set -euo pipefail
+          wrangler r2 object put "hivetechs-releases/stable/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+          wrangler r2 object put "hivetechs-releases/stable/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
-            wrangler r2 object put hivetechs-releases/releases/$VERSION/hive-macos-universal --file=release/hive-macos-universal
-            wrangler r2 object put hivetechs-releases/releases/$VERSION/hive-windows-x64.exe --file=release/hive-windows-x64.exe
-            wrangler r2 object put hivetechs-releases/releases/$VERSION/hive-linux-x64 --file=release/hive-linux-x64
-            wrangler r2 object put hivetechs-releases/releases/$VERSION/Hive-linux-x64.AppImage --file=release/Hive-linux-x64.AppImage
-            wrangler r2 object put hivetechs-releases/releases/$VERSION/checksums.sha256 --file=release/checksums.sha256
+            wrangler r2 object put "hivetechs-releases/releases/${VERSION}/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+            wrangler r2 object put "hivetechs-releases/releases/${VERSION}/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
           fi
-          
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            release/hive-macos-universal
-            release/hive-windows-x64.exe
-            release/hive-linux-x64
-            release/Hive-linux-x64.AppImage
-            release/checksums.sha256
+            release/${{ env.DMG_FILENAME }}
+            release/${{ env.DMG_FILENAME }}.sha256
+            release/build-report.json
           body: |
-            ## Hive IDE Release
-            
+            ## Hive Consensus Release
+
             ### Installation
-            
-            **macOS**: Download `hive-macos-universal` and run from terminal
-            **Windows**: Download `hive-windows-x64.exe` and run
-            **Linux**: Download `hive-linux-x64` or `Hive-linux-x64.AppImage`
-            
+            Download the macOS DMG (`${{ env.DMG_FILENAME }}`), open it, and drag **Hive Consensus** into _Applications_.
+
             ### Requirements
             - License key from hivetechs.io
             - OpenRouter API key

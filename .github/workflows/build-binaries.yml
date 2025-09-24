@@ -2,121 +2,77 @@ name: Build Binaries
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
 
-env:
-  CARGO_TERM_COLOR: always
+concurrency:
+  group: build-binaries-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            binary: hive-consensus
-            artifact: hive-linux-x64
-            
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary: hive-consensus.exe
-            artifact: hive-windows-x64.exe
-            
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            binary: hive-consensus
-            artifact: hive-macos-x64
-            
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            binary: hive-consensus
-            artifact: hive-macos-arm64
-
-    runs-on: ${{ matrix.os }}
-    
+  build-electron-dmg:
+    name: Build Electron DMG (manual)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: electron-poc
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install dependencies (Linux)
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libssl-dev \
-            pkg-config \
-            libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libsoup2.4-dev \
-            libjavascriptcoregtk-4.0-dev
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          targets: ${{ matrix.target }}
-      
-      - name: Build
-        run: cargo build --bin hive-consensus --release --target ${{ matrix.target }}
-      
-      - name: Prepare artifact
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron-poc/package-lock.json
+
+      - name: Install build prerequisites
         shell: bash
         run: |
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/${{ matrix.artifact }}
-          
-          # Make executable on Unix
-          if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
-            chmod +x dist/${{ matrix.artifact }}
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          if ! command -v ttyd >/dev/null 2>&1; then
+            brew install ttyd
           fi
-          
-          # Generate checksum
-          cd dist
-          if command -v sha256sum > /dev/null; then
-            sha256sum ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
-          else
-            shasum -a 256 ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
-          fi
-      
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: |
-            dist/${{ matrix.artifact }}
-            dist/${{ matrix.artifact }}.sha256
 
-  create-universal-macos:
-    needs: build
-    runs-on: macos-latest
-    
-    steps:
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: hive-macos-*
-          path: artifacts
-          
-      - name: Create universal binary
-        run: |
-          mkdir -p dist
-          lipo -create \
-            artifacts/hive-macos-x64/hive-macos-x64 \
-            artifacts/hive-macos-arm64/hive-macos-arm64 \
-            -output dist/hive-macos-universal
-          chmod +x dist/hive-macos-universal
-          
-          # Generate checksum
-          cd dist
-          shasum -a 256 hive-macos-universal > hive-macos-universal.sha256
-          
-      - name: Upload universal binary
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Rebuild native modules for Electron
+        run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
+
+      - name: Verify build requirements
+        run: npm run requirements
+
+      - name: Build production DMG
+        env:
+          CI: true
+        run: npm run build:complete
+
+      - name: Smoke test memory service /health
+        run: npm run smoke:memory-health
+
+      - name: Upload macOS DMG artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: hive-macos-universal
+          name: hive-macos-dmg
           path: |
-            dist/hive-macos-universal
-            dist/hive-macos-universal.sha256
+            electron-poc/out/make/*.dmg
+            electron-poc/out/build-report.json
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-build-logs
+          path: electron-poc/build-logs/**
+          if-no-files-found: ignore
+
+      - name: Capture native module metadata
+        if: always()
+        run: |
+          mkdir -p build-logs/native-modules
+          otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
+          shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256

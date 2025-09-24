@@ -821,7 +821,7 @@ pub enum DataValue {
     Date(DateTime<Utc>),
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

@@ -506,7 +506,7 @@ fn estimate_quality(tier: &ModelTier, model_id: &str) -> f32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

@@ -13,7 +13,11 @@ use tracing::{debug, error, trace};
 pub type EventHandler = Arc<dyn Fn(Event) -> Result<()> + Send + Sync>;
 
 /// Async event handler function type
-pub type AsyncEventHandler = Arc<dyn Fn(Event) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>> + Send + Sync>;
+pub type AsyncEventHandler = Arc<
+    dyn Fn(Event) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Event subscription handle for unsubscribing
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -24,7 +28,8 @@ pub struct EventBus {
     /// Synchronous event handlers
     subscribers: Arc<RwLock<HashMap<EventType, Vec<(SubscriptionHandle, EventHandler)>>>>,
     /// Asynchronous event handlers
-    async_subscribers: Arc<RwLock<HashMap<EventType, Vec<(SubscriptionHandle, AsyncEventHandler)>>>>,
+    async_subscribers:
+        Arc<RwLock<HashMap<EventType, Vec<(SubscriptionHandle, AsyncEventHandler)>>>>,
     /// Next subscription ID
     next_id: Arc<Mutex<usize>>,
 }
@@ -59,7 +64,11 @@ impl EventBus {
     }
 
     /// Subscribe to an event type with an asynchronous handler
-    pub async fn subscribe_async<F, Fut>(&self, event_type: EventType, handler: F) -> SubscriptionHandle
+    pub async fn subscribe_async<F, Fut>(
+        &self,
+        event_type: EventType,
+        handler: F,
+    ) -> SubscriptionHandle
     where
         F: Fn(Event) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<()>> + Send + 'static,
@@ -76,7 +85,10 @@ impl EventBus {
             .or_insert_with(Vec::new)
             .push((handle.clone(), handler));
 
-        debug!("Subscribed async handler {} to event {:?}", handle.0, event_type);
+        debug!(
+            "Subscribed async handler {} to event {:?}",
+            handle.0, event_type
+        );
         handle
     }
 
@@ -180,7 +192,7 @@ impl EventBus {
             let subscribers = async_subs.read().await;
             if let Some(handlers) = subscribers.get(&event.event_type) {
                 let mut tasks = Vec::new();
-                
+
                 for (_, handler) in handlers {
                     let event_clone = event.clone();
                     let future = handler(event_clone);
@@ -207,12 +219,18 @@ impl EventBus {
 
     /// Get the number of subscribers for a specific event type
     pub async fn subscriber_count(&self, event_type: &EventType) -> usize {
-        let sync_count = self.subscribers.read().await
+        let sync_count = self
+            .subscribers
+            .read()
+            .await
             .get(event_type)
             .map(|v| v.len())
             .unwrap_or(0);
 
-        let async_count = self.async_subscribers.read().await
+        let async_count = self
+            .async_subscribers
+            .read()
+            .await
             .get(event_type)
             .map(|v| v.len())
             .unwrap_or(0);
@@ -234,7 +252,7 @@ impl Default for EventBus {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};

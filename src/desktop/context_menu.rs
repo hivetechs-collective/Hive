@@ -1,7 +1,7 @@
 //! Context menu component for file operations
 
-use dioxus::prelude::*;
 use dioxus::events::MouseEvent;
+use dioxus::prelude::*;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -119,7 +119,7 @@ pub fn ContextMenu(
     on_action: EventHandler<(ContextMenuAction, PathBuf)>,
 ) -> Element {
     let menu_state = state.read();
-    
+
     if !menu_state.visible {
         return rsx! { div {} };
     }
@@ -134,41 +134,32 @@ pub fn ContextMenu(
             ContextMenuItem::new("New File...", ContextMenuAction::NewFile),
             ContextMenuItem::new("New Folder...", ContextMenuAction::NewFolder),
             ContextMenuItem::separator(),
-            ContextMenuItem::new("Cut", ContextMenuAction::Cut)
-                .with_shortcut("⌘X"),
-            ContextMenuItem::new("Copy", ContextMenuAction::Copy)
-                .with_shortcut("⌘C"),
-            ContextMenuItem::new("Paste", ContextMenuAction::Paste)
-                .with_shortcut("⌘V"),
+            ContextMenuItem::new("Cut", ContextMenuAction::Cut).with_shortcut("⌘X"),
+            ContextMenuItem::new("Copy", ContextMenuAction::Copy).with_shortcut("⌘C"),
+            ContextMenuItem::new("Paste", ContextMenuAction::Paste).with_shortcut("⌘V"),
             ContextMenuItem::separator(),
-            ContextMenuItem::new("Rename", ContextMenuAction::Rename)
-                .with_shortcut("F2"),
-            ContextMenuItem::new("Delete", ContextMenuAction::Delete)
-                .with_shortcut("Delete"),
+            ContextMenuItem::new("Rename", ContextMenuAction::Rename).with_shortcut("F2"),
+            ContextMenuItem::new("Delete", ContextMenuAction::Delete).with_shortcut("Delete"),
             ContextMenuItem::separator(),
-            ContextMenuItem::new("Copy Path", ContextMenuAction::CopyPath)
-                .with_shortcut("⌥⌘C"),
+            ContextMenuItem::new("Copy Path", ContextMenuAction::CopyPath).with_shortcut("⌥⌘C"),
             ContextMenuItem::new("Copy Relative Path", ContextMenuAction::CopyPath),
             ContextMenuItem::separator(),
-            ContextMenuItem::new("Open in Integrated Terminal", ContextMenuAction::OpenInTerminal),
+            ContextMenuItem::new(
+                "Open in Integrated Terminal",
+                ContextMenuAction::OpenInTerminal,
+            ),
             ContextMenuItem::new("Reveal in Finder", ContextMenuAction::RevealInFinder),
         ]
     } else {
         vec![
-            ContextMenuItem::new("Cut", ContextMenuAction::Cut)
-                .with_shortcut("⌘X"),
-            ContextMenuItem::new("Copy", ContextMenuAction::Copy)
-                .with_shortcut("⌘C"),
-            ContextMenuItem::new("Paste", ContextMenuAction::Paste)
-                .with_shortcut("⌘V"),
+            ContextMenuItem::new("Cut", ContextMenuAction::Cut).with_shortcut("⌘X"),
+            ContextMenuItem::new("Copy", ContextMenuAction::Copy).with_shortcut("⌘C"),
+            ContextMenuItem::new("Paste", ContextMenuAction::Paste).with_shortcut("⌘V"),
             ContextMenuItem::separator(),
-            ContextMenuItem::new("Rename", ContextMenuAction::Rename)
-                .with_shortcut("F2"),
-            ContextMenuItem::new("Delete", ContextMenuAction::Delete)
-                .with_shortcut("Delete"),
+            ContextMenuItem::new("Rename", ContextMenuAction::Rename).with_shortcut("F2"),
+            ContextMenuItem::new("Delete", ContextMenuAction::Delete).with_shortcut("Delete"),
             ContextMenuItem::separator(),
-            ContextMenuItem::new("Copy Path", ContextMenuAction::CopyPath)
-                .with_shortcut("⌥⌘C"),
+            ContextMenuItem::new("Copy Path", ContextMenuAction::CopyPath).with_shortcut("⌥⌘C"),
             ContextMenuItem::new("Copy Relative Path", ContextMenuAction::CopyPath),
             ContextMenuItem::separator(),
             ContextMenuItem::new("Reveal in Finder", ContextMenuAction::RevealInFinder),
@@ -176,12 +167,15 @@ pub fn ContextMenu(
     };
 
     // Enable paste if we have something in clipboard
-    let items: Vec<ContextMenuItem> = items.into_iter().map(|mut item| {
-        if let Some(ContextMenuAction::Paste) = &item.action {
-            item.enabled = has_clipboard;
-        }
-        item
-    }).collect();
+    let items: Vec<ContextMenuItem> = items
+        .into_iter()
+        .map(|mut item| {
+            if let Some(ContextMenuAction::Paste) = &item.action {
+                item.enabled = has_clipboard;
+            }
+            item
+        })
+        .collect();
 
     rsx! {
         // Backdrop to capture clicks outside menu
@@ -190,7 +184,7 @@ pub fn ContextMenu(
             onclick: move |_| {
                 state.write().hide();
             },
-            
+
             // The actual context menu
             div {
                 class: "context-menu",
@@ -198,7 +192,7 @@ pub fn ContextMenu(
                 onclick: move |e| {
                     e.stop_propagation();
                 },
-                
+
                 for item in items {
                     if item.separator {
                         div { class: "context-menu-separator" }
@@ -219,10 +213,10 @@ pub fn ContextMenu(
                                     }
                                 }
                             },
-                            
+
                             span { "{item.label}" }
                             if let Some(ref shortcut) = item.shortcut {
-                                span { 
+                                span {
                                     style: "margin-left: auto; opacity: 0.6; font-size: 11px;",
                                     "{shortcut}"
                                 }
@@ -245,7 +239,7 @@ pub fn FileNameDialog(
     on_cancel: EventHandler<()>,
 ) -> Element {
     let mut input_value = use_signal(|| initial_value.clone());
-    
+
     use_effect(move || {
         if visible {
             input_value.set(initial_value.clone());
@@ -259,15 +253,15 @@ pub fn FileNameDialog(
     rsx! {
         div {
             style: "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;",
-            
+
             div {
                 style: "background: #2d2d30; border: 1px solid #464647; border-radius: 6px; padding: 20px; min-width: 400px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);",
-                
+
                 h3 {
                     style: "margin: 0 0 15px 0; color: #cccccc; font-size: 14px;",
                     "{title}"
                 }
-                
+
                 input {
                     r#type: "text",
                     value: "{input_value}",
@@ -287,10 +281,10 @@ pub fn FileNameDialog(
                     style: "width: 100%; padding: 8px; background: #1e1e1e; border: 1px solid #3e3e42; color: #cccccc; border-radius: 3px; font-family: inherit; font-size: 13px;",
                     autofocus: true,
                 }
-                
+
                 div {
                     style: "margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px;",
-                    
+
                     button {
                         style: "padding: 6px 14px; background: #0e639c; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px;",
                         onclick: move |_| {
@@ -302,7 +296,7 @@ pub fn FileNameDialog(
                         },
                         "OK"
                     }
-                    
+
                     button {
                         style: "padding: 6px 14px; background: #3e3e42; color: #cccccc; border: none; border-radius: 3px; cursor: pointer; font-size: 13px;",
                         onclick: move |_| {
@@ -334,23 +328,23 @@ pub fn ConfirmDialog(
     rsx! {
         div {
             style: "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;",
-            
+
             div {
                 style: "background: #2d2d30; border: 1px solid #464647; border-radius: 6px; padding: 20px; max-width: 500px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);",
-                
+
                 h3 {
                     style: "margin: 0 0 15px 0; color: #cccccc; font-size: 14px;",
                     "{title}"
                 }
-                
+
                 p {
                     style: "margin: 0 0 20px 0; color: #cccccc; font-size: 13px; line-height: 1.5;",
                     "{message}"
                 }
-                
+
                 div {
                     style: "display: flex; justify-content: flex-end; gap: 10px;",
-                    
+
                     button {
                         style: format!("padding: 6px 14px; background: {}; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px;",
                             if danger { "#f44336" } else { "#0e639c" }
@@ -360,7 +354,7 @@ pub fn ConfirmDialog(
                         },
                         "{confirm_text}"
                     }
-                    
+
                     button {
                         style: "padding: 6px 14px; background: #3e3e42; color: #cccccc; border: none; border-radius: 3px; cursor: pointer; font-size: 13px;",
                         onclick: move |_| {

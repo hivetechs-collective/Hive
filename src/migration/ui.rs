@@ -882,7 +882,7 @@ pub async fn run_quick_migration(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::tempdir;

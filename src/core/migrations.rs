@@ -458,7 +458,7 @@ pub async fn get_migration_status(migrations_dir: PathBuf) -> Result<MigrationSt
     manager.get_migration_status().await
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

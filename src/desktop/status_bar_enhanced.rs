@@ -1,8 +1,8 @@
 //! Enhanced VS Code-style Status Bar
 //! Based on VS Code's src/vs/workbench/browser/parts/statusbar/
 
-use dioxus::prelude::*;
 use chrono::{DateTime, Utc};
+use dioxus::prelude::*;
 
 /// Status bar item alignment
 #[derive(Clone, Debug, PartialEq)]
@@ -130,7 +130,6 @@ impl Default for StatusBarState {
                     background_color: None,
                     foreground_color: None,
                 },
-                
                 // Right side items
                 StatusBarItem {
                     id: "consensus-status".to_string(),
@@ -225,36 +224,40 @@ pub fn EnhancedStatusBar(
     on_repository_selector_click: Option<EventHandler<()>>,
 ) -> Element {
     let status_state = state.read();
-    
+
     // Sort items by alignment and priority
-    let mut left_items: Vec<_> = status_state.items.iter()
+    let mut left_items: Vec<_> = status_state
+        .items
+        .iter()
         .filter(|item| item.alignment == StatusBarAlignment::Left)
         .collect();
     left_items.sort_by(|a, b| b.priority.cmp(&a.priority));
-    
-    let mut right_items: Vec<_> = status_state.items.iter()
+
+    let mut right_items: Vec<_> = status_state
+        .items
+        .iter()
         .filter(|item| item.alignment == StatusBarAlignment::Right)
         .collect();
     right_items.sort_by(|a, b| b.priority.cmp(&a.priority));
-    
+
     // Determine background color
     let background_style = if let Some(color) = &status_state.background_color {
         format!("background-color: {};", color)
     } else {
         String::new()
     };
-    
+
     rsx! {
         div {
             class: "status-bar",
             style: "{background_style}",
             role: "status",
             aria_label: "Status Bar",
-            
+
             // Left section
             div {
                 class: "status-bar-section status-bar-left",
-                
+
                 for item in left_items {
                     StatusBarItemComponent {
                         item: item.clone(),
@@ -282,11 +285,11 @@ pub fn EnhancedStatusBar(
                     }
                 }
             }
-            
+
             // Right section
             div {
                 class: "status-bar-section status-bar-right",
-                
+
                 for item in right_items {
                     StatusBarItemComponent {
                         item: item.clone(),
@@ -303,17 +306,14 @@ pub fn EnhancedStatusBar(
 
 /// Individual status bar item
 #[component]
-fn StatusBarItemComponent(
-    item: StatusBarItem,
-    on_click: EventHandler<()>,
-) -> Element {
+fn StatusBarItemComponent(item: StatusBarItem, on_click: EventHandler<()>) -> Element {
     let has_click_handler = item.on_click.is_some();
     let item_class = if has_click_handler {
         "status-bar-item clickable"
     } else {
         "status-bar-item"
     };
-    
+
     // Build inline styles
     let mut styles = Vec::new();
     if let Some(bg) = &item.background_color {
@@ -323,22 +323,20 @@ fn StatusBarItemComponent(
         styles.push(format!("color: {}", fg));
     }
     let style_str = styles.join("; ");
-    
+
     // Map icon names to codicons
-    let icon_class = item.icon.as_ref().map(|icon| {
-        match icon.as_str() {
-            "folder" => "codicon-folder",
-            "source-control" => "codicon-source-control",
-            "sync" => "codicon-sync",
-            "error" => "codicon-error",
-            "warning" => "codicon-warning",
-            "circuit-board" => "codicon-circuit-board",
-            "dashboard" => "codicon-dashboard",
-            "feedback" => "codicon-feedback",
-            _ => "codicon-circle",
-        }
+    let icon_class = item.icon.as_ref().map(|icon| match icon.as_str() {
+        "folder" => "codicon-folder",
+        "source-control" => "codicon-source-control",
+        "sync" => "codicon-sync",
+        "error" => "codicon-error",
+        "warning" => "codicon-warning",
+        "circuit-board" => "codicon-circuit-board",
+        "dashboard" => "codicon-dashboard",
+        "feedback" => "codicon-feedback",
+        _ => "codicon-circle",
     });
-    
+
     rsx! {
         div {
             class: "{item_class}",
@@ -349,13 +347,13 @@ fn StatusBarItemComponent(
                     on_click.call(());
                 }
             },
-            
+
             if let Some(icon) = icon_class {
                 span {
                     class: "status-bar-icon codicon {icon}",
                 }
             }
-            
+
             if !item.text.is_empty() {
                 span {
                     class: "status-bar-text",
@@ -373,65 +371,73 @@ impl StatusBarState {
             item.text = text;
         }
     }
-    
+
     pub fn update_consensus_status(&mut self, status: &str, color: Option<String>) {
         if let Some(item) = self.items.iter_mut().find(|i| i.id == "consensus-status") {
             item.text = format!("Consensus: {}", status);
             item.foreground_color = color;
         }
     }
-    
+
     pub fn update_api_usage(&mut self, cost: f64) {
         if let Some(item) = self.items.iter_mut().find(|i| i.id == "api-usage") {
             item.text = format!("${:.4}", cost);
             item.tooltip = Some(format!("API Usage Today: ${:.4}", cost));
         }
     }
-    
+
     pub fn update_problems(&mut self, errors: u32, warnings: u32) {
         if let Some(item) = self.items.iter_mut().find(|i| i.id == "problems") {
             item.text = errors.to_string();
-            item.tooltip = Some(if errors == 0 { 
-                "No Problems".to_string() 
-            } else { 
+            item.tooltip = Some(if errors == 0 {
+                "No Problems".to_string()
+            } else {
                 format!("{} Problem{}", errors, if errors == 1 { "" } else { "s" })
             });
         }
-        
+
         if let Some(item) = self.items.iter_mut().find(|i| i.id == "warnings") {
             item.text = warnings.to_string();
-            item.tooltip = Some(if warnings == 0 { 
-                "No Warnings".to_string() 
-            } else { 
-                format!("{} Warning{}", warnings, if warnings == 1 { "" } else { "s" })
+            item.tooltip = Some(if warnings == 0 {
+                "No Warnings".to_string()
+            } else {
+                format!(
+                    "{} Warning{}",
+                    warnings,
+                    if warnings == 1 { "" } else { "s" }
+                )
             });
         }
     }
-    
+
     pub fn set_remote_status(&mut self) {
         self.background_color = Some("#16825d".to_string()); // VS Code remote color
     }
-    
+
     pub fn set_debug_status(&mut self) {
         self.background_color = Some("#CC6633".to_string()); // VS Code debug color
     }
-    
+
     pub fn update_git_branch(&mut self, branch: &str) {
         if let Some(item) = self.items.iter_mut().find(|i| i.id == "git-branch") {
             item.text = branch.to_string();
             item.tooltip = Some(format!("Git: {} (click to checkout branch)", branch));
         }
     }
-    
+
     pub fn update_git_sync_status(&mut self, ahead: u32, behind: u32) {
         if let Some(item) = self.items.iter_mut().find(|i| i.id == "git-sync") {
             item.text = format!("↓{} ↑{}", behind, ahead);
             item.tooltip = Some("Synchronize Changes".to_string());
         }
     }
-    
+
     pub fn update_repository_selector(&mut self, name: &str, path: &str) {
-        if let Some(item) = self.items.iter_mut().find(|i| i.id == "repository-selector") {
+        if let Some(item) = self
+            .items
+            .iter_mut()
+            .find(|i| i.id == "repository-selector")
+        {
             item.text = name.to_string();
             item.tooltip = Some(format!("Repository: {} ({})", name, path));
         }

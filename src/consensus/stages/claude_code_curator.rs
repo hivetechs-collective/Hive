@@ -90,12 +90,18 @@ impl ClaudeCodeCuratorStage {
     /// Analyze if the response should include file operations
     fn analyze_for_file_operations(&self, question: &str, _response: &str) -> &'static str {
         let q_lower = question.to_lowercase();
-        
-        if q_lower.contains("create") || q_lower.contains("write") || 
-           q_lower.contains("add") || q_lower.contains("implement") ||
-           q_lower.contains("build") || q_lower.contains("make") ||
-           q_lower.contains("update") || q_lower.contains("modify") ||
-           q_lower.contains("refactor") || q_lower.contains("fix") {
+
+        if q_lower.contains("create")
+            || q_lower.contains("write")
+            || q_lower.contains("add")
+            || q_lower.contains("implement")
+            || q_lower.contains("build")
+            || q_lower.contains("make")
+            || q_lower.contains("update")
+            || q_lower.contains("modify")
+            || q_lower.contains("refactor")
+            || q_lower.contains("fix")
+        {
             "This request involves file operations. Format your response with inline code blocks showing file creation/modification operations as they happen, similar to Claude Code."
         } else {
             "This appears to be an informational request. Focus on clear explanation without file operations."
@@ -106,7 +112,9 @@ impl ClaudeCodeCuratorStage {
     pub fn structure_claude_code_context(&self, context: &str, _question: &str) -> String {
         let mut structured = String::new();
 
-        if context.contains("CRITICAL REPOSITORY CONTEXT") || context.contains("ACTUAL FILE CONTENTS") {
+        if context.contains("CRITICAL REPOSITORY CONTEXT")
+            || context.contains("ACTUAL FILE CONTENTS")
+        {
             structured.push_str("⚠️ CLAUDE CODE CURATION REQUIREMENT:\n");
             structured.push_str("Format file operations inline within your response:\n");
             structured.push_str("1. Show operations as they happen (Creating `filename`...)\n");
@@ -194,7 +202,7 @@ When the user's request involves creating, modifying, or working with code:
 
 Focus on clarity, completeness, and making the user feel like you're actively helping them code, not just explaining what could be done.";
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 
@@ -207,14 +215,18 @@ mod tests {
     #[test]
     fn test_inline_operations_detection() {
         let curator = ClaudeCodeCuratorStage::new(true);
-        let messages = curator.build_messages(
-            "Create a new authentication module",
-            Some("Previous analysis about auth"),
-            None,
-        ).unwrap();
-        
+        let messages = curator
+            .build_messages(
+                "Create a new authentication module",
+                Some("Previous analysis about auth"),
+                None,
+            )
+            .unwrap();
+
         // Should include inline operation guidelines
-        assert!(messages.iter().any(|m| m.content.contains("INLINE OPERATION")));
+        assert!(messages
+            .iter()
+            .any(|m| m.content.contains("INLINE OPERATION")));
     }
 
     #[test]

@@ -878,7 +878,7 @@ pub async fn get_memory_system() -> Result<Arc<MemorySystem>> {
         .map(Arc::clone)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

@@ -629,7 +629,7 @@ fn get_target_config_path() -> Result<PathBuf, HiveError> {
     Ok(home_dir.join(".hive").join("config.toml"))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

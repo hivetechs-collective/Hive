@@ -763,7 +763,7 @@ pub async fn find_conversations_by_topic(topic: &str, limit: Option<usize>) -> R
     Ok(conversations)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

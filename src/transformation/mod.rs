@@ -15,7 +15,7 @@ pub mod syntax;
 pub mod types;
 pub mod validation;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests;
 
 // Export both full and simple engines

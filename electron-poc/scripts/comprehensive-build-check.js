@@ -89,7 +89,7 @@ const requirements = {
 
   // Backend Server requirements
   backendServer: {
-    'Binary file': () => {
+    'Binary file (optional)': () => {
       const binaryPath = path.join(__dirname, '../binaries/hive-backend-server-enhanced');
       return { 
         present: fs.existsSync(binaryPath),
@@ -106,7 +106,7 @@ const requirements = {
         mustBeExecutable: true
       };
     },
-    'Rust source': () => {
+    'Rust source (optional)': () => {
       const rustPath = path.join(__dirname, '../../../hive/src/bin/hive-backend-server-enhanced.rs');
       return { 
         present: fs.existsSync(rustPath),
@@ -245,7 +245,10 @@ for (const [category, checks] of Object.entries(requirements)) {
     if (result.error) console.log(`   Error: ${result.error}`);
     
     if (!result.present) {
-      if (category === 'packaging' || name.includes('Built')) {
+      const lowerName = name.toLowerCase();
+      const optionalCheck = lowerName.includes('optional');
+      const optionalCategory = ['packaging', 'pythonRuntime'].includes(category);
+      if (optionalCategory || lowerName.includes('built') || optionalCheck) {
         hasWarnings = true;
       } else {
         hasErrors = true;

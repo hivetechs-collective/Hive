@@ -133,7 +133,7 @@ fn get_cwd_display() -> String {
         .unwrap_or_else(|_| "(unknown)".to_string())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

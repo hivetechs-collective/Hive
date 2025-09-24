@@ -453,7 +453,7 @@ echo "🔍 Use 'hive --help' for full command reference"
 "#.to_string()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

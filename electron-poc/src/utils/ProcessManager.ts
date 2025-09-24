@@ -1,6 +1,11 @@
 /**
  * ProcessManager - Manages child processes lifecycle for production
  * Handles spawning, monitoring, restarting, and cleanup
+ *
+ * Diagrams
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-system-overview
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-startup-sequence
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-dynamic-port-allocation
  */
 
 import { ChildProcess, fork, spawn } from 'child_process';
@@ -53,28 +58,94 @@ export class ProcessManager extends EventEmitter {
     if (app.isPackaged) {
       const path = require('path');
       const fs = require('fs');
-      const envPath = path.join(__dirname, '.env.production');
-      
-      if (fs.existsSync(envPath)) {
-        const envContent = fs.readFileSync(envPath, 'utf8');
-        const nodePathMatch = envContent.match(/NODE_PATH=(.+)/);
-        const useElectronMatch = envContent.match(/USE_ELECTRON_AS_NODE=true/);
-        
-        if (nodePathMatch && nodePathMatch[1]) {
-          const discoveredPath = nodePathMatch[1].trim();
-          logger.info(`[ProcessManager] Using Node.js from .env.production: ${discoveredPath}`);
-          
-          // If it's the Electron binary, we already handle ELECTRON_RUN_AS_NODE later
-          if (useElectronMatch || discoveredPath === process.execPath) {
-            logger.info(`[ProcessManager] Will use ELECTRON_RUN_AS_NODE=1 for Electron binary`);
-          }
-          
-          return discoveredPath;
+
+      const envCandidates = [
+        path.join(__dirname, '.env.production'),
+        path.join(process.resourcesPath, '.webpack', 'main', '.env.production'),
+        path.join(process.resourcesPath, '.webpack', '.env.production'),
+        path.join(process.resourcesPath, '.env.production'),
+      ];
+
+      let envContent = '';
+      let envSource: string | null = null;
+      for (const candidate of envCandidates) {
+        if (fs.existsSync(candidate)) {
+          envContent = fs.readFileSync(candidate, 'utf8');
+          envSource = candidate;
+          break;
         }
       }
-      
-      // Fallback to Electron if no saved path
-      logger.info(`[ProcessManager] No saved Node path, using Electron's Node.js: ${process.execPath}`);
+
+      const packagedNodeName = process.platform === 'win32' ? 'node.exe' : 'node';
+      const unpackedBinaryPath = path.join(process.resourcesPath, 'app.asar.unpacked', '.webpack', 'main', 'binaries', packagedNodeName);
+
+      if (envContent && envSource) {
+        const nodePathMatch = envContent.match(/NODE_PATH=(.+)/);
+        const useElectronMatch = envContent.match(/USE_ELECTRON_AS_NODE=true/);
+
+        if (nodePathMatch && nodePathMatch[1]) {
+          const rawPath = nodePathMatch[1].trim();
+          const baseDir = path.dirname(envSource);
+
+          const resolveRelative = (target: string, base: string) => {
+            if (path.isAbsolute(target)) {
+              return target;
+            }
+
+            const resolved = path.resolve(base, target);
+            if (resolved.includes('app.asar')) {
+              return resolved.replace('app.asar', 'app.asar.unpacked');
+            }
+
+            return resolved;
+          };
+
+          let discoveredPath = resolveRelative(rawPath, baseDir);
+
+          if (!fs.existsSync(discoveredPath)) {
+            const altResolved = resolveRelative(rawPath, path.join(process.resourcesPath, 'app.asar.unpacked', '.webpack', 'main'));
+            if (fs.existsSync(altResolved)) {
+              discoveredPath = altResolved;
+            }
+          }
+
+          if (!fs.existsSync(discoveredPath) && fs.existsSync(unpackedBinaryPath)) {
+            logger.warn(`[ProcessManager] Saved Node path ${rawPath} missing; using packaged binary at ${unpackedBinaryPath}`);
+            discoveredPath = unpackedBinaryPath;
+          }
+
+          if (fs.existsSync(discoveredPath)) {
+            try {
+              fs.chmodSync(discoveredPath, 0o755);
+            } catch (chmodError) {
+              logger.warn(`[ProcessManager] Unable to set execute permission on ${discoveredPath}: ${chmodError.message}`);
+            }
+
+            logger.info(`[ProcessManager] Using Node.js from .env.production (${envSource}): ${discoveredPath}`);
+
+            if (useElectronMatch || discoveredPath === process.execPath) {
+              logger.info(`[ProcessManager] Will use ELECTRON_RUN_AS_NODE=1 for Electron binary`);
+            }
+
+            return discoveredPath;
+          }
+
+          logger.warn(`[ProcessManager] Saved Node path ${rawPath} could not be resolved; falling back to packaged binary if available.`);
+        }
+      }
+
+      if (fs.existsSync(unpackedBinaryPath)) {
+        try {
+          fs.chmodSync(unpackedBinaryPath, 0o755);
+        } catch (chmodError) {
+          logger.warn(`[ProcessManager] Unable to set execute permission on bundled node: ${chmodError.message}`);
+        }
+
+        logger.info(`[ProcessManager] Using bundled Node.js runtime: ${unpackedBinaryPath}`);
+        return unpackedBinaryPath;
+      }
+
+      logger.warn('[ProcessManager] Bundled Node runtime missing; falling back to Electron');
       return process.execPath;
     }
     

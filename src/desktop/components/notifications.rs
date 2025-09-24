@@ -1,16 +1,14 @@
 // Notification System Component
 // Shows notifications for auto-accepted operations and other events
 
-use dioxus::prelude::*;
 use crate::consensus::{
-    stages::file_aware_curator::FileOperation,
-    ai_operation_parser::FileOperationWithMetadata,
-    smart_decision_engine::ExecutionDecision,
-    file_executor::ExecutionResult,
+    ai_operation_parser::FileOperationWithMetadata, file_executor::ExecutionResult,
+    smart_decision_engine::ExecutionDecision, stages::file_aware_curator::FileOperation,
 };
 use crate::desktop::styles::theme::ThemeColors;
-use std::time::{Duration, Instant};
+use dioxus::prelude::*;
 use std::collections::VecDeque;
+use std::time::{Duration, Instant};
 
 /// Notification type
 #[derive(Debug, Clone, PartialEq)]
@@ -48,16 +46,16 @@ pub struct NotificationAction {
 pub struct NotificationSystemProps {
     /// Maximum number of notifications to display
     pub max_notifications: usize,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Position on screen
     pub position: NotificationPosition,
-    
+
     /// Whether to show auto-accept summary
     pub show_auto_accept_summary: bool,
-    
+
     /// Callback when notification action is clicked
     pub on_action: EventHandler<String>,
 }
@@ -77,7 +75,7 @@ pub fn NotificationSystem(props: NotificationSystemProps) -> Element {
     let mut next_id = use_signal(|| 0usize);
     let mut auto_accept_count = use_signal(|| 0usize);
     let mut last_auto_accept_batch = use_signal(|| Vec::<FileOperationWithMetadata>::new());
-    
+
     // Context for adding notifications
     let context = NotificationContext {
         notifications: notifications.clone(),
@@ -87,12 +85,12 @@ pub fn NotificationSystem(props: NotificationSystemProps) -> Element {
         max_notifications: props.max_notifications,
     };
     use_context_provider(|| context);
-    
+
     // Auto-dismiss notifications
     use_future(move || async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            
+
             let now = Instant::now();
             notifications.with_mut(|n| {
                 n.retain(|notification| {
@@ -101,14 +99,14 @@ pub fn NotificationSystem(props: NotificationSystemProps) -> Element {
             });
         }
     });
-    
+
     let position_style = match props.position {
         NotificationPosition::TopRight => "top: 20px; right: 20px;",
         NotificationPosition::TopLeft => "top: 20px; left: 20px;",
         NotificationPosition::BottomRight => "bottom: 20px; right: 20px;",
         NotificationPosition::BottomLeft => "bottom: 20px; left: 20px;",
     };
-    
+
     rsx! {
         div {
             class: "notification-system",
@@ -122,7 +120,7 @@ pub fn NotificationSystem(props: NotificationSystemProps) -> Element {
                 max-width: 400px;
                 pointer-events: none;
             ",
-            
+
             // Auto-accept summary (if enabled)
             if props.show_auto_accept_summary && auto_accept_count() > 0 {
                 AutoAcceptSummary {
@@ -135,7 +133,7 @@ pub fn NotificationSystem(props: NotificationSystemProps) -> Element {
                     }
                 }
             }
-            
+
             // Active notifications
             for notification in notifications() {
                 NotificationItem {
@@ -168,24 +166,44 @@ struct NotificationItemProps {
 #[component]
 fn NotificationItem(props: NotificationItemProps) -> Element {
     let mut elapsed = use_signal(|| Duration::default());
-    
+
     use_future(move || async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
             elapsed.set(props.notification.created_at.elapsed());
         }
     });
-    
+
     let (bg_color, icon, icon_color) = match props.notification.notification_type {
-        NotificationType::Success => (format!("{}20", props.theme.success.clone()), "✓", props.theme.success.clone()),
-        NotificationType::Error => (format!("{}20", props.theme.error.clone()), "✗", props.theme.error.clone()),
-        NotificationType::Warning => (format!("{}20", props.theme.warning.clone()), "⚠", props.theme.warning.clone()),
-        NotificationType::Info => (format!("{}20", props.theme.info.clone()), "ℹ", props.theme.info.clone()),
-        NotificationType::AutoAccept => (format!("{}20", props.theme.primary.clone()), "🤖", props.theme.primary.clone()),
+        NotificationType::Success => (
+            format!("{}20", props.theme.success.clone()),
+            "✓",
+            props.theme.success.clone(),
+        ),
+        NotificationType::Error => (
+            format!("{}20", props.theme.error.clone()),
+            "✗",
+            props.theme.error.clone(),
+        ),
+        NotificationType::Warning => (
+            format!("{}20", props.theme.warning.clone()),
+            "⚠",
+            props.theme.warning.clone(),
+        ),
+        NotificationType::Info => (
+            format!("{}20", props.theme.info.clone()),
+            "ℹ",
+            props.theme.info.clone(),
+        ),
+        NotificationType::AutoAccept => (
+            format!("{}20", props.theme.primary.clone()),
+            "🤖",
+            props.theme.primary.clone(),
+        ),
     };
-    
+
     let progress = (elapsed().as_secs_f32() / props.notification.duration.as_secs_f32()).min(1.0);
-    
+
     rsx! {
         div {
             style: "
@@ -199,7 +217,7 @@ fn NotificationItem(props: NotificationItemProps) -> Element {
                 overflow: hidden;
                 animation: slideIn 0.3s ease-out;
             ",
-            
+
             // Progress bar
             div {
                 style: "
@@ -212,10 +230,10 @@ fn NotificationItem(props: NotificationItemProps) -> Element {
                     transition: width 0.1s linear;
                 ",
             }
-            
+
             div {
                 style: "display: flex; gap: 12px;",
-                
+
                 // Icon
                 div {
                     style: "
@@ -233,11 +251,11 @@ fn NotificationItem(props: NotificationItemProps) -> Element {
                     ",
                     "{icon}"
                 }
-                
+
                 // Content
                 div {
                     style: "flex: 1; min-width: 0;",
-                    
+
                     div {
                         style: "
                             font-weight: bold;
@@ -246,7 +264,7 @@ fn NotificationItem(props: NotificationItemProps) -> Element {
                         ",
                         "{props.notification.title}"
                     }
-                    
+
                     div {
                         style: "
                             color: {props.theme.text_secondary};
@@ -255,7 +273,7 @@ fn NotificationItem(props: NotificationItemProps) -> Element {
                         ",
                         "{props.notification.message}"
                     }
-                    
+
                     if let Some(details) = &props.notification.details {
                         div {
                             style: "
@@ -270,7 +288,7 @@ fn NotificationItem(props: NotificationItemProps) -> Element {
                             "{details}"
                         }
                     }
-                    
+
                     if let Some(action) = &props.notification.action {
                         {
                             let callback_id = action.callback_id.clone();
@@ -295,7 +313,7 @@ fn NotificationItem(props: NotificationItemProps) -> Element {
                         }
                     }
                 }
-                
+
                 // Dismiss button
                 if props.notification.is_dismissible {
                     button {
@@ -330,7 +348,7 @@ struct AutoAcceptSummaryProps {
 #[component]
 fn AutoAcceptSummary(props: AutoAcceptSummaryProps) -> Element {
     let mut show_details = use_signal(|| false);
-    
+
     rsx! {
         div {
             style: "
@@ -341,10 +359,10 @@ fn AutoAcceptSummary(props: AutoAcceptSummaryProps) -> Element {
                 pointer-events: auto;
                 margin-bottom: 8px;
             ",
-            
+
             div {
                 style: "display: flex; align-items: center; gap: 8px;",
-                
+
                 div {
                     style: "
                         background: {props.theme.primary};
@@ -356,12 +374,12 @@ fn AutoAcceptSummary(props: AutoAcceptSummaryProps) -> Element {
                     ",
                     "{props.count}"
                 }
-                
+
                 div {
                     style: "flex: 1; color: {props.theme.text}; font-size: 14px;",
                     "Operations auto-accepted this session"
                 }
-                
+
                 button {
                     style: "
                         background: none;
@@ -374,7 +392,7 @@ fn AutoAcceptSummary(props: AutoAcceptSummaryProps) -> Element {
                     onclick: move |_| show_details.set(!show_details()),
                     if show_details() { "Hide" } else { "Show" }
                 }
-                
+
                 button {
                     style: "
                         background: none;
@@ -388,7 +406,7 @@ fn AutoAcceptSummary(props: AutoAcceptSummaryProps) -> Element {
                     "×"
                 }
             }
-            
+
             if show_details() && !props.last_batch.is_empty() {
                 div {
                     style: "
@@ -396,7 +414,7 @@ fn AutoAcceptSummary(props: AutoAcceptSummaryProps) -> Element {
                         padding-top: 12px;
                         border-top: 1px solid {props.theme.border};
                     ",
-                    
+
                     div {
                         style: "
                             font-size: 12px;
@@ -405,17 +423,17 @@ fn AutoAcceptSummary(props: AutoAcceptSummaryProps) -> Element {
                         ",
                         "Recent operations:"
                     }
-                    
+
                     div {
                         style: "display: flex; flex-direction: column; gap: 4px;",
-                            
+
                             for (idx, op) in props.last_batch.iter().enumerate().take(5) {
                                 OperationSummaryItem {
                                     operation: op.clone(),
                                     theme: props.theme.clone(),
                                 }
                             }
-                            
+
                             if props.last_batch.len() > 5 {
                                 div {
                                     style: "
@@ -450,7 +468,7 @@ fn OperationSummaryItem(props: OperationSummaryItemProps) -> Element {
         FileOperation::Rename { .. } => ("🔄", props.theme.primary),
         FileOperation::Append { .. } => ("📝", props.theme.info),
     };
-    
+
     rsx! {
         div {
             style: "
@@ -462,9 +480,9 @@ fn OperationSummaryItem(props: OperationSummaryItemProps) -> Element {
                 border-radius: 4px;
                 font-size: 12px;
             ",
-            
+
             span { "{icon}" }
-            
+
             span {
                 style: "
                     color: {props.theme.text};
@@ -474,7 +492,7 @@ fn OperationSummaryItem(props: OperationSummaryItemProps) -> Element {
                 ",
                 "{get_operation_summary(&props.operation.operation)}"
             }
-            
+
             span {
                 style: "
                     color: {color};
@@ -512,7 +530,7 @@ impl NotificationContext {
         /*
         let id = (self.next_id)();
         self.next_id.set(id + 1);
-        
+
         let notification = Notification {
             id,
             notification_type: notification_type.clone(),
@@ -529,14 +547,14 @@ impl NotificationContext {
             is_dismissible: true,
             action: None,
         };
-        
+
         self.notifications.with_mut(|n| {
             n.push_front(notification);
             if n.len() > self.max_notifications {
                 n.pop_back();
             }
         });
-        
+
         if notification_type == NotificationType::AutoAccept {
             self.auto_accept_count.set((self.auto_accept_count)() + 1);
             if let Some(op) = operation {
@@ -545,7 +563,7 @@ impl NotificationContext {
         }
         */
     }
-    
+
     pub fn add_auto_accept_batch(&self, operations: Vec<FileOperationWithMetadata>) {
         // TODO: Implement notification context methods properly with Dioxus Signal
         // For now, this is commented out to allow compilation
@@ -553,10 +571,10 @@ impl NotificationContext {
         let count = operations.len();
         self.auto_accept_count.set((self.auto_accept_count)() + count);
         self.last_auto_accept_batch.set(operations.clone());
-        
+
         let id = (self.next_id)();
         self.next_id.set(id + 1);
-        
+
         let notification = Notification {
             id,
             notification_type: NotificationType::AutoAccept,
@@ -572,7 +590,7 @@ impl NotificationContext {
                 callback_id: format!("view_batch_{}", id),
             }),
         };
-        
+
         self.notifications.with_mut(|n| {
             n.push_front(notification);
             if n.len() > self.max_notifications {
@@ -604,9 +622,9 @@ pub fn notify_auto_accept_batch(operations: Vec<FileOperationWithMetadata>) {
 
 fn format_batch_summary(operations: &[FileOperationWithMetadata]) -> String {
     use std::collections::HashMap;
-    
+
     let mut counts: HashMap<&str, usize> = HashMap::new();
-    
+
     for op in operations {
         let op_type = match &op.operation {
             FileOperation::Create { .. } => "created",
@@ -617,26 +635,38 @@ fn format_batch_summary(operations: &[FileOperationWithMetadata]) -> String {
         };
         *counts.entry(op_type).or_insert(0) += 1;
     }
-    
+
     let mut summary_parts = Vec::new();
     for (op_type, count) in counts {
         summary_parts.push(format!("{} {}", count, op_type));
     }
-    
+
     summary_parts.join(", ")
 }
 
 fn get_operation_summary(operation: &FileOperation) -> String {
     match operation {
-        FileOperation::Create { path, .. } => format!("Create {}", path.file_name().unwrap_or_default().to_string_lossy()),
-        FileOperation::Update { path, .. } => format!("Update {}", path.file_name().unwrap_or_default().to_string_lossy()),
-        FileOperation::Delete { path } => format!("Delete {}", path.file_name().unwrap_or_default().to_string_lossy()),
+        FileOperation::Create { path, .. } => format!(
+            "Create {}",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ),
+        FileOperation::Update { path, .. } => format!(
+            "Update {}",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ),
+        FileOperation::Delete { path } => format!(
+            "Delete {}",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ),
         FileOperation::Rename { from, to } => format!(
             "{} → {}",
             from.file_name().unwrap_or_default().to_string_lossy(),
             to.file_name().unwrap_or_default().to_string_lossy()
         ),
-        FileOperation::Append { path, .. } => format!("Append to {}", path.file_name().unwrap_or_default().to_string_lossy()),
+        FileOperation::Append { path, .. } => format!(
+            "Append to {}",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ),
     }
 }
 

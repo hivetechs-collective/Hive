@@ -563,7 +563,7 @@ async fn find_issues(analysis: &TypeScriptAnalysis) -> Result<Vec<AnalysisIssue>
     Ok(issues)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

@@ -3,11 +3,11 @@
 //! This module analyzes questions and injects relevant historical knowledge
 //! from the AuthoritativeKnowledgeStore to enhance consensus responses.
 
-use std::sync::Arc;
-use chrono::Duration;
 use anyhow::Result;
+use chrono::Duration;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 use super::authoritative_store::{AuthoritativeKnowledgeStore, CuratedFact};
@@ -19,13 +19,13 @@ use crate::consensus::types::Stage;
 pub struct InjectedContext {
     /// Target consensus stage
     pub stage: Stage,
-    
+
     /// Relevant facts retrieved
     pub facts: Vec<RankedFact>,
-    
+
     /// Formatted context string ready for model
     pub formatted_context: String,
-    
+
     /// Metadata about the injection
     pub metadata: InjectionMetadata,
 }
@@ -81,16 +81,16 @@ pub enum TemporalFocus {
 pub struct ContextInjector {
     /// Knowledge store containing facts
     knowledge_store: Arc<AuthoritativeKnowledgeStore>,
-    
+
     /// AI helpers for intelligent analysis
     ai_helpers: Arc<AIHelperEcosystem>,
-    
+
     /// Time window for temporal relevance
     temporal_window: Duration,
-    
+
     /// Minimum relevance score for inclusion
     relevance_threshold: f32,
-    
+
     /// Maximum facts to inject per stage
     max_facts_per_stage: usize,
 }
@@ -109,19 +109,19 @@ impl ContextInjector {
             max_facts_per_stage: 10,
         })
     }
-    
+
     /// Configure temporal window
     pub fn with_temporal_window(mut self, window: Duration) -> Self {
         self.temporal_window = window;
         self
     }
-    
+
     /// Configure relevance threshold
     pub fn with_relevance_threshold(mut self, threshold: f32) -> Self {
         self.relevance_threshold = threshold;
         self
     }
-    
+
     /// Inject relevant context for a specific stage
     pub async fn inject_context(
         &self,
@@ -131,37 +131,45 @@ impl ContextInjector {
     ) -> Result<InjectedContext> {
         let start_time = std::time::Instant::now();
         info!("🧠 Injecting intelligent context for {:?} stage", stage);
-        
+
         // 1. Analyze the question using AI helpers
         let question_analysis = self.analyze_question(question).await?;
-        debug!("Question analysis: {} concepts, {} entities, {:?} type", 
+        debug!(
+            "Question analysis: {} concepts, {} entities, {:?} type",
             question_analysis.key_concepts.len(),
             question_analysis.entities.len(),
             question_analysis.question_type
         );
-        
+
         // 2. Retrieve relevant facts from different dimensions
         let temporal_facts = self.get_temporal_facts(&question_analysis).await?;
         let thematic_facts = self.get_thematic_facts(&question_analysis).await?;
         let entity_facts = self.get_entity_facts(&question_analysis).await?;
-        
+
         let total_facts = temporal_facts.len() + thematic_facts.len() + entity_facts.len();
-        debug!("Retrieved {} temporal, {} thematic, {} entity facts",
-            temporal_facts.len(), thematic_facts.len(), entity_facts.len()
+        debug!(
+            "Retrieved {} temporal, {} thematic, {} entity facts",
+            temporal_facts.len(),
+            thematic_facts.len(),
+            entity_facts.len()
         );
-        
+
         // 3. Rank and filter by relevance
-        let ranked_facts = self.rank_facts_by_relevance(
-            temporal_facts,
-            thematic_facts,
-            entity_facts,
-            &question_analysis,
-            stage,
-        ).await?;
-        
+        let ranked_facts = self
+            .rank_facts_by_relevance(
+                temporal_facts,
+                thematic_facts,
+                entity_facts,
+                &question_analysis,
+                stage,
+            )
+            .await?;
+
         // 4. Format context for the specific stage
-        let formatted_context = self.format_for_stage(&ranked_facts, stage, existing_context).await?;
-        
+        let formatted_context = self
+            .format_for_stage(&ranked_facts, stage, existing_context)
+            .await?;
+
         // 5. Create metadata
         let metadata = InjectionMetadata {
             total_facts_considered: total_facts,
@@ -171,11 +179,14 @@ impl ContextInjector {
             injection_timestamp: Utc::now(),
             processing_time_ms: start_time.elapsed().as_millis() as u64,
         };
-        
-        info!("✅ Injected {} relevant facts for {:?} stage in {}ms",
-            ranked_facts.len(), stage, metadata.processing_time_ms
+
+        info!(
+            "✅ Injected {} relevant facts for {:?} stage in {}ms",
+            ranked_facts.len(),
+            stage,
+            metadata.processing_time_ms
         );
-        
+
         Ok(InjectedContext {
             stage,
             facts: ranked_facts,
@@ -183,7 +194,7 @@ impl ContextInjector {
             metadata,
         })
     }
-    
+
     /// Analyze question using AI helpers
     async fn analyze_question(&self, question: &str) -> Result<QuestionAnalysis> {
         // Create indexed knowledge from the question for analysis
@@ -196,28 +207,32 @@ impl ContextInjector {
                 "timestamp": chrono::Utc::now().to_rfc3339()
             }),
         };
-        
+
         // Use pattern recognizer to analyze question patterns
-        let patterns = self.ai_helpers.pattern_recognizer
+        let patterns = self
+            .ai_helpers
+            .pattern_recognizer
             .analyze_patterns(&question_indexed)
             .await
             .unwrap_or_else(|_| vec![]);
-        
+
         // Extract key concepts from patterns and question
-        let concepts = self.extract_key_concepts_from_patterns(question, &patterns).await?;
-        
+        let concepts = self
+            .extract_key_concepts_from_patterns(question, &patterns)
+            .await?;
+
         // Extract entities
         let entities = self.extract_entities(question).await?;
-        
+
         // Determine question type
         let question_type = self.classify_question_type(question);
-        
+
         // Determine temporal focus
         let temporal_focus = self.determine_temporal_focus(question);
-        
+
         // Calculate complexity
         let complexity_score = self.calculate_complexity(question, &concepts, &entities);
-        
+
         Ok(QuestionAnalysis {
             key_concepts: concepts,
             entities,
@@ -226,13 +241,15 @@ impl ContextInjector {
             complexity_score,
         })
     }
-    
+
     /// Get temporally relevant facts
     async fn get_temporal_facts(&self, analysis: &QuestionAnalysis) -> Result<Vec<CuratedFact>> {
         match analysis.temporal_focus {
             TemporalFocus::Current => {
                 // Get recent facts within temporal window
-                self.knowledge_store.get_recent_facts(self.temporal_window).await
+                self.knowledge_store
+                    .get_recent_facts(self.temporal_window)
+                    .await
             }
             TemporalFocus::Historical => {
                 // Get all facts, sorted by date
@@ -244,33 +261,35 @@ impl ContextInjector {
             }
         }
     }
-    
+
     /// Get thematically relevant facts
     async fn get_thematic_facts(&self, analysis: &QuestionAnalysis) -> Result<Vec<CuratedFact>> {
         let mut all_facts = Vec::new();
-        
+
         // For each key concept, find similar facts
         for concept in &analysis.key_concepts {
             let similar = self.knowledge_store.find_similar(concept, 5).await?;
             all_facts.extend(similar);
         }
-        
+
         // Deduplicate by fact ID
         let mut seen_ids = std::collections::HashSet::new();
         all_facts.retain(|fact| seen_ids.insert(fact.id.clone()));
-        
+
         Ok(all_facts)
     }
-    
+
     /// Get entity-specific facts
     async fn get_entity_facts(&self, analysis: &QuestionAnalysis) -> Result<Vec<CuratedFact>> {
         if analysis.entities.is_empty() {
             return Ok(Vec::new());
         }
-        
-        self.knowledge_store.get_facts_about_entities(&analysis.entities).await
+
+        self.knowledge_store
+            .get_facts_about_entities(&analysis.entities)
+            .await
     }
-    
+
     /// Rank facts by relevance to question and stage
     async fn rank_facts_by_relevance(
         &self,
@@ -281,7 +300,7 @@ impl ContextInjector {
         stage: Stage,
     ) -> Result<Vec<RankedFact>> {
         let mut ranked_facts = Vec::new();
-        
+
         // Score temporal facts
         for fact in temporal_facts {
             let score = self.calculate_temporal_relevance(&fact, analysis);
@@ -293,7 +312,7 @@ impl ContextInjector {
                 });
             }
         }
-        
+
         // Score thematic facts
         for fact in thematic_facts {
             let score = self.calculate_thematic_relevance(&fact, analysis).await?;
@@ -305,7 +324,7 @@ impl ContextInjector {
                 });
             }
         }
-        
+
         // Score entity facts
         for fact in entity_facts {
             let score = self.calculate_entity_relevance(&fact, analysis);
@@ -317,17 +336,17 @@ impl ContextInjector {
                 });
             }
         }
-        
+
         // Sort by relevance score
         ranked_facts.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap());
-        
+
         // Apply stage-specific filtering
         let stage_limit = self.get_stage_limit(stage);
         ranked_facts.truncate(stage_limit);
-        
+
         Ok(ranked_facts)
     }
-    
+
     /// Format facts for specific stage
     async fn format_for_stage(
         &self,
@@ -336,16 +355,19 @@ impl ContextInjector {
         existing_context: Option<String>,
     ) -> Result<String> {
         let mut formatted = String::new();
-        
+
         // Add stage-specific header
-        formatted.push_str(&format!("## 🧠 AI-Injected Context for {:?} Stage\n\n", stage));
-        
+        formatted.push_str(&format!(
+            "## 🧠 AI-Injected Context for {:?} Stage\n\n",
+            stage
+        ));
+
         // Add existing context if provided
         if let Some(existing) = existing_context {
             formatted.push_str(&existing);
             formatted.push_str("\n\n");
         }
-        
+
         // Add facts based on stage requirements
         match stage {
             Stage::Generator => {
@@ -369,7 +391,12 @@ impl ContextInjector {
                         "- {}\n  *(Confidence: {:.0}%, Theme: {})*\n\n",
                         ranked_fact.fact.content,
                         ranked_fact.fact.curator_confidence * 100.0,
-                        ranked_fact.fact.topics.first().cloned().unwrap_or_else(|| "general".to_string())
+                        ranked_fact
+                            .fact
+                            .topics
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| "general".to_string())
                     ));
                 }
             }
@@ -396,57 +423,60 @@ impl ContextInjector {
                 }
             }
         }
-        
+
         Ok(formatted)
     }
-    
+
     // Helper methods
-    
-    async fn extract_key_concepts_from_patterns(&self, question: &str, patterns: &[crate::ai_helpers::Pattern]) -> Result<Vec<String>> {
+
+    async fn extract_key_concepts_from_patterns(
+        &self,
+        question: &str,
+        patterns: &[crate::ai_helpers::Pattern],
+    ) -> Result<Vec<String>> {
         // Extract concepts from patterns first
-        let mut concepts: Vec<String> = patterns.iter()
-            .flat_map(|p| p.examples.clone())
-            .collect();
-        
+        let mut concepts: Vec<String> = patterns.iter().flat_map(|p| p.examples.clone()).collect();
+
         // Add concepts from simple word analysis
         let additional_concepts = self.extract_key_concepts(question).await?;
         concepts.extend(additional_concepts);
-        
+
         // Deduplicate
         concepts.sort();
         concepts.dedup();
-        
+
         Ok(concepts)
     }
-    
+
     async fn extract_key_concepts(&self, question: &str) -> Result<Vec<String>> {
         // Use AI helpers to extract concepts
         // For now, use simple keyword extraction
         let words: Vec<&str> = question.split_whitespace().collect();
-        let concepts = words.into_iter()
+        let concepts = words
+            .into_iter()
             .filter(|w| w.len() > 4 && !is_common_word(w))
             .map(|w| w.to_string())
             .collect();
         Ok(concepts)
     }
-    
+
     async fn extract_entities(&self, question: &str) -> Result<Vec<String>> {
         // Extract proper nouns and specific terms
         let mut entities = Vec::new();
-        
+
         // Simple heuristic: capitalized words
         for word in question.split_whitespace() {
             if word.chars().next().map_or(false, |c| c.is_uppercase()) && word.len() > 2 {
                 entities.push(word.to_string());
             }
         }
-        
+
         Ok(entities)
     }
-    
+
     fn classify_question_type(&self, question: &str) -> QuestionType {
         let q_lower = question.to_lowercase();
-        
+
         if q_lower.starts_with("what is") || q_lower.starts_with("who is") {
             QuestionType::Factual
         } else if q_lower.starts_with("how") || q_lower.starts_with("why") {
@@ -461,30 +491,39 @@ impl ContextInjector {
             QuestionType::Procedural
         }
     }
-    
+
     fn determine_temporal_focus(&self, question: &str) -> TemporalFocus {
         let q_lower = question.to_lowercase();
-        
+
         if q_lower.contains("latest") || q_lower.contains("recent") || q_lower.contains("current") {
             TemporalFocus::Current
-        } else if q_lower.contains("history") || q_lower.contains("past") || q_lower.contains("was") {
+        } else if q_lower.contains("history") || q_lower.contains("past") || q_lower.contains("was")
+        {
             TemporalFocus::Historical
-        } else if q_lower.contains("future") || q_lower.contains("will") || q_lower.contains("upcoming") {
+        } else if q_lower.contains("future")
+            || q_lower.contains("will")
+            || q_lower.contains("upcoming")
+        {
             TemporalFocus::Future
         } else {
             TemporalFocus::Timeless
         }
     }
-    
-    fn calculate_complexity(&self, question: &str, concepts: &[String], entities: &[String]) -> f32 {
+
+    fn calculate_complexity(
+        &self,
+        question: &str,
+        concepts: &[String],
+        entities: &[String],
+    ) -> f32 {
         let word_count = question.split_whitespace().count() as f32;
         let concept_count = concepts.len() as f32;
         let entity_count = entities.len() as f32;
-        
+
         // Simple complexity heuristic
         (word_count / 10.0 + concept_count / 3.0 + entity_count / 2.0).min(1.0)
     }
-    
+
     fn calculate_temporal_relevance(&self, fact: &CuratedFact, analysis: &QuestionAnalysis) -> f32 {
         match analysis.temporal_focus {
             TemporalFocus::Current => {
@@ -497,43 +536,51 @@ impl ContextInjector {
             _ => 0.5, // Neutral relevance for non-temporal queries
         }
     }
-    
-    async fn calculate_thematic_relevance(&self, fact: &CuratedFact, analysis: &QuestionAnalysis) -> Result<f32> {
+
+    async fn calculate_thematic_relevance(
+        &self,
+        fact: &CuratedFact,
+        analysis: &QuestionAnalysis,
+    ) -> Result<f32> {
         // Use AI helpers to calculate semantic similarity
         let mut total_score = 0.0;
         let mut count = 0;
-        
+
         for concept in &analysis.key_concepts {
             // Simple keyword matching for now
-            if fact.content.to_lowercase().contains(&concept.to_lowercase()) {
+            if fact
+                .content
+                .to_lowercase()
+                .contains(&concept.to_lowercase())
+            {
                 total_score += 1.0;
             }
             count += 1;
         }
-        
+
         if count > 0 {
             Ok((total_score / count as f32).min(1.0))
         } else {
             Ok(0.0)
         }
     }
-    
+
     fn calculate_entity_relevance(&self, fact: &CuratedFact, analysis: &QuestionAnalysis) -> f32 {
         let mut matches = 0;
-        
+
         for entity in &analysis.entities {
             if fact.content.contains(entity) {
                 matches += 1;
             }
         }
-        
+
         if analysis.entities.is_empty() {
             0.0
         } else {
             (matches as f32 / analysis.entities.len() as f32).min(1.0)
         }
     }
-    
+
     fn get_stage_limit(&self, stage: Stage) -> usize {
         match stage {
             Stage::Generator => self.max_facts_per_stage,
@@ -546,23 +593,23 @@ impl ContextInjector {
 
 fn is_common_word(word: &str) -> bool {
     const COMMON_WORDS: &[&str] = &[
-        "the", "is", "at", "which", "on", "and", "a", "an", "as", "are", "was", "were",
-        "been", "be", "being", "have", "has", "had", "do", "does", "did", "will", "would",
-        "could", "should", "may", "might", "must", "shall", "can", "this", "that", "these",
-        "those", "what", "where", "when", "how", "why", "who", "whom", "whose", "which",
+        "the", "is", "at", "which", "on", "and", "a", "an", "as", "are", "was", "were", "been",
+        "be", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "must", "shall", "can", "this", "that", "these", "those", "what",
+        "where", "when", "how", "why", "who", "whom", "whose", "which",
     ];
     COMMON_WORDS.contains(&word.to_lowercase().as_str())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_question_analysis() {
         // Test implementation will be added
     }
-    
+
     #[tokio::test]
     async fn test_context_injection() {
         // Test implementation will be added

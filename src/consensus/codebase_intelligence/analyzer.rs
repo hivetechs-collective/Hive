@@ -1,8 +1,8 @@
 //! Relationship analysis and architecture derivation
 
-use std::collections::HashMap;
-use anyhow::Result;
 use super::ExtractedObject;
+use anyhow::Result;
+use std::collections::HashMap;
 
 /// Analyzes relationships between code objects
 pub struct RelationshipAnalyzer;
@@ -11,13 +11,17 @@ impl RelationshipAnalyzer {
     pub fn new() -> Self {
         Self
     }
-    
+
     pub async fn analyze_objects(&self, objects: &[ExtractedObject]) -> Result<RelationshipGraph> {
         // TODO: Implement actual relationship analysis
         Ok(RelationshipGraph::new())
     }
-    
-    pub async fn derive_architecture(&self, objects: &[ExtractedObject], relationships: &RelationshipGraph) -> Result<Architecture> {
+
+    pub async fn derive_architecture(
+        &self,
+        objects: &[ExtractedObject],
+        relationships: &RelationshipGraph,
+    ) -> Result<Architecture> {
         // TODO: Implement architecture detection
         Ok(Architecture {
             pattern: "Unknown".to_string(),

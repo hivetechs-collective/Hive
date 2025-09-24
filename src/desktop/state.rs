@@ -1,9 +1,9 @@
 //! Application State Management
 
+use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use dioxus::prelude::*;
 
 /// Global profile state - single source of truth
 #[derive(Clone, Debug, PartialEq)]
@@ -24,7 +24,8 @@ pub struct ActiveProfileData {
 }
 
 /// Global signal for profile state
-pub static ACTIVE_PROFILE_STATE: GlobalSignal<ProfileState> = Signal::global(|| ProfileState::Loading);
+pub static ACTIVE_PROFILE_STATE: GlobalSignal<ProfileState> =
+    Signal::global(|| ProfileState::Loading);
 
 /// Git operation states shared across components
 #[derive(Clone, Debug, PartialEq)]
@@ -44,7 +45,7 @@ impl GitOperationState {
             operation_status: None,
         }
     }
-    
+
     pub fn reset_all(&mut self) {
         self.is_pushing = false;
         self.is_pulling = false;
@@ -101,16 +102,17 @@ pub struct AppState {
 
     /// Trigger for analytics refresh after consensus completion
     pub analytics_refresh_trigger: u32,
-    
+
     /// Trigger for repository context update when directory selection changes
     pub repository_context_update_trigger: u32,
-    
+
     /// Pending file operations requiring user confirmation
-    pub pending_operations: Option<Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>>,
-    
+    pub pending_operations:
+        Option<Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>>,
+
     /// Show operation confirmation dialog
     pub show_operation_confirmation_dialog: bool,
-    
+
     /// Git operation states
     pub git_operations: GitOperationState,
 }
@@ -279,7 +281,7 @@ impl FileExplorerState {
     pub fn select_file(&mut self, path: PathBuf) {
         self.selected_file = Some(path);
     }
-    
+
     pub fn select_directory(&mut self, path: PathBuf) {
         self.selected_directory = Some(path);
     }
@@ -297,7 +299,7 @@ pub struct FileItem {
     pub git_status: Option<GitFileStatus>,
     pub size: Option<u64>,
     pub modified: Option<chrono::DateTime<chrono::Utc>>,
-    pub depth: usize,  // NEW: Track nesting depth for proper indentation
+    pub depth: usize, // NEW: Track nesting depth for proper indentation
 }
 
 impl PartialEq for FileItem {
@@ -509,7 +511,7 @@ pub struct ConsensusState {
     pub total_tokens: usize,
     pub estimated_cost: f64,
     pub streaming_content: String,
-    pub raw_streaming_content: String,  // Raw markdown before HTML conversion
+    pub raw_streaming_content: String, // Raw markdown before HTML conversion
     pub active_profile_name: String,
     // Debouncing fields for UI updates
     pub last_html_update_time: std::time::Instant,

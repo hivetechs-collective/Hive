@@ -259,7 +259,7 @@ impl TemplateMaintenanceManager {
         let conn = self.db.get_connection()?;
         let mut validations = HashMap::new();
 
-        // Get all profiles - they now store OpenRouter IDs directly  
+        // Get all profiles - they now store OpenRouter IDs directly
         let profiles = {
             let mut stmt = conn.prepare(
                 "SELECT cp.id, cp.profile_name,

@@ -1,9 +1,9 @@
 //! AI CLI tool registry and configurations
-//! 
+//!
 //! This module defines all available AI CLI tools and their configurations.
 
 use crate::desktop::ai_cli_updater::{
-    CliToolConfig, InstallMethod, InstallScript, Platform, ToolDependency, AuthStatus,
+    AuthStatus, CliToolConfig, InstallMethod, InstallScript, Platform, ToolDependency,
 };
 
 /// Get the complete list of AI CLI tools
@@ -86,7 +86,5 @@ pub fn get_tool_by_id(tool_id: &str) -> Option<CliToolConfig> {
 
 /// Check if a tool is currently enabled
 pub fn is_tool_enabled(tool_id: &str) -> bool {
-    get_enabled_ai_tools()
-        .iter()
-        .any(|tool| tool.id == tool_id)
+    get_enabled_ai_tools().iter().any(|tool| tool.id == tool_id)
 }

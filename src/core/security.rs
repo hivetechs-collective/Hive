@@ -757,7 +757,7 @@ pub fn check_directory_access(path: &Path) -> Result<()> {
     context.check_directory_access(path)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

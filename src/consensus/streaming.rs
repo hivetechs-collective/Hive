@@ -43,12 +43,12 @@ pub trait StreamingCallbacks: Send + Sync {
     fn on_profile_loaded(&self, profile_name: &str, models: &[String]) -> Result<()> {
         Ok(())
     }
-    
+
     /// Called when AI Helper makes routing decision
     fn on_mode_decision(&self, direct_mode: bool, reason: &str) -> Result<()> {
         Ok(())
     }
-    
+
     /// Called when a stage starts
     fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
         Ok(())
@@ -85,13 +85,13 @@ pub trait StreamingCallbacks: Send + Sync {
         // Default implementation does nothing
         Ok(())
     }
-    
+
     /// Get the current auto-accept state
     fn get_auto_accept_state(&self) -> Option<bool> {
         // Default implementation returns None
         None
     }
-    
+
     /// Called when operations require user confirmation
     fn on_operations_require_confirmation(
         &self,

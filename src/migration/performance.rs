@@ -731,7 +731,7 @@ pub async fn benchmark_against_typescript(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

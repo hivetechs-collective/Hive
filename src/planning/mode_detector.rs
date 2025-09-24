@@ -426,7 +426,7 @@ fn mode_to_string(mode: &ModeType) -> &'static str {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

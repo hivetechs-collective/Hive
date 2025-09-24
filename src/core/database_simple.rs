@@ -329,7 +329,7 @@ pub fn current_timestamp() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

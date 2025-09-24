@@ -61,7 +61,8 @@ class BuildWithProgress {
     
     this.progressWindow = spawn(electronPath, [windowScript], {
       stdio: 'inherit',
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+      // Launch Electron as a GUI app (do NOT set ELECTRON_RUN_AS_NODE)
+      env: { ...process.env }
     });
     
     this.progressWindow.on('error', (error) => {

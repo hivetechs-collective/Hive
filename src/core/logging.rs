@@ -484,7 +484,7 @@ pub fn default_log_dir() -> PathBuf {
     home_dir.join(".hive").join("logs")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

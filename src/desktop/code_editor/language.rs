@@ -1,5 +1,5 @@
 //! Language Service Integration
-//! 
+//!
 //! Provides language-specific features like auto-completion, hover info, and diagnostics
 
 use lsp_types::{
@@ -25,12 +25,12 @@ impl LanguageService {
             language_id: language_id.to_string(),
             completions: HashMap::new(),
         };
-        
+
         // Initialize with some mock completions for each language
         service.init_mock_completions();
         service
     }
-    
+
     fn init_mock_completions(&mut self) {
         match self.language_id.as_str() {
             "rust" => {
@@ -45,12 +45,15 @@ impl LanguageService {
             _ => {}
         }
     }
-    
+
     fn add_rust_completions(&mut self) {
         let mut completions = vec![];
-        
+
         // Common Rust keywords
-        for keyword in ["fn", "let", "mut", "const", "struct", "enum", "impl", "trait", "pub", "use", "mod", "async", "await"] {
+        for keyword in [
+            "fn", "let", "mut", "const", "struct", "enum", "impl", "trait", "pub", "use", "mod",
+            "async", "await",
+        ] {
             completions.push(CompletionItem {
                 label: keyword.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
@@ -58,9 +61,11 @@ impl LanguageService {
                 ..Default::default()
             });
         }
-        
+
         // Common types
-        for type_name in ["String", "Vec", "HashMap", "Option", "Result", "Box", "Arc", "Mutex"] {
+        for type_name in [
+            "String", "Vec", "HashMap", "Option", "Result", "Box", "Arc", "Mutex",
+        ] {
             completions.push(CompletionItem {
                 label: type_name.to_string(),
                 kind: Some(CompletionItemKind::STRUCT),
@@ -68,9 +73,17 @@ impl LanguageService {
                 ..Default::default()
             });
         }
-        
+
         // Common macros
-        for macro_name in ["println!", "vec!", "format!", "panic!", "dbg!", "todo!", "unimplemented!"] {
+        for macro_name in [
+            "println!",
+            "vec!",
+            "format!",
+            "panic!",
+            "dbg!",
+            "todo!",
+            "unimplemented!",
+        ] {
             completions.push(CompletionItem {
                 label: macro_name.to_string(),
                 kind: Some(CompletionItemKind::FUNCTION),
@@ -78,15 +91,18 @@ impl LanguageService {
                 ..Default::default()
             });
         }
-        
+
         self.completions.insert("rust".to_string(), completions);
     }
-    
+
     fn add_javascript_completions(&mut self) {
         let mut completions = vec![];
-        
+
         // JavaScript keywords
-        for keyword in ["const", "let", "var", "function", "class", "async", "await", "return", "if", "else", "for", "while"] {
+        for keyword in [
+            "const", "let", "var", "function", "class", "async", "await", "return", "if", "else",
+            "for", "while",
+        ] {
             completions.push(CompletionItem {
                 label: keyword.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
@@ -94,9 +110,16 @@ impl LanguageService {
                 ..Default::default()
             });
         }
-        
+
         // Common methods
-        for method in ["console.log", "Array.from", "Object.keys", "Promise.all", "JSON.stringify", "JSON.parse"] {
+        for method in [
+            "console.log",
+            "Array.from",
+            "Object.keys",
+            "Promise.all",
+            "JSON.stringify",
+            "JSON.parse",
+        ] {
             completions.push(CompletionItem {
                 label: method.to_string(),
                 kind: Some(CompletionItemKind::METHOD),
@@ -104,16 +127,21 @@ impl LanguageService {
                 ..Default::default()
             });
         }
-        
-        self.completions.insert("javascript".to_string(), completions.clone());
-        self.completions.insert("typescript".to_string(), completions);
+
+        self.completions
+            .insert("javascript".to_string(), completions.clone());
+        self.completions
+            .insert("typescript".to_string(), completions);
     }
-    
+
     fn add_python_completions(&mut self) {
         let mut completions = vec![];
-        
+
         // Python keywords
-        for keyword in ["def", "class", "import", "from", "if", "elif", "else", "for", "while", "return", "async", "await"] {
+        for keyword in [
+            "def", "class", "import", "from", "if", "elif", "else", "for", "while", "return",
+            "async", "await",
+        ] {
             completions.push(CompletionItem {
                 label: keyword.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
@@ -121,9 +149,20 @@ impl LanguageService {
                 ..Default::default()
             });
         }
-        
+
         // Built-in functions
-        for func in ["print", "len", "range", "enumerate", "zip", "map", "filter", "sum", "min", "max"] {
+        for func in [
+            "print",
+            "len",
+            "range",
+            "enumerate",
+            "zip",
+            "map",
+            "filter",
+            "sum",
+            "min",
+            "max",
+        ] {
             completions.push(CompletionItem {
                 label: func.to_string(),
                 kind: Some(CompletionItemKind::FUNCTION),
@@ -131,17 +170,22 @@ impl LanguageService {
                 ..Default::default()
             });
         }
-        
+
         self.completions.insert("python".to_string(), completions);
     }
-    
+
     /// Get completion suggestions at the current position
-    pub async fn get_completions(&self, text: &str, line: usize, column: usize) -> Vec<CompletionItem> {
+    pub async fn get_completions(
+        &self,
+        text: &str,
+        line: usize,
+        column: usize,
+    ) -> Vec<CompletionItem> {
         // Get the current word being typed
         let lines: Vec<&str> = text.lines().collect();
         if let Some(current_line) = lines.get(line) {
             let prefix = Self::get_word_at_position(current_line, column);
-            
+
             // Filter completions based on prefix
             if let Some(all_completions) = self.completions.get(&self.language_id) {
                 return all_completions
@@ -151,16 +195,16 @@ impl LanguageService {
                     .collect();
             }
         }
-        
+
         Vec::new()
     }
-    
+
     /// Get hover information at position
     pub async fn get_hover_info(&self, text: &str, line: usize, column: usize) -> Option<String> {
         let lines: Vec<&str> = text.lines().collect();
         if let Some(current_line) = lines.get(line) {
             let word = Self::get_word_at_position(current_line, column);
-            
+
             // Provide mock hover info based on word
             match self.language_id.as_str() {
                 "rust" => match word.as_str() {
@@ -185,18 +229,21 @@ impl LanguageService {
             None
         }
     }
-    
+
     /// Get diagnostics (errors, warnings) for the current text
     pub async fn get_diagnostics(&self, text: &str) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
-        
+
         // Simple example diagnostics
         match self.language_id.as_str() {
             "rust" => {
                 // Check for missing semicolons
                 for (line_num, line) in text.lines().enumerate() {
                     let trimmed = line.trim();
-                    if trimmed.starts_with("let") && !trimmed.ends_with(';') && !trimmed.ends_with('{') {
+                    if trimmed.starts_with("let")
+                        && !trimmed.ends_with(';')
+                        && !trimmed.ends_with('{')
+                    {
                         diagnostics.push(Diagnostic {
                             range: LspRange {
                                 start: LspPosition {
@@ -239,28 +286,38 @@ impl LanguageService {
             }
             _ => {}
         }
-        
+
         diagnostics
     }
-    
+
     /// Helper to extract word at position
     fn get_word_at_position(line: &str, column: usize) -> String {
         let chars: Vec<char> = line.chars().collect();
-        
+
         // Find word boundaries
         let mut start = column;
         let mut end = column;
-        
+
         // Move start back to beginning of word
-        while start > 0 && chars.get(start - 1).map(|c| c.is_alphanumeric() || *c == '_').unwrap_or(false) {
+        while start > 0
+            && chars
+                .get(start - 1)
+                .map(|c| c.is_alphanumeric() || *c == '_')
+                .unwrap_or(false)
+        {
             start -= 1;
         }
-        
+
         // Move end forward to end of word
-        while end < chars.len() && chars.get(end).map(|c| c.is_alphanumeric() || *c == '_').unwrap_or(false) {
+        while end < chars.len()
+            && chars
+                .get(end)
+                .map(|c| c.is_alphanumeric() || *c == '_')
+                .unwrap_or(false)
+        {
             end += 1;
         }
-        
+
         chars[start..end].iter().collect()
     }
 }

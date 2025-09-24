@@ -1,17 +1,17 @@
 // Operation Outcome Tracking System for AI Helper Learning
-use crate::consensus::operation_analysis::{OperationAnalysis, ComponentScores};
+use crate::consensus::operation_analysis::{ComponentScores, OperationAnalysis};
 use crate::consensus::operation_history::OperationHistoryDatabase;
 use crate::consensus::operation_intelligence::OperationOutcome;
-use crate::consensus::smart_decision_engine::{UserDecision, UserChoice};
 use crate::consensus::rollback_executor::{RollbackExecution, RollbackExecutionStatus};
+use crate::consensus::smart_decision_engine::{UserChoice, UserDecision};
 // use crate::ai_helpers::knowledge_indexer::AnalysisResult;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc, Duration};
-use std::collections::HashMap;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 
 /// Main outcome tracking system that learns from operation results
 pub struct OperationOutcomeTracker {
@@ -59,24 +59,24 @@ pub struct TrackedOutcome {
     pub outcome_id: String,
     pub operation_id: String,
     pub recorded_at: DateTime<Utc>,
-    
+
     // Pre-operation predictions
     pub predicted_analysis: OperationAnalysis,
     pub predicted_confidence: f32,
     pub predicted_risk: f32,
     pub ai_helper_scores: ComponentScores,
-    
+
     // Actual results
     pub actual_outcome: OperationResult,
     pub user_decision: Option<UserDecision>,
     pub execution_success: bool,
     pub rollback_required: bool,
     pub rollback_success: Option<bool>,
-    
+
     // Performance metrics
     pub execution_time_ms: u64,
     pub accuracy_metrics: OutcomeAccuracy,
-    
+
     // Learning data
     pub feature_vector: Vec<f32>,
     pub prediction_errors: Vec<PredictionError>,
@@ -127,7 +127,7 @@ pub enum PredictionErrorType {
 pub struct OutcomeCache {
     outcomes: HashMap<String, TrackedOutcome>,
     operation_lookup: HashMap<String, String>, // operation_id -> outcome_id
-    recent_outcomes: Vec<String>, // outcome_ids in chronological order
+    recent_outcomes: Vec<String>,              // outcome_ids in chronological order
     cache_stats: CacheStatistics,
 }
 
@@ -173,7 +173,7 @@ impl OperationOutcomeTracker {
         config: Option<OutcomeTrackingConfig>,
     ) -> Self {
         let config = config.unwrap_or_default();
-        
+
         Self {
             history_database,
             learning_engine: Arc::new(LearningEngine::new()),
@@ -193,7 +193,7 @@ impl OperationOutcomeTracker {
         helper_scores: ComponentScores,
     ) -> Result<String> {
         let outcome_id = format!("outcome_{}", Utc::now().timestamp_millis());
-        
+
         let tracked_outcome = TrackedOutcome {
             outcome_id: outcome_id.clone(),
             operation_id: operation_id.clone(),
@@ -202,7 +202,7 @@ impl OperationOutcomeTracker {
             predicted_confidence: analysis.unified_score.confidence,
             predicted_risk: analysis.unified_score.risk,
             ai_helper_scores: helper_scores,
-            
+
             // Will be filled in later
             actual_outcome: OperationResult {
                 success: false,
@@ -232,7 +232,9 @@ impl OperationOutcomeTracker {
         // Store in cache
         let mut cache = self.outcome_cache.write().await;
         cache.outcomes.insert(outcome_id.clone(), tracked_outcome);
-        cache.operation_lookup.insert(operation_id, outcome_id.clone());
+        cache
+            .operation_lookup
+            .insert(operation_id, outcome_id.clone());
         cache.recent_outcomes.push(outcome_id.clone());
 
         // Maintain cache size limit
@@ -275,7 +277,7 @@ impl OperationOutcomeTracker {
                 tracked_outcome.user_decision = user_decision.clone();
                 tracked_outcome.execution_success = tracked_outcome.actual_outcome.success;
                 tracked_outcome.execution_time_ms = execution_time_ms;
-                
+
                 if let Some(rollback) = rollback_execution {
                     tracked_outcome.rollback_required = true;
                     tracked_outcome.rollback_success = Some(matches!(
@@ -285,13 +287,16 @@ impl OperationOutcomeTracker {
                 }
 
                 // Calculate accuracy metrics
-                tracked_outcome.accuracy_metrics = self.calculate_accuracy_metrics(tracked_outcome).await;
-                
+                tracked_outcome.accuracy_metrics =
+                    self.calculate_accuracy_metrics(tracked_outcome).await;
+
                 // Analyze prediction errors
-                tracked_outcome.prediction_errors = self.analyze_prediction_errors(tracked_outcome).await;
-                
+                tracked_outcome.prediction_errors =
+                    self.analyze_prediction_errors(tracked_outcome).await;
+
                 // Generate improvement suggestions
-                tracked_outcome.improvement_suggestions = self.generate_improvement_suggestions(tracked_outcome).await;
+                tracked_outcome.improvement_suggestions =
+                    self.generate_improvement_suggestions(tracked_outcome).await;
             }
         }
 
@@ -321,33 +326,46 @@ impl OperationOutcomeTracker {
         let accuracy = self.prediction_accuracy.read().await;
 
         let total_outcomes = cache.outcomes.len();
-        let recent_outcomes: Vec<&TrackedOutcome> = cache.recent_outcomes.iter()
+        let recent_outcomes: Vec<&TrackedOutcome> = cache
+            .recent_outcomes
+            .iter()
             .rev()
             .take(100)
             .filter_map(|id| cache.outcomes.get(id))
             .collect();
 
         let success_rate = if total_outcomes > 0 {
-            recent_outcomes.iter()
+            recent_outcomes
+                .iter()
                 .filter(|outcome| outcome.actual_outcome.success)
-                .count() as f32 / recent_outcomes.len() as f32
+                .count() as f32
+                / recent_outcomes.len() as f32
         } else {
             0.0
         };
 
-        let avg_confidence_error = recent_outcomes.iter()
+        let avg_confidence_error = recent_outcomes
+            .iter()
             .map(|outcome| outcome.accuracy_metrics.confidence_prediction_error)
-            .sum::<f32>() / recent_outcomes.len().max(1) as f32;
+            .sum::<f32>()
+            / recent_outcomes.len().max(1) as f32;
 
-        let avg_risk_error = recent_outcomes.iter()
+        let avg_risk_error = recent_outcomes
+            .iter()
             .map(|outcome| outcome.accuracy_metrics.risk_prediction_error)
-            .sum::<f32>() / recent_outcomes.len().max(1) as f32;
+            .sum::<f32>()
+            / recent_outcomes.len().max(1) as f32;
 
         // Identify common error patterns
-        let error_patterns = self.pattern_learner.identify_error_patterns(&recent_outcomes).await;
+        let error_patterns = self
+            .pattern_learner
+            .identify_error_patterns(&recent_outcomes)
+            .await;
 
         // Generate recommendations
-        let recommendations = self.generate_training_recommendations(&accuracy, &error_patterns).await;
+        let recommendations = self
+            .generate_training_recommendations(&accuracy, &error_patterns)
+            .await;
 
         Ok(LearningInsights {
             total_outcomes,
@@ -409,19 +427,52 @@ impl OperationOutcomeTracker {
 
     async fn extract_feature_vector(&self, analysis: &OperationAnalysis) -> Vec<f32> {
         let mut features = Vec::new();
-        
+
         // Core prediction features
         features.push(analysis.unified_score.confidence / 100.0);
         features.push(analysis.unified_score.risk / 100.0);
-        
+
         // Helper component scores
         let scores = &analysis.component_scores;
-        features.push(scores.knowledge_indexer.as_ref().map(|s| s.prediction_confidence).unwrap_or(0.0) / 100.0);
-        features.push(scores.context_retriever.as_ref().map(|s| s.relevance_score).unwrap_or(0.0));
-        features.push(scores.pattern_recognizer.as_ref().map(|s| s.safety_score).unwrap_or(0.0) / 100.0);
-        features.push(scores.quality_analyzer.as_ref().map(|s| 100.0 - s.risk_score).unwrap_or(0.0) / 100.0);
-        features.push(scores.knowledge_synthesizer.as_ref().map(|s| s.plan_quality).unwrap_or(0.0));
-        
+        features.push(
+            scores
+                .knowledge_indexer
+                .as_ref()
+                .map(|s| s.prediction_confidence)
+                .unwrap_or(0.0)
+                / 100.0,
+        );
+        features.push(
+            scores
+                .context_retriever
+                .as_ref()
+                .map(|s| s.relevance_score)
+                .unwrap_or(0.0),
+        );
+        features.push(
+            scores
+                .pattern_recognizer
+                .as_ref()
+                .map(|s| s.safety_score)
+                .unwrap_or(0.0)
+                / 100.0,
+        );
+        features.push(
+            scores
+                .quality_analyzer
+                .as_ref()
+                .map(|s| 100.0 - s.risk_score)
+                .unwrap_or(0.0)
+                / 100.0,
+        );
+        features.push(
+            scores
+                .knowledge_synthesizer
+                .as_ref()
+                .map(|s| s.plan_quality)
+                .unwrap_or(0.0),
+        );
+
         // Scoring factors
         let factors = &analysis.scoring_factors;
         features.push(factors.historical_success.unwrap_or(0.0));
@@ -429,67 +480,90 @@ impl OperationOutcomeTracker {
         features.push(factors.conflict_probability.unwrap_or(0.0));
         features.push(factors.rollback_complexity.unwrap_or(0.0));
         features.push(factors.user_trust);
-        
+
         // Recommendation count and complexity
         features.push(analysis.recommendations.len() as f32 / 10.0); // Normalized
-        
+
         // Statistical features (use scoring factors as proxy)
         features.push(factors.historical_success.unwrap_or(0.5));
         features.push(0.5); // Default file type rate
         features.push(0.5); // Default trend
-        
+
         features
     }
 
     async fn calculate_accuracy_metrics(&self, outcome: &TrackedOutcome) -> OutcomeAccuracy {
-        let confidence_error = (outcome.predicted_confidence - 
-            if outcome.actual_outcome.success { 100.0 } else { 0.0 }).abs();
-        
-        let risk_error = (outcome.predicted_risk - 
-            if outcome.actual_outcome.success { 0.0 } else { 100.0 }).abs();
-        
-        let success_accuracy = if (outcome.predicted_confidence > 50.0) == outcome.actual_outcome.success {
-            1.0
+        let confidence_error = (outcome.predicted_confidence
+            - if outcome.actual_outcome.success {
+                100.0
+            } else {
+                0.0
+            })
+        .abs();
+
+        let risk_error = (outcome.predicted_risk
+            - if outcome.actual_outcome.success {
+                0.0
+            } else {
+                100.0
+            })
+        .abs();
+
+        let success_accuracy =
+            if (outcome.predicted_confidence > 50.0) == outcome.actual_outcome.success {
+                1.0
+            } else {
+                0.0
+            };
+
+        // Calculate helper score accuracy
+        let mut helper_accuracy = HashMap::new();
+        let actual_success_score = if outcome.actual_outcome.success {
+            100.0
         } else {
             0.0
         };
-        
-        // Calculate helper score accuracy
-        let mut helper_accuracy = HashMap::new();
-        let actual_success_score = if outcome.actual_outcome.success { 100.0 } else { 0.0 };
-        
+
         if let Some(indexer) = &outcome.ai_helper_scores.knowledge_indexer {
             let score = indexer.prediction_confidence;
-            helper_accuracy.insert("knowledge_indexer".to_string(), 
-                1.0 - (score - actual_success_score).abs() / 100.0);
+            helper_accuracy.insert(
+                "knowledge_indexer".to_string(),
+                1.0 - (score - actual_success_score).abs() / 100.0,
+            );
         }
         if let Some(retriever) = &outcome.ai_helper_scores.context_retriever {
             let score = retriever.relevance_score * 100.0;
-            helper_accuracy.insert("context_retriever".to_string(), 
-                1.0 - (score - actual_success_score).abs() / 100.0);
+            helper_accuracy.insert(
+                "context_retriever".to_string(),
+                1.0 - (score - actual_success_score).abs() / 100.0,
+            );
         }
         if let Some(recognizer) = &outcome.ai_helper_scores.pattern_recognizer {
             let score = recognizer.safety_score;
-            helper_accuracy.insert("pattern_recognizer".to_string(), 
-                1.0 - (score - actual_success_score).abs() / 100.0);
+            helper_accuracy.insert(
+                "pattern_recognizer".to_string(),
+                1.0 - (score - actual_success_score).abs() / 100.0,
+            );
         }
         if let Some(analyzer) = &outcome.ai_helper_scores.quality_analyzer {
             let score = 100.0 - analyzer.risk_score;
-            helper_accuracy.insert("quality_analyzer".to_string(), 
-                1.0 - (score - actual_success_score).abs() / 100.0);
+            helper_accuracy.insert(
+                "quality_analyzer".to_string(),
+                1.0 - (score - actual_success_score).abs() / 100.0,
+            );
         }
         if let Some(synthesizer) = &outcome.ai_helper_scores.knowledge_synthesizer {
             let score = synthesizer.plan_quality * 100.0;
-            helper_accuracy.insert("knowledge_synthesizer".to_string(), 
-                1.0 - (score - actual_success_score).abs() / 100.0);
+            helper_accuracy.insert(
+                "knowledge_synthesizer".to_string(),
+                1.0 - (score - actual_success_score).abs() / 100.0,
+            );
         }
-        
-        let overall_accuracy = (
-            (1.0 - confidence_error / 100.0) * 0.3 +
-            (1.0 - risk_error / 100.0) * 0.3 +
-            success_accuracy * 0.4
-        );
-        
+
+        let overall_accuracy = ((1.0 - confidence_error / 100.0) * 0.3
+            + (1.0 - risk_error / 100.0) * 0.3
+            + success_accuracy * 0.4);
+
         OutcomeAccuracy {
             confidence_prediction_error: confidence_error,
             risk_prediction_error: risk_error,
@@ -501,7 +575,7 @@ impl OperationOutcomeTracker {
 
     async fn analyze_prediction_errors(&self, outcome: &TrackedOutcome) -> Vec<PredictionError> {
         let mut errors = Vec::new();
-        
+
         // Confidence prediction errors
         if outcome.predicted_confidence > 80.0 && !outcome.actual_outcome.success {
             errors.push(PredictionError {
@@ -518,7 +592,7 @@ impl OperationOutcomeTracker {
                 suggested_adjustment: "Increase weight on success indicators".to_string(),
             });
         }
-        
+
         // Risk prediction errors
         if outcome.predicted_risk < 30.0 && !outcome.actual_outcome.success {
             errors.push(PredictionError {
@@ -535,45 +609,49 @@ impl OperationOutcomeTracker {
                 suggested_adjustment: "Reduce false positive patterns".to_string(),
             });
         }
-        
+
         errors
     }
 
     async fn generate_improvement_suggestions(&self, outcome: &TrackedOutcome) -> Vec<String> {
         let mut suggestions = Vec::new();
-        
+
         if outcome.accuracy_metrics.overall_accuracy_score < 0.7 {
             suggestions.push("Consider adding more contextual factors to analysis".to_string());
         }
-        
+
         if outcome.accuracy_metrics.confidence_prediction_error > 30.0 {
             suggestions.push("Improve confidence calibration using historical data".to_string());
         }
-        
+
         if outcome.accuracy_metrics.risk_prediction_error > 30.0 {
             suggestions.push("Enhance risk assessment with pattern analysis".to_string());
         }
-        
+
         // Helper-specific suggestions
         for (helper, accuracy) in &outcome.accuracy_metrics.helper_score_accuracy {
             if *accuracy < 0.6 {
                 suggestions.push(format!("Retrain {} with recent outcome patterns", helper));
             }
         }
-        
+
         suggestions
     }
 
     async fn update_accuracy_metrics(&self, outcome_id: &str) -> Result<()> {
         let cache = self.outcome_cache.read().await;
-        let outcome = cache.outcomes.get(outcome_id)
+        let outcome = cache
+            .outcomes
+            .get(outcome_id)
             .context("Outcome not found in cache")?;
 
         let mut accuracy = self.prediction_accuracy.write().await;
-        
+
         // Update helper-specific accuracy
         for (helper_name, helper_accuracy) in &outcome.accuracy_metrics.helper_score_accuracy {
-            let helper_stats = accuracy.by_helper.entry(helper_name.clone())
+            let helper_stats = accuracy
+                .by_helper
+                .entry(helper_name.clone())
                 .or_insert_with(|| HelperAccuracy {
                     helper_name: helper_name.clone(),
                     prediction_accuracy: 0.0,
@@ -583,34 +661,34 @@ impl OperationOutcomeTracker {
                     recent_trend: Vec::new(),
                     suggested_weight_adjustment: 1.0,
                 });
-            
+
             // Update running average
-            helper_stats.prediction_accuracy = 
+            helper_stats.prediction_accuracy =
                 helper_stats.prediction_accuracy * 0.9 + helper_accuracy * 0.1;
-            
+
             // Update trend
             helper_stats.recent_trend.push(*helper_accuracy);
             if helper_stats.recent_trend.len() > 50 {
                 helper_stats.recent_trend.remove(0);
             }
         }
-        
+
         // Update overall accuracy
-        accuracy.overall_accuracy = accuracy.overall_accuracy * 0.95 + 
-            outcome.accuracy_metrics.overall_accuracy_score * 0.05;
-        
+        accuracy.overall_accuracy = accuracy.overall_accuracy * 0.95
+            + outcome.accuracy_metrics.overall_accuracy_score * 0.05;
+
         // Add accuracy data point
         accuracy.accuracy_trend.push(AccuracyDataPoint {
             timestamp: Utc::now(),
             accuracy: outcome.accuracy_metrics.overall_accuracy_score,
             sample_size: 1,
         });
-        
+
         // Keep only recent trend data
         if accuracy.accuracy_trend.len() > 1000 {
             accuracy.accuracy_trend.remove(0);
         }
-        
+
         Ok(())
     }
 
@@ -627,29 +705,35 @@ impl OperationOutcomeTracker {
     async fn check_retraining_trigger(&self) -> Result<()> {
         let accuracy = self.prediction_accuracy.read().await;
         let cache = self.outcome_cache.read().await;
-        
+
         if self.should_trigger_retraining(&cache, &accuracy).await {
             drop(accuracy);
             drop(cache);
-            
+
             info!("Triggering automatic retraining");
             let _result = self.trigger_retraining().await?;
         }
-        
+
         Ok(())
     }
 
-    async fn should_trigger_retraining(&self, cache: &OutcomeCache, accuracy: &AccuracyMetrics) -> bool {
+    async fn should_trigger_retraining(
+        &self,
+        cache: &OutcomeCache,
+        accuracy: &AccuracyMetrics,
+    ) -> bool {
         // Check if enough time has passed
         if let Some(last_retrain) = accuracy.last_retrain {
-            if Utc::now() - last_retrain < Duration::hours(self.configuration.retrain_interval_hours as i64) {
+            if Utc::now() - last_retrain
+                < Duration::hours(self.configuration.retrain_interval_hours as i64)
+            {
                 return false;
             }
         }
-        
+
         // Check if we have enough new data
-        cache.outcomes.len() >= self.configuration.min_outcomes_for_training &&
-        accuracy.overall_accuracy < 0.8 // Retrain if accuracy is below threshold
+        cache.outcomes.len() >= self.configuration.min_outcomes_for_training
+            && accuracy.overall_accuracy < 0.8 // Retrain if accuracy is below threshold
     }
 
     async fn generate_training_recommendations(
@@ -658,11 +742,14 @@ impl OperationOutcomeTracker {
         error_patterns: &[ErrorPattern],
     ) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         if accuracy.overall_accuracy < 0.7 {
-            recommendations.push("Overall prediction accuracy is low - consider comprehensive retraining".to_string());
+            recommendations.push(
+                "Overall prediction accuracy is low - consider comprehensive retraining"
+                    .to_string(),
+            );
         }
-        
+
         for (helper_name, helper_accuracy) in &accuracy.by_helper {
             if helper_accuracy.prediction_accuracy < 0.6 {
                 recommendations.push(format!(
@@ -672,15 +759,14 @@ impl OperationOutcomeTracker {
                 ));
             }
         }
-        
+
         for pattern in error_patterns {
             recommendations.push(format!(
                 "Address {} pattern: {}",
-                pattern.pattern_type,
-                pattern.description
+                pattern.pattern_type, pattern.description
             ));
         }
-        
+
         recommendations
     }
 }
@@ -697,15 +783,18 @@ impl LearningEngine {
         Self {}
     }
 
-    pub async fn train_from_outcomes(&self, outcomes: &[&TrackedOutcome]) -> Result<LearningResult> {
+    pub async fn train_from_outcomes(
+        &self,
+        outcomes: &[&TrackedOutcome],
+    ) -> Result<LearningResult> {
         info!("Training on {} outcomes", outcomes.len());
-        
+
         // Analyze feature correlations
         let feature_analysis = self.analyze_feature_correlations(outcomes).await;
-        
+
         // Generate weight adjustments
         let weight_adjustments = self.calculate_weight_adjustments(&feature_analysis).await;
-        
+
         Ok(LearningResult {
             feature_analysis,
             weight_adjustments,
@@ -727,7 +816,10 @@ impl LearningEngine {
         }
     }
 
-    async fn calculate_weight_adjustments(&self, _analysis: &FeatureAnalysis) -> HashMap<String, f32> {
+    async fn calculate_weight_adjustments(
+        &self,
+        _analysis: &FeatureAnalysis,
+    ) -> HashMap<String, f32> {
         // Calculate suggested weight adjustments for AI helpers
         let mut adjustments = HashMap::new();
         adjustments.insert("knowledge_indexer".to_string(), 1.05);
@@ -762,12 +854,13 @@ impl PatternLearner {
 
     pub async fn identify_error_patterns(&self, outcomes: &[&TrackedOutcome]) -> Vec<ErrorPattern> {
         let mut patterns = Vec::new();
-        
+
         // Analyze overconfidence patterns
-        let overconfident_count = outcomes.iter()
+        let overconfident_count = outcomes
+            .iter()
             .filter(|o| o.predicted_confidence > 80.0 && !o.actual_outcome.success)
             .count();
-        
+
         if overconfident_count > outcomes.len() / 10 {
             patterns.push(ErrorPattern {
                 pattern_type: "overconfidence".to_string(),
@@ -776,21 +869,23 @@ impl PatternLearner {
                 suggested_fix: "Increase risk weighting in confidence calculations".to_string(),
             });
         }
-        
+
         // Analyze risk underestimation patterns
-        let risk_underestimate_count = outcomes.iter()
+        let risk_underestimate_count = outcomes
+            .iter()
             .filter(|o| o.predicted_risk < 30.0 && !o.actual_outcome.success)
             .count();
-        
+
         if risk_underestimate_count > outcomes.len() / 10 {
             patterns.push(ErrorPattern {
                 pattern_type: "risk_underestimation".to_string(),
                 frequency: risk_underestimate_count as f32 / outcomes.len() as f32,
-                description: "Risk assessment frequently underestimates actual failure risk".to_string(),
+                description: "Risk assessment frequently underestimates actual failure risk"
+                    .to_string(),
                 suggested_fix: "Improve pattern recognition for risky operations".to_string(),
             });
         }
-        
+
         patterns
     }
 }

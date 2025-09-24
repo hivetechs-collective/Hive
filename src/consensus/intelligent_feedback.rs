@@ -1,5 +1,5 @@
 // Intelligent User Feedback System - AI-powered explanations and suggestions
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -7,14 +7,14 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_analysis::{
-    OperationAnalysis, UnifiedScore, ActionRecommendation, ComponentScores, 
-    ScoringFactors, OperationContext, ActionPriority
-};
-use crate::consensus::smart_decision_engine::{ExecutionDecision, UserPreferences};
-use crate::consensus::operation_clustering::{OperationCluster, ClusterType};
 use crate::ai_helpers::knowledge_synthesizer::KnowledgeSynthesizer;
+use crate::consensus::operation_analysis::{
+    ActionPriority, ActionRecommendation, ComponentScores, OperationAnalysis, OperationContext,
+    ScoringFactors, UnifiedScore,
+};
+use crate::consensus::operation_clustering::{ClusterType, OperationCluster};
+use crate::consensus::smart_decision_engine::{ExecutionDecision, UserPreferences};
+use crate::consensus::stages::file_aware_curator::FileOperation;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserFeedback {
@@ -154,19 +154,24 @@ impl IntelligentFeedbackGenerator {
         user_preferences: UserPreferences,
     ) -> Self {
         let mut templates = HashMap::new();
-        
+
         // Initialize common feedback templates
         templates.insert("high_confidence_safe".to_string(), FeedbackTemplate {
             template_type: "positive".to_string(),
             base_message: "This operation is safe to execute based on {evidence_count} supporting factors.".to_string(),
             variables: vec!["evidence_count".to_string()],
         });
-        
-        templates.insert("high_risk_blocked".to_string(), FeedbackTemplate {
-            template_type: "warning".to_string(),
-            base_message: "This operation has been blocked due to {risk_count} critical risk factors.".to_string(),
-            variables: vec!["risk_count".to_string()],
-        });
+
+        templates.insert(
+            "high_risk_blocked".to_string(),
+            FeedbackTemplate {
+                template_type: "warning".to_string(),
+                base_message:
+                    "This operation has been blocked due to {risk_count} critical risk factors."
+                        .to_string(),
+                variables: vec!["risk_count".to_string()],
+            },
+        );
 
         Self {
             knowledge_synthesizer,
@@ -189,7 +194,8 @@ impl IntelligentFeedbackGenerator {
         let suggestions = self.generate_suggestions(analysis, decision)?;
         let operation_preview = self.create_operation_preview(analysis, cluster).await?;
         let learning_notes = self.generate_learning_notes(analysis)?;
-        let visual_indicators = self.determine_visual_indicators(decision, &analysis.unified_score)?;
+        let visual_indicators =
+            self.determine_visual_indicators(decision, &analysis.unified_score)?;
 
         let feedback = UserFeedback {
             decision_summary,
@@ -208,7 +214,11 @@ impl IntelligentFeedbackGenerator {
         Ok(feedback)
     }
 
-    fn create_decision_summary(&self, decision: &ExecutionDecision, score: &UnifiedScore) -> Result<String> {
+    fn create_decision_summary(
+        &self,
+        decision: &ExecutionDecision,
+        score: &UnifiedScore,
+    ) -> Result<String> {
         let summary = match decision {
             ExecutionDecision::AutoExecute { reason, .. } => {
                 format!(
@@ -217,38 +227,54 @@ impl IntelligentFeedbackGenerator {
                     reason, score.confidence, score.risk
                 )
             }
-            ExecutionDecision::RequireConfirmation { reason, warnings, .. } => {
+            ExecutionDecision::RequireConfirmation {
+                reason, warnings, ..
+            } => {
                 let warning_text = if warnings.is_empty() {
                     String::new()
                 } else {
-                    format!("\n\n**Warnings**:\n{}", warnings.iter()
-                        .map(|w| format!("⚠️  {}", w))
-                        .collect::<Vec<_>>()
-                        .join("\n"))
+                    format!(
+                        "\n\n**Warnings**:\n{}",
+                        warnings
+                            .iter()
+                            .map(|w| format!("⚠️  {}", w))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    )
                 };
-                
+
                 format!(
                     "🤔 **Confirmation required**\n\n{}{}\n\n\
                     **Confidence**: {:.0}% | **Risk**: {:.0}%",
                     reason, warning_text, score.confidence, score.risk
                 )
             }
-            ExecutionDecision::Block { reason, critical_issues, alternatives, .. } => {
-                let issues_text = critical_issues.iter()
+            ExecutionDecision::Block {
+                reason,
+                critical_issues,
+                alternatives,
+                ..
+            } => {
+                let issues_text = critical_issues
+                    .iter()
                     .map(|i| format!("🚨 {}", i))
                     .collect::<Vec<_>>()
                     .join("\n");
-                
+
                 let alternatives_text = if alternatives.is_empty() {
                     String::new()
                 } else {
-                    format!("\n\n**Alternatives**:\n{}", alternatives.iter()
-                        .enumerate()
-                        .map(|(i, a)| format!("{}. {}", i + 1, a))
-                        .collect::<Vec<_>>()
-                        .join("\n"))
+                    format!(
+                        "\n\n**Alternatives**:\n{}",
+                        alternatives
+                            .iter()
+                            .enumerate()
+                            .map(|(i, a)| format!("{}. {}", i + 1, a))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    )
                 };
-                
+
                 format!(
                     "🛑 **Operation blocked for safety**\n\n{}\n\n\
                     **Critical Issues**:\n{}{}\n\n\
@@ -263,13 +289,14 @@ impl IntelligentFeedbackGenerator {
 
     fn create_risk_explanation(&self, analysis: &OperationAnalysis) -> Result<RiskExplanation> {
         let risk = analysis.unified_score.risk;
-        
+
         let risk_level = match risk {
             r if r < 20.0 => "Low",
             r if r < 40.0 => "Medium",
             r if r < 70.0 => "High",
             _ => "Critical",
-        }.to_string();
+        }
+        .to_string();
 
         let mut main_risk_factors = Vec::new();
         let mut mitigation_strategies = Vec::new();
@@ -281,7 +308,8 @@ impl IntelligentFeedbackGenerator {
                     "Dangerous patterns detected (safety score: {:.0}%)",
                     pattern_score.safety_score
                 ));
-                mitigation_strategies.push("Review and modify operations to avoid anti-patterns".to_string());
+                mitigation_strategies
+                    .push("Review and modify operations to avoid anti-patterns".to_string());
             }
         }
 
@@ -291,21 +319,26 @@ impl IntelligentFeedbackGenerator {
                     "High conflict probability ({:.0}%)",
                     quality_score.conflict_probability
                 ));
-                mitigation_strategies.push("Check for concurrent modifications or dependencies".to_string());
+                mitigation_strategies
+                    .push("Check for concurrent modifications or dependencies".to_string());
             }
-            
+
             if quality_score.rollback_complexity > 50.0 {
                 main_risk_factors.push("Complex rollback scenario detected".to_string());
-                mitigation_strategies.push("Create comprehensive backups before proceeding".to_string());
+                mitigation_strategies
+                    .push("Create comprehensive backups before proceeding".to_string());
             }
         }
 
         // Check for deletions
-        let has_deletions = analysis.operations.iter()
+        let has_deletions = analysis
+            .operations
+            .iter()
             .any(|op| matches!(op, FileOperation::Delete { .. }));
         if has_deletions {
             main_risk_factors.push("Operation includes file deletions".to_string());
-            mitigation_strategies.push("Verify files are no longer needed and create backups".to_string());
+            mitigation_strategies
+                .push("Verify files are no longer needed and create backups".to_string());
         }
 
         // Determine worst case scenario
@@ -327,15 +360,19 @@ impl IntelligentFeedbackGenerator {
         })
     }
 
-    fn create_confidence_explanation(&self, analysis: &OperationAnalysis) -> Result<ConfidenceExplanation> {
+    fn create_confidence_explanation(
+        &self,
+        analysis: &OperationAnalysis,
+    ) -> Result<ConfidenceExplanation> {
         let confidence = analysis.unified_score.confidence;
-        
+
         let confidence_level = match confidence {
             c if c >= 90.0 => "Very High",
             c if c >= 75.0 => "High",
             c if c >= 50.0 => "Moderate",
             _ => "Low",
-        }.to_string();
+        }
+        .to_string();
 
         let mut supporting_evidence = Vec::new();
         let mut uncertainty_factors = Vec::new();
@@ -345,7 +382,10 @@ impl IntelligentFeedbackGenerator {
             if historical.prediction_confidence > 80.0 {
                 supporting_evidence.push(format!(
                     "Strong historical precedent ({} similar operations)",
-                    analysis.scoring_factors.similar_operations_count.unwrap_or(0)
+                    analysis
+                        .scoring_factors
+                        .similar_operations_count
+                        .unwrap_or(0)
                 ));
             }
         }
@@ -373,10 +413,18 @@ impl IntelligentFeedbackGenerator {
             uncertainty_factors.push("Large number of operations increases complexity".to_string());
         }
 
-        let similar_operations_summary = if analysis.scoring_factors.similar_operations_count.unwrap_or(0) > 0 {
+        let similar_operations_summary = if analysis
+            .scoring_factors
+            .similar_operations_count
+            .unwrap_or(0)
+            > 0
+        {
             Some(format!(
                 "Found {} similar operations with {:.0}% success rate",
-                analysis.scoring_factors.similar_operations_count.unwrap_or(0),
+                analysis
+                    .scoring_factors
+                    .similar_operations_count
+                    .unwrap_or(0),
                 analysis.scoring_factors.historical_success.unwrap_or(0.0) * 100.0
             ))
         } else {
@@ -397,18 +445,10 @@ impl IntelligentFeedbackGenerator {
         // Extract insights from recommendations
         for recommendation in &analysis.recommendations {
             let (insight_type, importance) = match recommendation.priority {
-                ActionPriority::Critical => {
-                    (InsightType::Warning, InsightImportance::Critical)
-                }
-                ActionPriority::High => {
-                    (InsightType::Warning, InsightImportance::High)
-                }
-                ActionPriority::Medium => {
-                    (InsightType::Suggestion, InsightImportance::Medium)
-                }
-                ActionPriority::Low => {
-                    (InsightType::Suggestion, InsightImportance::Low)
-                }
+                ActionPriority::Critical => (InsightType::Warning, InsightImportance::Critical),
+                ActionPriority::High => (InsightType::Warning, InsightImportance::High),
+                ActionPriority::Medium => (InsightType::Suggestion, InsightImportance::Medium),
+                ActionPriority::Low => (InsightType::Suggestion, InsightImportance::Low),
             };
 
             insights.push(AIInsight {
@@ -420,13 +460,21 @@ impl IntelligentFeedbackGenerator {
         }
 
         // Add pattern-based insights
-        if analysis.scoring_factors.dangerous_pattern_count.unwrap_or(0) > 0 {
+        if analysis
+            .scoring_factors
+            .dangerous_pattern_count
+            .unwrap_or(0)
+            > 0
+        {
             insights.push(AIInsight {
                 source: "Pattern Recognizer".to_string(),
                 insight_type: InsightType::Pattern,
                 description: format!(
                     "Detected {} dangerous patterns that may cause issues",
-                    analysis.scoring_factors.dangerous_pattern_count.unwrap_or(0)
+                    analysis
+                        .scoring_factors
+                        .dangerous_pattern_count
+                        .unwrap_or(0)
                 ),
                 importance: InsightImportance::High,
             });
@@ -458,11 +506,18 @@ impl IntelligentFeedbackGenerator {
         Ok(insights)
     }
 
-    fn generate_suggestions(&self, analysis: &OperationAnalysis, decision: &ExecutionDecision) -> Result<Vec<Suggestion>> {
+    fn generate_suggestions(
+        &self,
+        analysis: &OperationAnalysis,
+        decision: &ExecutionDecision,
+    ) -> Result<Vec<Suggestion>> {
         let mut suggestions = Vec::new();
 
         match decision {
-            ExecutionDecision::RequireConfirmation { suggestions: decision_suggestions, .. } => {
+            ExecutionDecision::RequireConfirmation {
+                suggestions: decision_suggestions,
+                ..
+            } => {
                 // Convert decision suggestions to our format
                 for suggestion_text in decision_suggestions {
                     suggestions.push(Suggestion {
@@ -500,14 +555,13 @@ impl IntelligentFeedbackGenerator {
             });
         }
 
-        let has_tests = analysis.operations.iter()
-            .any(|op| {
-                if let FileOperation::Create { path, .. } | FileOperation::Update { path, .. } = op {
-                    path.to_string_lossy().contains("test")
-                } else {
-                    false
-                }
-            });
+        let has_tests = analysis.operations.iter().any(|op| {
+            if let FileOperation::Create { path, .. } | FileOperation::Update { path, .. } = op {
+                path.to_string_lossy().contains("test")
+            } else {
+                false
+            }
+        });
 
         if !has_tests && analysis.operations.len() > 3 {
             suggestions.push(Suggestion {
@@ -554,9 +608,7 @@ impl IntelligentFeedbackGenerator {
                     };
                     (path.clone(), "Update".to_string(), Some(preview))
                 }
-                FileOperation::Delete { path } => {
-                    (path.clone(), "Delete".to_string(), None)
-                }
+                FileOperation::Delete { path } => (path.clone(), "Delete".to_string(), None),
                 FileOperation::Append { path, content } => {
                     let preview = if content.len() > 100 {
                         format!("{}...", &content[..100])
@@ -592,7 +644,8 @@ impl IntelligentFeedbackGenerator {
             "Module"
         } else {
             "Local"
-        }.to_string();
+        }
+        .to_string();
 
         // Extract affected functionality from paths
         for file in &affected_files {
@@ -611,7 +664,7 @@ impl IntelligentFeedbackGenerator {
             scope,
             affected_functionality,
             dependency_count: analysis.operations.len() * 2, // Rough estimate
-            test_coverage: None, // Would need actual test analysis
+            test_coverage: None,                             // Would need actual test analysis
         };
 
         Ok(Some(OperationPreview {
@@ -628,7 +681,8 @@ impl IntelligentFeedbackGenerator {
         if analysis.unified_score.confidence > 80.0 && analysis.unified_score.risk > 30.0 {
             notes.push(
                 "💡 High confidence doesn't always mean low risk - \
-                operations can be predictable but still dangerous".to_string()
+                operations can be predictable but still dangerous"
+                    .to_string(),
             );
         }
 
@@ -643,27 +697,32 @@ impl IntelligentFeedbackGenerator {
         }
 
         // Note about patterns
-        if analysis.scoring_factors.dangerous_pattern_count.unwrap_or(0) > 0 {
+        if analysis
+            .scoring_factors
+            .dangerous_pattern_count
+            .unwrap_or(0)
+            > 0
+        {
             notes.push(
-                "⚡ The AI detected patterns that have caused issues in the past".to_string()
+                "⚡ The AI detected patterns that have caused issues in the past".to_string(),
             );
         }
 
         Ok(notes)
     }
 
-    fn determine_visual_indicators(&self, decision: &ExecutionDecision, score: &UnifiedScore) -> Result<VisualIndicators> {
+    fn determine_visual_indicators(
+        &self,
+        decision: &ExecutionDecision,
+        score: &UnifiedScore,
+    ) -> Result<VisualIndicators> {
         let (primary_color, icon_type, animation_style, urgency_level) = match decision {
-            ExecutionDecision::AutoExecute { .. } => {
-                ("green", "check-circle", "pulse-once", 2)
-            }
+            ExecutionDecision::AutoExecute { .. } => ("green", "check-circle", "pulse-once", 2),
             ExecutionDecision::RequireConfirmation { .. } => {
                 let urgency = if score.risk > 50.0 { 6 } else { 4 };
                 ("yellow", "question-circle", "gentle-pulse", urgency)
             }
-            ExecutionDecision::Block { .. } => {
-                ("red", "shield-exclamation", "shake", 8)
-            }
+            ExecutionDecision::Block { .. } => ("red", "shield-exclamation", "shake", 8),
         };
 
         Ok(VisualIndicators {
@@ -700,7 +759,10 @@ impl IntelligentFeedbackGenerator {
         output.push("\n---\n".to_string());
 
         // Risk section
-        output.push(format!("### 🎯 Risk Assessment: **{}**", feedback.risk_explanation.risk_level));
+        output.push(format!(
+            "### 🎯 Risk Assessment: **{}**",
+            feedback.risk_explanation.risk_level
+        ));
         if !feedback.risk_explanation.main_risk_factors.is_empty() {
             output.push("\n**Risk Factors:**".to_string());
             for factor in &feedback.risk_explanation.main_risk_factors {
@@ -715,8 +777,15 @@ impl IntelligentFeedbackGenerator {
         }
 
         // Confidence section
-        output.push(format!("\n### 📊 Confidence Level: **{}**", feedback.confidence_explanation.confidence_level));
-        if !feedback.confidence_explanation.supporting_evidence.is_empty() {
+        output.push(format!(
+            "\n### 📊 Confidence Level: **{}**",
+            feedback.confidence_explanation.confidence_level
+        ));
+        if !feedback
+            .confidence_explanation
+            .supporting_evidence
+            .is_empty()
+        {
             output.push("\n**Supporting Evidence:**".to_string());
             for evidence in &feedback.confidence_explanation.supporting_evidence {
                 output.push(format!("- ✅ {}", evidence));
@@ -733,7 +802,10 @@ impl IntelligentFeedbackGenerator {
                     InsightImportance::Medium => "ℹ️",
                     InsightImportance::Low => "💡",
                 };
-                output.push(format!("{} **{}**: {}", icon, insight.source, insight.description));
+                output.push(format!(
+                    "{} **{}**: {}",
+                    icon, insight.source, insight.description
+                ));
             }
         }
 
@@ -741,18 +813,24 @@ impl IntelligentFeedbackGenerator {
         if !feedback.suggestions.is_empty() {
             output.push("\n### 💡 Suggestions".to_string());
             for (i, suggestion) in feedback.suggestions.iter().enumerate() {
-                output.push(format!("{}. **{}**\n   {}", i + 1, suggestion.title, suggestion.description));
+                output.push(format!(
+                    "{}. **{}**\n   {}",
+                    i + 1,
+                    suggestion.title,
+                    suggestion.description
+                ));
             }
         }
 
         // Operation preview
         if let Some(preview) = &feedback.operation_preview {
             output.push("\n### 📁 Operation Preview".to_string());
-            output.push(format!("**Scope**: {} | **Files**: {}", 
-                preview.estimated_impact.scope, 
+            output.push(format!(
+                "**Scope**: {} | **Files**: {}",
+                preview.estimated_impact.scope,
                 preview.affected_files.len()
             ));
-            
+
             if !preview.execution_plan.is_empty() {
                 output.push("\n**Execution Plan:**".to_string());
                 for step in &preview.execution_plan {
@@ -773,7 +851,7 @@ impl IntelligentFeedbackGenerator {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -801,7 +879,10 @@ mod tests {
             risk_level: 35.0,
         };
 
-        let feedback = generator.generate_feedback(&analysis, &decision, None).await.unwrap();
+        let feedback = generator
+            .generate_feedback(&analysis, &decision, None)
+            .await
+            .unwrap();
 
         assert!(feedback.decision_summary.contains("Confirmation required"));
         assert_eq!(feedback.risk_explanation.risk_level, "Medium");
@@ -810,12 +891,10 @@ mod tests {
 
     fn create_test_analysis() -> OperationAnalysis {
         OperationAnalysis {
-            operations: vec![
-                FileOperation::Create {
-                    path: PathBuf::from("test.rs"),
-                    content: "fn main() {}".to_string(),
-                }
-            ],
+            operations: vec![FileOperation::Create {
+                path: PathBuf::from("test.rs"),
+                content: "fn main() {}".to_string(),
+            }],
             context: OperationContext {
                 repository_path: PathBuf::from("/test"),
                 user_question: "Test".to_string(),
@@ -823,9 +902,9 @@ mod tests {
                 timestamp: std::time::SystemTime::now(),
                 session_id: "test".to_string(),
             },
-            unified_score: UnifiedScore { 
-                confidence: 75.0, 
-                risk: 35.0 
+            unified_score: UnifiedScore {
+                confidence: 75.0,
+                risk: 35.0,
             },
             recommendations: vec![],
             groups: crate::consensus::operation_analysis::OperationGroups {

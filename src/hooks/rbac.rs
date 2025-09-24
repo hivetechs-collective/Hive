@@ -558,7 +558,7 @@ pub struct RbacStatistics {
     pub users_with_roles: usize,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

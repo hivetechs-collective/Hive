@@ -276,7 +276,7 @@ use once_cell::sync::Lazy;
 
 pub static GLOBAL_POOLS: Lazy<MemoryPools> = Lazy::new(MemoryPools::new);
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     

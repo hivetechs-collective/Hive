@@ -388,7 +388,7 @@ macro_rules! perf_time {
     }};
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tokio::test;

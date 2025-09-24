@@ -1,15 +1,17 @@
 //! Git operations toolbar component
-//! 
+//!
 //! Provides VS Code-style git operation buttons (commit, push, pull, etc.)
 
 use dioxus::prelude::*;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{GitOperations, GitOperation, GitOperationResult, GitOperationProgress, CancellationToken};
 use super::commit_box::{CommitBox, CommitBoxProps};
+use super::performance::PerformanceStats;
 use super::performance_monitor::{PerformanceMonitor, PerformanceMonitorProps};
-use super::performance::{PerformanceStats};
+use super::{
+    CancellationToken, GitOperation, GitOperationProgress, GitOperationResult, GitOperations,
+};
 
 /// State of a git operation
 #[derive(Debug, Clone, PartialEq)]
@@ -53,26 +55,29 @@ pub struct GitToolbarProps {
 #[component]
 pub fn GitToolbar(props: GitToolbarProps) -> Element {
     let mut show_commit_box = use_signal(|| false);
-    
+
     // Use the shared state signals from props
     let mut is_pushing = props.is_pushing;
     let mut is_pulling = props.is_pulling;
     let mut is_syncing = props.is_syncing;
     let mut operation_status = props.operation_status;
-    
+
     let repo_path = props.repo_path.clone();
     let has_repo = repo_path.is_some();
     let has_staged = props.staged_count > 0;
     let has_unstaged = props.unstaged_count > 0;
-    let current_branch = props.current_branch.clone().unwrap_or_else(|| "main".to_string());
+    let current_branch = props
+        .current_branch
+        .clone()
+        .unwrap_or_else(|| "main".to_string());
     let staged_count = props.staged_count;
     let unstaged_count = props.unstaged_count;
-    
+
     rsx! {
         div {
             class: "git-toolbar",
             style: "padding: 8px; background: #252526; border-bottom: 1px solid #3e3e42;",
-            
+
             // Status message
             if let Some(status) = operation_status.read().as_ref() {
                 div {
@@ -80,15 +85,15 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     "{status}"
                 }
             }
-            
+
             // Commit section
             div {
                 style: "margin-bottom: 12px;",
-                
+
                 // Commit and stage buttons
                 div {
                     style: "display: flex; align-items: center; gap: 8px;",
-                    
+
                     button {
                         style: if has_staged {
                             "padding: 6px 12px; background: #0e639c; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 13px;"
@@ -103,7 +108,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         },
                         "✓ Commit ({staged_count})"
                     }
-                    
+
                     if has_unstaged {
                         button {
                             style: "padding: 4px 8px; background: transparent; color: #0e639c; border: 1px solid #0e639c; border-radius: 3px; cursor: pointer; font-size: 11px;",
@@ -119,11 +124,11 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     }
                 }
             }
-            
+
             // Remote operations section
             div {
                 style: "display: flex; gap: 8px; flex-wrap: wrap;",
-                
+
                 // Sync button (VS Code style - pull + push)
                 button {
                     style: if has_repo {
@@ -150,7 +155,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         "🔄 Sync"
                     }
                 }
-                
+
                 // Push button
                 button {
                     style: if has_repo {
@@ -178,7 +183,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         "⬆ Push"
                     }
                 }
-                
+
                 // Pull button
                 button {
                     style: if has_repo {
@@ -205,7 +210,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         "⬇ Pull"
                     }
                 }
-                
+
                 // Fetch button
                 button {
                     style: if has_repo {
@@ -224,7 +229,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     },
                     "↻ Fetch"
                 }
-                
+
                 // Stash button
                 button {
                     style: if has_repo {
@@ -243,7 +248,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     },
                     "📦 Stash"
                 }
-                
+
                 // Discard all changes button (with confirmation)
                 if has_unstaged {
                     button {
@@ -261,13 +266,13 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     }
                 }
             }
-            
+
             // Branch info
             div {
                 style: "margin-top: 12px; padding: 6px 8px; background: #1e1e1e; border-radius: 3px; font-size: 11px; color: #888;",
                 "Branch: {current_branch} • Staged: {staged_count} • Unstaged: {unstaged_count}"
             }
-            
+
             // Performance monitor (optional)
             if props.show_performance_monitor {
                 if let Some(stats) = &props.performance_stats {
@@ -281,7 +286,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                 }
             }
         }
-        
+
         // Commit Box overlay
         CommitBox {
             visible: *show_commit_box.read(),

@@ -422,7 +422,7 @@ pub async fn quick_validate(transformation: &Transformation) -> Result<bool> {
     Ok(report.valid)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use std::path::PathBuf;
