@@ -360,35 +360,45 @@ jobs:
           echo "DMG_FILENAME=${DMG_NAME}" >> "$GITHUB_ENV"
           echo "DMG_LATEST=Hive-Consensus-latest.dmg" >> "$GITHUB_ENV"
 
-      - name: Install Wrangler
-        run: npm install -g wrangler
-
       - name: Upload to R2
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DMG_FILENAME: ${{ env.DMG_FILENAME }}
           DMG_LATEST: ${{ env.DMG_LATEST }}
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
         run: |
           set -euo pipefail
 
+          upload() {
+            local source=$1
+            local key=$2
+            local content_type=${3:-application/octet-stream}
+            aws s3 cp "$source" "s3://releases-hivetechs/$key" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --region "$AWS_REGION" \
+              --content-type "$content_type"
+          }
+
           # Versioned objects
-          wrangler r2 object put "releases-hivetechs/stable/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
-          wrangler r2 object put "releases-hivetechs/stable/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+          upload "release/${DMG_FILENAME}" "stable/${DMG_FILENAME}"
+          upload "release/${DMG_FILENAME}.sha256" "stable/${DMG_FILENAME}.sha256" text/plain
 
           # Latest aliases consumed by the website download button and direct checksum link
-          wrangler r2 object put "releases-hivetechs/stable/${DMG_LATEST}" --file="release/${DMG_FILENAME}"
-          wrangler r2 object put "releases-hivetechs/stable/${DMG_LATEST}.sha256" --file="release/${DMG_FILENAME}.sha256"
+          upload "release/${DMG_FILENAME}" "stable/${DMG_LATEST}"
+          upload "release/${DMG_FILENAME}.sha256" "stable/${DMG_LATEST}.sha256" text/plain
 
           # Legacy electron/ path retained for compatibility during transition
-          wrangler r2 object put "releases-hivetechs/stable/electron/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
-          wrangler r2 object put "releases-hivetechs/stable/electron/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
-          wrangler r2 object put "releases-hivetechs/stable/electron/${DMG_LATEST}" --file="release/${DMG_FILENAME}"
-          wrangler r2 object put "releases-hivetechs/stable/electron/${DMG_LATEST}.sha256" --file="release/${DMG_FILENAME}.sha256"
+          upload "release/${DMG_FILENAME}" "stable/electron/${DMG_FILENAME}"
+          upload "release/${DMG_FILENAME}.sha256" "stable/electron/${DMG_FILENAME}.sha256" text/plain
+          upload "release/${DMG_FILENAME}" "stable/electron/${DMG_LATEST}"
+          upload "release/${DMG_FILENAME}.sha256" "stable/electron/${DMG_LATEST}.sha256" text/plain
 
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
-          wrangler r2 object put "releases-hivetechs/releases/${VERSION}/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
-          wrangler r2 object put "releases-hivetechs/releases/${VERSION}/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+            upload "release/${DMG_FILENAME}" "releases/${VERSION}/${DMG_FILENAME}"
+            upload "release/${DMG_FILENAME}.sha256" "releases/${VERSION}/${DMG_FILENAME}.sha256" text/plain
           fi
 
       - name: Create GitHub Release
