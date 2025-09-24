@@ -48,27 +48,27 @@ clap = { version = "4.4", features = ["derive", "env"] }
 clap_complete = "4.4"
 
 # Desktop App (Dioxus) dependencies - 100% Rust stack
-dioxus = { version = "0.6.3", features = ["desktop"] }
-dioxus-desktop = "0.6.3"
+dioxus = { version = "0.6.3", features = ["desktop"], optional = true }
+dioxus-desktop = { version = "0.6.3", optional = true }
 pulldown-cmark = "0.9"
-dioxus-router = "0.6.3"
+dioxus-router = { version = "0.6.3", optional = true }
 
 # Additional Dioxus utilities
-dioxus-signals = "0.6.3"
-manganis = { version = "0.7.0-alpha.2" }
+dioxus-signals = { version = "0.6.3", optional = true }
+manganis = { version = "0.7.0-alpha.2", optional = true }
 
 # Dioxus SDK for enhanced desktop features
-dioxus-sdk = "0.6"
-dioxus-html = "0.6"
+dioxus-sdk = { version = "0.6", optional = true }
+dioxus-html = { version = "0.6", optional = true }
 
 # Native file dialogs
-rfd = "0.15"
+rfd = { version = "0.15", optional = true }
 
 # Clipboard access
-arboard = "3.2"
+arboard = { version = "3.2", optional = true }
 
 # Browser opening
-webbrowser = "1.0"
+webbrowser = { version = "1.0", optional = true }
 
 # System information
 hostname = "0.3"
@@ -117,7 +117,7 @@ r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 
 # HTTP and network
-reqwest = { version = "0.11", features = ["json", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "native-tls"] }
 hyper = { version = "0.14", features = ["full"] }
 warp = "0.3"
 tower-http = { version = "0.3", features = ["cors"] }
@@ -151,7 +151,7 @@ syntect = "5.2"
 candle-core = "0.9"
 candle-nn = "0.9"
 candle-transformers = "0.9"
-hf-hub = { version = "0.3", features = ["tokio"] }
+hf-hub = { version = "0.4", default-features = false, features = ["tokio"] }
 tokenizers = "0.15"
 
 # Utilities
@@ -185,6 +185,19 @@ default = ["embeddings"]
 embeddings = []
 full = ["embeddings"]
 legacy-tests = []
+desktop-legacy = [
+    "dioxus",
+    "dioxus-desktop",
+    "dioxus-router",
+    "dioxus-signals",
+    "dioxus-sdk",
+    "dioxus-html",
+    "manganis",
+    "rfd",
+    "arboard",
+    "webbrowser"
+]
+
 
 [[bin]]
 name = "hive-backend-server-enhanced"
@@ -197,3 +210,4 @@ identifier = "com.hivetechs.hive"
 [lib]
 name = "hive_ai"
 path = "src/lib.rs"
+

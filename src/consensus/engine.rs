@@ -238,8 +238,8 @@ impl ConsensusEngine {
         }
 
         // Update AI helpers with repository context to enable autonomous helper
+        #[cfg(feature = "desktop-legacy")]
         if let Some(ai_helpers) = self.ai_helpers.write().await.as_mut() {
-            // Get mutable reference to update the AI helpers
             if let Some(ai_helpers_mut) = Arc::get_mut(ai_helpers) {
                 ai_helpers_mut
                     .set_repository_context(Some(repository_context.clone()))
