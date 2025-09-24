@@ -1,0 +1,8 @@
+# Default owners — update to match your GitHub teams or individuals
+* @veronelazio
+
+# Backend (Rust)
+/src/ @veronelazio
+
+# Electron renderer + release assets
+/electron-poc/ @veronelazio

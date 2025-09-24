@@ -1,14 +1,14 @@
 //! Code Editor Renderer
-//! 
+//!
 //! Handles the visual rendering of code with syntax highlighting and decorations
 
-use dioxus::prelude::*;
 use super::{
     buffer::TextBuffer,
     cursor::{Cursor, Selection},
-    highlighting::{SyntaxHighlighter, Theme, HighlightedSpan},
     git_integration::{GitIntegration, InlineDecoration},
+    highlighting::{HighlightedSpan, SyntaxHighlighter, Theme},
 };
+use dioxus::prelude::*;
 
 /// Render a single line of code with syntax highlighting
 #[component]
@@ -29,23 +29,25 @@ pub fn CodeLine(
         white-space: pre;
         font-family: inherit;
     "#;
-    
+
     // Check if line has any git decorations
-    let line_git_class = git_decorations.iter()
+    let line_git_class = git_decorations
+        .iter()
         .find(|d| d.line == line_number)
         .map(|d| d.decoration_type.css_class());
-    
-    let line_bg = git_decorations.iter()
+
+    let line_bg = git_decorations
+        .iter()
         .find(|d| d.line == line_number)
         .map(|d| d.decoration_type.background_color())
         .unwrap_or("transparent");
-    
+
     rsx! {
         div {
             class: "code-line",
             style: "{line_style} background: {line_bg};",
             "data-line": "{line_number}",
-            
+
             // Render highlighted spans
             if highlights.is_empty() {
                 span {
@@ -79,10 +81,7 @@ pub fn CodeLine(
 
 /// Render the cursor
 #[component]
-pub fn CursorComponent(
-    position: super::cursor::Position,
-    theme: Theme,
-) -> Element {
+pub fn CursorComponent(position: super::cursor::Position, theme: Theme) -> Element {
     let cursor_style = format!(
         r#"
         position: absolute;
@@ -93,11 +92,11 @@ pub fn CursorComponent(
         "#,
         theme.cursor
     );
-    
+
     // Calculate pixel position based on character position
     let x = position.column as f32 * 8.4; // Approximate character width
     let y = position.line as f32 * 21.0; // Line height
-    
+
     rsx! {
         div {
             class: "cursor",
@@ -108,14 +107,11 @@ pub fn CursorComponent(
 
 /// Render selection overlay
 #[component]
-pub fn SelectionOverlay(
-    selection: Selection,
-    theme: Theme,
-) -> Element {
+pub fn SelectionOverlay(selection: Selection, theme: Theme) -> Element {
     if selection.is_empty() {
         return rsx! { div {} };
     }
-    
+
     let selection_style = format!(
         r#"
         position: absolute;
@@ -125,17 +121,17 @@ pub fn SelectionOverlay(
         "#,
         theme.selection
     );
-    
+
     // Calculate selection bounds
     let start = selection.start();
     let end = selection.end();
-    
+
     // For simplicity, assume single-line selection for now
     if start.line == end.line {
         let x = start.column as f32 * 8.4;
         let width = (end.column - start.column) as f32 * 8.4;
         let y = start.line as f32 * 21.0;
-        
+
         rsx! {
             div {
                 class: "selection",
@@ -166,7 +162,7 @@ pub fn EditorView(
         font-size: 14px;
         overflow: hidden;
     "#;
-    
+
     let gutter_style = r#"
         background: #181E21;
         border-right: 1px solid #2D3336;
@@ -176,14 +172,14 @@ pub fn EditorView(
         user-select: none;
         min-width: 50px;
     "#;
-    
+
     let editor_content_style = r#"
         flex: 1;
         overflow: auto;
         padding: 10px;
         position: relative;
     "#;
-    
+
     let minimap_style = r#"
         width: 120px;
         background: #181E21;
@@ -191,18 +187,18 @@ pub fn EditorView(
         overflow: hidden;
         opacity: 0.8;
     "#;
-    
+
     rsx! {
         div {
             class: "editor-view",
             style: "{editor_container_style}",
-            
+
             // Line number gutter
             if show_line_numbers {
                 div {
                     class: "gutter",
                     style: "{gutter_style}",
-                    
+
                     for line_num in 1..=buffer.read().len_lines() {
                         div {
                             class: "line-number",
@@ -212,12 +208,12 @@ pub fn EditorView(
                     }
                 }
             }
-            
+
             // Main editor content
             div {
                 class: "editor-content",
                 style: "{editor_content_style}",
-                
+
                 // Render each line
                 for line_idx in 0..buffer.read().len_lines() {
                     if let Some(line) = buffer.read().line(line_idx) {
@@ -231,13 +227,13 @@ pub fn EditorView(
                         }
                     }
                 }
-                
+
                 // Render cursor
                 CursorComponent {
                     position: cursor.read().primary.active,
                     theme: highlighter.read().get_theme().clone(),
                 }
-                
+
                 // Render selections
                 for selection in cursor.read().all_selections() {
                     SelectionOverlay {
@@ -246,17 +242,17 @@ pub fn EditorView(
                     }
                 }
             }
-            
+
             // Minimap
             if show_minimap {
                 div {
                     class: "minimap",
                     style: "{minimap_style}",
-                    
+
                     // Simplified minimap rendering
                     div {
                         style: "transform: scale(0.1); transform-origin: top left; width: 1200px;",
-                        
+
                         for line_idx in 0..buffer.read().len_lines() {
                             div {
                                 style: "height: 2px; background: #444; margin-bottom: 1px;",

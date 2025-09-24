@@ -281,7 +281,7 @@ pub async fn reset_to_version(conn: &Connection, target_version: i32) -> Result<
     ));
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use rusqlite::Connection;

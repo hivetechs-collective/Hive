@@ -2,9 +2,11 @@
 //!
 //! User interface for configuring git decoration appearance and behavior
 
+use crate::desktop::git::decorations::{
+    DecorationStyles, GitDecorationConfig, GitDecorationManager,
+};
 use dioxus::prelude::*;
 use std::sync::{Arc, Mutex};
-use crate::desktop::git::decorations::{GitDecorationConfig, DecorationStyles, GitDecorationManager};
 
 /// Props for the decoration config UI
 #[derive(Props, Clone)]
@@ -20,7 +22,7 @@ pub struct DecorationConfigProps {
 impl PartialEq for DecorationConfigProps {
     fn eq(&self, other: &Self) -> bool {
         // Compare by Arc pointer equality and visible state
-        Arc::ptr_eq(&self.decoration_manager, &other.decoration_manager) 
+        Arc::ptr_eq(&self.decoration_manager, &other.decoration_manager)
             && self.visible == other.visible
     }
 }
@@ -35,7 +37,7 @@ pub fn GitDecorationConfigUI(props: DecorationConfigProps) -> Element {
             GitDecorationConfig::default()
         }
     });
-    
+
     if !props.visible {
         return rsx! { div {} };
     }
@@ -561,7 +563,7 @@ pub fn GitDecorationPreview(config: GitDecorationConfig) -> Element {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

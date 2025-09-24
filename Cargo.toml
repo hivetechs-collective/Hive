@@ -184,54 +184,11 @@ strip = true
 default = ["embeddings"]
 embeddings = []
 full = ["embeddings"]
-
-[[bin]]
-name = "hive"
-path = "src/main.rs"
-
-[[bin]]
-name = "hive-consensus"
-path = "src/bin/hive-consensus.rs"
-
-[[bin]]
-name = "test-streaming"
-path = "src/bin/test-streaming.rs"
-
-[[bin]]
-name = "test-d1"
-path = "src/bin/test_d1.rs"
-
-[[bin]]
-name = "fix-db-schema"
-path = "src/bin/fix_db_schema.rs"
-
-[[bin]]
-name = "test-consensus-cost"
-path = "src/bin/test_consensus_cost.rs"
-
-[[bin]]
-name = "test-consensus-simple"
-path = "src/bin/test_consensus_simple.rs"
-
-[[bin]]
-name = "test-terminal-cleaning"
-path = "src/bin/test-terminal-cleaning.rs"
-
-[[bin]]
-name = "git-features-demo"
-path = "git_features_standalone.rs"
-
-[[bin]]
-name = "hive-backend-server"
-path = "src/bin/hive-backend-server.rs"
+legacy-tests = []
 
 [[bin]]
 name = "hive-backend-server-enhanced"
 path = "src/bin/hive-backend-server-enhanced.rs"
-
-[[bin]]
-name = "init-database"
-path = "src/bin/init-database.rs"
 
 [package.metadata.bundle]
 name = "Hive"
@@ -240,7 +197,3 @@ identifier = "com.hivetechs.hive"
 [lib]
 name = "hive_ai"
 path = "src/lib.rs"
-
-[[example]]
-name = "event_bus_demo"
-path = "examples/event_bus_demo.rs"

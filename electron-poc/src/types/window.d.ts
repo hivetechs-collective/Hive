@@ -62,6 +62,7 @@ declare global {
         commitCount: number;
         recommendation: string;
       }>;
+      clone(url: string, parentDirectory: string): Promise<{ success: boolean; destination?: string; output?: string; error?: string }>;
     };
     
     // Terminal API
@@ -86,6 +87,20 @@ declare global {
       onTerminalError(callback: (terminalId: string, error: string) => void): void;
     };
     
+    // Database API
+    databaseAPI: {
+      getSetting(key: string): Promise<string | null>;
+      setSetting(key: string, value: string): Promise<{ success: boolean }>;
+      // Session persistence
+      saveSession?(folderPath: string, tabs: any[], activeTab: string | null): Promise<any>;
+      loadSession?(folderPath: string): Promise<any>;
+      clearSession?(folderPath: string): Promise<any>;
+      // Recent folders
+      addRecentFolder?(folderPath: string, tabCount: number): Promise<any>;
+      getRecentFolders?(): Promise<Array<{ folder_path: string; last_opened: string; tab_count: number }>>;
+      removeRecentFolder?(folderPath: string): Promise<any>;
+    };
+    
     // Electron API
     electronAPI: {
       getAnalytics(): Promise<any>;
@@ -106,7 +121,41 @@ declare global {
       onMenuCloseAllTabs(callback: () => void): void;
       onMenuToggleAutoSave(callback: (enabled: boolean) => void): void;
       onMenuResetState(callback: () => void): void;
+      onMenuGettingStarted(callback: () => void): void;
+      onMenuMemoryGuide(callback: () => void): void;
+      onMenuCloneRepo(callback: () => void): void;
+      onMenuInitRepo(callback: () => void): void;
+      onMenuAbout(callback: () => void): void;
+      
+      // Help menu handlers
+      onMenuHelpDocumentation(callback: () => void): void;
+      onMenuShowWelcome(callback: () => void): void;
+      onMenuToggleExplorer(callback: () => void): void;
+      onMenuToggleGit(callback: () => void): void;
+      onMenuToggleTerminal(callback: () => void): void;
+      onMenuOpenMemory(callback: () => void): void;
+      onMenuOpenCliTools(callback: () => void): void;
+      onMenuOpenAnalytics(callback: () => void): void;
+      onMenuGoToFile(callback: () => void): void;
+      onMenuGoToLine(callback: () => void): void;
+      onMenuFind(callback: () => void): void;
+      onMenuReplace(callback: () => void): void;
+      onMenuUndo(callback: () => void): void;
+      onMenuRedo(callback: () => void): void;
+      onMenuCut(callback: () => void): void;
+      onMenuCopy(callback: () => void): void;
+      onMenuPaste(callback: () => void): void;
+      onMenuSelectAll(callback: () => void): void;
+      onMenuTerminalNewTab(callback: () => void): void;
+      onMenuTerminalCloseTab(callback: () => void): void;
+      onMenuTerminalShowLog(callback: () => void): void;
+      onMenuTerminalHideLog(callback: () => void): void;
+      onMenuTerminalClearLog(callback: () => void): void;
+      
+      getVersion(): Promise<string>;
       openExternal?(url: string): Promise<void>;
+      refreshMenu(): Promise<any>;
+      updateMenuContext(context: { autoSaveEnabled?: boolean; hasFolder?: boolean; isRepo?: boolean }): Promise<any>;
       
       // Memory Service API
       startMemoryService(): Promise<boolean>;
@@ -130,6 +179,11 @@ declare global {
         command: string;
         cwd: string;
       }) => void) => void;
+    };
+    
+    // Consensus API
+    consensusAPI: {
+      interruptConsensus: () => void;
     };
     
     // Global instances

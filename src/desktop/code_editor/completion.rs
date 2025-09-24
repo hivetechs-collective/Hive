@@ -1,10 +1,10 @@
 //! Code Completion and IntelliSense UI
-//! 
+//!
 //! Provides the completion popup and parameter hints
 
+use super::language::{AIEnhancedCompletion, LanguageService};
 use dioxus::prelude::*;
 use lsp_types::CompletionItem;
-use super::language::{LanguageService, AIEnhancedCompletion};
 
 #[derive(Debug, Clone)]
 pub struct CompletionState {
@@ -49,7 +49,7 @@ pub fn CompletionPopup(
     if !state.read().visible || state.read().items.is_empty() {
         return rsx! { div {} };
     }
-    
+
     let position = state.read().position.clone();
     let popup_style = format!(
         r#"
@@ -70,7 +70,7 @@ pub fn CompletionPopup(
         position.x,
         position.y + 20.0 // Position below cursor
     );
-    
+
     rsx! {
         div {
             class: "completion-popup",
@@ -101,7 +101,7 @@ pub fn CompletionPopup(
                     _ => {}
                 }
             },
-            
+
             // Completion items
             {
                 let items = state.read().items.clone();
@@ -159,7 +159,7 @@ fn CompletionItemComponent(
         }
         "#
     };
-    
+
     let icon = match item.kind {
         Some(lsp_types::CompletionItemKind::KEYWORD) => "🔤",
         Some(lsp_types::CompletionItemKind::FUNCTION) => "ƒ",
@@ -172,7 +172,7 @@ fn CompletionItemComponent(
         Some(lsp_types::CompletionItemKind::PROPERTY) => "●",
         _ => "◯",
     };
-    
+
     let icon_color = match item.kind {
         Some(lsp_types::CompletionItemKind::KEYWORD) => "#569CD6",
         Some(lsp_types::CompletionItemKind::FUNCTION) => "#DCDCAA",
@@ -182,25 +182,25 @@ fn CompletionItemComponent(
         Some(lsp_types::CompletionItemKind::STRUCT) => "#4EC9B0",
         _ => "#cccccc",
     };
-    
+
     rsx! {
         div {
             class: "completion-item",
             style: "{item_style}",
             onclick: move |_| on_click.call(()),
-            
+
             // Icon
             span {
                 style: "color: {icon_color}; font-size: 14px; width: 20px; text-align: center;",
                 "{icon}"
             }
-            
+
             // Label
             span {
                 style: "flex: 1;",
                 "{item.label}"
             }
-            
+
             // Detail
             if let Some(detail) = &item.detail {
                 span {
@@ -238,18 +238,18 @@ pub fn ParameterHints(
         position.x,
         position.y - 30.0 // Position above cursor
     );
-    
+
     rsx! {
         div {
             class: "parameter-hints",
             style: "{hint_style}",
-            
+
             span {
                 style: "color: #DCDCAA;",
                 "{function_name}"
             }
             "("
-            
+
             for (index, param) in parameters.iter().enumerate() {
                 span {
                     style: if index == current_parameter {
@@ -259,12 +259,12 @@ pub fn ParameterHints(
                     },
                     "{param}"
                 }
-                
+
                 if index < parameters.len() - 1 {
                     ", "
                 }
             }
-            
+
             ")"
         }
     }
@@ -284,22 +284,22 @@ pub fn AICompletionItem(
     } else {
         "#F44336" // Red for low confidence
     };
-    
+
     rsx! {
         div {
             style: "position: relative;",
-            
+
             CompletionItemComponent {
                 item: completion.base_completion.clone(),
                 is_selected,
                 on_click,
             }
-            
+
             // AI confidence indicator
             if completion.is_from_consensus {
                 div {
                     style: format!(
-                        "position: absolute; right: 8px; top: 50%; transform: translateY(-50%); 
+                        "position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
                          width: 8px; height: 8px; border-radius: 50%; background: {};",
                         confidence_color
                     ),

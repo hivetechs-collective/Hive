@@ -1,16 +1,16 @@
 //! Problems Panel Component
-//! 
+//!
 //! VS Code-style problems panel that aggregates and displays:
 //! - Git merge conflicts
 //! - Build compilation errors
 //! - Linting warnings
 //! - Other diagnostic information
 
-use dioxus::prelude::*;
-use std::path::PathBuf;
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use dioxus::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Problem severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -115,13 +115,15 @@ pub struct ProblemItem {
 
 impl ProblemItem {
     /// Create a new problem item
-    pub fn new(
-        severity: ProblemSeverity,
-        source: ProblemSource,
-        message: String,
-    ) -> Self {
+    pub fn new(severity: ProblemSeverity, source: ProblemSource, message: String) -> Self {
         Self {
-            id: format!("problem_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()),
+            id: format!(
+                "problem_{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            ),
             severity,
             source,
             message,
@@ -145,7 +147,14 @@ impl ProblemItem {
     }
 
     /// Set range location
-    pub fn with_range(mut self, file_path: PathBuf, start_line: u32, start_col: u32, end_line: u32, end_col: u32) -> Self {
+    pub fn with_range(
+        mut self,
+        file_path: PathBuf,
+        start_line: u32,
+        start_col: u32,
+        end_line: u32,
+        end_col: u32,
+    ) -> Self {
         self.file_path = Some(file_path);
         self.line = Some(start_line);
         self.column = Some(start_col);
@@ -169,10 +178,11 @@ impl ProblemItem {
     /// Get location string for display
     pub fn location_string(&self) -> String {
         if let Some(path) = &self.file_path {
-            let file_name = path.file_name()
+            let file_name = path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
-            
+
             if let (Some(line), Some(col)) = (self.line, self.column) {
                 format!("{}:{}:{}", file_name, line, col)
             } else {
@@ -242,7 +252,10 @@ impl ProblemsState {
     /// Add a problem to the state
     pub fn add_problem(&mut self, problem: ProblemItem) {
         let source = problem.source.clone();
-        self.problems.entry(source).or_insert_with(Vec::new).push(problem);
+        self.problems
+            .entry(source)
+            .or_insert_with(Vec::new)
+            .push(problem);
     }
 
     /// Remove all problems from a specific source
@@ -253,7 +266,7 @@ impl ProblemsState {
     /// Get filtered problems for display
     pub fn filtered_problems(&self) -> Vec<&ProblemItem> {
         let mut problems = Vec::new();
-        
+
         for source_problems in self.problems.values() {
             for problem in source_problems {
                 if self.filter.matches(problem) {
@@ -261,11 +274,11 @@ impl ProblemsState {
                 }
             }
         }
-        
+
         // Sort by severity, then by file, then by line
         problems.sort_by(|a, b| {
             use std::cmp::Ordering;
-            
+
             // First by severity (errors first)
             match a.severity.priority().cmp(&b.severity.priority()) {
                 Ordering::Equal => {
@@ -288,7 +301,7 @@ impl ProblemsState {
                 other => other,
             }
         });
-        
+
         problems
     }
 
@@ -298,7 +311,7 @@ impl ProblemsState {
         let mut warnings = 0;
         let mut info = 0;
         let mut hints = 0;
-        
+
         for problem in self.filtered_problems() {
             match problem.severity {
                 ProblemSeverity::Error => errors += 1,
@@ -307,24 +320,33 @@ impl ProblemsState {
                 ProblemSeverity::Hint => hints += 1,
             }
         }
-        
+
         (errors, warnings, info, hints)
     }
 
     /// Update problems from git conflicts
-    pub fn update_git_problems(&mut self, file_statuses: &std::collections::HashMap<std::path::PathBuf, super::super::git::FileStatus>) {
+    pub fn update_git_problems(
+        &mut self,
+        file_statuses: &std::collections::HashMap<
+            std::path::PathBuf,
+            super::super::git::FileStatus,
+        >,
+    ) {
         // Clear existing git problems
         self.clear_source(&ProblemSource::Git);
-        
+
         // Add conflict problems
-        for (path, status) in file_statuses.iter().filter(|(_, status)| status.status_type == super::super::git::StatusType::Conflicted) {
+        for (path, status) in file_statuses
+            .iter()
+            .filter(|(_, status)| status.status_type == super::super::git::StatusType::Conflicted)
+        {
             let problem = ProblemItem::new(
                 ProblemSeverity::Error,
                 ProblemSource::Git,
                 format!("Merge conflict in {}", path.display()),
             )
             .with_location(path.clone(), 1, 1);
-            
+
             self.add_problem(problem);
         }
     }
@@ -333,7 +355,7 @@ impl ProblemsState {
     pub fn update_build_problems(&mut self, source: ProblemSource, output: &str) {
         // Clear existing problems from this source
         self.clear_source(&source);
-        
+
         // Parse build output (simplified parser for common formats)
         self.parse_build_output(source, output);
     }
@@ -353,9 +375,10 @@ impl ProblemsState {
         let parts: Vec<&str> = line.split(':').collect();
         if parts.len() >= 4 {
             let file_path = PathBuf::from(parts[0]);
-            if let (Ok(line_num), Ok(col_num)) = (parts[1].parse::<u32>(), parts[2].parse::<u32>()) {
+            if let (Ok(line_num), Ok(col_num)) = (parts[1].parse::<u32>(), parts[2].parse::<u32>())
+            {
                 let rest = parts[3..].join(":");
-                
+
                 if let Some(error_start) = rest.find("error") {
                     let message = rest[error_start..].to_string();
                     let problem = ProblemItem::new(ProblemSeverity::Error, source.clone(), message)
@@ -363,13 +386,14 @@ impl ProblemsState {
                     return Some(problem);
                 } else if let Some(warning_start) = rest.find("warning") {
                     let message = rest[warning_start..].to_string();
-                    let problem = ProblemItem::new(ProblemSeverity::Warning, source.clone(), message)
-                        .with_location(file_path, line_num, col_num);
+                    let problem =
+                        ProblemItem::new(ProblemSeverity::Warning, source.clone(), message)
+                            .with_location(file_path, line_num, col_num);
                     return Some(problem);
                 }
             }
         }
-        
+
         None
     }
 }
@@ -384,18 +408,18 @@ impl ProblemFilter {
             ProblemSeverity::Info => self.show_info,
             ProblemSeverity::Hint => self.show_hints,
         };
-        
+
         if !severity_matches {
             return false;
         }
-        
+
         // Check source filter
         if let Some(ref source_filter) = self.source_filter {
             if &problem.source != source_filter {
                 return false;
             }
         }
-        
+
         // Check file filter
         if let Some(ref file_filter) = self.file_filter {
             if let Some(ref problem_file) = problem.file_path {
@@ -406,7 +430,7 @@ impl ProblemFilter {
                 return false;
             }
         }
-        
+
         true
     }
 }
@@ -421,27 +445,27 @@ pub fn ProblemsPanel(
     let problems_state = state.read();
     let filtered_problems = problems_state.filtered_problems();
     let (errors, warnings, info, hints) = problems_state.get_counts();
-    
+
     if !problems_state.visible {
         return rsx! { div { class: "problems-panel hidden" } };
     }
-    
+
     rsx! {
         div {
             class: "problems-panel",
-            
+
             // Header with counts and filters
             div {
                 class: "problems-header",
-                
+
                 div {
                     class: "problems-title",
                     "Problems"
                 }
-                
+
                 div {
                     class: "problems-counts",
-                    
+
                     if errors > 0 {
                         span {
                             class: "problem-count error",
@@ -450,7 +474,7 @@ pub fn ProblemsPanel(
                             "{errors}"
                         }
                     }
-                    
+
                     if warnings > 0 {
                         span {
                             class: "problem-count warning",
@@ -459,7 +483,7 @@ pub fn ProblemsPanel(
                             "{warnings}"
                         }
                     }
-                    
+
                     if info > 0 {
                         span {
                             class: "problem-count info",
@@ -468,7 +492,7 @@ pub fn ProblemsPanel(
                             "{info}"
                         }
                     }
-                    
+
                     if hints > 0 {
                         span {
                             class: "problem-count hint",
@@ -478,16 +502,16 @@ pub fn ProblemsPanel(
                         }
                     }
                 }
-                
+
                 div {
                     class: "problems-actions",
-                    
+
                     button {
                         class: "problems-filter-btn",
                         title: "Filter Problems",
                         span { class: "codicon codicon-filter" }
                     }
-                    
+
                     button {
                         class: "problems-clear-btn",
                         title: "Clear All Problems",
@@ -498,11 +522,11 @@ pub fn ProblemsPanel(
                     }
                 }
             }
-            
+
             // Problems list
             div {
                 class: "problems-list",
-                
+
                 if filtered_problems.is_empty() {
                     div {
                         class: "problems-empty",
@@ -529,7 +553,7 @@ pub fn ProblemsPanel(
                                     }
                                 }
                             },
-                            
+
                             div {
                                 class: "problem-icon",
                                 span {
@@ -537,14 +561,14 @@ pub fn ProblemsPanel(
                                     style: "color: {problem.severity.color()};",
                                 }
                             }
-                            
+
                             div {
                                 class: "problem-content",
-                                
+
                                 div {
                                     class: "problem-message",
                                     "{problem.message}"
-                                    
+
                                     if let Some(code) = &problem.code {
                                         span {
                                             class: "problem-code",
@@ -552,7 +576,7 @@ pub fn ProblemsPanel(
                                         }
                                     }
                                 }
-                                
+
                                 div {
                                     class: "problem-location",
                                     span {
@@ -566,7 +590,7 @@ pub fn ProblemsPanel(
                                     }
                                 }
                             }
-                            
+
                             if problem.fixable {
                                 div {
                                     class: "problem-actions",

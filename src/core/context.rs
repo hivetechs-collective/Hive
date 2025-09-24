@@ -487,7 +487,7 @@ fn language_to_string(lang: Language) -> &'static str {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

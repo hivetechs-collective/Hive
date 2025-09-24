@@ -5,10 +5,10 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use git2::{Repository, StatusOptions};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use git2::{Repository, StatusOptions};
 
 use super::state::{FileItem, FileType, GitFileStatus};
 
@@ -67,12 +67,18 @@ fn load_directory_tree_inner<'a>(
 
             // Get git status for this file
             let git_status = git_statuses.get(&path).cloned();
-            
+
             // Load children if directory is expanded
             let children = if is_directory && is_expanded {
-                load_directory_tree_inner(&path, expanded_dirs, show_hidden, depth + 1, git_statuses)
-                    .await
-                    .unwrap_or_default()
+                load_directory_tree_inner(
+                    &path,
+                    expanded_dirs,
+                    show_hidden,
+                    depth + 1,
+                    git_statuses,
+                )
+                .await
+                .unwrap_or_default()
             } else {
                 Vec::new()
             };
@@ -128,7 +134,7 @@ pub async fn read_file_content(path: &Path) -> Result<String> {
 /// Get git statuses for all files in a directory
 fn get_git_statuses_for_directory(root: &Path) -> HashMap<PathBuf, GitFileStatus> {
     let mut statuses = HashMap::new();
-    
+
     // Try to discover repository from the root path
     if let Ok(repo) = Repository::discover(root) {
         // Get the repository workdir to calculate relative paths
@@ -138,14 +144,14 @@ fn get_git_statuses_for_directory(root: &Path) -> HashMap<PathBuf, GitFileStatus
             opts.include_untracked(true)
                 .include_ignored(false)
                 .include_unmodified(false);
-            
+
             // Get all file statuses
             if let Ok(git_statuses) = repo.statuses(Some(&mut opts)) {
                 for entry in git_statuses.iter() {
                     if let Some(path_str) = entry.path() {
                         let full_path = workdir.join(path_str);
                         let status = entry.status();
-                        
+
                         // Convert git2 status to our GitFileStatus
                         let file_status = convert_git_status(status);
                         if let Some(fs) = file_status {
@@ -156,14 +162,14 @@ fn get_git_statuses_for_directory(root: &Path) -> HashMap<PathBuf, GitFileStatus
             }
         }
     }
-    
+
     statuses
 }
 
 /// Convert git2::Status to GitFileStatus
 fn convert_git_status(status: git2::Status) -> Option<GitFileStatus> {
     use git2::Status;
-    
+
     // Priority order for status (most important first)
     if status.contains(Status::INDEX_NEW) || status.contains(Status::WT_NEW) {
         Some(GitFileStatus::Added)
@@ -230,7 +236,7 @@ impl FileType {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

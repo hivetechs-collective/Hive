@@ -1,16 +1,16 @@
 //! Multi-Repository Manager
-//! 
+//!
 //! Manages multiple git repositories in a workspace,
 //! coordinates git operations across repositories
 
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use anyhow::{Result, Context};
 use tokio::sync::RwLock;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 use super::repository_selector::{RepositoryInfo, RepositorySelectorState};
-use super::{GitRepository, GitState, BranchInfo, SyncStatus};
+use super::{BranchInfo, GitRepository, GitState, SyncStatus};
 
 /// Multi-repository manager for coordinating git operations
 pub struct MultiRepoManager {
@@ -37,10 +37,15 @@ impl MultiRepoManager {
 
     /// Initialize the manager by scanning for repositories
     pub async fn initialize(&mut self) -> Result<()> {
-        info!("Initializing multi-repository manager for workspace: {:?}", self.workspace_path);
-        
+        info!(
+            "Initializing multi-repository manager for workspace: {:?}",
+            self.workspace_path
+        );
+
         // Scan workspace for repositories
-        self.selector_state.scan_workspace(&self.workspace_path).await
+        self.selector_state
+            .scan_workspace(&self.workspace_path)
+            .await
             .context("Failed to scan workspace for repositories")?;
 
         // Initialize git states for found repositories
@@ -54,7 +59,10 @@ impl MultiRepoManager {
             self.set_active_repository(first_repo.path.clone()).await?;
         }
 
-        info!("Initialized {} repositories", self.selector_state.repositories.len());
+        info!(
+            "Initialized {} repositories",
+            self.selector_state.repositories.len()
+        );
         Ok(())
     }
 
@@ -75,8 +83,16 @@ impl MultiRepoManager {
 
     /// Set active repository
     pub async fn set_active_repository(&mut self, repo_path: PathBuf) -> Result<()> {
-        if !self.selector_state.repositories.iter().any(|r| r.path == repo_path) {
-            warn!("Attempted to set non-existent repository as active: {:?}", repo_path);
+        if !self
+            .selector_state
+            .repositories
+            .iter()
+            .any(|r| r.path == repo_path)
+        {
+            warn!(
+                "Attempted to set non-existent repository as active: {:?}",
+                repo_path
+            );
             return Ok(());
         }
 
@@ -99,7 +115,8 @@ impl MultiRepoManager {
 
     /// Get git state for the active repository
     pub fn active_git_state(&self) -> Option<&GitState> {
-        self.active_repo.as_ref()
+        self.active_repo
+            .as_ref()
             .and_then(|path| self.git_states.get(path))
     }
 
@@ -112,7 +129,7 @@ impl MultiRepoManager {
 
         // Create repository info
         let repo_info = RepositoryInfo::from_path(repo_path.clone()).await;
-        
+
         // Add to selector state
         self.selector_state.add_repository(repo_info);
 
@@ -150,8 +167,10 @@ impl MultiRepoManager {
     /// Refresh all repository information
     pub async fn refresh_all_repositories(&mut self) -> Result<()> {
         info!("Refreshing all repositories");
-        
-        let repo_paths: Vec<PathBuf> = self.selector_state.repositories
+
+        let repo_paths: Vec<PathBuf> = self
+            .selector_state
+            .repositories
             .iter()
             .map(|r| r.path.clone())
             .collect();
@@ -159,7 +178,7 @@ impl MultiRepoManager {
         for repo_path in repo_paths {
             // Refresh repository info
             self.selector_state.refresh_repository(&repo_path).await;
-            
+
             // Refresh git state
             if let Some(git_state) = self.git_states.get(&repo_path) {
                 git_state.refresh_status(&repo_path).await;
@@ -172,10 +191,10 @@ impl MultiRepoManager {
     /// Get summary of all repositories' status
     pub fn get_repositories_summary(&self) -> RepositoriesSummary {
         let mut summary = RepositoriesSummary::default();
-        
+
         for repo_info in &self.selector_state.repositories {
             summary.total_repos += 1;
-            
+
             match &repo_info.status {
                 super::repository_selector::RepositoryStatus::Clean => {
                     summary.clean_repos += 1;
@@ -218,15 +237,18 @@ impl MultiRepoManager {
     /// Perform sync operation on specific repository
     pub async fn sync_repository(&mut self, repo_path: &PathBuf) -> Result<()> {
         info!("Syncing repository: {:?}", repo_path);
-        
+
         // Use the async operations from the git operations module
-        super::operations::fetch(repo_path).await
+        super::operations::fetch(repo_path)
+            .await
             .context("Failed to fetch")?;
-            
-        super::operations::pull(repo_path).await
+
+        super::operations::pull(repo_path)
+            .await
             .context("Failed to pull")?;
-            
-        super::operations::push(repo_path).await
+
+        super::operations::push(repo_path)
+            .await
             .context("Failed to push")?;
 
         // Refresh repository state after sync
@@ -242,8 +264,10 @@ impl MultiRepoManager {
     /// Perform operation on all repositories
     pub async fn sync_all_repositories(&mut self) -> Result<Vec<(PathBuf, Result<()>)>> {
         info!("Syncing all repositories");
-        
-        let repo_paths: Vec<PathBuf> = self.selector_state.repositories
+
+        let repo_paths: Vec<PathBuf> = self
+            .selector_state
+            .repositories
             .iter()
             .map(|r| r.path.clone())
             .collect();
@@ -277,7 +301,10 @@ impl RepositoriesSummary {
         if self.total_repos == 0 {
             "No repositories".to_string()
         } else if self.repos_with_conflicts > 0 {
-            format!("{} conflicts in {} repos", self.repos_with_conflicts, self.total_repos)
+            format!(
+                "{} conflicts in {} repos",
+                self.repos_with_conflicts, self.total_repos
+            )
         } else if self.repos_with_changes > 0 {
             format!("{} repos with changes", self.repos_with_changes)
         } else if self.repos_needing_sync > 0 {

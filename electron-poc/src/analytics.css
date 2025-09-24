@@ -39,6 +39,22 @@
   color: var(--text-primary);
 }
 
+.analytics-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.analytics-title svg {
+  width: 18px;
+  height: 18px;
+}
+
+.metric-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
 .analytics-controls {
   display: flex;
   gap: 12px;

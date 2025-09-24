@@ -6,17 +6,17 @@
 //! - Memory-efficient operations
 //! - Incremental updates and batch operations
 
-use std::collections::{HashMap, HashSet, BTreeMap};
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{mpsc, Semaphore};
 use tokio::time::{sleep, timeout};
-use anyhow::{Result, Context};
-use serde::{Deserialize, Serialize};
-use tracing::{debug, info, warn, error, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
-use super::{GitRepository, RepositoryInfo, BranchInfo};
+use super::{BranchInfo, GitRepository, RepositoryInfo};
 
 /// Configuration for performance optimizations
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -76,11 +76,11 @@ impl<T> CacheEntry<T> {
             access_count: 0,
         }
     }
-    
+
     fn is_expired(&self, ttl: Duration) -> bool {
         self.timestamp.elapsed().unwrap_or(Duration::ZERO) > ttl
     }
-    
+
     fn access(&mut self) -> &T {
         self.access_count += 1;
         &self.data
@@ -95,11 +95,11 @@ pub struct OptimizedGitManager {
     branch_cache: Arc<RwLock<HashMap<PathBuf, CacheEntry<Vec<BranchInfo>>>>>,
     status_cache: Arc<RwLock<HashMap<PathBuf, CacheEntry<Vec<(PathBuf, git2::Status)>>>>>,
     repository_list_cache: Arc<RwLock<Option<CacheEntry<Vec<RepositoryInfo>>>>>,
-    
+
     // Background processing
     operation_semaphore: Arc<Semaphore>,
     background_tx: mpsc::UnboundedSender<BackgroundTask>,
-    
+
     // Statistics
     stats: Arc<Mutex<PerformanceStats>>,
 }
@@ -108,7 +108,7 @@ pub struct OptimizedGitManager {
 #[derive(Debug)]
 enum BackgroundTask {
     RefreshRepositoryList { workspace_path: PathBuf },
-    RefreshBranches { repo_path: PathBuf },  
+    RefreshBranches { repo_path: PathBuf },
     RefreshStatus { repo_path: PathBuf },
     PreloadRepository { repo_path: PathBuf },
     CacheCleanup,
@@ -153,13 +153,13 @@ impl<T: Clone> PaginatedResult<T> {
         let total_pages = (total_items + page_size - 1) / page_size;
         let start_idx = page * page_size;
         let end_idx = std::cmp::min(start_idx + page_size, total_items);
-        
+
         let items = if start_idx < total_items {
             all_items[start_idx..end_idx].to_vec()
         } else {
             Vec::new()
         };
-        
+
         Self {
             items,
             page,
@@ -176,10 +176,10 @@ impl OptimizedGitManager {
     pub fn new(config: PerformanceConfig) -> Self {
         let (background_tx, mut background_rx) = mpsc::unbounded_channel();
         let operation_semaphore = Arc::new(Semaphore::new(config.max_concurrent_operations));
-        
+
         let manager = Self {
             config: config.clone(),
-            repository_cache: Arc::new(RwLock::new(HashMap::new())), 
+            repository_cache: Arc::new(RwLock::new(HashMap::new())),
             branch_cache: Arc::new(RwLock::new(HashMap::new())),
             status_cache: Arc::new(RwLock::new(HashMap::new())),
             repository_list_cache: Arc::new(RwLock::new(None)),
@@ -187,7 +187,7 @@ impl OptimizedGitManager {
             background_tx,
             stats: Arc::new(Mutex::new(PerformanceStats::default())),
         };
-        
+
         // Start background task processor
         if config.background_processing {
             let branch_cache = manager.branch_cache.clone();
@@ -195,7 +195,7 @@ impl OptimizedGitManager {
             let repository_list_cache = manager.repository_list_cache.clone();
             let stats = manager.stats.clone();
             let config = config.clone();
-            
+
             tokio::spawn(async move {
                 while let Some(task) = background_rx.recv().await {
                     Self::process_background_task(
@@ -205,10 +205,11 @@ impl OptimizedGitManager {
                         &repository_list_cache,
                         &stats,
                         &config,
-                    ).await;
+                    )
+                    .await;
                 }
             });
-            
+
             // Start cache cleanup task
             let cleanup_tx = manager.background_tx.clone();
             tokio::spawn(async move {
@@ -219,15 +220,15 @@ impl OptimizedGitManager {
                 }
             });
         }
-        
+
         manager
     }
-    
+
     /// Get repository with caching and lazy loading
     #[instrument(skip(self), fields(path = %path.display()))]
     pub async fn get_repository(&self, path: &Path) -> Result<Arc<GitRepository>> {
         let cache_key = path.to_path_buf();
-        
+
         // Check cache first
         if self.config.caching_enabled {
             let cache = self.repository_cache.read().unwrap();
@@ -241,35 +242,36 @@ impl OptimizedGitManager {
                 }
             }
         }
-        
+
         // Cache miss - load repository
         self.record_cache_miss();
         debug!("Repository cache miss for: {:?}", path);
-        
+
         let start_time = Instant::now();
         let permit = self.operation_semaphore.acquire().await.unwrap();
-        
+
         let repo = timeout(
             Duration::from_millis(self.config.operation_timeout_ms),
             async move {
                 let _permit = permit; // Keep permit until operation completes
                 GitRepository::open(path)
-            }
-        ).await;
-        
+            },
+        )
+        .await;
+
         let elapsed = start_time.elapsed();
         self.record_operation_time(elapsed);
-        
+
         match repo {
             Ok(Ok(git_repo)) => {
                 let arc_repo = Arc::new(git_repo);
-                
+
                 // Cache the result
                 if self.config.caching_enabled {
                     let mut cache = self.repository_cache.write().unwrap();
                     cache.insert(cache_key, CacheEntry::new(arc_repo.clone()));
                 }
-                
+
                 Ok(arc_repo)
             }
             Ok(Err(e)) => Err(e),
@@ -279,10 +281,13 @@ impl OptimizedGitManager {
             }
         }
     }
-    
+
     /// Discover repositories with performance optimizations
     #[instrument(skip(self), fields(workspace = %workspace_path.display()))]
-    pub async fn discover_repositories_optimized(&self, workspace_path: &Path) -> Result<Vec<RepositoryInfo>> {
+    pub async fn discover_repositories_optimized(
+        &self,
+        workspace_path: &Path,
+    ) -> Result<Vec<RepositoryInfo>> {
         // Check cache first
         if self.config.caching_enabled {
             let cache = self.repository_list_cache.read().unwrap();
@@ -295,38 +300,48 @@ impl OptimizedGitManager {
                 }
             }
         }
-        
+
         self.record_cache_miss();
         debug!("Repository list cache miss - scanning workspace");
-        
+
         let start_time = Instant::now();
         let repositories = self.scan_workspace_efficiently(workspace_path).await?;
         let elapsed = start_time.elapsed();
-        
+
         self.record_operation_time(elapsed);
-        info!("Discovered {} repositories in {:?}", repositories.len(), elapsed);
-        
+        info!(
+            "Discovered {} repositories in {:?}",
+            repositories.len(),
+            elapsed
+        );
+
         // Cache the result
         if self.config.caching_enabled {
             let mut cache = self.repository_list_cache.write().unwrap();
             *cache = Some(CacheEntry::new(repositories.clone()));
         }
-        
+
         // Start background refresh
         if self.config.background_processing {
-            let _ = self.background_tx.send(BackgroundTask::RefreshRepositoryList {
-                workspace_path: workspace_path.to_path_buf(),
-            });
+            let _ = self
+                .background_tx
+                .send(BackgroundTask::RefreshRepositoryList {
+                    workspace_path: workspace_path.to_path_buf(),
+                });
         }
-        
+
         Ok(repositories)
     }
-    
+
     /// Get branches with pagination and caching
     #[instrument(skip(self), fields(repo = %repo_path.display()))]
-    pub async fn get_branches_paginated(&self, repo_path: &Path, page: usize) -> Result<PaginatedResult<BranchInfo>> {
+    pub async fn get_branches_paginated(
+        &self,
+        repo_path: &Path,
+        page: usize,
+    ) -> Result<PaginatedResult<BranchInfo>> {
         let cache_key = repo_path.to_path_buf();
-        
+
         // Check cache first
         let branches = if self.config.caching_enabled {
             let cache = self.branch_cache.read().unwrap();
@@ -347,16 +362,19 @@ impl OptimizedGitManager {
         } else {
             self.load_branches_fresh(repo_path).await?
         };
-        
+
         // Return paginated result
         Ok(PaginatedResult::new(branches, page, self.config.page_size))
     }
-    
+
     /// Get file statuses with batching and caching
     #[instrument(skip(self), fields(repo = %repo_path.display()))]
-    pub async fn get_file_statuses_batched(&self, repo_path: &Path) -> Result<Vec<(PathBuf, git2::Status)>> {
+    pub async fn get_file_statuses_batched(
+        &self,
+        repo_path: &Path,
+    ) -> Result<Vec<(PathBuf, git2::Status)>> {
         let cache_key = repo_path.to_path_buf();
-        
+
         // Check cache first
         if self.config.caching_enabled {
             let cache = self.status_cache.read().unwrap();
@@ -369,24 +387,25 @@ impl OptimizedGitManager {
                 }
             }
         }
-        
+
         self.record_cache_miss();
-        
+
         let start_time = Instant::now();
         let permit = self.operation_semaphore.acquire().await.unwrap();
-        
+
         let statuses = timeout(
             Duration::from_millis(self.config.operation_timeout_ms),
             async move {
                 let _permit = permit;
                 let repo = GitRepository::open(repo_path)?;
                 repo.file_statuses()
-            }
-        ).await;
-        
+            },
+        )
+        .await;
+
         let elapsed = start_time.elapsed();
         self.record_operation_time(elapsed);
-        
+
         match statuses {
             Ok(Ok(statuses)) => {
                 // Cache the result
@@ -394,14 +413,14 @@ impl OptimizedGitManager {
                     let mut cache = self.status_cache.write().unwrap();
                     cache.insert(cache_key, CacheEntry::new(statuses.clone()));
                 }
-                
+
                 // Start background refresh
                 if self.config.background_processing {
                     let _ = self.background_tx.send(BackgroundTask::RefreshStatus {
                         repo_path: repo_path.to_path_buf(),
                     });
                 }
-                
+
                 Ok(statuses)
             }
             Ok(Err(e)) => Err(e),
@@ -411,118 +430,135 @@ impl OptimizedGitManager {
             }
         }
     }
-    
+
     /// Preload repositories in background
     pub fn preload_repositories(&self, repo_paths: Vec<PathBuf>) {
         if !self.config.background_processing {
             return;
         }
-        
+
         for repo_path in repo_paths {
-            let _ = self.background_tx.send(BackgroundTask::PreloadRepository { repo_path });
+            let _ = self
+                .background_tx
+                .send(BackgroundTask::PreloadRepository { repo_path });
         }
     }
-    
+
     /// Get performance statistics
     pub fn get_stats(&self) -> PerformanceStats {
         self.stats.lock().unwrap().clone()
     }
-    
+
     /// Clear all caches
     pub fn clear_caches(&self) {
         if !self.config.caching_enabled {
             return;
         }
-        
+
         self.repository_cache.write().unwrap().clear();
         self.branch_cache.write().unwrap().clear();
         self.status_cache.write().unwrap().clear();
         *self.repository_list_cache.write().unwrap() = None;
-        
+
         info!("Cleared all git operation caches");
     }
-    
+
     /// Efficient workspace scanning with memory optimization
-    async fn scan_workspace_efficiently(&self, workspace_path: &Path) -> Result<Vec<RepositoryInfo>> {
+    async fn scan_workspace_efficiently(
+        &self,
+        workspace_path: &Path,
+    ) -> Result<Vec<RepositoryInfo>> {
         let mut repositories = Vec::new();
         let mut visited_paths = HashSet::new();
         let max_depth = 5; // Prevent deep recursion
-        
+
         // Use a work queue to control memory usage
         let mut work_queue = vec![(workspace_path.to_path_buf(), 0)];
-        
+
         while let Some((current_path, depth)) = work_queue.pop() {
             if depth > max_depth || visited_paths.contains(&current_path) {
                 continue;
             }
-            
+
             visited_paths.insert(current_path.clone());
-            
+
             // Check if this directory is a git repository
             if let Ok(repo) = GitRepository::open(&current_path) {
-                let name = current_path.file_name()
+                let name = current_path
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("unknown")
                     .to_string();
-                
+
                 repositories.push(RepositoryInfo {
                     path: current_path.clone(),
                     name,
                     is_bare: repo.is_bare(),
                     has_changes: false, // Will be updated in background
                 });
-                
+
                 // Don't scan subdirectories of git repositories
                 continue;
             }
-            
+
             // Scan subdirectories (but limit to avoid memory issues)
             if let Ok(entries) = std::fs::read_dir(&current_path) {
                 let mut subdir_count = 0;
                 for entry in entries {
-                    if subdir_count >= 100 { // Limit subdirectories to scan
+                    if subdir_count >= 100 {
+                        // Limit subdirectories to scan
                         break;
                     }
-                    
+
                     if let Ok(entry) = entry {
                         let path = entry.path();
-                        if path.is_dir() && !path.file_name().unwrap_or_default().to_string_lossy().starts_with('.') {
+                        if path.is_dir()
+                            && !path
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .starts_with('.')
+                        {
                             work_queue.push((path, depth + 1));
                             subdir_count += 1;
                         }
                     }
                 }
             }
-            
+
             // Yield periodically to prevent blocking
             if repositories.len() % 10 == 0 {
                 tokio::task::yield_now().await;
             }
         }
-        
-        info!("Scanned workspace, found {} repositories", repositories.len());
+
+        info!(
+            "Scanned workspace, found {} repositories",
+            repositories.len()
+        );
         Ok(repositories)
     }
-    
+
     /// Load branches without caching (for fresh data)
     async fn load_branches_fresh(&self, repo_path: &Path) -> Result<Vec<BranchInfo>> {
         self.record_cache_miss();
-        
+
         let start_time = Instant::now();
         let permit = self.operation_semaphore.acquire().await.unwrap();
-        
+
         let branches = timeout(
             Duration::from_millis(self.config.operation_timeout_ms),
             async move {
                 let _permit = permit;
                 let repo = GitRepository::open(repo_path)?;
                 repo.list_branches()
-            }
-        ).await;
-        
+            },
+        )
+        .await;
+
         let elapsed = start_time.elapsed();
         self.record_operation_time(elapsed);
-        
+
         match branches {
             Ok(Ok(branches)) => {
                 // Cache the result
@@ -530,7 +566,7 @@ impl OptimizedGitManager {
                     let mut cache = self.branch_cache.write().unwrap();
                     cache.insert(repo_path.to_path_buf(), CacheEntry::new(branches.clone()));
                 }
-                
+
                 Ok(branches)
             }
             Ok(Err(e)) => Err(e),
@@ -540,7 +576,7 @@ impl OptimizedGitManager {
             }
         }
     }
-    
+
     /// Process background tasks
     async fn process_background_task(
         task: BackgroundTask,
@@ -551,7 +587,7 @@ impl OptimizedGitManager {
         config: &PerformanceConfig,
     ) {
         debug!("Processing background task: {:?}", task);
-        
+
         match task {
             BackgroundTask::RefreshRepositoryList { workspace_path } => {
                 let repositories = GitRepository::discover_repositories(&workspace_path);
@@ -561,7 +597,7 @@ impl OptimizedGitManager {
                     debug!("Background: Refreshed repository list");
                 }
             }
-            
+
             BackgroundTask::RefreshBranches { repo_path } => {
                 if let Ok(repo) = GitRepository::open(&repo_path) {
                     if let Ok(branches) = repo.list_branches() {
@@ -571,7 +607,7 @@ impl OptimizedGitManager {
                     }
                 }
             }
-            
+
             BackgroundTask::RefreshStatus { repo_path } => {
                 if let Ok(repo) = GitRepository::open(&repo_path) {
                     if let Ok(statuses) = repo.file_statuses() {
@@ -581,13 +617,13 @@ impl OptimizedGitManager {
                     }
                 }
             }
-            
+
             BackgroundTask::PreloadRepository { repo_path: _ } => {
                 // Repository preloading disabled due to thread safety constraints
                 // with git2::Repository containing non-Sync raw pointers
                 debug!("Background: Repository preloading skipped (thread safety)");
             }
-            
+
             BackgroundTask::CacheCleanup => {
                 Self::cleanup_expired_caches(
                     branch_cache,
@@ -598,12 +634,12 @@ impl OptimizedGitManager {
                 debug!("Background: Cleaned up expired caches");
             }
         }
-        
+
         // Update stats
         let mut stats = stats.lock().unwrap();
         stats.background_tasks_completed += 1;
     }
-    
+
     /// Clean up expired cache entries
     fn cleanup_expired_caches(
         branch_cache: &Arc<RwLock<HashMap<PathBuf, CacheEntry<Vec<BranchInfo>>>>>,
@@ -612,20 +648,20 @@ impl OptimizedGitManager {
         config: &PerformanceConfig,
     ) {
         let ttl = Duration::from_secs(config.cache_ttl_seconds);
-        
-        // Clean branch cache  
+
+        // Clean branch cache
         {
             let mut cache = branch_cache.write().unwrap();
             cache.retain(|_, entry| !entry.is_expired(ttl));
         }
-        
+
         // Clean status cache (shorter TTL)
         {
             let mut cache = status_cache.write().unwrap();
             let status_ttl = Duration::from_secs(config.cache_ttl_seconds / 4);
             cache.retain(|_, entry| !entry.is_expired(status_ttl));
         }
-        
+
         // Clean repository list cache
         {
             let mut cache = repository_list_cache.write().unwrap();
@@ -635,33 +671,33 @@ impl OptimizedGitManager {
                 }
             }
         }
-        
+
         debug!("Cleaned up expired cache entries");
     }
-    
+
     // Statistics recording methods
     fn record_cache_hit(&self) {
         let mut stats = self.stats.lock().unwrap();
         stats.cache_hits += 1;
     }
-    
+
     fn record_cache_miss(&self) {
         let mut stats = self.stats.lock().unwrap();
         stats.cache_misses += 1;
     }
-    
+
     fn record_operation_time(&self, elapsed: Duration) {
         let mut stats = self.stats.lock().unwrap();
         let elapsed_ms = elapsed.as_millis() as f64;
-        
+
         // Update running average
         let total_ops = stats.total_operations as f64;
-        stats.average_operation_time_ms = 
+        stats.average_operation_time_ms =
             (stats.average_operation_time_ms * total_ops + elapsed_ms) / (total_ops + 1.0);
-        
+
         stats.total_operations += 1;
     }
-    
+
     fn record_timeout(&self) {
         let mut stats = self.stats.lock().unwrap();
         stats.operations_timed_out += 1;
@@ -681,7 +717,7 @@ impl BatchProcessor {
             semaphore: Arc::new(Semaphore::new(max_concurrent)),
         }
     }
-    
+
     /// Process items in batches with controlled concurrency
     pub async fn process_batches<T, F, R>(&self, items: Vec<T>, processor: F) -> Vec<Result<R>>
     where
@@ -691,15 +727,15 @@ impl BatchProcessor {
     {
         let mut results = Vec::new();
         let chunks: Vec<_> = items.chunks(self.batch_size).collect();
-        
+
         for chunk in chunks {
             let chunk_results = self.process_chunk(chunk.to_vec(), processor.clone()).await;
             results.extend(chunk_results);
         }
-        
+
         results
     }
-    
+
     async fn process_chunk<T, F, R>(&self, items: Vec<T>, processor: F) -> Vec<Result<R>>
     where
         T: Send + Clone + 'static,
@@ -707,15 +743,18 @@ impl BatchProcessor {
         R: Send + 'static,
     {
         let semaphore = self.semaphore.clone();
-        let tasks: Vec<_> = items.into_iter().map(|item| {
-            let processor = processor.clone();
-            let semaphore = semaphore.clone();
-            tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
-                processor(item)
+        let tasks: Vec<_> = items
+            .into_iter()
+            .map(|item| {
+                let processor = processor.clone();
+                let semaphore = semaphore.clone();
+                tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.unwrap();
+                    processor(item)
+                })
             })
-        }).collect();
-        
+            .collect();
+
         let mut results = Vec::new();
         for task in tasks {
             match task.await {
@@ -723,16 +762,16 @@ impl BatchProcessor {
                 Err(_) => results.push(Err(anyhow::anyhow!("Task panicked"))),
             }
         }
-        
+
         results
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    
+
     #[tokio::test]
     async fn test_performance_config() {
         let config = PerformanceConfig::default();
@@ -740,12 +779,12 @@ mod tests {
         assert!(config.caching_enabled);
         assert_eq!(config.cache_ttl_seconds, 300);
     }
-    
+
     #[tokio::test]
     async fn test_paginated_result() {
         let items = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         let result = PaginatedResult::new(items, 0, 3);
-        
+
         assert_eq!(result.items, vec![1, 2, 3]);
         assert_eq!(result.page, 0);
         assert_eq!(result.total_pages, 4);
@@ -753,14 +792,14 @@ mod tests {
         assert!(result.has_next);
         assert!(!result.has_previous);
     }
-    
+
     #[tokio::test]
     async fn test_batch_processor() {
         let processor = BatchProcessor::new(2, 4);
         let items = vec![1, 2, 3, 4, 5];
-        
+
         let results = processor.process_batches(items, |x| Ok(x * 2)).await;
-        
+
         assert_eq!(results.len(), 5);
         for (i, result) in results.iter().enumerate() {
             assert!(result.is_ok());

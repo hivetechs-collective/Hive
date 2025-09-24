@@ -1,5 +1,5 @@
 //! Enhanced Hive Consensus Backend Server with WebSocket Streaming
-//! 
+//!
 //! Modern multi-threaded architecture for Electron frontend (2025)
 //! - WebSocket support for real-time streaming
 //! - Proper database integration
@@ -7,8 +7,12 @@
 //! - Multi-threaded consensus processing
 //! - No CPU overheating issues
 
+use axum::http::Method;
 use axum::{
-    extract::{ws::{WebSocket, WebSocketUpgrade}, State},
+    extract::{
+        ws::{WebSocket, WebSocketUpgrade},
+        State,
+    },
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -22,17 +26,16 @@ use hive_ai::{
         types::{Stage, StageResult},
     },
     core::{
-        database::{initialize_database, get_database, DatabaseManager},
         api_keys::ApiKeyManager,
+        database::{get_database, initialize_database, DatabaseManager},
     },
     maintenance::{BackgroundMaintenance, MaintenanceConfig},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tower_http::cors::CorsLayer;
 use tracing::{error, info, warn};
-use axum::http::Method;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ConsensusRequest {
@@ -60,23 +63,49 @@ struct ContextMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum WSMessage {
     // Client -> Server
-    StartConsensus { 
-        query: String, 
+    StartConsensus {
+        query: String,
         profile: Option<String>,
         conversation_id: Option<String>,
-        context: Option<Vec<ContextMessage>>
+        context: Option<Vec<ContextMessage>>,
     },
     CancelConsensus,
-    
+
     // Server -> Client
-    ProfileLoaded { name: String, models: Vec<String> },
-    StageStarted { stage: String, model: String },
-    StreamChunk { stage: String, chunk: String },
-    StageProgress { stage: String, percentage: f32, tokens: u32 },
-    StageCompleted { stage: String, tokens: u32, cost: f64 },
-    ConsensusComplete { result: String, total_tokens: u32, total_cost: f64 },
-    Error { message: String },
-    AIHelperDecision { direct_mode: bool, reason: String },
+    ProfileLoaded {
+        name: String,
+        models: Vec<String>,
+    },
+    StageStarted {
+        stage: String,
+        model: String,
+    },
+    StreamChunk {
+        stage: String,
+        chunk: String,
+    },
+    StageProgress {
+        stage: String,
+        percentage: f32,
+        tokens: u32,
+    },
+    StageCompleted {
+        stage: String,
+        tokens: u32,
+        cost: f64,
+    },
+    ConsensusComplete {
+        result: String,
+        total_tokens: u32,
+        total_cost: f64,
+    },
+    Error {
+        message: String,
+    },
+    AIHelperDecision {
+        direct_mode: bool,
+        reason: String,
+    },
 }
 
 // WebSocket streaming callbacks
@@ -86,13 +115,16 @@ struct WebSocketCallbacks {
 
 impl StreamingCallbacks for WebSocketCallbacks {
     fn on_profile_loaded(&self, profile_name: &str, models: &[String]) -> anyhow::Result<()> {
-        info!("WebSocket callback: on_profile_loaded called for {}", profile_name);
-        
-        let msg = WSMessage::ProfileLoaded { 
+        info!(
+            "WebSocket callback: on_profile_loaded called for {}",
+            profile_name
+        );
+
+        let msg = WSMessage::ProfileLoaded {
             name: profile_name.to_string(),
             models: models.to_vec(),
         };
-        
+
         // UnboundedSender::send is synchronous - no async needed!
         match self.tx.send(msg) {
             Ok(_) => info!("✅ Sent ProfileLoaded message for {}", profile_name),
@@ -102,28 +134,38 @@ impl StreamingCallbacks for WebSocketCallbacks {
     }
 
     fn on_mode_decision(&self, direct_mode: bool, reason: &str) -> anyhow::Result<()> {
-        info!("WebSocket callback: on_mode_decision called - direct_mode: {}, reason: {}", direct_mode, reason);
-        
-        let msg = WSMessage::AIHelperDecision { 
+        info!(
+            "WebSocket callback: on_mode_decision called - direct_mode: {}, reason: {}",
+            direct_mode, reason
+        );
+
+        let msg = WSMessage::AIHelperDecision {
             direct_mode,
             reason: reason.to_string(),
         };
-        
+
         match self.tx.send(msg) {
-            Ok(_) => info!("✅ Sent AIHelperDecision message - mode: {}", if direct_mode { "Direct" } else { "Consensus" }),
+            Ok(_) => info!(
+                "✅ Sent AIHelperDecision message - mode: {}",
+                if direct_mode { "Direct" } else { "Consensus" }
+            ),
             Err(e) => error!("❌ Failed to send AIHelperDecision message: {}", e),
         }
         Ok(())
     }
 
     fn on_stage_start(&self, stage: Stage, model: &str) -> anyhow::Result<()> {
-        info!("WebSocket callback: on_stage_start called for {} with model {}", stage.display_name(), model);
-        
-        let msg = WSMessage::StageStarted { 
+        info!(
+            "WebSocket callback: on_stage_start called for {} with model {}",
+            stage.display_name(),
+            model
+        );
+
+        let msg = WSMessage::StageStarted {
             stage: stage.display_name().to_string(),
             model: model.to_string(),
         };
-        
+
         match self.tx.send(msg) {
             Ok(_) => info!("✅ Sent StageStarted message for {}", stage.display_name()),
             Err(e) => error!("❌ Failed to send StageStarted message: {}", e),
@@ -131,57 +173,70 @@ impl StreamingCallbacks for WebSocketCallbacks {
         Ok(())
     }
 
-    fn on_stage_chunk(&self, stage: Stage, chunk: &str, _total_content: &str) -> anyhow::Result<()> {
-        let msg = WSMessage::StreamChunk { 
+    fn on_stage_chunk(
+        &self,
+        stage: Stage,
+        chunk: &str,
+        _total_content: &str,
+    ) -> anyhow::Result<()> {
+        let msg = WSMessage::StreamChunk {
             stage: stage.display_name().to_string(),
             chunk: chunk.to_string(),
         };
-        
+
         // Silently ignore errors for chunks (too many to log)
         let _ = self.tx.send(msg);
         Ok(())
     }
 
     fn on_stage_progress(&self, stage: Stage, progress: ProgressInfo) -> anyhow::Result<()> {
-        let msg = WSMessage::StageProgress { 
+        let msg = WSMessage::StageProgress {
             stage: stage.display_name().to_string(),
             percentage: progress.percentage,
             tokens: progress.tokens,
         };
-        
+
         let _ = self.tx.send(msg);
         Ok(())
     }
 
     fn on_stage_complete(&self, stage: Stage, result: &StageResult) -> anyhow::Result<()> {
-        info!("WebSocket callback: on_stage_complete called for {}", stage.display_name());
-        
+        info!(
+            "WebSocket callback: on_stage_complete called for {}",
+            stage.display_name()
+        );
+
         // Calculate cost from analytics
         let cost = result.analytics.as_ref().map(|a| a.cost).unwrap_or(0.0);
-        let tokens = result.usage.as_ref()
+        let tokens = result
+            .usage
+            .as_ref()
             .map(|u| u.prompt_tokens + u.completion_tokens)
             .unwrap_or(0) as u32;
-        
-        let msg = WSMessage::StageCompleted { 
+
+        let msg = WSMessage::StageCompleted {
             stage: stage.display_name().to_string(),
             tokens,
             cost,
         };
-        
+
         match self.tx.send(msg) {
-            Ok(_) => info!("✅ Sent StageCompleted message for {}", stage.display_name()),
+            Ok(_) => info!(
+                "✅ Sent StageCompleted message for {}",
+                stage.display_name()
+            ),
             Err(e) => error!("❌ Failed to send StageCompleted message: {}", e),
         }
         Ok(())
     }
 
     fn on_error(&self, stage: Stage, error: &anyhow::Error) -> anyhow::Result<()> {
-        let msg = WSMessage::Error { 
-            message: format!("{} error: {}", stage.display_name(), error)
+        let msg = WSMessage::Error {
+            message: format!("{} error: {}", stage.display_name(), error),
         };
-        
+
         match self.tx.send(msg) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => error!("Failed to send error message: {}", e),
         }
         Ok(())
@@ -230,25 +285,23 @@ async fn main() -> anyhow::Result<()> {
     // We'll initialize it in the background after the server starts listening
     let consensus_engine = None;
     info!("⏳ Consensus engine will be initialized after server starts...");
-    
+
     // AI helpers are now managed internally by ConsensusEngine
     let ai_helpers = None;
 
     // Initialize maintenance system if database is available
     let maintenance = if let Some(ref db) = database {
         // Get API key for OpenRouter sync
-        let api_key = ApiKeyManager::get_openrouter_key()
-            .await
-            .ok();
-        
+        let api_key = ApiKeyManager::get_openrouter_key().await.ok();
+
         let maintenance = Arc::new(BackgroundMaintenance::new(db.clone(), api_key));
-        
+
         // Start background maintenance tasks
         let maintenance_clone = Arc::clone(&maintenance);
         tokio::spawn(async move {
             maintenance_clone.start().await;
         });
-        
+
         info!("✅ Background maintenance system started");
         Some(maintenance)
     } else {
@@ -263,18 +316,18 @@ async fn main() -> anyhow::Result<()> {
         ai_helpers: Arc::new(RwLock::new(ai_helpers)),
         maintenance: Arc::new(RwLock::new(maintenance)),
     });
-    
+
     // Clone state for background initialization
     let init_state = state.clone();
     let init_database = database.clone();
-    
+
     // Spawn background task to initialize consensus engine after server starts
     tokio::spawn(async move {
         // Wait a bit for the server to fully start
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        
+
         info!("🔄 Starting background initialization of consensus engine...");
-        
+
         if let Some(ref db) = init_database {
             info!("Database available for consensus engine initialization");
             match ConsensusEngine::new(Some(db.clone())).await {
@@ -298,7 +351,6 @@ async fn main() -> anyhow::Result<()> {
         // WebSocket endpoint for streaming consensus
         .route("/ws", get(websocket_handler))
         .route("/ws-test", get(test_websocket_handler))
-        
         // REST endpoints
         .route("/api/consensus", post(run_consensus))
         .route("/api/consensus/quick", post(quick_consensus))
@@ -307,13 +359,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/maintenance/status", get(maintenance_status))
         .route("/api/maintenance/sync", post(force_maintenance_sync))
         .route("/health", get(health_check))
-        
         // CORS for Electron
         .layer(
             CorsLayer::new()
                 .allow_origin(tower_http::cors::Any)
                 .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-                .allow_headers(tower_http::cors::Any)
+                .allow_headers(tower_http::cors::Any),
         )
         .with_state(state);
 
@@ -327,13 +378,15 @@ async fn main() -> anyhow::Result<()> {
             warn!("⚠️ PORT environment variable not set, using default 8765");
             "8765".to_string()
         });
-    
+
     // Validate port is numeric
-    let port_num: u16 = port.parse()
-        .expect(&format!("Invalid PORT value: '{}' - must be a number between 1-65535", port));
-    
+    let port_num: u16 = port.parse().expect(&format!(
+        "Invalid PORT value: '{}' - must be a number between 1-65535",
+        port
+    ));
+
     let addr = format!("0.0.0.0:{}", port_num);
-    
+
     // Log that we're about to start
     info!("🚀 Starting Enhanced Backend Server on http://{}", addr);
     info!("🔌 WebSocket endpoint: ws://{}/ws", addr);
@@ -341,24 +394,24 @@ async fn main() -> anyhow::Result<()> {
     info!("🤖 AI routing: POST http://{}/api/ai-helper/route", addr);
     info!("📊 Multi-threaded processing enabled");
     info!("🔥 CPU overheating protection active");
-    
+
     // Actually bind and start serving
     // Create the service
     let service = app.into_make_service();
-    
+
     // Parse the address
     let socket_addr = addr.parse()?;
-    
+
     // Bind to the address
     info!("⏳ Binding to {}...", addr);
-    
+
     // Use axum::Server to bind and serve
     // This will start accepting connections immediately after binding
     let server = axum::Server::bind(&socket_addr);
-    
+
     info!("✅ Server successfully bound to {}", addr);
     info!("🚀 Server is now listening and ready to accept connections!");
-    
+
     // Start serving - this blocks until the server shuts down
     server.serve(service).await?;
 
@@ -370,31 +423,34 @@ async fn test_websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
     info!("Test WebSocket upgrade requested");
     ws.on_upgrade(|mut socket| async move {
         info!("Test WebSocket connected");
-        
+
         // Send a test message
         let (mut tx, mut rx) = socket.split();
-        
-        if let Err(e) = tx.send(axum::extract::ws::Message::Text(
-            "WebSocket connection successful!".to_string()
-        )).await {
+
+        if let Err(e) = tx
+            .send(axum::extract::ws::Message::Text(
+                "WebSocket connection successful!".to_string(),
+            ))
+            .await
+        {
             error!("Failed to send test message: {}", e);
         }
-        
+
         // Echo messages back
         while let Some(msg) = rx.next().await {
             if let Ok(msg) = msg {
                 match msg {
                     axum::extract::ws::Message::Text(txt) => {
-                        let _ = tx.send(axum::extract::ws::Message::Text(
-                            format!("Echo: {}", txt)
-                        )).await;
+                        let _ = tx
+                            .send(axum::extract::ws::Message::Text(format!("Echo: {}", txt)))
+                            .await;
                     }
                     axum::extract::ws::Message::Close(_) => break,
                     _ => {}
                 }
             }
         }
-        
+
         info!("Test WebSocket disconnected");
     })
 }
@@ -410,12 +466,12 @@ async fn websocket_handler(
 
 async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     info!("WebSocket connection established");
-    
+
     let (mut socket_tx, mut socket_rx) = socket.split();
-    
+
     // Create channel for sending messages to client
     let (tx, mut rx) = mpsc::unbounded_channel::<WSMessage>();
-    
+
     // Spawn task to forward messages to WebSocket
     tokio::spawn(async move {
         info!("Message forwarding task started");
@@ -423,7 +479,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             info!("Received message from channel: {:?}", msg);
             if let Ok(json) = serde_json::to_string(&msg) {
                 info!("Sending to WebSocket: {}", json);
-                if socket_tx.send(axum::extract::ws::Message::Text(json)).await.is_err() {
+                if socket_tx
+                    .send(axum::extract::ws::Message::Text(json))
+                    .await
+                    .is_err()
+                {
                     error!("Failed to send to WebSocket, breaking");
                     break;
                 }
@@ -431,7 +491,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         }
         info!("Message forwarding task ended");
     });
-    
+
     // Handle incoming messages
     while let Some(msg) = socket_rx.next().await {
         if let Ok(msg) = msg {
@@ -442,31 +502,37 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         Ok(ws_msg) => {
                             info!("Successfully parsed WSMessage: {:?}", ws_msg);
                             match ws_msg {
-                                WSMessage::StartConsensus { query, profile, conversation_id, context } => {
+                                WSMessage::StartConsensus {
+                                    query,
+                                    profile,
+                                    conversation_id,
+                                    context,
+                                } => {
                                     info!("Received StartConsensus message!");
-                                // Run consensus in separate task to avoid blocking
-                                let state_clone = state.clone();
-                                let tx_clone = tx.clone();
-                                
-                                tokio::spawn(async move {
-                                    run_consensus_streaming(
-                                        query,
-                                        profile,
-                                        conversation_id,
-                                        context,
-                                        state_clone,
-                                        tx_clone,
-                                    ).await;
-                                });
+                                    // Run consensus in separate task to avoid blocking
+                                    let state_clone = state.clone();
+                                    let tx_clone = tx.clone();
+
+                                    tokio::spawn(async move {
+                                        run_consensus_streaming(
+                                            query,
+                                            profile,
+                                            conversation_id,
+                                            context,
+                                            state_clone,
+                                            tx_clone,
+                                        )
+                                        .await;
+                                    });
+                                }
+                                WSMessage::CancelConsensus => {
+                                    info!("Consensus cancellation requested");
+                                    // TODO: Implement cancellation token
+                                }
+                                _ => {
+                                    info!("Received other WSMessage type");
+                                }
                             }
-                            WSMessage::CancelConsensus => {
-                                info!("Consensus cancellation requested");
-                                // TODO: Implement cancellation token
-                            }
-                            _ => {
-                                info!("Received other WSMessage type");
-                            }
-                        }
                         }
                         Err(e) => {
                             error!("Failed to parse WSMessage: {}, raw text was: {}", e, text);
@@ -478,7 +544,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             }
         }
     }
-    
+
     info!("WebSocket connection closed");
 }
 
@@ -490,9 +556,11 @@ async fn run_consensus_streaming(
     state: Arc<AppState>,
     tx: mpsc::UnboundedSender<WSMessage>,
 ) {
-    info!("Starting streaming consensus for query: '{}' with profile: {:?}, conversation_id: {:?}", 
-        query, profile, conversation_id);
-    
+    info!(
+        "Starting streaming consensus for query: '{}' with profile: {:?}, conversation_id: {:?}",
+        query, profile, conversation_id
+    );
+
     // Check if engine is initialized
     info!("Checking consensus engine state...");
     let engine_guard = state.consensus_engine.read().await;
@@ -500,21 +568,23 @@ async fn run_consensus_streaming(
     if engine_guard.is_none() {
         error!("Consensus engine is None in shared state!");
         let _ = tx.send(WSMessage::Error {
-            message: "Consensus engine not initialized. Please check database and configuration.".to_string(),
+            message: "Consensus engine not initialized. Please check database and configuration."
+                .to_string(),
         });
         return;
     }
     info!("✅ Consensus engine found in shared state!");
-    
+
     let engine = engine_guard.as_ref().unwrap();
     info!("Consensus engine obtained, preparing to process...");
-    
+
     // Build context string from conversation history
     let context_str = if let Some(ctx_messages) = context {
         if !ctx_messages.is_empty() {
             let mut ctx = String::new();
             ctx.push_str("Previous conversation context:\n");
-            for msg in ctx_messages.iter().take(10) { // Limit to last 10 messages for context
+            for msg in ctx_messages.iter().take(10) {
+                // Limit to last 10 messages for context
                 ctx.push_str(&format!("{}: {}\n", msg.role, msg.content));
             }
             Some(ctx)
@@ -524,57 +594,72 @@ async fn run_consensus_streaming(
     } else {
         None
     };
-    
+
     if let Some(ref ctx) = context_str {
         info!("Using conversation context with {} characters", ctx.len());
     }
-    
+
     // Note: The consensus engine will use AI Helpers to intelligently decide between Direct and Consensus mode
     // The decision will be communicated through the streaming callbacks
-    
+
     // Create streaming callbacks
     let callbacks = Arc::new(WebSocketCallbacks { tx: tx.clone() });
-    
+
     info!("Starting consensus processing with callbacks...");
-    
+
     // Set the profile if provided
     if let Some(profile_name) = profile {
         if let Err(e) = engine.set_profile(&profile_name).await {
             warn!("Failed to set profile {}: {}", profile_name, e);
         }
     }
-    
+
     // Run consensus with streaming callbacks (context as second parameter, user_id as fourth)
-    match engine.process_with_callbacks(&query, context_str.clone(), callbacks, conversation_id.clone()).await {
+    match engine
+        .process_with_callbacks(
+            &query,
+            context_str.clone(),
+            callbacks,
+            conversation_id.clone(),
+        )
+        .await
+    {
         Ok(result) => {
             info!("Consensus completed successfully");
             // Calculate total tokens from stages
-            let total_tokens: u32 = result.stages.iter()
+            let total_tokens: u32 = result
+                .stages
+                .iter()
                 .filter_map(|stage| stage.usage.as_ref())
                 .map(|usage| usage.total_tokens)
                 .sum();
-            
+
             let final_result = result.result.clone().unwrap_or_default();
-            
+
             let _ = tx.send(WSMessage::ConsensusComplete {
                 result: final_result.clone(),
                 total_tokens,
                 total_cost: result.total_cost,
             });
-            
+
             // Save to database for memory continuity (both Simple and Complex questions)
             {
                 // Determine execution mode based on stages used
-                let execution_mode = if result.stages.len() == 1 && 
-                    result.stages[0].stage_name.to_lowercase().contains("direct") {
+                let execution_mode = if result.stages.len() == 1
+                    && result.stages[0]
+                        .stage_name
+                        .to_lowercase()
+                        .contains("direct")
+                {
                     "simple"
                 } else {
                     "consensus"
                 };
-                
-                let conv_id = conversation_id.clone()
+
+                let conv_id = conversation_id
+                    .clone()
                     .unwrap_or_else(|| hive_ai::core::database::generate_id());
-                
+
                 // Save user question as a message
                 match hive_ai::core::database::Message::create(
                     conv_id.clone(),
@@ -582,7 +667,9 @@ async fn run_consensus_streaming(
                     query.clone(),
                     None,
                     None,
-                ).await {
+                )
+                .await
+                {
                     Ok(_) => {
                         info!("✅ Saved user question to database");
                     }
@@ -590,23 +677,28 @@ async fn run_consensus_streaming(
                         error!("Failed to save user question: {}", e);
                     }
                 }
-                
+
                 // Save assistant response as a message
                 let model_info = if !result.stages.is_empty() {
                     Some(result.stages[0].model.clone())
                 } else {
                     None
                 };
-                
+
                 match hive_ai::core::database::Message::create(
                     conv_id.clone(),
                     "assistant".to_string(),
                     final_result.clone(),
                     Some(execution_mode.to_string()),
                     model_info,
-                ).await {
+                )
+                .await
+                {
                     Ok(_) => {
-                        info!("✅ Saved assistant response to database (mode: {})", execution_mode);
+                        info!(
+                            "✅ Saved assistant response to database (mode: {})",
+                            execution_mode
+                        );
                         info!("   - Question: {}", query);
                         info!("   - Mode: {}", execution_mode);
                         info!("   - Tokens: {}", total_tokens);
@@ -616,28 +708,35 @@ async fn run_consensus_streaming(
                         error!("Failed to save assistant response: {}", e);
                     }
                 }
-                
+
                 // Also store conversation cost data if available
                 if let Ok(db) = get_database().await {
                     // Calculate input and output tokens from stages
-                    let total_input_tokens: u32 = result.stages.iter()
+                    let total_input_tokens: u32 = result
+                        .stages
+                        .iter()
                         .filter_map(|stage| stage.usage.as_ref())
                         .map(|usage| usage.prompt_tokens)
                         .sum();
-                    
-                    let total_output_tokens: u32 = result.stages.iter()
+
+                    let total_output_tokens: u32 = result
+                        .stages
+                        .iter()
                         .filter_map(|stage| stage.usage.as_ref())
                         .map(|usage| usage.completion_tokens)
                         .sum();
-                    
-                    if let Err(e) = db.store_conversation_with_cost(
-                        &conv_id,
-                        None, // user_id if available
-                        &query,
-                        result.total_cost,
-                        total_input_tokens,
-                        total_output_tokens,
-                    ).await {
+
+                    if let Err(e) = db
+                        .store_conversation_with_cost(
+                            &conv_id,
+                            None, // user_id if available
+                            &query,
+                            result.total_cost,
+                            total_input_tokens,
+                            total_output_tokens,
+                        )
+                        .await
+                    {
                         warn!("Failed to store conversation cost data: {}", e);
                     }
                 }
@@ -658,7 +757,7 @@ async fn quick_consensus(
     Json(req): Json<ConsensusRequest>,
 ) -> Result<Json<ConsensusResponse>, String> {
     info!("Quick consensus request: {}", req.query);
-    
+
     // For simple queries, just return a quick response
     let result = match req.query.to_lowercase().as_str() {
         q if q.contains("1 + 1") || q.contains("1+1") => "The answer is 2.",
@@ -676,7 +775,7 @@ async fn quick_consensus(
         },
         _ => "I understand your query. For complex questions, the full consensus pipeline would provide a more comprehensive answer. This quick endpoint is designed for simple responses and testing.",
     };
-    
+
     Ok(Json(ConsensusResponse {
         result: result.to_string(),
         duration_ms: 50,
@@ -692,23 +791,25 @@ async fn run_consensus(
     Json(req): Json<ConsensusRequest>,
 ) -> Result<Json<ConsensusResponse>, String> {
     info!("REST consensus request: {}", req.query);
-    
+
     let engine_guard = state.consensus_engine.read().await;
     if engine_guard.is_none() {
         return Err("Consensus engine not initialized".to_string());
     }
-    
+
     let engine = engine_guard.as_ref().unwrap();
     let start = std::time::Instant::now();
-    
+
     match engine.process(&req.query, None).await {
         Ok(result) => {
             // Calculate total tokens from stages
-            let total_tokens: u32 = result.stages.iter()
+            let total_tokens: u32 = result
+                .stages
+                .iter()
                 .filter_map(|stage| stage.usage.as_ref())
                 .map(|usage| usage.total_tokens)
                 .sum();
-            
+
             Ok(Json(ConsensusResponse {
                 result: result.result.unwrap_or_default(),
                 duration_ms: start.elapsed().as_millis(),
@@ -717,7 +818,7 @@ async fn run_consensus(
                 cost: result.total_cost,
             }))
         }
-        Err(e) => Err(format!("Consensus failed: {}", e))
+        Err(e) => Err(format!("Consensus failed: {}", e)),
     }
 }
 
@@ -735,9 +836,7 @@ async fn ai_routing_decision(
 }
 
 // List available profiles
-async fn list_profiles(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn list_profiles(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     if let Some(ref engine) = *state.consensus_engine.read().await {
         // This would need to be implemented in ConsensusEngine
         Json(serde_json::json!({
@@ -768,9 +867,7 @@ async fn health_check() -> Json<serde_json::Value> {
 }
 
 // Get maintenance status
-async fn maintenance_status(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
+async fn maintenance_status(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     if let Some(ref maintenance) = *state.maintenance.read().await {
         let status = maintenance.get_status().await;
         Json(serde_json::json!(status))
@@ -792,7 +889,7 @@ async fn force_maintenance_sync(
                 "models_updated": report.models_updated,
                 "profiles_migrated": report.profiles_migrated,
             }))),
-            Err(e) => Err(format!("Sync failed: {}", e))
+            Err(e) => Err(format!("Sync failed: {}", e)),
         }
     } else {
         Err("Maintenance system not initialized".to_string())

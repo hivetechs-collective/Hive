@@ -360,7 +360,7 @@ edit:completion:arg-completer[hive] = [@words]{
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

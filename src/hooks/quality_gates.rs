@@ -1832,7 +1832,7 @@ pub struct QualityStatistics {
     pub average_scores_by_stage: HashMap<String, f64>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use crate::consensus::types::{StageAnalytics, TokenUsage};

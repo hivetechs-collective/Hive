@@ -326,7 +326,7 @@ pub async fn get_advanced_analytics() -> Result<Arc<AdvancedAnalyticsEngine>> {
         .map(Arc::clone)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

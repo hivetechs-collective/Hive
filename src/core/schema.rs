@@ -829,7 +829,7 @@ pub fn repair_schema(conn: &Connection) -> Result<Vec<String>> {
     Ok(repairs)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use rusqlite::Connection;

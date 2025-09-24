@@ -6,12 +6,12 @@
 use super::problems_panel::{ProblemItem, ProblemSeverity, ProblemSource, ProblemsState};
 use crate::desktop::events::{Event, EventHandler, EventType};
 use anyhow::Result;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Output;
 use tokio::process::Command;
 use tracing::{debug, error, info, warn};
-use serde_json::Value;
 
 /// Build system integration manager
 pub struct BuildSystemIntegration {
@@ -50,7 +50,10 @@ impl BuildSystemIntegration {
 
     /// Initialize build system integration
     pub async fn initialize(&mut self) -> Result<()> {
-        info!("🔧 Initializing build system integration for: {}", self.workspace_path.display());
+        info!(
+            "🔧 Initializing build system integration for: {}",
+            self.workspace_path.display()
+        );
 
         // Detect available build tools and create monitors
         self.detect_and_setup_monitors().await?;
@@ -61,7 +64,10 @@ impl BuildSystemIntegration {
         // Run initial build checks
         self.run_initial_checks().await?;
 
-        info!("✅ Build system integration initialized with {} monitors", self.active_monitors.len());
+        info!(
+            "✅ Build system integration initialized with {} monitors",
+            self.active_monitors.len()
+        );
         Ok(())
     }
 
@@ -87,9 +93,10 @@ impl BuildSystemIntegration {
             }
 
             // Check for ESLint
-            if self.workspace_path.join(".eslintrc.json").exists() 
+            if self.workspace_path.join(".eslintrc.json").exists()
                 || self.workspace_path.join(".eslintrc.js").exists()
-                || self.workspace_path.join("eslint.config.js").exists() {
+                || self.workspace_path.join("eslint.config.js").exists()
+            {
                 self.add_monitor(BuildTool::ESLint).await?;
                 debug!("📦 Detected ESLint - added ESLint monitor");
             }
@@ -123,7 +130,7 @@ impl BuildSystemIntegration {
         info!("🔍 Running initial build checks...");
 
         let tools: Vec<BuildTool> = self.active_monitors.keys().cloned().collect();
-        
+
         for tool in tools {
             match self.run_build_check(&tool).await {
                 Ok(()) => debug!("✅ Initial check completed for {:?}", tool),
@@ -154,9 +161,15 @@ impl BuildSystemIntegration {
         // Update the problems state
         self.update_problems_state(tool, problems).await?;
 
-        info!("🔧 Build check for {:?} completed in {:?} - found {} problems", 
-              tool, duration, 
-              self.active_monitors.get(tool).map(|m| m.current_problems.len()).unwrap_or(0));
+        info!(
+            "🔧 Build check for {:?} completed in {:?} - found {} problems",
+            tool,
+            duration,
+            self.active_monitors
+                .get(tool)
+                .map(|m| m.current_problems.len())
+                .unwrap_or(0)
+        );
 
         Ok(())
     }
@@ -164,7 +177,7 @@ impl BuildSystemIntegration {
     /// Execute build command for a specific tool
     async fn execute_build_command(&self, tool: &BuildTool) -> Result<Output> {
         let (command, args) = self.get_build_command(tool);
-        
+
         debug!("Executing: {} {}", command, args.join(" "));
 
         let output = Command::new(command)
@@ -179,8 +192,21 @@ impl BuildSystemIntegration {
     /// Get build command and arguments for a tool
     fn get_build_command(&self, tool: &BuildTool) -> (&str, Vec<&str>) {
         match tool {
-            BuildTool::Cargo => ("cargo", vec!["check", "--message-format=json", "--all-targets"]),
-            BuildTool::Clippy => ("cargo", vec!["clippy", "--message-format=json", "--all-targets", "--", "-W", "clippy::all"]),
+            BuildTool::Cargo => (
+                "cargo",
+                vec!["check", "--message-format=json", "--all-targets"],
+            ),
+            BuildTool::Clippy => (
+                "cargo",
+                vec![
+                    "clippy",
+                    "--message-format=json",
+                    "--all-targets",
+                    "--",
+                    "-W",
+                    "clippy::all",
+                ],
+            ),
             BuildTool::RustFmt => ("cargo", vec!["fmt", "--check"]),
             BuildTool::Npm => ("npm", vec!["run", "build"]),
             BuildTool::TypeScript => ("npx", vec!["tsc", "--noEmit", "--pretty", "false"]),
@@ -189,7 +215,11 @@ impl BuildSystemIntegration {
     }
 
     /// Parse build output and extract problems
-    async fn parse_build_output(&self, tool: &BuildTool, output: &Output) -> Result<Vec<ProblemItem>> {
+    async fn parse_build_output(
+        &self,
+        tool: &BuildTool,
+        output: &Output,
+    ) -> Result<Vec<ProblemItem>> {
         let mut problems = Vec::new();
 
         match tool {
@@ -247,10 +277,7 @@ impl BuildSystemIntegration {
             ProblemSource::Rust
         };
 
-        let message_text = message_obj
-            .get("message")?
-            .as_str()?
-            .to_string();
+        let message_text = message_obj.get("message")?.as_str()?.to_string();
 
         // Extract location information
         let (file_path, line, column, code) = self.extract_cargo_location(message_obj);
@@ -269,29 +296,33 @@ impl BuildSystemIntegration {
     }
 
     /// Extract location information from Cargo message
-    fn extract_cargo_location(&self, message_obj: &Value) -> (Option<PathBuf>, Option<u32>, Option<u32>, Option<String>) {
+    fn extract_cargo_location(
+        &self,
+        message_obj: &Value,
+    ) -> (Option<PathBuf>, Option<u32>, Option<u32>, Option<String>) {
         if let Some(spans) = message_obj.get("spans") {
             if let Some(span) = spans.as_array().and_then(|arr| arr.first()) {
-                let file_path = span.get("file_name")
-                    .and_then(|f| f.as_str())
-                    .map(|f| {
-                        let path = PathBuf::from(f);
-                        if path.is_absolute() {
-                            path
-                        } else {
-                            self.workspace_path.join(path)
-                        }
-                    });
+                let file_path = span.get("file_name").and_then(|f| f.as_str()).map(|f| {
+                    let path = PathBuf::from(f);
+                    if path.is_absolute() {
+                        path
+                    } else {
+                        self.workspace_path.join(path)
+                    }
+                });
 
-                let line = span.get("line_start")
+                let line = span
+                    .get("line_start")
                     .and_then(|l| l.as_u64())
                     .map(|l| l as u32);
 
-                let column = span.get("column_start")
+                let column = span
+                    .get("column_start")
                     .and_then(|c| c.as_u64())
                     .map(|c| c as u32);
 
-                let code = message_obj.get("code")
+                let code = message_obj
+                    .get("code")
                     .and_then(|c| c.get("code"))
                     .and_then(|c| c.as_str())
                     .map(|c| c.to_string());
@@ -317,7 +348,8 @@ impl BuildSystemIntegration {
                         ProblemSeverity::Warning,
                         ProblemSource::Other("rustfmt".to_string()),
                         "File needs formatting".to_string(),
-                    ).with_location(full_path, 1, 1);
+                    )
+                    .with_location(full_path, 1, 1);
 
                     problems.push(problem);
                 }
@@ -364,13 +396,18 @@ impl BuildSystemIntegration {
                 let coords: Vec<&str> = position.split(',').collect();
 
                 if coords.len() == 2 {
-                    if let (Ok(line), Ok(column)) = (coords[0].parse::<u32>(), coords[1].parse::<u32>()) {
+                    if let (Ok(line), Ok(column)) =
+                        (coords[0].parse::<u32>(), coords[1].parse::<u32>())
+                    {
                         let full_path = self.workspace_path.join(file_path);
-                        return Some(ProblemItem::new(
-                            ProblemSeverity::Error,
-                            ProblemSource::TypeScript,
-                            message,
-                        ).with_location(full_path, line, column));
+                        return Some(
+                            ProblemItem::new(
+                                ProblemSeverity::Error,
+                                ProblemSource::TypeScript,
+                                message,
+                            )
+                            .with_location(full_path, line, column),
+                        );
                     }
                 }
             }
@@ -388,7 +425,8 @@ impl BuildSystemIntegration {
             if let Some(files) = eslint_results.as_array() {
                 for file_result in files {
                     if let Some(messages) = file_result.get("messages").and_then(|m| m.as_array()) {
-                        let file_path = file_result.get("filePath")
+                        let file_path = file_result
+                            .get("filePath")
                             .and_then(|p| p.as_str())
                             .map(PathBuf::from)
                             .unwrap_or_default();
@@ -417,7 +455,10 @@ impl BuildSystemIntegration {
         let message_text = message.get("message")?.as_str()?.to_string();
         let line = message.get("line")?.as_u64()? as u32;
         let column = message.get("column")?.as_u64()? as u32;
-        let rule_id = message.get("ruleId").and_then(|r| r.as_str()).map(|r| r.to_string());
+        let rule_id = message
+            .get("ruleId")
+            .and_then(|r| r.as_str())
+            .map(|r| r.to_string());
 
         let mut problem = ProblemItem::new(severity, ProblemSource::ESLint, message_text)
             .with_location(file_path.clone(), line, column);
@@ -457,7 +498,11 @@ impl BuildSystemIntegration {
     }
 
     /// Update problems state with new problems from a tool
-    async fn update_problems_state(&mut self, tool: &BuildTool, problems: Vec<ProblemItem>) -> Result<()> {
+    async fn update_problems_state(
+        &mut self,
+        tool: &BuildTool,
+        problems: Vec<ProblemItem>,
+    ) -> Result<()> {
         // Clear previous problems from this tool
         let source = self.tool_to_problem_source(tool);
         self.problems_state.clear_source(&source);
@@ -467,8 +512,15 @@ impl BuildSystemIntegration {
             self.problems_state.add_problem(problem);
         }
 
-        debug!("Updated problems state for {:?}: {} problems", tool, 
-               self.problems_state.problems.get(&source).map(|p| p.len()).unwrap_or(0));
+        debug!(
+            "Updated problems state for {:?}: {} problems",
+            tool,
+            self.problems_state
+                .problems
+                .get(&source)
+                .map(|p| p.len())
+                .unwrap_or(0)
+        );
 
         Ok(())
     }
@@ -500,7 +552,7 @@ impl BuildSystemIntegration {
         info!("🔄 Refreshing all build monitors...");
 
         let tools: Vec<BuildTool> = self.active_monitors.keys().cloned().collect();
-        
+
         for tool in tools {
             if let Err(e) = self.run_build_check(&tool).await {
                 error!("Failed to refresh {:?}: {}", tool, e);

@@ -1,14 +1,29 @@
 import type { Configuration } from 'webpack';
 import MonacoWebpackPlugin from 'monaco-editor-webpack-plugin';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
+import MiniCssExtractPlugin from 'mini-css-extract-plugin';
 
 import { rules } from './webpack.rules';
 import { plugins } from './webpack.plugins';
 
+// Use style-loader for development, MiniCssExtractPlugin for production
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
 rules.push({
   test: /\.css$/,
-  use: [{ loader: 'style-loader' }, { loader: 'css-loader' }],
+  use: [
+    isDevelopment ? 'style-loader' : MiniCssExtractPlugin.loader,
+    { loader: 'css-loader' }
+  ],
 });
+
+// Add MiniCssExtractPlugin for production builds
+if (!isDevelopment) {
+  plugins.push(new MiniCssExtractPlugin({
+    filename: '[name].css',
+    chunkFilename: '[id].css',
+  }));
+}
 
 // Add Monaco plugin with worker fix
 plugins.push(new MonacoWebpackPlugin({

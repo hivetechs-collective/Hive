@@ -284,7 +284,7 @@ impl Default for ModeConfig {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

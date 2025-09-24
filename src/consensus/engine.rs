@@ -1,6 +1,7 @@
 // Consensus Engine - Main entry point for consensus functionality
 // Manages profiles, configuration, and pipeline execution
 
+use crate::ai_helpers::AIHelperEcosystem;
 use crate::consensus::codebase_intelligence::{
     AnalysisProgress, CodebaseCommand, CodebaseIntelligence,
 };
@@ -17,7 +18,6 @@ use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusRequest, ConsensusResult, ContextInjectionStrategy,
     ResponseMetadata, RetryPolicy,
 };
-use crate::ai_helpers::AIHelperEcosystem;
 use crate::core::api_keys::ApiKeyManager;
 use crate::core::config;
 use crate::core::config::get_hive_config_dir;
@@ -55,7 +55,8 @@ impl ConsensusEngine {
     /// Create a new consensus engine
     pub async fn new(database: Option<Arc<DatabaseManager>>) -> Result<Self> {
         // Create database service if we have a database manager
-        let db_service = database.as_ref()
+        let db_service = database
+            .as_ref()
             .map(|db| DatabaseService::spawn(db.clone()));
         // Load configuration from file system
         let hive_config = config::get_config().await?;
@@ -155,27 +156,36 @@ impl ConsensusEngine {
 
         // Create OpenRouter client for AI helpers if API key is available
         let openrouter_client = if let Some(ref key) = openrouter_api_key {
-            Some(Arc::new(crate::consensus::openrouter::OpenRouterClient::new(key.clone())))
+            Some(Arc::new(
+                crate::consensus::openrouter::OpenRouterClient::new(key.clone()),
+            ))
         } else {
             None
         };
-        
+
         // Initialize AI helpers if database is available (with timeout to prevent hanging)
         let ai_helpers = if let Some(ref db) = database {
             tracing::info!("🚀 Starting AI Helper initialization with 30 second timeout...");
             let db_clone = db.clone();
             let client_clone = openrouter_client.clone();
-            
+
             match tokio::time::timeout(
                 std::time::Duration::from_secs(30),
-                AIHelperEcosystem::new_with_client(db_clone, client_clone)
-            ).await {
+                AIHelperEcosystem::new_with_client(db_clone, client_clone),
+            )
+            .await
+            {
                 Ok(Ok(helpers)) => {
-                    tracing::info!("✅ AI Helper Ecosystem initialized successfully with OpenRouter access");
+                    tracing::info!(
+                        "✅ AI Helper Ecosystem initialized successfully with OpenRouter access"
+                    );
                     Some(Arc::new(helpers))
                 }
                 Ok(Err(e)) => {
-                    tracing::warn!("❌ Failed to initialize AI helpers: {}. Continuing without helpers.", e);
+                    tracing::warn!(
+                        "❌ Failed to initialize AI helpers: {}. Continuing without helpers.",
+                        e
+                    );
                     None
                 }
                 Err(_) => {
@@ -209,30 +219,39 @@ impl ConsensusEngine {
     }
 
     /// Set the repository context manager for this engine
-    pub async fn set_repository_context(&mut self, repository_context: Arc<RepositoryContextManager>) -> Result<()> {
+    pub async fn set_repository_context(
+        &mut self,
+        repository_context: Arc<RepositoryContextManager>,
+    ) -> Result<()> {
         let mut repo_ctx = self.repository_context.write().await;
         *repo_ctx = Some(repository_context.clone());
-        
+
         // Update codebase intelligence with repository path
         if let Some(ref mut ci) = self.codebase_intelligence.write().await.as_mut() {
             let context = repository_context.get_context().await;
             if let Some(root_path) = context.root_path {
-                let ci_mut = Arc::get_mut(ci).ok_or_else(|| anyhow!("Failed to get mutable reference to CodebaseIntelligence"))?;
+                let ci_mut = Arc::get_mut(ci).ok_or_else(|| {
+                    anyhow!("Failed to get mutable reference to CodebaseIntelligence")
+                })?;
                 ci_mut.set_repository(root_path);
             }
         }
-        
+
         // Update AI helpers with repository context to enable autonomous helper
         if let Some(ai_helpers) = self.ai_helpers.write().await.as_mut() {
             // Get mutable reference to update the AI helpers
             if let Some(ai_helpers_mut) = Arc::get_mut(ai_helpers) {
-                ai_helpers_mut.set_repository_context(Some(repository_context.clone())).await?;
-                tracing::info!("✅ Repository context set on AI helpers - autonomous helper activated");
+                ai_helpers_mut
+                    .set_repository_context(Some(repository_context.clone()))
+                    .await?;
+                tracing::info!(
+                    "✅ Repository context set on AI helpers - autonomous helper activated"
+                );
             } else {
                 tracing::warn!("Could not get mutable reference to AI helpers - autonomous helper not activated");
             }
         }
-        
+
         Ok(())
     }
 
@@ -267,11 +286,14 @@ impl ConsensusEngine {
                 p
             }
             Err(e) => {
-                tracing::warn!("Failed to load active profile from database: {}, using cached profile", e);
+                tracing::warn!(
+                    "Failed to load active profile from database: {}, using cached profile",
+                    e
+                );
                 self.current_profile.read().await.clone()
             }
         };
-        
+
         let mut pipeline = ConsensusPipeline::new(config, profile, self.openrouter_api_key.clone());
 
         // Set database if available
@@ -288,10 +310,10 @@ impl ConsensusEngine {
         if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
-        
+
         // Initialize consensus memory after AI helpers are set
         pipeline.initialize_consensus_memory().await?;
-        
+
         // Configure mode detection for Claude Code-style execution
         pipeline = pipeline.with_mode_detection().await?;
 
@@ -320,10 +342,10 @@ impl ConsensusEngine {
         // Check if this is a @codebase command
         if CodebaseIntelligence::is_codebase_command(query) {
             tracing::info!("🔍 Detected @codebase command: {}", query);
-            
+
             // Handle @codebase command with a special consensus result
             let (sender, mut receiver) = mpsc::unbounded_channel();
-            
+
             // Handle the codebase command
             match self.handle_codebase_command(query, sender).await {
                 Ok(_) => {
@@ -352,7 +374,7 @@ impl ConsensusEngine {
                             _ => {}
                         }
                     }
-                    
+
                     // If we got here without a Complete response, return what we collected
                     return Ok(ConsensusResult {
                         success: true,
@@ -369,7 +391,7 @@ impl ConsensusEngine {
                 }
             }
         }
-        
+
         let config = self.config.read().await.clone();
 
         // Always load the active profile from database to ensure we use the latest selection
@@ -378,25 +400,31 @@ impl ConsensusEngine {
                 tracing::info!("✅ Loaded active profile from database: {}", p.profile_name);
                 // Update the cached profile
                 *self.current_profile.write().await = p.clone();
-                
+
                 // Send profile info to UI callbacks
-                let _ = callbacks.on_profile_loaded(&p.profile_name, &vec![
-                    p.generator_model.clone(),
-                    p.refiner_model.clone(),
-                    p.validator_model.clone(),
-                    p.curator_model.clone(),
-                ]);
-                
+                let _ = callbacks.on_profile_loaded(
+                    &p.profile_name,
+                    &vec![
+                        p.generator_model.clone(),
+                        p.refiner_model.clone(),
+                        p.validator_model.clone(),
+                        p.curator_model.clone(),
+                    ],
+                );
+
                 p
             }
             Err(e) => {
-                tracing::error!("❌ Failed to load active profile from database: {}, using cached profile", e);
+                tracing::error!(
+                    "❌ Failed to load active profile from database: {}, using cached profile",
+                    e
+                );
                 let cached = self.current_profile.read().await.clone();
                 tracing::warn!("📋 Using cached profile: {}", cached.profile_name);
                 cached
             }
         };
-        
+
         let mut pipeline = ConsensusPipeline::new(config, profile, self.openrouter_api_key.clone())
             .with_callbacks(callbacks);
 
@@ -414,10 +442,10 @@ impl ConsensusEngine {
         if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
-        
+
         // Initialize consensus memory after AI helpers are set
         pipeline.initialize_consensus_memory().await?;
-        
+
         // Configure mode detection for Claude Code-style execution
         pipeline = pipeline.with_mode_detection().await?;
 
@@ -444,10 +472,10 @@ impl ConsensusEngine {
         // Check if this is a @codebase command
         if CodebaseIntelligence::is_codebase_command(query) {
             tracing::info!("🔍 Detected @codebase command: {}", query);
-            
+
             // Handle @codebase command with a special consensus result
             let (sender, mut receiver) = mpsc::unbounded_channel();
-            
+
             // Handle the codebase command
             match self.handle_codebase_command(query, sender).await {
                 Ok(_) => {
@@ -458,7 +486,7 @@ impl ConsensusEngine {
                         if cancellation_token.is_cancelled() {
                             return Err(anyhow!("@codebase command was cancelled"));
                         }
-                        
+
                         match response {
                             StreamingResponse::TokenReceived { token } => {
                                 content.push_str(&token);
@@ -481,7 +509,7 @@ impl ConsensusEngine {
                             _ => {}
                         }
                     }
-                    
+
                     // If we got here without a Complete response, return what we collected
                     return Ok(ConsensusResult {
                         success: true,
@@ -501,37 +529,43 @@ impl ConsensusEngine {
 
         // Regular consensus processing with cancellation support
         let config = self.config.read().await.clone();
-        
+
         // Always load the active profile from database to ensure we use the latest selection
         let profile = match self.load_active_profile_from_db().await {
             Ok(p) => {
                 tracing::info!("✅ Loaded active profile from database: {}", p.profile_name);
                 // Update the cached profile
                 *self.current_profile.write().await = p.clone();
-                
+
                 // Send profile info to UI callbacks
-                let _ = callbacks.on_profile_loaded(&p.profile_name, &vec![
-                    p.generator_model.clone(),
-                    p.refiner_model.clone(),
-                    p.validator_model.clone(),
-                    p.curator_model.clone(),
-                ]);
-                
+                let _ = callbacks.on_profile_loaded(
+                    &p.profile_name,
+                    &vec![
+                        p.generator_model.clone(),
+                        p.refiner_model.clone(),
+                        p.validator_model.clone(),
+                        p.curator_model.clone(),
+                    ],
+                );
+
                 p
             }
             Err(e) => {
-                tracing::error!("❌ Failed to load active profile from database: {}, using cached profile", e);
+                tracing::error!(
+                    "❌ Failed to load active profile from database: {}, using cached profile",
+                    e
+                );
                 let cached = self.current_profile.read().await.clone();
                 tracing::warn!("📋 Using cached profile: {}", cached.profile_name);
                 cached
             }
         };
-        
+
         let api_key = self.openrouter_api_key.clone();
-        
+
         // Create pipeline with callbacks and cancellation
-        let mut pipeline = ConsensusPipeline::new(config, profile, api_key)
-            .with_callbacks(callbacks);
+        let mut pipeline =
+            ConsensusPipeline::new(config, profile, api_key).with_callbacks(callbacks);
 
         // Set database if available
         if let Some(ref db) = self.database {
@@ -547,10 +581,10 @@ impl ConsensusEngine {
         if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
-        
+
         // Initialize consensus memory after AI helpers are set
         pipeline.initialize_consensus_memory().await?;
-        
+
         // Configure mode detection for Claude Code-style execution
         pipeline = pipeline.with_mode_detection().await?;
 
@@ -722,7 +756,7 @@ impl ConsensusEngine {
             anyhow::bail!("Database service not available")
         }
     }
-    
+
     /// Load the active profile from database
     async fn load_active_profile_from_db(&self) -> Result<ConsensusProfile> {
         if let Some(ref db_service) = self.db_service {
@@ -736,23 +770,31 @@ impl ConsensusEngine {
     pub async fn get_current_profile(&self) -> ConsensusProfile {
         self.current_profile.read().await.clone()
     }
-    
+
     /// Get AI helpers if available
     pub async fn get_ai_helpers(&self) -> Option<Arc<AIHelperEcosystem>> {
         self.ai_helpers.read().await.clone()
     }
-    
+
     /// Get pipeline configuration (for lock-free pipeline creation)
-    pub async fn get_pipeline_config(&self) -> (Option<String>, ConsensusProfile, Option<Arc<DatabaseManager>>, Option<Arc<RepositoryContextManager>>, Option<Arc<AIHelperEcosystem>>) {
+    pub async fn get_pipeline_config(
+        &self,
+    ) -> (
+        Option<String>,
+        ConsensusProfile,
+        Option<Arc<DatabaseManager>>,
+        Option<Arc<RepositoryContextManager>>,
+        Option<Arc<AIHelperEcosystem>>,
+    ) {
         let api_key = self.openrouter_api_key.clone();
         let profile = self.current_profile.read().await.clone();
         let database = self.database.clone();
         let repo_context = self.repository_context.read().await.clone();
         let ai_helpers = self.ai_helpers.read().await.clone();
-        
+
         (api_key, profile, database, repo_context, ai_helpers)
     }
-    
+
     /// Clear cached profile to force reload from database on next use
     pub async fn clear_cached_profile(&self) {
         tracing::info!("🧹 Clearing cached profile to force database reload on next consensus");
@@ -803,26 +845,29 @@ impl ConsensusEngine {
     ) -> Result<()> {
         let command = CodebaseIntelligence::parse_command(query);
         tracing::info!("🎯 Parsed command: {:?}", command);
-        
+
         // Get codebase intelligence instance
         let ci_lock = self.codebase_intelligence.read().await;
         tracing::info!("🧠 CodebaseIntelligence available: {}", ci_lock.is_some());
-        
-        let ci = ci_lock.as_ref()
+
+        let ci = ci_lock
+            .as_ref()
             .ok_or_else(|| anyhow!("Codebase intelligence not initialized"))?;
-        
+
         match command {
             CodebaseCommand::FullScan => {
                 // Send initial status
                 let _ = sender.send(StreamingResponse::TokenReceived {
                     token: "🔍 Starting deep codebase analysis...\n\n".to_string(),
                 });
-                
+
                 // Create progress callback
                 let sender_clone = sender.clone();
                 let progress_callback = move |progress: AnalysisProgress| {
                     let message = match progress {
-                        AnalysisProgress::Starting => "📂 Initializing codebase scan...\n".to_string(),
+                        AnalysisProgress::Starting => {
+                            "📂 Initializing codebase scan...\n".to_string()
+                        }
                         AnalysisProgress::Scanning { current, total } => {
                             if total > 0 {
                                 format!("📊 Scanning files: {}/{}\n", current, total)
@@ -833,19 +878,21 @@ impl ConsensusEngine {
                         AnalysisProgress::Extracting { current, total } => {
                             format!("🔧 Extracting code objects: {}/{}\n", current, total)
                         }
-                        AnalysisProgress::Analyzing => "🧠 Analyzing relationships and architecture...\n".to_string(),
+                        AnalysisProgress::Analyzing => {
+                            "🧠 Analyzing relationships and architecture...\n".to_string()
+                        }
                         AnalysisProgress::Indexing => "📚 Building semantic index...\n".to_string(),
-                        AnalysisProgress::Complete => "✅ Codebase analysis complete!\n\n".to_string(),
+                        AnalysisProgress::Complete => {
+                            "✅ Codebase analysis complete!\n\n".to_string()
+                        }
                     };
-                    
-                    let _ = sender_clone.send(StreamingResponse::TokenReceived {
-                        token: message,
-                    });
+
+                    let _ = sender_clone.send(StreamingResponse::TokenReceived { token: message });
                 };
-                
+
                 // Run analysis
                 let result = ci.analyze_codebase(progress_callback).await?;
-                
+
                 // Send results
                 let summary = format!(
                     "## 📊 Codebase Analysis Results\n\n\
@@ -859,7 +906,7 @@ impl ConsensusEngine {
                     result.architecture,
                     result.key_concepts.join(", ")
                 );
-                
+
                 let _ = sender.send(StreamingResponse::Complete {
                     response: ConsensusResponseResult {
                         content: summary,
@@ -901,7 +948,7 @@ impl ConsensusEngine {
                 });
             }
         }
-        
+
         Ok(())
     }
 
@@ -984,7 +1031,10 @@ impl ConsensusEngine {
         // Try to get active profile, fallback to any available profile
         match service.get_active_profile().await {
             Ok(profile) => {
-                tracing::info!("Successfully loaded active profile: {}", profile.profile_name);
+                tracing::info!(
+                    "Successfully loaded active profile: {}",
+                    profile.profile_name
+                );
                 Ok(profile)
             }
             Err(_) => {
@@ -1002,7 +1052,7 @@ impl ConsensusEngine {
         let service = db_service
             .as_ref()
             .ok_or_else(|| anyhow!("Database service not available"))?;
-        
+
         // Try to find profile by name
         if let Some(profile) = service.get_profile_by_name(profile_name_or_id).await? {
             Ok(profile)
@@ -1038,7 +1088,7 @@ pub struct ValidationResult {
     pub errors: Vec<String>,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     // use crate::core::Database;

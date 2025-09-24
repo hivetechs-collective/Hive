@@ -19,6 +19,20 @@ import { logger } from '../../utils/SafeLogger';
 
 const execAsync = promisify(exec);
 
+// ProcessManager for dynamic port discovery
+let processManagerRef: any = null;
+
+const CURSOR_MCP_SERVER_ID = 'hive-memory-service';
+const CURSOR_MCP_CONFIG_PATH = path.join(os.homedir(), '.cursor', 'mcp.json');
+
+/**
+ * Set ProcessManager reference for dynamic port discovery
+ */
+export function setProcessManagerReference(processManager: any) {
+  processManagerRef = processManager;
+  logger.info('[CliToolsDetector] ProcessManager reference set for dynamic port discovery');
+}
+
 /**
  * Detector class for CLI tools
  * Handles detection of installed tools with caching
@@ -95,6 +109,32 @@ export class CliToolsDetector {
       }
       
       toolInfo.path = toolPath;
+
+      // Special handling for GitHub Copilot - check if extension is installed
+      if (toolId === 'github-copilot') {
+        try {
+          const { stdout: extensionList } = await execAsync(
+            'gh extension list',
+            { env }
+          );
+
+          if (!extensionList.includes('gh-copilot') && !extensionList.includes('github/gh-copilot')) {
+            logger.info(`[CliToolsDetector] GitHub CLI found but Copilot extension not installed`);
+            toolInfo.installed = false;
+            toolInfo.status = CliToolStatus.NOT_INSTALLED;
+            this.updateCache(toolId, toolInfo);
+            return toolInfo;
+          }
+          logger.info(`[CliToolsDetector] GitHub Copilot extension is installed`);
+        } catch (extError) {
+          logger.warn(`[CliToolsDetector] Could not check GitHub Copilot extension:`, extError);
+          toolInfo.installed = false;
+          toolInfo.status = CliToolStatus.NOT_INSTALLED;
+          this.updateCache(toolId, toolInfo);
+          return toolInfo;
+        }
+      }
+
       toolInfo.installed = true;
       toolInfo.status = CliToolStatus.INSTALLED;
       
@@ -118,7 +158,10 @@ export class CliToolsDetector {
       }
       
       // Check for memory service connection (for supported tools)
-      if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' || toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok') {
+      // Note: GitHub Copilot, Cursor, Continue, Cody, and AWS Q don't support Memory Service integration
+      // Only npm-based AI CLI tools with MCP or direct API support can connect to Memory Service
+      if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' ||
+          toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok' || toolId === 'cursor-cli') {
         toolInfo.memoryServiceConnected = await this.checkMemoryServiceConnection(toolId);
       }
       
@@ -184,62 +227,78 @@ export class CliToolsDetector {
   
   /**
    * Check if tool is connected to memory service
+   * Uses dynamic port discovery (NO HARDCODED PORTS)
    */
   private async checkMemoryServiceConnection(toolId: string): Promise<boolean> {
     try {
       let token: string | undefined;
-      let endpoint: string | undefined;
       
-      // Grok is unique - it uses its own MCP config file
-      if (toolId === 'grok') {
-        const grokMcpPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
-        if (fs.existsSync(grokMcpPath)) {
-          try {
-            const grokMcp = JSON.parse(fs.readFileSync(grokMcpPath, 'utf-8'));
-            const memoryServer = grokMcp.servers?.['hive-memory-service'];
-            if (memoryServer?.env) {
-              token = memoryServer.env.MEMORY_SERVICE_TOKEN;
-              endpoint = memoryServer.env.MEMORY_SERVICE_ENDPOINT;
+      // Get authentication token (ONLY thing stored in config - no endpoints!)
+      const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+      if (fs.existsSync(configPath)) {
+        try {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+          
+          // For Grok, also try MCP config
+          if (toolId === 'grok') {
+            const grokMcpPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
+            if (fs.existsSync(grokMcpPath)) {
+              try {
+                const grokMcp = JSON.parse(fs.readFileSync(grokMcpPath, 'utf-8'));
+                const memoryServer = grokMcp.servers?.['hive-memory-service'];
+                if (memoryServer?.env?.MEMORY_SERVICE_TOKEN) {
+                  token = memoryServer.env.MEMORY_SERVICE_TOKEN;
+                }
+              } catch (e) {
+                logger.debug(`[CliToolsDetector] Failed to parse Grok MCP config:`, e);
+              }
             }
-          } catch (e) {
-            logger.debug(`[CliToolsDetector] Failed to parse Grok MCP config:`, e);
           }
-        }
-        
-        if (!token) {
-          // Fallback to checking cli-tools-config.json for Grok
-          const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
-          if (fs.existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+          
+          // Fallback to standard config for all tools
+          if (!token) {
             token = config[toolId]?.memoryService?.token;
-            endpoint = config[toolId]?.memoryService?.endpoint;
           }
+        } catch (e) {
+          logger.debug(`[CliToolsDetector] Failed to parse config:`, e);
         }
-      } else {
-        // Other tools use the standard cli-tools-config.json
-        const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
-        if (!fs.existsSync(configPath)) {
-          logger.debug(`[CliToolsDetector] No config file found for memory service check`);
-          return false;
-        }
-        
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        const toolConfig = config[toolId];
-        token = toolConfig?.memoryService?.token;
-        endpoint = toolConfig?.memoryService?.endpoint;
       }
       
+      if (!token && toolId === 'cursor-cli') {
+        // Fallback to Cursor MCP config
+        try {
+          if (fs.existsSync(CURSOR_MCP_CONFIG_PATH)) {
+            const cursorConfig = JSON.parse(fs.readFileSync(CURSOR_MCP_CONFIG_PATH, 'utf-8'));
+            const cursorServer = cursorConfig?.mcpServers?.[CURSOR_MCP_SERVER_ID];
+            const authHeader = cursorServer?.headers?.Authorization;
+            if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+              token = authHeader.substring('Bearer '.length);
+            }
+          }
+        } catch (cursorConfigError) {
+          logger.debug('[CliToolsDetector] Failed to read Cursor MCP config:', cursorConfigError);
+        }
+      }
+
       if (!token) {
         logger.debug(`[CliToolsDetector] No memory service token found for ${toolId}`);
         return false;
       }
       
-      // Check if the token is valid by querying the Memory Service
-      const memoryServicePort = endpoint?.match(/:(\d+)/)?.[1];
-      if (!memoryServicePort) {
-        logger.error(`[CliToolsDetector] Invalid endpoint format: ${endpoint}`);
+      // DYNAMIC PORT DISCOVERY - NO HARDCODED ENDPOINTS!
+      if (!processManagerRef) {
+        logger.debug(`[CliToolsDetector] ProcessManager not available for dynamic port discovery`);
         return false;
       }
+      
+      const memoryServiceStatus = processManagerRef.getProcessStatus('memory-service');
+      if (!memoryServiceStatus || !memoryServiceStatus.port) {
+        logger.debug(`[CliToolsDetector] Memory Service not running or no port allocated`);
+        return false;
+      }
+      
+      const dynamicPort = memoryServiceStatus.port;
+      logger.debug(`[CliToolsDetector] Testing ${toolId} connection to Memory Service on dynamic port: ${dynamicPort}`);
       
       // Use node's http module instead of fetch for compatibility
       const http = require('http');
@@ -247,7 +306,7 @@ export class CliToolsDetector {
       return new Promise((resolve) => {
         const options = {
           hostname: 'localhost',
-          port: memoryServicePort,
+          port: dynamicPort, // Use dynamic port from ProcessManager
           path: '/api/v1/memory/stats',
           method: 'GET',
           headers: {

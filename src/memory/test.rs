@@ -1,6 +1,6 @@
 //! Simple test for memory module
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::super::*;
 

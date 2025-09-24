@@ -2,6 +2,8 @@ import { BrowserWindow } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { MemoryContextDatabase, Memory, ContextFramework, MemoryContextLog } from '../database/MemoryContextDatabase';
+import { OptimizedMemoryService } from '../database/OptimizedMemoryService';
 
 interface ConversationMessage {
   speaker: 'generator' | 'refiner' | 'validator';
@@ -21,15 +23,125 @@ interface Conversation {
 }
 
 export class SimpleConsensusEngine {
+  // Consensus configuration
+  private static readonly MAJORITY_THRESHOLD = 2;
+  
   private db: any;
   private modelCosts: Map<string, {input: number, output: number}> = new Map();
   private costsLoaded: Promise<void>;
   private conversation: Conversation | null = null;
+  private memoryDb: MemoryContextDatabase;
+  private optimizedMemory: OptimizedMemoryService;
+  private conversationId: string | null = null;
+  private userMessageId: string | null = null;
+  private consensusType: 'unanimous' | 'majority' | 'curator_override' | 'pending' | 'conversing' | 'routing' | 'stage_running' | 'curating' = 'pending';
+  private maxConsensusRounds: number = 3; // Default, will be overridden by profile
+  private deliberationStartTime: number = 0;
+  private animatedIcons: string[] = [
+    "+", "×", "*", "✱", "✲", "✳"
+  ];
+  private currentIconIndex: number = 0;
+  private conversationPhrases: string[] = [
+    "ai's rapping",
+    "bots are chatting", 
+    "minds are melding",
+    "silicon syncing",
+    "neural networking",
+    "code conferencing",
+    "digital debating",
+    "algorithms arguing",
+    "models mingling",
+    "circuits discussing",
+    "logic linking",
+    "brains brainstorming",
+    "neurons firing",
+    "data dancing",
+    "tokens talking",
+    "bits buzzing",
+    "chips chatting",
+    "servers syncing",
+    "cores computing",
+    "bytes bouncing",
+    "nodes networking",
+    "threads thinking",
+    "processes pondering",
+    "systems syncing",
+    "engines evolving",
+    "machines musing",
+    "robots reasoning",
+    "ai's analyzing",
+    "llms laughing",
+    "models meditating",
+    "agents agreeing",
+    "bots building",
+    "code collaborating",
+    "tech talking",
+    "digital discussing",
+    "cyber syncing"
+  ];
+  private routingPhrases: string[] = [
+    "path processing",
+    "route computing", 
+    "direction detecting",
+    "signal switching",
+    "traffic directing",
+    "data routing",
+    "network navigating",
+    "packet pathing",
+    "flow finding",
+    "circuit choosing",
+    "bandwidth balancing",
+    "load leveling",
+    "queue querying",
+    "stack sorting",
+    "heap hopping",
+    "tree traversing",
+    "graph graphing",
+    "node navigating",
+    "edge exploring",
+    "link locating",
+    "protocol parsing",
+    "header hunting",
+    "payload processing",
+    "frame forwarding",
+    "buffer bouncing",
+    "cache checking",
+    "memory mapping",
+    "address allocating",
+    "port probing",
+    "socket scanning",
+    "connection creating",
+    "session starting",
+    "request routing",
+    "response redirecting",
+    "api analyzing",
+    "endpoint examining"
+  ];
+  private generatorPhrases: string[] = [
+    "code crafting", "logic building", "syntax spinning", "function forging", "method making", "class creating", "object orchestrating", "variable virtuoso"
+  ];
+  private refinerPhrases: string[] = [
+    "bug buffing", "code combing", "logic linting", "syntax sweeping", "error erasing", "flaw fixing", "polish programming", "cleanup coding"
+  ];
+  private validatorPhrases: string[] = [
+    "test running", "error hunting", "bug catching", "flaw finding", "issue inspecting", "problem probing", "defect detecting", "quality querying"
+  ];
+  private curatorPhrases: string[] = [
+    "final formatting", "output optimizing", "result wrapping", "delivery preparing", "package polishing", "presentation perfecting", "finish finalizing", "release readying"
+  ];
+  private currentPhraseIndex: number = 0;
+  private animationTimer: NodeJS.Timeout | null = null;
+  private currentStage: 'routing' | 'generator' | 'refiner' | 'validator' | 'curator' | 'conversing' = 'routing';
+  private isInterrupted: boolean = false;
+  private phraseChangeCounter: number = 0;
+  private activeAbortController: AbortController | null = null;
 
   constructor(database: any) {
     this.db = database;
     this.modelCosts = new Map();
     this.costsLoaded = this.loadModelCosts();
+    this.memoryDb = new MemoryContextDatabase(database);
+    this.optimizedMemory = new OptimizedMemoryService(database);
   }
 
   private async loadModelCosts(): Promise<void> {
@@ -111,6 +223,10 @@ export class SimpleConsensusEngine {
 
   async processConsensus(request: any): Promise<any> {
     console.log('🎯 SimpleConsensusEngine.processConsensus called');
+    
+    // Reset interruption flag for new consensus operation
+    this.isInterrupted = false;
+    
     const startTime = Date.now();
     
     // Ensure model costs are loaded before processing
@@ -130,6 +246,21 @@ export class SimpleConsensusEngine {
         throw new Error('No profile found');
       }
 
+      // Resolve models to current active OpenRouter IDs (handles internal_id and deprecations)
+      try {
+        const { resolveProfileStageModels } = await import('./model-resolver');
+        const resolved = await resolveProfileStageModels(this.db as any, profile);
+        profile.generator_model = resolved.generator_model;
+        profile.refiner_model = resolved.refiner_model;
+        profile.validator_model = resolved.validator_model;
+        profile.curator_model = resolved.curator_model;
+      } catch (e) {
+        console.warn('[SimpleConsensus] Model resolution failed, using raw profile models', e);
+      }
+
+      // Set max consensus rounds from profile (defaults to 3 if not set)
+      this.maxConsensusRounds = profile.max_consensus_rounds || 3;
+
       console.log('🎯 Using profile:', profile.profile_name);
       console.log('🎯 Models:', {
         generator: profile.generator_model,
@@ -137,10 +268,29 @@ export class SimpleConsensusEngine {
         validator: profile.validator_model,
         curator: profile.curator_model
       });
+      console.log('🎯 Max Consensus Rounds:', this.maxConsensusRounds);
 
       // Initialize conversation for iterative deliberation
       // Generate unique consensus_id (timestamp + random)
       const consensusId = `consensus_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Generate conversation ID if not provided
+      this.conversationId = request.conversationId || `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Ensure a conversations row exists early to satisfy FKs for messages/usage
+      try {
+        const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // same user used for usage analytics
+        const title = (request.query || 'Consensus Query').substring(0, 100);
+        const ts = new Date().toISOString();
+        const stmt = this.db.prepare(`
+          INSERT OR IGNORE INTO conversations (
+            id, user_id, title, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?)
+        `);
+        stmt.run(this.conversationId, userId, title, ts, ts);
+      } catch (err) {
+        console.error('❌ Failed to ensure conversations row:', err);
+      }
       
       this.conversation = {
         consensus_id: consensusId,
@@ -151,13 +301,79 @@ export class SimpleConsensusEngine {
         total_tokens: 0,
         total_cost: 0
       };
+      
+      // Store the user's question in the database using optimized service
+      try {
+        console.log('🚀 Storing user message via optimized service');
+        this.userMessageId = await this.optimizedMemory.storeMessage({
+          conversationId: this.conversationId,
+          role: 'user',
+          content: request.query
+        });
+        console.log(`💾 Stored user question with ID: ${this.userMessageId}`);
+        
+        // Insert into conversation_usage for analytics and memory service tracking
+        const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // sales@hivetechs.io user ID
+        await this.recordConversationUsage(userId, this.conversationId);
+        console.log(`📊 Recorded conversation usage for analytics`);
+      } catch (error) {
+        console.error('❌ Failed to store user message:', error);
+      }
+
+      // MEMORY STAGE - Retrieve relevant past conversations
+      console.log('\n🧠 MEMORY STAGE - Retrieving relevant memories');
+      this.sendStageUpdate('memory', 'running');
+      this.sendProgressUpdate(request.requestId, 'Searching memory for relevant context...', 0.02);
+      
+      const relevantMemories = await this.retrieveRelevantMemories(request.query);
+      console.log(`📚 Found ${relevantMemories.length} relevant memories`);
+
+      // CONTEXT STAGE - Build contextual framework
+      console.log('\n🔍 CONTEXT STAGE - Building contextual framework');
+      // Mark memory complete and context running at the same time
+      this.sendStageUpdate('memory', 'completed');
+      this.sendStageUpdate('context', 'running');
+      this.sendProgressUpdate(request.requestId, 'Analyzing context and patterns...', 0.04);
+      
+      const contextFramework = await this.buildContextFramework(request.query, relevantMemories);
+      console.log(`📝 Context framework built with ${contextFramework.patterns.length} patterns identified`);
+
+      // Save context framework to database for review
+      const contextLogId = `ctxlog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await this.memoryDb.logMemoryContextOperation({
+        log_id: contextLogId,
+        request_id: request.requestId,
+        conversation_id: this.conversationId || undefined,
+        memories_retrieved: {
+          recent: relevantMemories.filter(m => m.recency_score === 4).length,
+          today: relevantMemories.filter(m => m.recency_score === 3).length,
+          week: relevantMemories.filter(m => m.recency_score === 2).length,
+          semantic: relevantMemories.filter(m => m.recency_score === 1).length
+        },
+        context_summary: contextFramework.summary,
+        patterns_identified: contextFramework.patterns,
+        topics_extracted: contextFramework.relevantTopics,
+        performance_ms: {
+          memory: 0, // Already logged in memory retrieval
+          context: 0 // Will be updated separately
+        }
+      });
+      console.log(`💾 Context framework saved to database with ID: ${contextLogId}`);
 
       // ROUTING STAGE - Determine if question is simple or complex
       console.log('\n🔄 ROUTING STAGE - Determining question complexity');
+      // Mark context complete and route running at the same time
+      this.sendStageUpdate('context', 'completed');
       this.sendStageUpdate('route', 'running');
       this.sendProgressUpdate(request.requestId, 'Analyzing question complexity...', 0.05);
       
+      // Start unified animation system
+      this.currentStage = 'routing';
+      this.startUnifiedTimer();
+      
       const routingPrompt = `Analyze this question and determine if it requires simple or complex reasoning.
+
+${contextFramework.summary ? `Context from past conversations:\n${contextFramework.summary}\n` : ''}
 
 A SIMPLE question:
 - Has a straightforward, factual answer
@@ -179,6 +395,11 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       const routingDecision = routingResult.content.trim().toUpperCase();
       
       console.log(`📊 Routing Decision: ${routingDecision}`);
+      
+      // Update the context log with routing decision
+      await this.updateContextLogRouting(contextLogId, routingDecision);
+      
+      // Route completes but keep unified timer running for next stage
       this.sendStageUpdate('route', 'completed');
       
       // Add routing cost to conversation
@@ -190,9 +411,16 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         console.log('✨ SIMPLE QUESTION - Using direct response path');
         this.sendProgressUpdate(request.requestId, 'Generating direct response...', 0.2);
         
-        // Get single response from Generator
+        // Get single response from Generator with context
         this.sendStageUpdate('generator', 'running');
-        const simpleResult = await this.callOpenRouter(apiKey, profile.generator_model, request.query);
+        
+        // Build context-enhanced prompt
+        let enhancedPrompt = request.query;
+        if (contextFramework.summary) {
+          enhancedPrompt = `Context from previous conversations: ${contextFramework.summary}\n\nCurrent question: ${request.query}`;
+        }
+        
+        const simpleResult = await this.callOpenRouter(apiKey, profile.generator_model, enhancedPrompt);
         this.sendStageUpdate('generator', 'completed');
         
         // Update conversation stats
@@ -220,12 +448,34 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         console.log('  Total tokens:', this.conversation.total_tokens);
         console.log('  Total cost: $' + this.conversation.total_cost.toFixed(4));
         
+        // Store the assistant's response in the database using optimized service
+        try {
+          console.log('🚀 Storing assistant response via optimized service');
+          const assistantMessageId = await this.optimizedMemory.storeMessage({
+            conversationId: this.conversationId,
+            role: 'assistant',
+            content: simpleResult.content,
+            model: profile.generator_model,
+            tokensUsed: this.conversation.total_tokens,
+            cost: this.conversation.total_cost,
+            consensusPath: 'SIMPLE',
+            consensusRounds: 1,
+            parentMessageId: this.userMessageId || undefined
+          });
+          console.log(`💾 Stored assistant response with ID: ${assistantMessageId}`);
+        } catch (error) {
+          console.error('❌ Failed to store assistant message:', error);
+        }
+        
+        // Set consensus type for SIMPLE PATH
+        this.consensusType = 'direct' as any; // Direct Answer - no consensus needed
+        
         // Send completion
         this.sendConsensusComplete({
           response: simpleResult.content,
           totalTokens: this.conversation.total_tokens,
           totalCost: this.conversation.total_cost,
-          conversationId: request.requestId,
+          conversationId: this.conversationId,
           rounds: 1,
           consensusAchieved: true
         });
@@ -241,11 +491,30 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       // COMPLEX PATH - Full consensus pipeline
       console.log('🧩 COMPLEX QUESTION - Using full consensus pipeline');
       
-      // ITERATIVE DELIBERATION LOOP (max 50 rounds - let consensus happen naturally)
-      const MAX_ROUNDS = 50; // No practical limit - let consensus happen naturally
-      while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < MAX_ROUNDS) {
+      // Switch to conversing stage for deliberation rounds  
+      this.currentStage = 'conversing';
+      
+      // ITERATIVE DELIBERATION LOOP (max rounds from profile - let consensus happen naturally)
+      while (!this.conversation.consensus_achieved && this.conversation.rounds_completed < this.maxConsensusRounds && !this.isInterrupted) {
         this.conversation.rounds_completed++;
         console.log(`\n🔄 Starting Round ${this.conversation.rounds_completed}`);
+        
+        // Check for interruption at start of round
+        if (this.isInterrupted) {
+          console.log('🛑 Consensus interrupted during round start');
+          return { response: 'Consensus interrupted by user', consensusType: 'interrupted' };
+        }
+        
+        // Show "AI's Conversing" status with initial fun phrase
+        this.currentPhraseIndex = Math.floor(Math.random() * this.conversationPhrases.length);
+        const funPhrase = this.conversationPhrases[this.currentPhraseIndex];
+        
+        this.sendConsensusStatus({
+          achieved: false,
+          consensusType: 'conversing',
+          round: this.conversation.rounds_completed,
+          funPhrase: funPhrase
+        });
         
         // Reset stages to 'ready' for new round (visual sync)
         if (this.conversation.rounds_completed > 1) {
@@ -258,8 +527,8 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         // Send round update to renderer
         this.sendRoundUpdate(this.conversation.rounds_completed);
         
-        // Execute one round of Generator → Refiner → Validator
-        await this.executeDeliberationRound(apiKey, profile);
+        // Execute one round of Generator → Refiner → Validator with context
+        await this.executeDeliberationRound(apiKey, profile, contextFramework);
         
         // Check consensus after each round
         await this.checkConsensus(apiKey, profile);
@@ -271,26 +540,60 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       console.log('\n📊 LOOP EXIT STATUS:');
       console.log(`  Rounds completed: ${this.conversation.rounds_completed}`);
       console.log(`  Consensus achieved: ${this.conversation.consensus_achieved}`);
-      console.log(`  Max rounds (${MAX_ROUNDS}): ${this.conversation.rounds_completed >= MAX_ROUNDS ? 'REACHED' : 'Not reached'}`);
+      console.log(`  Max rounds (${this.maxConsensusRounds}): ${this.conversation.rounds_completed >= this.maxConsensusRounds ? 'REACHED' : 'Not reached'}`);
       
       if (!this.conversation.consensus_achieved) {
-        console.log(`\n⚠️ Maximum rounds (${MAX_ROUNDS}) reached without consensus!`);
+        console.log(`\n⚠️ Maximum rounds (${this.maxConsensusRounds}) reached without consensus!`);
         console.log('📝 Using last validator response as final (no Curator)');
       }
 
-      // CURATOR - Final polish ONLY after consensus achieved
+      // Store final round LLM responses for curator access
+      console.log('\n💾 Storing final round LLM responses for curator...');
+      const finalRound = this.conversation.rounds_completed;
+      const finalRoundMessages = this.conversation.messages.filter(m => m.round === finalRound);
+      
+      for (const message of finalRoundMessages) {
+        await this.optimizedMemory.storeMessage({
+          conversationId: this.conversationId,
+          role: 'assistant',
+          content: message.content,
+          model: profile[`${message.speaker}_model`],
+          consensusRounds: finalRound
+        });
+        console.log(`💾 Stored ${message.speaker} response for curator`);
+      }
+
+      // CURATOR - Always runs, but with different roles based on consensus type
       let finalResponse: string;
-      if (this.conversation.consensus_achieved) {
-        console.log('\n✅ CONSENSUS ACHIEVED - Running Curator for final polish');
-        console.log('🎯 Stage 4: Curator (Final Polish)');
-        const curatorResult = await this.curateConsensusResponse(apiKey, profile);
+      console.log('\n🎯 Stage 4: Curator');
+      
+      // Switch to curator stage - unified timer handles display
+      this.currentStage = 'curator';
+      
+      if (this.consensusType === 'unanimous') {
+        // Unanimous consensus - curator polishes with full context and all responses
+        console.log('✅ UNANIMOUS CONSENSUS - Curator will polish with full context');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish', contextFramework);
+        finalResponse = curatorResult.content;
+      } else if (this.consensusType === 'majority') {
+        // Majority consensus - curator polishes with full context and all responses
+        console.log('🤝 MAJORITY CONSENSUS - Curator will polish with full context');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'polish', contextFramework);
+        finalResponse = curatorResult.content;
+      } else if (this.consensusType === 'curator_override') {
+        // No consensus - curator chooses with full context and all responses
+        console.log('👨‍⚖️ NO CONSENSUS - Curator will choose with full context');
+        const curatorResult = await this.curateConsensusResponse(apiKey, profile, 'choose', contextFramework);
         finalResponse = curatorResult.content;
       } else {
-        // Use last validator response if no consensus
-        console.log('\n❌ NO CONSENSUS - Skipping Curator, using last response');
+        // Fallback (shouldn't happen)
+        console.log('⚠️ Unexpected consensus type - using last response');
         const lastMessage = this.conversation.messages[this.conversation.messages.length - 1];
         finalResponse = lastMessage.content;
       }
+      
+      // Stop timer but DON'T send status here - let sendConsensusComplete handle it
+      this.stopUnifiedTimer();
       
       console.log('\n📊 FINAL STATISTICS:');
       console.log('  Total tokens:', this.conversation.total_tokens);
@@ -298,15 +601,56 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
       console.log('  Rounds:', this.conversation.rounds_completed);
       console.log('  Consensus:', this.conversation.consensus_achieved ? 'YES' : 'NO');
 
+      // Store the assistant's response in the database for future memory retrieval
+      try {
+        const modelUsed = this.conversation.consensus_achieved ? profile.curator_model : profile.validator_model;
+        console.log('🚀 Storing consensus response via optimized service');
+        const assistantMessageId = await this.optimizedMemory.storeMessage({
+          conversationId: this.conversationId,
+          role: 'assistant',
+          content: finalResponse,
+          model: modelUsed,
+          tokensUsed: this.conversation.total_tokens,
+          cost: this.conversation.total_cost,
+          consensusPath: 'COMPLEX',
+          consensusRounds: this.conversation.rounds_completed,
+          parentMessageId: this.userMessageId || undefined
+        });
+        console.log(`💾 Stored assistant response with ID: ${assistantMessageId}`);
+      } catch (error) {
+        console.error('❌ Failed to store assistant message:', error);
+      }
+
       // Send to renderer
       this.sendConsensusComplete({
         response: finalResponse,
         totalTokens: this.conversation.total_tokens,
         totalCost: this.conversation.total_cost,
-        conversationId: request.requestId,
+        conversationId: this.conversationId,
         rounds: this.conversation.rounds_completed,
-        consensusAchieved: this.conversation.consensus_achieved
+        consensusAchieved: this.conversation.consensus_achieved,
+        consensusType: this.consensusType,  // Include the consensus classification!
+        consensus_path: this.consensusType  // Also include as consensus_path for compatibility
       });
+      
+      // NEW: Force display the consensus classification after everything else
+      // This runs at the very end to ensure nothing overwrites it
+      setTimeout(() => {
+        console.log('🎯 FORCING FINAL CONSENSUS DISPLAY');
+        const finalClassification = this.consensusType;
+        
+        // Send a special "final-classification" event that nothing else uses
+        const windows = BrowserWindow.getAllWindows();
+        if (windows.length > 0) {
+          windows[0].webContents.send('consensus-final-classification', {
+            classificationType: finalClassification,
+            displayText: finalClassification === 'unanimous' ? '✅ Unanimous Consensus' :
+                        finalClassification === 'majority' ? '🟡 Majority Consensus' :
+                        finalClassification === 'curator_override' ? '🟠 Curator Decision' :
+                        '❓ Unknown'
+          });
+        }
+      }, 2000); // 2 second delay to ensure it's the absolute last thing
 
       // Return in expected format
       const stagesCompleted = ['generator', 'refiner', 'validator'];
@@ -323,7 +667,9 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         rounds_completed: this.conversation.rounds_completed,
         tokens_used: this.conversation.total_tokens,
         cost: this.conversation.total_cost,
-        duration_ms: Date.now() - startTime
+        duration_ms: Date.now() - startTime,
+        consensus_path: this.consensusType,  // Add the consensus classification here!
+        consensusType: this.consensusType    // Also include as consensusType for compatibility
       };
 
     } catch (error: any) {
@@ -423,8 +769,160 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
     });
   }
 
+  private async retrieveRelevantMemories(query: string): Promise<Memory[]> {
+    const startTime = Date.now();
+    
+    try {
+      // Use optimized parallel memory retrieval with connection pool
+      console.log('🚀 Using optimized parallel memory retrieval');
+      
+      // Execute optimized parallel query
+      const memories = await this.optimizedMemory.retrieveMemories(query, this.conversationId || undefined);
+      
+      const endTime = Date.now();
+      console.log(`⚡ Optimized memory retrieval took ${endTime - startTime}ms`);
+      
+      // Get performance metrics
+      const metrics = this.optimizedMemory.getPerformanceMetrics();
+      console.log(`📊 Performance Stats:`);
+      console.log(`  - Cache size: ${metrics.cacheSize}`);
+      console.log(`  - Connection pool: ${metrics.connectionPoolSize} connections`);
+      
+      // Log memory counts by layer for verification
+      const recentCount = memories.filter((m: any) => m.recencyScore === 4).length;
+      const todayCount = memories.filter((m: any) => m.recencyScore === 3).length;
+      const weekCount = memories.filter((m: any) => m.recencyScore === 2).length;
+      const semanticCount = memories.filter((m: any) => m.recencyScore === 1).length;
+      
+      console.log(`📊 Memory Distribution:`);
+      console.log(`  - Recent (2h): ${recentCount} memories`);
+      console.log(`  - Today (24h): ${todayCount} memories`);
+      console.log(`  - This Week: ${weekCount} memories`);
+      console.log(`  - Semantic: ${semanticCount} memories`);
+      
+      // Log the memory retrieval operation
+      const logId = `memlog_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await this.memoryDb.logMemoryContextOperation({
+        log_id: logId,
+        request_id: this.conversation?.consensus_id || 'unknown',
+        conversation_id: this.conversationId || undefined,
+        memories_retrieved: {
+          recent: recentCount,
+          today: todayCount,
+          week: weekCount,
+          semantic: semanticCount
+        },
+        performance_ms: {
+          memory: endTime - startTime,
+          context: 0 // Will be updated in buildContextFramework
+        }
+      });
+      
+      return memories;
+    } catch (error) {
+      console.error('❌ Error in memory retrieval:', error);
+      return [];
+    }
+  }
+  
+  private async buildContextFramework(query: string, memories: Memory[]): Promise<ContextFramework> {
+    const startTime = Date.now();
+    
+    const framework = {
+      summary: '',
+      patterns: [] as string[],
+      relevantTopics: [] as string[],
+      userPreferences: [] as string[]
+    };
+    
+    if (memories.length === 0) {
+      console.log('📝 No memories found, using empty context framework');
+      return framework;
+    }
+    
+    // Sort memories by timestamp (newest first) for chronological context
+    const sortedMemories = memories.sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    
+    console.log(`📚 Building context from ${memories.length} memories (sorted by timestamp)`);
+    
+    // Extract the actual conversation context from recent messages
+    const recentContext: string[] = [];
+    // Take the most recent 10 messages for context building
+    sortedMemories.slice(0, 10).forEach(memory => {
+      if (memory.role === 'user') {
+        recentContext.push(`User asked: "${memory.content}"`);
+      } else if (memory.role === 'assistant') {
+        // Extract key topics from assistant responses
+        const shortContent = memory.content.substring(0, 150);
+        recentContext.push(`Previously discussed: ${shortContent}...`);
+      }
+    });
+    
+    // Extract patterns and topics from ALL memories
+    const topics = new Set<string>();
+    const patterns = new Set<string>();
+    
+    memories.forEach(memory => {
+      // Extract meaningful topics (not just words)
+      if (/PowerShell|powershell/i.test(memory.content)) topics.add('PowerShell');
+      if (/Python|python/i.test(memory.content)) topics.add('Python');
+      if (/JavaScript|javascript|JS/i.test(memory.content)) topics.add('JavaScript');
+      if (/TypeScript|typescript|TS/i.test(memory.content)) topics.add('TypeScript');
+      if (/React|Vue|Angular/i.test(memory.content)) topics.add('Web Frameworks');
+      if (/database|SQL|query/i.test(memory.content)) topics.add('Databases');
+      if (/API|REST|GraphQL/i.test(memory.content)) topics.add('APIs');
+      if (/example|examples/i.test(memory.content)) topics.add('Examples Requested');
+      
+      // Identify conversation patterns
+      if (memory.content.includes('?')) patterns.add('questions');
+      if (/function|const|class|def|import/.test(memory.content)) patterns.add('code-related');
+      if (/create|build|implement|develop/.test(memory.content)) patterns.add('creation-tasks');
+      if (/fix|debug|solve|error/.test(memory.content)) patterns.add('debugging');
+      if (/optimize|improve|enhance/.test(memory.content)) patterns.add('optimization');
+      if (/example|show me|how to/i.test(memory.content)) patterns.add('examples-needed');
+    });
+    
+    framework.patterns = Array.from(patterns);
+    framework.relevantTopics = Array.from(topics);
+    
+    // Build comprehensive summary with actual conversation context
+    if (recentContext.length > 0) {
+      framework.summary = `Current conversation context: ${recentContext.join(' ')} `;
+    }
+    
+    if (framework.relevantTopics.length > 0) {
+      framework.summary += `Topics being discussed: ${framework.relevantTopics.join(', ')}. `;
+    }
+    
+    if (framework.patterns.length > 0) {
+      framework.summary += `Conversation patterns: ${framework.patterns.join(', ')}.`;
+    }
+    
+    const endTime = Date.now();
+    console.log(`⚡ Context building took ${endTime - startTime}ms`);
+    console.log('📊 Context Framework:');
+    console.log(`  - Total memories used: ${memories.length}`);
+    console.log(`  - Recent context items: ${recentContext.length}`);
+    console.log(`  - Patterns: ${framework.patterns.join(', ')}`);
+    console.log(`  - Topics: ${framework.relevantTopics.join(', ')}`);
+    console.log(`  - Summary: ${framework.summary ? framework.summary.substring(0, 200) + '...' : 'No summary'}`);
+    
+    return framework;
+  }
+
   private async callOpenRouter(apiKey: string, model: string, query: string): Promise<{content: string, usage: any}> {
     console.log('🎯 Calling OpenRouter with model:', model);
+    
+    // Create new AbortController for this API call
+    this.activeAbortController = new AbortController();
+    
+    // Check if already interrupted before making call
+    if (this.isInterrupted) {
+      console.log('🛑 Skipping API call - already interrupted');
+      throw new Error('Consensus interrupted');
+    }
     
     // Determine max_tokens based on model capabilities (2025 standards)
     let maxTokens = 8192; // Safe default for most models
@@ -450,6 +948,7 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
         'HTTP-Referer': 'https://hivetech.ai',
         'X-Title': 'Hive Consensus'
       },
+      signal: this.activeAbortController.signal,
       body: JSON.stringify({
         model: model,
         messages: [
@@ -482,8 +981,9 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
     throw new Error('Invalid response from OpenRouter');
   }
 
-  private async executeDeliberationRound(apiKey: string, profile: any): Promise<void> {
-    const round = this.conversation!.rounds_completed;
+  private async executeDeliberationRound(apiKey: string, profile: any, contextFramework?: any): Promise<void> {
+    
+    const round = this.conversation.rounds_completed;
     
     // GENERATOR
     console.log('🎯 Stage 1: Generator');
@@ -491,8 +991,11 @@ Respond with ONLY one word: SIMPLE or COMPLEX`;
     
     let generatorPrompt: string;
     if (round === 1) {
-      // First round: just the original question
+      // First round: original question with context if available
       generatorPrompt = this.conversation!.user_question;
+      if (contextFramework && contextFramework.summary) {
+        generatorPrompt = `Context from previous conversations: ${contextFramework.summary}\n\nCurrent question: ${this.conversation!.user_question}`;
+      }
     } else {
       // Subsequent rounds: Generator uses consensus evaluation question
       const lastValidatorMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
@@ -507,7 +1010,8 @@ ${lastValidatorMessage.content}`;
     }
     
     const generatorResult = await this.callOpenRouter(apiKey, profile.generator_model, generatorPrompt);
-    this.conversation!.messages.push({
+    
+    this.conversation.messages.push({
       speaker: 'generator',
       content: generatorResult.content,
       round: round
@@ -534,10 +1038,10 @@ ${lastValidatorMessage.content}`;
       round
     );
     
-    this.sendStageUpdate('generator', 'completed');
-    
     // REFINER
     console.log('🎯 Stage 2: Refiner');
+    // Mark generator complete and refiner running at the same time
+    this.sendStageUpdate('generator', 'completed');
     this.sendStageUpdate('refiner', 'running');
     
     // Refiner evaluates the Generator's response using the consensus question
@@ -551,7 +1055,8 @@ Current response:
 ${generatorResult.content}`;
     
     const refinerResult = await this.callOpenRouter(apiKey, profile.refiner_model, refinerPrompt);
-    this.conversation!.messages.push({
+    
+    this.conversation.messages.push({
       speaker: 'refiner',
       content: refinerResult.content,
       round: round
@@ -578,10 +1083,10 @@ ${generatorResult.content}`;
       round
     );
     
-    this.sendStageUpdate('refiner', 'completed');
-    
     // VALIDATOR
     console.log('🎯 Stage 3: Validator');
+    // Mark refiner complete and validator running at the same time
+    this.sendStageUpdate('refiner', 'completed');
     this.sendStageUpdate('validator', 'running');
     
     // Validator evaluates for consensus
@@ -595,7 +1100,8 @@ Current response:
 ${refinerResult.content}`;
     
     const validatorResult = await this.callOpenRouter(apiKey, profile.validator_model, validatorPrompt);
-    this.conversation!.messages.push({
+    
+    this.conversation.messages.push({
       speaker: 'validator',
       content: validatorResult.content,
       round: round
@@ -622,12 +1128,14 @@ ${refinerResult.content}`;
       round
     );
     
-    this.sendStageUpdate('validator', 'completed');
+    // DON'T mark validator complete yet - keep symbols during consensus checking
+    // this.sendStageUpdate('validator', 'completed'); // Moved to after consensus checking
   }
 
   private async checkConsensus(apiKey: string, profile: any): Promise<void> {
+    
     // Get the last validator response (the final response of this round)
-    const lastMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
+    const lastMessage = this.conversation.messages[this.conversation.messages.length - 1];
     const currentResponse = lastMessage.content;
     
     const consensusPrompt = `Evaluate this response for accuracy and completeness.
@@ -645,6 +1153,7 @@ ${currentResponse}`;
     // Generator's opinion
     console.log('🤔 Asking Generator for consensus opinion...');
     const genOpinion = await this.callOpenRouter(apiKey, profile.generator_model, consensusPrompt);
+    
     console.log(`  Generator raw response: "${genOpinion.content}"`);
     const genVote = this.parseConsensusOpinion(genOpinion.content);
     opinions.push(genVote);
@@ -673,6 +1182,7 @@ ${currentResponse}`;
     // Refiner's opinion
     console.log('🤔 Asking Refiner for consensus opinion...');
     const refOpinion = await this.callOpenRouter(apiKey, profile.refiner_model, consensusPrompt);
+    
     console.log(`  Refiner raw response: "${refOpinion.content}"`);
     const refVote = this.parseConsensusOpinion(refOpinion.content);
     opinions.push(refVote);
@@ -701,6 +1211,7 @@ ${currentResponse}`;
     // Validator's opinion
     console.log('🤔 Asking Validator for consensus opinion...');
     const valOpinion = await this.callOpenRouter(apiKey, profile.validator_model, consensusPrompt);
+    
     console.log(`  Validator raw response: "${valOpinion.content}"`);
     const valVote = this.parseConsensusOpinion(valOpinion.content);
     opinions.push(valVote);
@@ -726,18 +1237,55 @@ ${currentResponse}`;
       this.conversation!.rounds_completed
     );
     
-    // If ALL say NO (cannot be improved), consensus is achieved
-    this.conversation!.consensus_achieved = opinions.every(opinion => opinion === 'NO');
+    // Count how many models accept the response (YES = accept, response is satisfactory)
+    const acceptCount = opinions.filter(opinion => opinion === 'YES').length;
+    
+    // Hybrid consensus approach based on round number
+    if (this.conversation!.rounds_completed < this.maxConsensusRounds) {
+      // Rounds 1 to (maxRounds-1): Require unanimous consensus (all models agree response is good)
+      this.conversation!.consensus_achieved = opinions.every(opinion => opinion === 'YES');
+      
+      if (this.conversation!.consensus_achieved) {
+        console.log('✅ Unanimous consensus achieved - all models agree response is satisfactory');
+        this.consensusType = 'unanimous';
+      } else {
+        console.log(`⏭️ No unanimous consensus in round ${this.conversation!.rounds_completed} - continuing to next round`);
+      }
+    } else if (this.conversation!.rounds_completed === this.maxConsensusRounds) {
+      // Final round: Check unanimous first, then majority, then curator override
+      if (opinions.every(opinion => opinion === 'YES')) {
+        // Unanimous consensus achieved in final round
+        console.log(`✅ Unanimous consensus (3/3) achieved in final round ${this.conversation!.rounds_completed}`);
+        this.conversation!.consensus_achieved = true;
+        this.consensusType = 'unanimous';
+      } else if (acceptCount >= SimpleConsensusEngine.MAJORITY_THRESHOLD) {
+        // Majority consensus achieved in final round
+        console.log(`✅ Majority consensus (${acceptCount}/3) after ${this.conversation!.rounds_completed} rounds`);
+        this.conversation!.consensus_achieved = true;
+        this.consensusType = 'majority';
+      } else {
+        // No consensus - use curator judgment as fallback
+        console.log(`⚠️ No consensus after ${this.maxConsensusRounds} rounds - using curator judgment`);
+        this.conversation!.consensus_achieved = true;
+        this.consensusType = 'curator_override';
+      }
+    }
     
     // Log consensus decision
     console.log(`\n📊 Consensus Check Summary:`);
     console.log(`  Generator: ${opinions[0]}`);
     console.log(`  Refiner: ${opinions[1]}`);
     console.log(`  Validator: ${opinions[2]}`);
-    console.log(`  Consensus Achieved: ${this.conversation!.consensus_achieved ? '✅ YES - All voted NO' : '❌ NO - At least one voted YES'}`);
+    console.log(`  Accept Count: ${acceptCount}/3`);
+    console.log(`  Round: ${this.conversation!.rounds_completed}/${this.maxConsensusRounds}`);
+    console.log(`  Consensus Type: ${this.consensusType}`);
+    console.log(`  Consensus Achieved: ${this.conversation!.consensus_achieved ? '✅ YES' : '❌ NO - Continue deliberation'}`);
     
-    // Send consensus status to renderer
-    this.sendConsensusStatus({
+    // DON'T send final consensus status yet - let fun phrases continue during curator stage
+    // Final status will be sent after curator completes
+
+    // Send the vote update to the renderer
+    this.sendConsensusVoteUpdate({
       generator: opinions[0],
       refiner: opinions[1],
       validator: opinions[2],
@@ -780,27 +1328,59 @@ ${currentResponse}`;
   }
 
 
-  private async curateConsensusResponse(apiKey: string, profile: any): Promise<any> {
-    console.log('🎨 CURATOR CALLED - This should only happen after consensus!');
+  private async curateConsensusResponse(apiKey: string, profile: any, mode: 'polish' | 'choose', contextFramework?: any): Promise<any> {
+    console.log(`🎨 CURATOR CALLED - Mode: ${mode}`);
     this.sendStageUpdate('curator', 'running');
     
-    // Get the final validated response
-    const finalMessage = this.conversation!.messages[this.conversation!.messages.length - 1];
+    // Get final round responses for curator (both modes need all 3 responses)
+    const finalRound = this.conversation!.rounds_completed;
+    const finalRoundMessages = this.conversation!.messages.filter(m => m.round === finalRound);
+    const generatorResponse = finalRoundMessages.find(m => m.speaker === 'generator')?.content || 'No response';
+    const refinerResponse = finalRoundMessages.find(m => m.speaker === 'refiner')?.content || 'No response';
+    const validatorResponse = finalRoundMessages.find(m => m.speaker === 'validator')?.content || 'No response';
     
-    const curatorPrompt = `You are the CURATOR. After ${this.conversation!.rounds_completed} rounds of deliberation, the AI team has reached consensus.
+    // Build curator prompt with full context (same treatment as other LLMs)
+    const contextSummary = contextFramework && contextFramework.summary ? contextFramework.summary : '';
+    
+    let curatorPrompt: string;
+    if (mode === 'polish') {
+      // Polish mode - show all 3 responses and ask for polished version
+      curatorPrompt = `${contextSummary ? `Context from previous conversations:\n${contextSummary}\n\n` : ''}Question: ${this.conversation!.user_question}
 
-Original Question: "${this.conversation!.user_question}"
+The AI team reached ${this.consensusType} consensus. Here are their responses:
 
-Final Agreed Response:
-${finalMessage.content}
+Generator Response:
+${generatorResponse}
 
-Your role is to polish this for optimal user experience. Ensure professional, clear, and engaging presentation while preserving the content.
+Refiner Response:  
+${refinerResponse}
 
-Final Curated Response:`;
+Validator Response:
+${validatorResponse}
+
+Provide your final polished answer to the original question.`;
+    } else {
+      // Choose mode - same format, curator decides between responses
+      curatorPrompt = `${contextSummary ? `Context from previous conversations:\n${contextSummary}\n\n` : ''}Question: ${this.conversation!.user_question}
+
+The AI team could not reach consensus. Here are their responses:
+
+Generator Response:
+${generatorResponse}
+
+Refiner Response:
+${refinerResponse}
+
+Validator Response:
+${validatorResponse}
+
+Consider all responses and provide your final answer to the original question.`;
+    }
     
     const curatorResult = await this.callOpenRouter(apiKey, profile.curator_model, curatorPrompt);
-    this.conversation!.total_tokens += curatorResult.usage.total_tokens;
-    this.conversation!.total_cost += this.calculateCost(profile.curator_model, curatorResult.usage);
+    
+    this.conversation.total_tokens += curatorResult.usage.total_tokens;
+    this.conversation.total_cost += this.calculateCost(profile.curator_model, curatorResult.usage);
     
     // Log curator response for analysis
     await this.logConsensusResponse(
@@ -841,6 +1421,13 @@ Final Curated Response:`;
     }
     
     console.log(`📡 Stage Update: ${stage} -> ${status}`);
+    
+    // Update current stage for unified timer  
+    if (status === 'running' && ['generator', 'refiner', 'validator', 'curator'].includes(stage)) {
+      this.currentStage = stage as 'generator' | 'refiner' | 'validator' | 'curator';
+      // Unified timer already running, just change stage
+    }
+    
     const windows = BrowserWindow.getAllWindows();
     if (windows.length > 0) {
       windows[0].webContents.send('consensus-stage-update', { stage, status });
@@ -855,18 +1442,197 @@ Final Curated Response:`;
   }
 
   private sendConsensusStatus(status: any) {
+    console.log('🎯 Sending consensus status:', JSON.stringify(status));
     const windows = BrowserWindow.getAllWindows();
     if (windows.length > 0) {
       windows[0].webContents.send('consensus-status', status);
     }
   }
 
+  private sendConsensusVoteUpdate(data: any) {
+    console.log('🎯 Sending consensus vote update:', JSON.stringify(data));
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length > 0) {
+      windows[0].webContents.send('consensus-vote-update', data);
+    }
+  }
+
   private sendConsensusComplete(data: any) {
+    // CRITICAL: Stop unified timer FIRST to prevent any more updates
+    this.stopUnifiedTimer();
+    
+    // Log the current consensus type BEFORE sending
+    console.log(`🎯 sendConsensusComplete called with consensusType: ${this.consensusType}`);
+    
+    // Store the consensus type to ensure consistency
+    const finalConsensusType = this.consensusType;
+    
+    // Send final consensus status IMMEDIATELY to show classification
+    console.log(`📊 SENDING FINAL CLASSIFICATION: ${finalConsensusType}`);
+    this.sendConsensusStatus({
+      achieved: true,
+      consensusType: finalConsensusType,
+      round: this.conversation?.rounds_completed || 0
+    });
+    
+    // CRITICAL: Add consensusType to the data being sent
+    const completeData = {
+      ...data,
+      consensusType: finalConsensusType
+    };
+    
+    // Then send consensus-complete event with consensusType included
     const allWindows = BrowserWindow.getAllWindows();
     allWindows.forEach(window => {
-      console.log('✅ Sending consensus-complete to renderer');
-      window.webContents.send('consensus-complete', data);
+      console.log(`✅ Sending consensus-complete to renderer with consensusType: ${finalConsensusType}`);
+      window.webContents.send('consensus-complete', completeData);
     });
+  }
+
+
+
+  private startUnifiedTimer() {
+    // One timer to handle all stages sequentially
+    this.animationTimer = setInterval(() => {
+      // Cycle symbol rapidly every update
+      this.currentIconIndex = (this.currentIconIndex + 1) % this.animatedIcons.length;
+      
+      // Select appropriate phrase list based on current stage
+      let stagePhrases: string[];
+      let consensusType: string;
+      
+      switch (this.currentStage) {
+        case 'routing':
+          stagePhrases = this.routingPhrases;
+          consensusType = 'routing';
+          break;
+        case 'generator':
+        case 'refiner':
+        case 'validator':
+        case 'curator':
+        case 'conversing':
+          // All consensus stages use the same conversation phrases
+          stagePhrases = this.conversationPhrases;
+          consensusType = 'stage_running';
+          break;
+      }
+      
+      // Ensure phrase index is within bounds for current stage
+      if (this.currentPhraseIndex >= stagePhrases.length) {
+        this.currentPhraseIndex = 0;
+      }
+      
+      // Change phrase every 30 seconds deterministically (375 updates = 30 seconds at 80ms)
+      this.phraseChangeCounter++;
+      if (this.phraseChangeCounter >= 375) {
+        this.currentPhraseIndex = Math.floor(Math.random() * stagePhrases.length);
+        this.phraseChangeCounter = 0;
+        console.log(`🎯 Changed phrase to: ${stagePhrases[this.currentPhraseIndex]}`);
+      }
+      
+      const stagePhrase = stagePhrases[this.currentPhraseIndex];
+      const animatedIcon = this.animatedIcons[this.currentIconIndex];
+      
+      this.sendConsensusStatus({
+        achieved: false,
+        consensusType: consensusType,
+        funPhrase: stagePhrase,
+        animatedIcon: animatedIcon,
+        currentStage: this.currentStage
+      });
+    }, 80); // Update every 80ms for optimal symbol cycling
+  }
+
+  private stopUnifiedTimer() {
+    if (this.animationTimer) {
+      clearInterval(this.animationTimer);
+      this.animationTimer = null;
+      console.log('🛑 Unified animation timer stopped');
+    }
+  }
+
+  public interrupt() {
+    console.log('🛑 COMPLETE CONSENSUS CANCELLATION - User pressed ESC');
+    
+    // 1. IMMEDIATE UI RESET (instant user feedback)
+    this.isInterrupted = true;
+    this.stopUnifiedTimer();
+    this.resetAllGraphics();
+    
+    // 2. CANCEL API OPERATIONS (prevent token usage)
+    this.abortAllApiCalls();
+    
+    // 3. CLEAN STATE (ready for next consensus)
+    this.resetConsensusState();
+    
+    console.log('✅ Complete cancellation finished - ready for new consensus');
+  }
+
+  private resetAllGraphics() {
+    // Reset consensus display immediately
+    this.sendConsensusStatus({
+      achieved: true,
+      consensusType: 'pending',
+      reset: true,
+      cancelled: true
+    });
+    
+    // Reset all stage displays to ready
+    this.sendStageUpdate('memory', 'ready');
+    this.sendStageUpdate('context', 'ready'); 
+    this.sendStageUpdate('route', 'ready');
+    this.sendStageUpdate('generator', 'ready');
+    this.sendStageUpdate('refiner', 'ready');
+    this.sendStageUpdate('validator', 'ready');
+    this.sendStageUpdate('curator', 'ready');
+    
+    // Reset neural consciousness, progress bars, and clear chat
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length > 0) {
+      windows[0].webContents.send('reset-neural-consciousness');
+      windows[0].webContents.send('reset-all-progress');
+      windows[0].webContents.send('clear-chat-window');
+    }
+  }
+
+  private abortAllApiCalls() {
+    // Actually abort any active API calls to prevent token usage
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      console.log('🚫 Active API call aborted - preventing token usage');
+    }
+    
+    this.isInterrupted = true;
+    console.log('🛑 All future API calls will be ignored');
+  }
+
+  private resetConsensusState() {
+    // Reset all consensus tracking
+    this.consensusType = 'pending';
+    this.currentStage = 'routing';
+    this.currentPhraseIndex = 0;
+    this.phraseChangeCounter = 0;
+    this.conversation = null;
+    this.conversationId = null;
+    this.userMessageId = null;
+    
+    console.log('🔄 Consensus state completely reset');
+  }
+
+  private safeConversationAccess<T>(accessor: () => T, defaultValue: T): T {
+    // Safely access conversation properties with interruption check
+    if (this.isInterrupted || !this.conversation) {
+      return defaultValue;
+    }
+    try {
+      return accessor();
+    } catch (error) {
+      if (this.isInterrupted) {
+        console.log('🛑 Safe conversation access: skipped due to interruption');
+        return defaultValue;
+      }
+      throw error;
+    }
   }
 
   private logIteration(
@@ -889,5 +1655,69 @@ Final Curated Response:`;
     } catch (error) {
       console.error('❌ Failed to log iteration:', error);
     }
+  }
+
+  /**
+   * Cleanup resources when engine is destroyed
+   */
+  async cleanup() {
+    console.log('🧹 Cleaning up SimpleConsensusEngine resources');
+    
+    // Cleanup optimized memory service
+    if (this.optimizedMemory) {
+      this.optimizedMemory.cleanup();
+    }
+    
+    console.log('✅ SimpleConsensusEngine cleanup complete');
+  }
+  
+  private async updateContextLogRouting(logId: string, routingDecision: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const sql = `
+        UPDATE memory_context_logs 
+        SET routing_decision = ?, 
+            context_influenced_routing = 1
+        WHERE log_id = ?
+      `;
+      
+      this.db.run(sql, [routingDecision, logId], (err: Error | null) => {
+        if (err) {
+          console.error('❌ Error updating context log with routing:', err);
+          reject(err);
+        } else {
+          console.log(`✅ Updated context log ${logId} with routing: ${routingDecision}`);
+          resolve();
+        }
+      });
+    });
+  }
+
+  private async recordConversationUsage(userId: string, conversationId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timestamp = new Date().toISOString();
+      const sql = `
+        INSERT INTO conversation_usage (
+          user_id, conversation_id, timestamp
+        ) VALUES (?, ?, ?)
+      `;
+      
+      this.db.run(sql, [userId, conversationId, timestamp], function(err: Error | null) {
+        if (err) {
+          console.error('❌ Failed to record conversation usage:', err);
+          // Don't reject - just log the error and continue
+          resolve();
+        } else {
+          console.log(`✅ Conversation usage recorded for analytics`);
+          try {
+            // Enqueue D1 usage sync
+            const enqueueSql = `INSERT INTO d1_usage_queue (user_id, conversation_id, timestamp, status, attempts) VALUES (?, ?, ?, 'pending', 0)`;
+            (this as any).db?.run?.(enqueueSql, [userId, conversationId, timestamp], (e: any) => {
+              if (e) console.error('[D1UsageQueue] enqueue failed:', e);
+            });
+          } catch (e) { console.warn('[D1UsageQueue] enqueue error', e); }
+          resolve();
+        }
+      });
+    });
   }
 }

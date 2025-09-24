@@ -58,6 +58,7 @@ export class AnalyticsDashboard {
   private data: AnalyticsData | null = null;
   private updateInterval: NodeJS.Timeout | null = null;
   private chartUpdateInterval: NodeJS.Timeout | null = null;
+  private period: '24h' | '7d' | '30d' = '24h';
 
   constructor() {
     this.initializeData();
@@ -112,6 +113,11 @@ export class AnalyticsDashboard {
     }
   }
 
+  // Public refresh API for external triggers (e.g., on consensus-complete)
+  public async refresh(): Promise<void> {
+    await this.fetchAnalyticsData();
+  }
+
   private async fetchAnalyticsData(): Promise<void> {
     try {
       console.log('Fetching analytics data...');
@@ -123,12 +129,10 @@ export class AnalyticsDashboard {
       
       if (electronAPI && electronAPI.getAnalytics) {
         console.log('Calling getAnalytics...');
-        const analyticsData = await electronAPI.getAnalytics();
+        const analyticsData = await electronAPI.getAnalytics(this.period);
         console.log('Analytics data received:', analyticsData);
-        console.log('Recent activity sample:', analyticsData?.recentActivity?.slice(0, 2));
-        
         if (analyticsData) {
-          this.data = analyticsData;
+          this.data = this.processConsensusMetrics(analyticsData);
           this.updateDashboard();
           return;
         }
@@ -239,37 +243,40 @@ export class AnalyticsDashboard {
     this.container.innerHTML = `
       <div class="analytics-dashboard">
         <div class="analytics-header">
-          <h2>📊 Analytics Dashboard</h2>
+          <h2 class="analytics-title">
+            ${this.icon('graph')}
+            <span>Analytics Dashboard</span>
+          </h2>
           <div class="analytics-controls">
             <select class="period-selector">
               <option value="24h">Last 24 Hours</option>
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
             </select>
-            <button class="refresh-btn" title="Refresh">🔄</button>
+            <button class="refresh-btn" title="Refresh">${this.icon('refresh')}</button>
           </div>
         </div>
 
         <!-- Key Metrics Row -->
         <div class="metrics-grid">
           <div class="metric-card">
-            <div class="metric-icon">📅</div>
+            <div class="metric-icon">${this.icon('calendar')}</div>
             <div class="metric-content">
               <div class="metric-value" id="today-queries">0</div>
-              <div class="metric-label">Today's Queries</div>
+              <div class="metric-label" id="period-queries-label">Period Queries</div>
             </div>
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">💵</div>
+            <div class="metric-icon">${this.icon('dollar')}</div>
             <div class="metric-content">
               <div class="metric-value" id="today-cost">$0.00</div>
-              <div class="metric-label">Today's Cost</div>
+              <div class="metric-label" id="period-cost-label">Period Cost</div>
             </div>
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">📈</div>
+            <div class="metric-icon">${this.icon('activity')}</div>
             <div class="metric-content">
               <div class="metric-value" id="total-queries">0</div>
               <div class="metric-label">All-Time Queries</div>
@@ -277,7 +284,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">💰</div>
+            <div class="metric-icon">${this.icon('balance')}</div>
             <div class="metric-content">
               <div class="metric-value" id="total-cost">$0.00</div>
               <div class="metric-label">Total Cost</div>
@@ -285,7 +292,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">✅</div>
+            <div class="metric-icon">${this.icon('check')}</div>
             <div class="metric-content">
               <div class="metric-value" id="success-rate">0%</div>
               <div class="metric-label">Success Rate</div>
@@ -293,7 +300,7 @@ export class AnalyticsDashboard {
           </div>
           
           <div class="metric-card">
-            <div class="metric-icon">⚡</div>
+            <div class="metric-icon">${this.icon('bolt')}</div>
             <div class="metric-content">
               <div class="metric-value" id="avg-response">0s</div>
               <div class="metric-label">Avg Response</div>
@@ -304,7 +311,7 @@ export class AnalyticsDashboard {
         <!-- Charts Row -->
         <div class="charts-row">
           <div class="chart-container">
-            <h3>Query Volume (24h)</h3>
+            <h3 id="volume-title">Query Volume</h3>
             <div class="line-chart" id="volume-chart">
               <canvas id="volume-canvas"></canvas>
             </div>
@@ -377,22 +384,62 @@ export class AnalyticsDashboard {
     `;
 
     this.attachEventListeners();
+    // Set initial titles/labels for default period
+    const volTitle = this.container?.querySelector('#volume-title');
+    if (volTitle) (volTitle as HTMLElement).textContent = `Query Volume (${this.period.toUpperCase()})`;
+    const pq = this.container?.querySelector('#period-queries-label');
+    if (pq) (pq as HTMLElement).textContent = 'Period Queries';
+    const pc = this.container?.querySelector('#period-cost-label');
+    if (pc) (pc as HTMLElement).textContent = 'Period Cost';
     this.fetchAnalyticsData();
   }
 
+  private icon(name: 'graph' | 'refresh' | 'calendar' | 'dollar' | 'activity' | 'balance' | 'check' | 'bolt'): string {
+    const common = 'width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+    switch (name) {
+      case 'graph':
+        return `<svg ${common}><path d="M3 3v18h18"/><path d="M7 13l3 3 7-7"/></svg>`;
+      case 'refresh':
+        return `<svg ${common}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"/></svg>`;
+      case 'calendar':
+        return `<svg ${common}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+      case 'dollar':
+        return `<svg ${common}><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+      case 'activity':
+        return `<svg ${common}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
+      case 'balance':
+        return `<svg ${common}><path d="M12 2v20"/><path d="M7 6h10"/><path d="M7 10h10"/><path d="M7 14h10"/><path d="M7 18h10"/></svg>`;
+      case 'check':
+        return `<svg ${common}><path d="M20 6L9 17l-5-5"/></svg>`;
+      case 'bolt':
+        return `<svg ${common}><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>`;
+    }
+  }
+
   private attachEventListeners(): void {
-    const refreshBtn = this.container?.querySelector('.refresh-btn');
+    const refreshBtn = this.container?.querySelector('.refresh-btn') as HTMLElement | null;
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
         this.fetchAnalyticsData();
-        this.animateRefresh(refreshBtn as HTMLElement);
+        this.animateRefresh(refreshBtn);
       });
     }
 
-    const periodSelector = this.container?.querySelector('.period-selector') as HTMLSelectElement;
+    const periodSelector = this.container?.querySelector('.period-selector') as HTMLSelectElement | null;
     if (periodSelector) {
       periodSelector.addEventListener('change', () => {
-        // Update data based on selected period
+        const val = periodSelector.value as any;
+        if (val === '24h' || val === '7d' || val === '30d') {
+          this.period = val;
+        } else {
+          this.period = '24h';
+        }
+        const volTitle = this.container?.querySelector('#volume-title');
+        if (volTitle) volTitle.textContent = `Query Volume (${this.period.toUpperCase()})`;
+        const pq = this.container?.querySelector('#period-queries-label');
+        if (pq) pq.textContent = 'Period Queries';
+        const pc = this.container?.querySelector('#period-cost-label');
+        if (pc) pc.textContent = 'Period Cost';
         this.fetchAnalyticsData();
       });
     }

@@ -115,28 +115,25 @@ impl LayoutState {
             self.visibility = PanelVisibility::default();
         }
     }
-    
+
     /// Toggle sidebar visibility (Ctrl+B)
     pub fn toggle_sidebar(&mut self) {
         self.visibility.side_bar = !self.visibility.side_bar;
     }
-    
+
     /// Toggle panel visibility (Ctrl+J)
     pub fn toggle_panel(&mut self) {
         self.visibility.panel = !self.visibility.panel;
     }
-    
+
     /// Save layout to localStorage
     pub fn save_to_storage(&self) {
-        if let Ok(json) = serde_json::to_string(&(
-            &self.visibility,
-            &self.dimensions,
-        )) {
+        if let Ok(json) = serde_json::to_string(&(&self.visibility, &self.dimensions)) {
             // In a real implementation, save to localStorage
             tracing::debug!("Saving layout: {}", json);
         }
     }
-    
+
     /// Load layout from localStorage
     pub fn load_from_storage(&mut self) {
         // In a real implementation, load from localStorage
@@ -155,12 +152,12 @@ pub fn Splitter(
     let mut is_dragging = use_signal(|| false);
     let mut start_pos = use_signal(|| 0.0);
     let mut start_size = use_signal(|| 0.0);
-    
+
     let splitter_class = match direction {
         SplitterDirection::Vertical => "splitter vertical",
         SplitterDirection::Horizontal => "splitter horizontal",
     };
-    
+
     rsx! {
         div {
             class: "{splitter_class}",
@@ -187,7 +184,7 @@ pub fn Splitter(
                             e.client_coordinates().y as f32 - *start_pos.read()
                         }
                     };
-                    
+
                     let new_size = (*start_size.read() + delta).clamp(min_size, max_size);
                     on_resize.call(new_size);
                 }
@@ -219,14 +216,14 @@ pub fn VSCodeLayout(
     status_bar: Element,
 ) -> Element {
     let layout = state.read();
-    
+
     // Calculate layout styles
     let container_class = if layout.is_zen_mode {
         "vscode-layout zen-mode"
     } else {
         "vscode-layout"
     };
-    
+
     let sidebar_style = format!(
         "width: {}px; {}",
         layout.dimensions.side_bar_width,
@@ -236,20 +233,17 @@ pub fn VSCodeLayout(
             "order: 1;"
         }
     );
-    
-    let panel_style = format!(
-        "height: {}px;",
-        layout.dimensions.panel_height
-    );
-    
+
+    let panel_style = format!("height: {}px;", layout.dimensions.panel_height);
+
     rsx! {
         div {
             class: "{container_class}",
-            
+
             // Main horizontal layout
             div {
                 class: "layout-main",
-                
+
                 // Activity Bar
                 if layout.visibility.activity_bar {
                     div {
@@ -257,18 +251,18 @@ pub fn VSCodeLayout(
                         {activity_bar}
                     }
                 }
-                
+
                 // Sidebar with splitter
                 if layout.visibility.side_bar {
                     div {
                         class: "layout-sidebar-container",
                         style: "{sidebar_style}",
-                        
+
                         div {
                             class: "layout-sidebar",
                             {sidebar}
                         }
-                        
+
                         Splitter {
                             direction: SplitterDirection::Vertical,
                             on_resize: move |size| {
@@ -280,18 +274,18 @@ pub fn VSCodeLayout(
                         }
                     }
                 }
-                
+
                 // Editor area (includes panel if position is right)
                 div {
                     class: "layout-editor-container",
                     style: "order: 2; flex: 1;",
-                    
+
                     // Editor
                     div {
                         class: "layout-editor",
                         {editor}
                     }
-                    
+
                     // Panel (if bottom position)
                     if layout.visibility.panel && layout.dimensions.panel_position == PanelPosition::Bottom {
                         Splitter {
@@ -303,7 +297,7 @@ pub fn VSCodeLayout(
                             min_size: 100.0,
                             max_size: 400.0,
                         }
-                        
+
                         div {
                             class: "layout-panel",
                             style: "{panel_style}",
@@ -312,7 +306,7 @@ pub fn VSCodeLayout(
                     }
                 }
             }
-            
+
             // Status Bar
             if layout.visibility.status_bar {
                 div {

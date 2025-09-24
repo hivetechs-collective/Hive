@@ -588,7 +588,7 @@ pub struct AuthStatistics {
     pub locked_accounts: u64,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

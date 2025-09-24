@@ -3,35 +3,35 @@
 //! This module provides the updated structures that match what the
 //! smart decision engine and other consensus components expect.
 
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::SystemTime;
-use crate::consensus::stages::file_aware_curator::FileOperation;
 
 /// Complete analysis result from all AI helpers
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OperationAnalysis {
     /// The operations being analyzed
     pub operations: Vec<FileOperation>,
-    
+
     /// Context of the operation
     pub context: OperationContext,
-    
+
     /// Unified score combining all AI helper outputs
     pub unified_score: UnifiedScore,
-    
+
     /// Recommendations from various AI helpers
     pub recommendations: Vec<ActionRecommendation>,
-    
+
     /// Operation groups for better organization
     pub groups: OperationGroups,
-    
+
     /// Component scores from individual AI helpers
     pub component_scores: ComponentScores,
-    
+
     /// Scoring factors used in decision making
     pub scoring_factors: ScoringFactors,
-    
+
     /// Statistics about the analysis
     pub statistics: Option<AnalysisStatistics>,
 }
@@ -41,7 +41,7 @@ pub struct OperationAnalysis {
 pub struct UnifiedScore {
     /// Overall confidence score (0-100)
     pub confidence: f32,
-    
+
     /// Overall risk score (0-100)
     pub risk: f32,
 }
@@ -51,13 +51,13 @@ pub struct UnifiedScore {
 pub struct ActionRecommendation {
     /// Priority of this recommendation
     pub priority: ActionPriority,
-    
+
     /// Source AI helper
     pub source: String,
-    
+
     /// Description of the recommendation
     pub description: String,
-    
+
     /// Detailed action to take
     pub action: RecommendedAction,
 }
@@ -88,19 +88,19 @@ pub enum RecommendedAction {
 pub struct OperationContext {
     /// Repository path
     pub repository_path: PathBuf,
-    
+
     /// User's original question
     pub user_question: String,
-    
+
     /// Consensus response that led to these operations
     pub consensus_response: String,
-    
+
     /// Timestamp
     pub timestamp: SystemTime,
-    
+
     /// Session ID
     pub session_id: String,
-    
+
     /// Git commit hash if available
     pub git_commit: Option<String>,
 }

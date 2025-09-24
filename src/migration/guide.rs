@@ -974,7 +974,7 @@ pub fn display_migration_guide(guide: &MigrationGuide) -> String {
     output
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

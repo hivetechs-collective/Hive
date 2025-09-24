@@ -25,7 +25,8 @@ impl ConsensusStage for ValidatorStage {
         let refined_response = previous_answer.unwrap_or("No response to validate");
 
         // Use intelligent context type if available, otherwise analyze content
-        let content_type = self.extract_intelligent_context_type(context)
+        let content_type = self
+            .extract_intelligent_context_type(context)
             .unwrap_or_else(|| self.analyze_content_type(refined_response));
 
         let mut messages = vec![Message {
@@ -50,7 +51,10 @@ impl ConsensusStage for ValidatorStage {
         }
 
         // Perform automated checks first (but skip for academic/general knowledge questions)
-        if !matches!(content_type, "academic" | "general_knowledge" | "computer_science") {
+        if !matches!(
+            content_type,
+            "academic" | "general_knowledge" | "computer_science"
+        ) {
             let validation_report = self.perform_automated_validation(refined_response);
             if !validation_report.is_empty() {
                 messages.push(Message {
@@ -81,7 +85,12 @@ impl ValidatorStage {
     }
 
     /// Build enhanced system prompt for validation with intelligent context awareness
-    pub fn build_enhanced_validation_system_prompt(&self, question: &str, response: &str, content_type: &str) -> String {
+    pub fn build_enhanced_validation_system_prompt(
+        &self,
+        question: &str,
+        response: &str,
+        content_type: &str,
+    ) -> String {
         let base_prompt = StagePrompts::validator_system();
 
         format!(
@@ -91,13 +100,13 @@ impl ValidatorStage {
             self.get_validation_objectives_for_type(content_type)
         )
     }
-    
+
     /// Build enhanced system prompt for validation (legacy method for compatibility)
     pub fn build_validation_system_prompt(&self, question: &str, response: &str) -> String {
         let content_type = self.analyze_content_type(response);
         self.build_enhanced_validation_system_prompt(question, response, content_type)
     }
-    
+
     /// Extract intelligent context guidance from system messages
     fn extract_intelligent_context_type(&self, context: Option<&str>) -> Option<&'static str> {
         if let Some(ctx) = context {
@@ -126,11 +135,19 @@ impl ValidatorStage {
         // Check if this is repository context
         if context.contains("CRITICAL REPOSITORY CONTEXT") {
             structured.push_str("⚠️ CRITICAL VALIDATION REQUIREMENT:\n");
-            structured.push_str("The previous stages analyzed a SPECIFIC repository. During validation:\n");
-            structured.push_str("1. VALIDATE information against the SAME repository mentioned in the context\n");
+            structured.push_str(
+                "The previous stages analyzed a SPECIFIC repository. During validation:\n",
+            );
+            structured.push_str(
+                "1. VALIDATE information against the SAME repository mentioned in the context\n",
+            );
             structured.push_str("2. DO NOT validate against assumptions from other projects\n");
-            structured.push_str("3. ENSURE all file paths, code references, and features match THIS repository\n");
-            structured.push_str("4. FLAG any information that doesn't match the actual repository structure\n\n");
+            structured.push_str(
+                "3. ENSURE all file paths, code references, and features match THIS repository\n",
+            );
+            structured.push_str(
+                "4. FLAG any information that doesn't match the actual repository structure\n\n",
+            );
         }
 
         // Check if this is memory context (authoritative knowledge from curator)
@@ -158,10 +175,14 @@ impl ValidatorStage {
             structured.push_str("- Validate new information aligns with established facts\n");
         }
 
-        if context.contains("symbols:") || context.contains("dependencies:") || context.contains("Repository Path:") {
+        if context.contains("symbols:")
+            || context.contains("dependencies:")
+            || context.contains("Repository Path:")
+        {
             structured.push_str("- Verify code suggestions match actual repository structure\n");
             structured.push_str("- Check that referenced symbols and imports are valid\n");
-            structured.push_str("- VALIDATE that all technical details match the actual repository\n");
+            structured
+                .push_str("- VALIDATE that all technical details match the actual repository\n");
             structured.push_str("- DO NOT accept generic assumptions about the codebase\n");
         }
 
@@ -236,7 +257,7 @@ impl ValidatorStage {
             }
         }.to_string()
     }
-    
+
     /// Get validation tasks for a specific content type (intelligent context aware)
     pub fn get_validation_tasks_for_content_type(&self, content_type: &str) -> String {
         match content_type {
@@ -287,7 +308,7 @@ impl ValidatorStage {
                 return "computer_science";
             }
         }
-        
+
         // Fallback to content-based analysis only if no intelligent guidance
         if response.contains("```") || response.contains("function") || response.contains("class ")
         {

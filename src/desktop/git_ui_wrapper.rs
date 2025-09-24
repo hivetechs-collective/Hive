@@ -1,12 +1,12 @@
 //! LazyGit CLI Wrapper for Portal Architecture
-//! 
+//!
 //! This module provides a zero-maintenance Git integration by wrapping LazyGit
 //! as a CLI tool in our Portal architecture.
 
+use crate::desktop::git::initialize_lazygit_updater_db;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use crate::desktop::git::initialize_lazygit_updater_db;
 
 /// LazyGit wrapper that provides full Git functionality with zero code maintenance
 pub struct LazyGitWrapper;
@@ -54,8 +54,10 @@ impl LazyGitWrapper {
         env.insert("TERM".to_string(), "xterm-256color".to_string());
         env.insert("COLORTERM".to_string(), "truecolor".to_string());
         // LazyGit config directory
-        env.insert("XDG_CONFIG_HOME".to_string(), 
-                  std::env::var("HOME").unwrap_or_default() + "/.config");
+        env.insert(
+            "XDG_CONFIG_HOME".to_string(),
+            std::env::var("HOME").unwrap_or_default() + "/.config",
+        );
         env
     }
 
@@ -89,12 +91,9 @@ pub fn ensure_lazygit_installed_sync() -> Result<()> {
 /// Get LazyGit version information
 pub async fn get_lazygit_version() -> Result<String> {
     use tokio::process::Command;
-    
-    let output = Command::new("lazygit")
-        .arg("--version")
-        .output()
-        .await?;
-    
+
+    let output = Command::new("lazygit").arg("--version").output().await?;
+
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
@@ -109,7 +108,7 @@ pub fn is_git_repository(path: &Path) -> bool {
     if git_dir.exists() {
         return true;
     }
-    
+
     // Also check parent directories in case we're in a subdirectory
     if let Some(parent) = path.parent() {
         // But only check up to 5 levels to avoid excessive checking
@@ -126,7 +125,7 @@ pub fn is_git_repository(path: &Path) -> bool {
             levels += 1;
         }
     }
-    
+
     false
 }
 
@@ -136,12 +135,13 @@ pub fn find_git_root(path: &Path) -> Option<std::path::PathBuf> {
     if path.join(".git").exists() {
         return Some(path.to_path_buf());
     }
-    
+
     // Check parent directories
     if let Some(parent) = path.parent() {
         let mut current = parent;
         let mut levels = 0;
-        while levels < 10 {  // Reasonable limit to avoid excessive checking
+        while levels < 10 {
+            // Reasonable limit to avoid excessive checking
             if current.join(".git").exists() {
                 return Some(current.to_path_buf());
             }
@@ -152,44 +152,49 @@ pub fn find_git_root(path: &Path) -> Option<std::path::PathBuf> {
             levels += 1;
         }
     }
-    
+
     None
 }
 
 /// Configure git safe directory if needed
 pub fn ensure_safe_directory(path: &Path) -> Result<()> {
     use std::process::Command;
-    
+
     // Try to run a simple git command to check if the directory is trusted
     let output = Command::new("git")
         .arg("status")
         .current_dir(path)
         .output()?;
-    
+
     // If the output contains "dubious ownership" error, add it as safe
     let stderr = String::from_utf8_lossy(&output.stderr);
-    if stderr.contains("dubious ownership") || stderr.contains("fatal: detected dubious ownership") {
+    if stderr.contains("dubious ownership") || stderr.contains("fatal: detected dubious ownership")
+    {
         // Add the directory as safe
         Command::new("git")
-            .args(&["config", "--global", "--add", "safe.directory", path.to_str().unwrap_or("*")])
+            .args(&[
+                "config",
+                "--global",
+                "--add",
+                "safe.directory",
+                path.to_str().unwrap_or("*"),
+            ])
             .output()?;
-        
+
         tracing::info!("Added {} as safe directory for git", path.display());
     }
-    
+
     Ok(())
 }
 
 /// Spawn GitUI in a specific directory
 pub fn spawn_gitui_with_dir(working_dir: &std::path::Path) -> Result<()> {
     use std::process::Command;
-    
+
     // Ensure the directory is trusted by git
     let _ = ensure_safe_directory(working_dir);
-    
-    Command::new("gitui")
-        .current_dir(working_dir)
-        .spawn()?;
-    
+
+    Command::new("gitui").current_dir(working_dir).spawn()?;
+
     Ok(())
 }

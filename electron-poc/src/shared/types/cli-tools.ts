@@ -50,6 +50,7 @@ export interface CliToolConfig {
   icon?: string;
   requiresNode?: boolean;
   requiresPython?: boolean;
+  wrapperPath?: string;  // Optional path to wrapper script for terminal compatibility
 }
 
 /**
@@ -144,30 +145,43 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     icon: '🧠',
     requiresNode: true
   },
-  'cline': {
-    id: 'cline',
-    name: 'Cline',
-    description: 'Task-based AI assistant with 47k+ GitHub stars',
-    command: 'cline-cli',
-    installCommand: 'npm install -g @yaegaki/cline-cli',
-    updateCommand: 'npm update -g @yaegaki/cline-cli',
-    versionCommand: 'cline-cli --version',
-    versionRegex: /(\d+\.\d+\.\d+)/,
-    docsUrl: 'https://cline.bot',
+  'github-copilot': {
+    id: 'github-copilot',
+    name: 'GitHub Copilot',
+    description: 'Official GitHub AI pair programmer - now FREE with limited usage',
+    command: 'gh',  // Base command for detection
+    installCommand: 'gh extension install github/gh-copilot',
+    updateCommand: 'gh extension upgrade github/gh-copilot',
+    versionCommand: 'gh copilot --version',
+    versionRegex: /version (\d+\.\d+\.\d+)/,
+    docsUrl: 'https://docs.github.com/copilot/using-github-copilot/using-github-copilot-in-the-command-line',
     icon: '🤖',
-    requiresNode: true
+    requiresNode: false
+  },
+  'cursor-cli': {
+    id: 'cursor-cli',
+    name: 'Cursor CLI',
+    description: 'Interactive terminal AI coding assistant (Beta)',
+    command: 'cursor-agent',
+    installCommand: 'curl https://cursor.com/install -fsS | bash',
+    updateCommand: 'curl https://cursor.com/install -fsS | bash', // Re-run install to update
+    versionCommand: 'cursor-agent --version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://docs.cursor.com/en/cli/overview',
+    icon: '🖱️',
+    requiresNode: false
   },
   'grok': {
     id: 'grok',
-    name: 'Grok CLI',
-    description: 'xAI Grok-powered terminal agent with MCP support',
+    name: 'Grok CLI (Community)',
+    description: '⚠️ Known issue: Module resolution error in v0.0.29. Community-built terminal agent for xAI Grok',
     command: 'grok',
-    installCommand: 'npm install -g @vibe-kit/grok-cli',
-    updateCommand: 'npm update -g @vibe-kit/grok-cli',
+    installCommand: 'npm install -g @vibe-kit/grok-cli@0.0.28', // Pinned to v0.0.28 to avoid v0.0.29 ESM bug
+    updateCommand: 'npm install -g @vibe-kit/grok-cli@0.0.28', // Force v0.0.28 on update to avoid broken v0.0.29
     versionCommand: 'grok --version',
     versionRegex: /(\d+\.\d+\.\d+)/,
     docsUrl: 'https://github.com/superagent-ai/grok-cli',
-    icon: '🚀',
+    icon: '⚠️',
     requiresNode: true
   }
 };

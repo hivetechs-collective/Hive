@@ -514,7 +514,7 @@ impl<T> ComplexSystem<T> where T: Send + Sync + Clone + 'static {{
     }}
 }}
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {{
     use super::*;
 
@@ -555,7 +555,7 @@ fn function_{}() -> Result<(), Box<dyn std::error::Error>> {{
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

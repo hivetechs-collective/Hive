@@ -146,7 +146,9 @@ async function fixBinaryPermissions(appPath) {
   
   const binaries = [
     'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/hive-backend-server-enhanced',
-    'Contents/Resources/app.asar.unpacked/.webpack/main/resources/python-runtime/python/bin/python3'
+    'Contents/Resources/app.asar.unpacked/.webpack/main/resources/python-runtime/python/bin/python3',
+    'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/node',
+    'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/ttyd'
   ];
   
   let fixedCount = 0;

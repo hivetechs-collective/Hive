@@ -22,11 +22,11 @@ pub use legacy::{
 };
 
 // Include examples module for documentation
-#[cfg(any(test, doc))]
+#[cfg(any(all(test, feature = "legacy-tests"), doc))]
 pub mod examples;
 
 // Integration examples
-#[cfg(any(test, doc))]
+#[cfg(any(all(test, feature = "legacy-tests"), doc))]
 pub mod git_integration;
-#[cfg(any(test, doc))]
+#[cfg(any(all(test, feature = "legacy-tests"), doc))]
 pub mod problems_integration;

@@ -1,14 +1,14 @@
 // Operation Preview Component
 // Displays file operations with syntax-highlighted before/after previews
 
-use dioxus::prelude::*;
 use crate::consensus::{
-    stages::file_aware_curator::FileOperation,
-    operation_preview_generator::{OperationPreview as PreviewData, DiffView, FileState},
     ai_operation_parser::FileOperationWithMetadata,
+    operation_preview_generator::{DiffView, FileState, OperationPreview as PreviewData},
+    stages::file_aware_curator::FileOperation,
 };
-use crate::desktop::styles::theme::ThemeColors;
 use crate::desktop::components::common::{Button, Card};
+use crate::desktop::styles::theme::ThemeColors;
+use dioxus::prelude::*;
 use std::path::PathBuf;
 
 /// Operation preview component props
@@ -16,19 +16,19 @@ use std::path::PathBuf;
 pub struct OperationPreviewProps {
     /// The operation to preview
     pub operation: FileOperationWithMetadata,
-    
+
     /// Preview data (if available)
     pub preview: Option<PreviewData>,
-    
+
     /// Theme colors
     pub theme: ThemeColors,
-    
+
     /// Callback when user approves
     pub on_approve: EventHandler<()>,
-    
+
     /// Callback when user rejects
     pub on_reject: EventHandler<()>,
-    
+
     /// Whether this operation is currently selected
     pub is_selected: bool,
 }
@@ -38,7 +38,7 @@ pub struct OperationPreviewProps {
 pub fn OperationPreview(props: OperationPreviewProps) -> Element {
     let mut show_diff = use_signal(|| true);
     let mut show_details = use_signal(|| false);
-    
+
     let operation_type = match &props.operation.operation {
         FileOperation::Create { .. } => ("CREATE", "🆕", props.theme.success.clone()),
         FileOperation::Update { .. } => ("UPDATE", "✏️", props.theme.warning.clone()),
@@ -46,18 +46,38 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
         FileOperation::Delete { .. } => ("DELETE", "🗑️", props.theme.error.clone()),
         FileOperation::Rename { .. } => ("RENAME", "🔄", props.theme.primary.clone()),
     };
-    
+
     let file_path = get_operation_path(&props.operation.operation);
-    let border_color = if props.is_selected { props.theme.primary.clone() } else { props.theme.border.clone() };
-    
+    let border_color = if props.is_selected {
+        props.theme.primary.clone()
+    } else {
+        props.theme.border.clone()
+    };
+
     let show_diff_value = show_diff();
     let show_details_value = show_details();
-    
-    let diff_button_bg = if show_diff_value { props.theme.primary.clone() } else { "transparent".to_string() };
-    let diff_button_color = if show_diff_value { props.theme.background.clone() } else { props.theme.text.clone() };
-    let details_button_bg = if show_details_value { props.theme.primary.clone() } else { "transparent".to_string() };
-    let details_button_color = if show_details_value { props.theme.background.clone() } else { props.theme.text.clone() };
-    
+
+    let diff_button_bg = if show_diff_value {
+        props.theme.primary.clone()
+    } else {
+        "transparent".to_string()
+    };
+    let diff_button_color = if show_diff_value {
+        props.theme.background.clone()
+    } else {
+        props.theme.text.clone()
+    };
+    let details_button_bg = if show_details_value {
+        props.theme.primary.clone()
+    } else {
+        "transparent".to_string()
+    };
+    let details_button_color = if show_details_value {
+        props.theme.background.clone()
+    } else {
+        props.theme.text.clone()
+    };
+
     rsx! {
         div {
             class: "operation-preview",
@@ -68,7 +88,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                 overflow: hidden;
                 transition: all 0.2s;
             ",
-            
+
             // Header
             div {
                 style: "
@@ -78,7 +98,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                     background: {props.theme.background_secondary};
                     border-bottom: 1px solid {props.theme.border};
                 ",
-                
+
                 // Operation type badge
                 div {
                     style: "
@@ -87,12 +107,12 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         gap: 8px;
                         margin-right: 16px;
                     ",
-                    
+
                     span {
                         style: "font-size: 20px;",
                         "{operation_type.1}"
                     }
-                    
+
                     span {
                         style: "
                             font-weight: bold;
@@ -104,11 +124,11 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         "{operation_type.0}"
                     }
                 }
-                
+
                 // File path
                 div {
                     style: "flex: 1;",
-                    
+
                     code {
                         style: "
                             font-family: monospace;
@@ -117,7 +137,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         ",
                         "{file_path}"
                     }
-                    
+
                     // Confidence score
                     div {
                         style: "
@@ -127,9 +147,9 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                             font-size: 12px;
                             color: {props.theme.text_secondary};
                         ",
-                        
+
                         "Confidence: "
-                        
+
                         span {
                             style: "
                                 color: {get_confidence_color(props.operation.confidence, &props.theme)};
@@ -140,11 +160,11 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         }
                     }
                 }
-                
+
                 // View toggles
                 div {
                     style: "display: flex; gap: 8px;",
-                    
+
                     button {
                         style: "
                             background: {diff_button_bg};
@@ -158,7 +178,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         onclick: move |_| show_diff.set(!show_diff()),
                         "Diff"
                     }
-                    
+
                     button {
                         style: "
                             background: {details_button_bg};
@@ -174,11 +194,11 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                     }
                 }
             }
-            
+
             // Content
             div {
                 style: "padding: 16px;",
-                
+
                 // Rationale (if available)
                 if let Some(rationale) = &props.operation.rationale {
                     div {
@@ -193,7 +213,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         "💭 {rationale}"
                     }
                 }
-                
+
                 // Preview content
                 if let Some(preview) = &props.preview {
                     if show_diff_value && preview.diff.unified_diff.is_some() {
@@ -204,7 +224,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                     } else {
                         div {
                             style: "display: grid; grid-template-columns: 1fr 1fr; gap: 16px;",
-                            
+
                             // Before state
                             FileStateView {
                                 title: "Before",
@@ -212,7 +232,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                                 theme: props.theme.clone(),
                                 highlight: false,
                             }
-                            
+
                             // After state
                             FileStateView {
                                 title: "After",
@@ -229,7 +249,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         theme: props.theme.clone(),
                     }
                 }
-                
+
                 // Additional details
                 if show_details_value {
                     div {
@@ -238,7 +258,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                             padding-top: 16px;
                             border-top: 1px solid {props.theme.border};
                         ",
-                        
+
                         OperationMetadata {
                             operation: props.operation.clone(),
                             preview: props.preview.clone(),
@@ -247,7 +267,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                     }
                 }
             }
-            
+
             // Action buttons
             div {
                 style: "
@@ -257,23 +277,23 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                     background: {props.theme.background_secondary};
                     border-top: 1px solid {props.theme.border};
                 ",
-                
+
                 Button {
                     label: "✓ Approve",
                     variant: "success",
                     theme: props.theme.clone(),
                     on_click: move |_| props.on_approve.call(()),
                 }
-                
+
                 Button {
                     label: "✗ Reject",
                     variant: "danger",
                     theme: props.theme.clone(),
                     on_click: move |_| props.on_reject.call(()),
                 }
-                
+
                 div { style: "flex: 1;" }
-                
+
                 // Keyboard shortcuts hint
                 div {
                     style: "
@@ -283,7 +303,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         font-size: 12px;
                         color: {props.theme.text_secondary};
                     ",
-                    
+
                     span {
                         style: "
                             background: {props.theme.background};
@@ -294,7 +314,7 @@ pub fn OperationPreview(props: OperationPreviewProps) -> Element {
                         "Y"
                     }
                     "Approve"
-                    
+
                     span {
                         style: "
                             background: {props.theme.background};
@@ -329,7 +349,7 @@ fn DiffViewComponent(props: DiffViewComponentProps) -> Element {
                 border-radius: 6px;
                 overflow: hidden;
             ",
-            
+
             // Diff content
             pre {
                 style: "
@@ -340,7 +360,7 @@ fn DiffViewComponent(props: DiffViewComponentProps) -> Element {
                     line-height: 1.5;
                     overflow-x: auto;
                 ",
-                
+
                 // Render diff chunks
                 if let Some(unified) = &props.diff.unified_diff {
                     code {
@@ -363,8 +383,12 @@ struct FileStateViewProps {
 
 #[component]
 fn FileStateView(props: FileStateViewProps) -> Element {
-    let border_color = if props.highlight { props.theme.primary.clone() } else { props.theme.border.clone() };
-    
+    let border_color = if props.highlight {
+        props.theme.primary.clone()
+    } else {
+        props.theme.border.clone()
+    };
+
     rsx! {
         div {
             class: "file-state",
@@ -373,7 +397,7 @@ fn FileStateView(props: FileStateViewProps) -> Element {
                 border-radius: 6px;
                 overflow: hidden;
             ",
-            
+
             // Header
             div {
                 style: "
@@ -386,7 +410,7 @@ fn FileStateView(props: FileStateViewProps) -> Element {
                 ",
                 "{props.title}"
             }
-            
+
             // Content
             if props.state.exists {
                 if let Some(content) = &props.state.content {
@@ -453,7 +477,7 @@ fn OperationDetails(props: OperationDetailsProps) -> Element {
                         font-family: monospace;
                         font-size: 13px;
                     ",
-                    
+
                     div { style: "color: {props.theme.text_secondary};", "Create new file:" }
                     div { style: "color: {props.theme.primary}; margin: 8px 0;", {path_str} }
                     if content.len() < 500 {
@@ -489,7 +513,7 @@ fn OperationDetails(props: OperationDetailsProps) -> Element {
                         font-family: monospace;
                         font-size: 13px;
                     ",
-                    
+
                     div { style: "color: {props.theme.text_secondary};", "Update file:" }
                     div { style: "color: {props.theme.primary}; margin: 8px 0;", {path_str} }
                     div {
@@ -511,7 +535,7 @@ fn OperationDetails(props: OperationDetailsProps) -> Element {
                         font-family: monospace;
                         font-size: 13px;
                     ",
-                    
+
                     div { style: "color: {props.theme.text_secondary};", "Delete file:" }
                     div { style: "color: {props.theme.error}; margin: 8px 0;", {path_str} }
                 }
@@ -530,7 +554,7 @@ fn OperationDetails(props: OperationDetailsProps) -> Element {
                         font-family: monospace;
                         font-size: 13px;
                     ",
-                    
+
                     div { style: "color: {props.theme.text_secondary};", "Rename file:" }
                     div { style: "color: {props.theme.error}; margin: 8px 0;", {from_str} }
                     div { style: "color: {props.theme.success}; margin: 8px 0;", {to_str} }
@@ -550,7 +574,7 @@ fn OperationDetails(props: OperationDetailsProps) -> Element {
                         font-family: monospace;
                         font-size: 13px;
                     ",
-                    
+
                     div { style: "color: {props.theme.text_secondary};", "Append to file:" }
                     div { style: "color: {props.theme.primary}; margin: 8px 0;", {path_str} }
                     div {
@@ -582,7 +606,7 @@ fn OperationMetadata(props: OperationMetadataProps) -> Element {
                 gap: 16px;
                 font-size: 13px;
             ",
-            
+
             // Source location
             div {
                 div {
@@ -594,7 +618,7 @@ fn OperationMetadata(props: OperationMetadataProps) -> Element {
                     "Line {props.operation.source_location.line}, Position {props.operation.source_location.start}"
                 }
             }
-            
+
             // Dependencies
             if !props.operation.dependencies.is_empty() {
                 div {
@@ -617,7 +641,7 @@ fn OperationMetadata(props: OperationMetadataProps) -> Element {
                     }
                 }
             }
-            
+
             // Impact analysis
             if let Some(preview) = &props.preview {
                 div {
@@ -639,10 +663,10 @@ fn OperationMetadata(props: OperationMetadataProps) -> Element {
 
 fn get_operation_path(operation: &FileOperation) -> String {
     match operation {
-        FileOperation::Create { path, .. } |
-        FileOperation::Update { path, .. } |
-        FileOperation::Append { path, .. } |
-        FileOperation::Delete { path } => path.to_string_lossy().to_string(),
+        FileOperation::Create { path, .. }
+        | FileOperation::Update { path, .. }
+        | FileOperation::Append { path, .. }
+        | FileOperation::Delete { path } => path.to_string_lossy().to_string(),
         FileOperation::Rename { from, to } => format!("{} → {}", from.display(), to.display()),
     }
 }
@@ -657,7 +681,10 @@ fn get_confidence_color(confidence: f32, theme: &ThemeColors) -> String {
     }
 }
 
-fn get_impact_color(risk_level: &crate::consensus::operation_preview_generator::RiskLevel, theme: &ThemeColors) -> String {
+fn get_impact_color(
+    risk_level: &crate::consensus::operation_preview_generator::RiskLevel,
+    theme: &ThemeColors,
+) -> String {
     use crate::consensus::operation_preview_generator::RiskLevel;
     match risk_level {
         RiskLevel::Low => theme.success.clone(),
@@ -672,11 +699,23 @@ fn render_unified_diff(diff: &str, theme: &ThemeColors) -> String {
     diff.lines()
         .map(|line| {
             if line.starts_with('+') && !line.starts_with("+++") {
-                format!(r#"<span style="color: {};">{}</span>"#, theme.success, html_escape(line))
+                format!(
+                    r#"<span style="color: {};">{}</span>"#,
+                    theme.success,
+                    html_escape(line)
+                )
             } else if line.starts_with('-') && !line.starts_with("---") {
-                format!(r#"<span style="color: {};">{}</span>"#, theme.error, html_escape(line))
+                format!(
+                    r#"<span style="color: {};">{}</span>"#,
+                    theme.error,
+                    html_escape(line)
+                )
             } else if line.starts_with("@@") {
-                format!(r#"<span style="color: {};">{}</span>"#, theme.primary, html_escape(line))
+                format!(
+                    r#"<span style="color: {};">{}</span>"#,
+                    theme.primary,
+                    html_escape(line)
+                )
             } else {
                 html_escape(line)
             }

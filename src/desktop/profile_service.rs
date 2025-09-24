@@ -1,7 +1,7 @@
 //! Profile Service - Manages reactive profile state
 
-use crate::desktop::state::{ActiveProfileData, ProfileState, ACTIVE_PROFILE_STATE};
 use crate::core::database::get_database;
+use crate::desktop::state::{ActiveProfileData, ProfileState, ACTIVE_PROFILE_STATE};
 use rusqlite::OptionalExtension;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -16,7 +16,7 @@ impl ProfileService {
         // Load initial profile
         spawn(async {
             Self::load_and_update_profile().await;
-            
+
             // Start background watcher
             Self::start_watcher().await;
         });
@@ -25,7 +25,7 @@ impl ProfileService {
     /// Load profile from database and update global signal
     async fn load_and_update_profile() {
         info!("🔄 ProfileService: Loading profile from database");
-        
+
         match Self::load_profile_from_database().await {
             Ok(profile_data) => {
                 info!("✅ ProfileService: Loaded profile: {}", profile_data.name);
@@ -41,19 +41,22 @@ impl ProfileService {
     /// Background watcher that checks for profile changes
     async fn start_watcher() {
         info!("🔍 ProfileService: Starting background watcher");
-        
+
         loop {
             sleep(Duration::from_secs(5)).await; // Check every 5 seconds
-            
+
             // Check if profile has changed
             match Self::load_profile_from_database().await {
                 Ok(new_profile) => {
                     let current_state = ACTIVE_PROFILE_STATE();
-                    
+
                     // Only update if profile has changed
                     if let ProfileState::Loaded(current_profile) = &current_state {
                         if *current_profile != new_profile {
-                            info!("🔄 ProfileService: Profile changed, updating to: {}", new_profile.name);
+                            info!(
+                                "🔄 ProfileService: Profile changed, updating to: {}",
+                                new_profile.name
+                            );
                             *ACTIVE_PROFILE_STATE.write() = ProfileState::Loaded(new_profile);
                         }
                     } else {
@@ -73,17 +76,19 @@ impl ProfileService {
     async fn load_profile_from_database() -> anyhow::Result<ActiveProfileData> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         // Get active profile ID
-        let active_profile_id: Option<String> = conn.query_row(
-            "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
-            [],
-            |row| row.get(0)
-        ).optional()?;
-        
-        let profile_id = active_profile_id
-            .ok_or_else(|| anyhow::anyhow!("No active profile configured"))?;
-        
+        let active_profile_id: Option<String> = conn
+            .query_row(
+                "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        let profile_id =
+            active_profile_id.ok_or_else(|| anyhow::anyhow!("No active profile configured"))?;
+
         // Get profile data
         let profile = conn.query_row(
             "SELECT profile_name, generator_model, refiner_model, validator_model, curator_model FROM consensus_profiles WHERE id = ?1",
@@ -98,7 +103,7 @@ impl ProfileService {
                 })
             }
         )?;
-        
+
         Ok(profile)
     }
 

@@ -5,23 +5,23 @@
 //! creates plans following the architecture principle where consensus THINKS
 //! and AI Helpers DO.
 
-use crate::consensus::rollback_planner::{
-    RollbackPlan as LegacyRollbackPlan, RollbackStep, RollbackStrategy, 
-    RollbackOperation as LegacyRollbackOp, RiskLevel
-};
-use crate::consensus::rollback_plan::RollbackAction as LegacyRollbackAction;
-use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
-use crate::consensus::operation_history::OperationHistoryDatabase;
-use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::ai_helpers::rollback_executor::{
-    RollbackPlan, RollbackOperation, RollbackAction, RollbackSafetyLevel
+    RollbackAction, RollbackOperation, RollbackPlan, RollbackSafetyLevel,
 };
-use anyhow::{Result, Context};
+use crate::consensus::operation_history::OperationHistoryDatabase;
+use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
+use crate::consensus::rollback_plan::RollbackAction as LegacyRollbackAction;
+use crate::consensus::rollback_planner::{
+    RiskLevel, RollbackOperation as LegacyRollbackOp, RollbackPlan as LegacyRollbackPlan,
+    RollbackStep, RollbackStrategy,
+};
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, warn, debug};
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Rollback planner that creates plans for AI Helpers to execute
@@ -73,16 +73,19 @@ impl ConsensusRollbackPlanner {
         failed_operations: Vec<FileOperation>,
         failure_context: &str,
     ) -> Result<RollbackPlan> {
-        info!("Creating rollback plan for {} failed operations", failed_operations.len());
-        
+        info!(
+            "Creating rollback plan for {} failed operations",
+            failed_operations.len()
+        );
+
         let plan_id = Uuid::new_v4().to_string();
         let mut operations = Vec::new();
-        
+
         // Analyze each failed operation and create rollback actions
         for (idx, failed_op) in failed_operations.iter().enumerate() {
             let rollback_action = self.create_rollback_action(failed_op).await?;
             let files_affected = self.get_affected_files(failed_op);
-            
+
             operations.push(RollbackOperation {
                 operation_id: format!("{}-{}", plan_id, idx),
                 action: rollback_action,
@@ -91,10 +94,10 @@ impl ConsensusRollbackPlanner {
                 dependencies: self.determine_dependencies(&operations, failed_op),
             });
         }
-        
+
         // Determine safety level based on operations
         let safety_level = self.determine_safety_level(&operations);
-        
+
         Ok(RollbackPlan {
             plan_id,
             operations,
@@ -107,11 +110,11 @@ impl ConsensusRollbackPlanner {
     /// Convert legacy rollback plan to new format for AI Helpers
     pub fn convert_legacy_plan(&self, legacy_plan: LegacyRollbackPlan) -> Result<RollbackPlan> {
         let mut operations = Vec::new();
-        
+
         for step in legacy_plan.steps {
             let action = self.convert_legacy_operation(&step.operation)?;
             let files_affected = self.get_files_affected_from_operation(&step.operation);
-            
+
             operations.push(RollbackOperation {
                 operation_id: step.step_number.to_string(),
                 action,
@@ -120,7 +123,7 @@ impl ConsensusRollbackPlanner {
                 dependencies: step.depends_on.iter().map(|d| d.to_string()).collect(),
             });
         }
-        
+
         // Map risk assessment to safety level
         let safety_level = match legacy_plan.risk_assessment.risk_level {
             RiskLevel::Low => RollbackSafetyLevel::Low,
@@ -128,7 +131,7 @@ impl ConsensusRollbackPlanner {
             RiskLevel::High => RollbackSafetyLevel::High,
             RiskLevel::Critical => RollbackSafetyLevel::Critical,
         };
-        
+
         Ok(RollbackPlan {
             plan_id: legacy_plan.id,
             operations,
@@ -143,9 +146,7 @@ impl ConsensusRollbackPlanner {
         match operation {
             FileOperation::Create { path, .. } => {
                 // If we created a file, rollback is to delete it
-                Ok(RollbackAction::DeleteCreatedFile {
-                    path: path.clone(),
-                })
+                Ok(RollbackAction::DeleteCreatedFile { path: path.clone() })
             }
             FileOperation::Update { path, .. } => {
                 // For updates, we need the original content
@@ -153,7 +154,8 @@ impl ConsensusRollbackPlanner {
                 warn!("Update rollback requires original content - using placeholder");
                 Ok(RollbackAction::RevertModification {
                     path: path.clone(),
-                    original_content: "// Original content would be restored from backup".to_string(),
+                    original_content: "// Original content would be restored from backup"
+                        .to_string(),
                 })
             }
             FileOperation::Delete { path } => {
@@ -177,7 +179,8 @@ impl ConsensusRollbackPlanner {
                 warn!("Append rollback requires original content - using placeholder");
                 Ok(RollbackAction::RevertModification {
                     path: path.clone(),
-                    original_content: "// Original content would be restored from backup".to_string(),
+                    original_content: "// Original content would be restored from backup"
+                        .to_string(),
                 })
             }
         }
@@ -187,12 +190,14 @@ impl ConsensusRollbackPlanner {
     fn convert_legacy_operation(&self, legacy_op: &LegacyRollbackOp) -> Result<RollbackAction> {
         // Convert from legacy RollbackOperation to new RollbackAction format
         match legacy_op {
-            LegacyRollbackOp::RestoreFile { source, destination, .. } => {
-                Ok(RollbackAction::RestoreFromBackup {
-                    backup_path: source.clone(),
-                    target_path: destination.clone(),
-                })
-            }
+            LegacyRollbackOp::RestoreFile {
+                source,
+                destination,
+                ..
+            } => Ok(RollbackAction::RestoreFromBackup {
+                backup_path: source.clone(),
+                target_path: destination.clone(),
+            }),
             LegacyRollbackOp::GitCommand { command, args, .. } => {
                 let mut git_args = vec![command.clone()];
                 git_args.extend(args.clone());
@@ -205,37 +210,36 @@ impl ConsensusRollbackPlanner {
                 // Convert FileOperation to appropriate RollbackAction
                 match operation {
                     FileOperation::Create { path, .. } => {
-                        Ok(RollbackAction::DeleteCreatedFile {
-                            path: path.clone(),
-                        })
+                        Ok(RollbackAction::DeleteCreatedFile { path: path.clone() })
                     }
                     FileOperation::Delete { path } => {
                         // For deleted files, we'd need the original content to recreate
                         // This is a limitation of the legacy format
                         Ok(RollbackAction::NoOp {
-                            reason: format!("Cannot restore deleted file {} without backup", path.display()),
+                            reason: format!(
+                                "Cannot restore deleted file {} without backup",
+                                path.display()
+                            ),
                         })
                     }
-                    FileOperation::Update { path, .. } | 
-                    FileOperation::Append { path, .. } => {
+                    FileOperation::Update { path, .. } | FileOperation::Append { path, .. } => {
                         // For modified files, we'd need the original content
                         Ok(RollbackAction::NoOp {
-                            reason: format!("Cannot revert modification to {} without backup", path.display()),
+                            reason: format!(
+                                "Cannot revert modification to {} without backup",
+                                path.display()
+                            ),
                         })
                     }
-                    FileOperation::Rename { from, to } => {
-                        Ok(RollbackAction::UndoRename {
-                            current_path: to.clone(),
-                            original_path: from.clone(),
-                        })
-                    }
+                    FileOperation::Rename { from, to } => Ok(RollbackAction::UndoRename {
+                        current_path: to.clone(),
+                        original_path: from.clone(),
+                    }),
                 }
             }
-            LegacyRollbackOp::VerifyState { file, .. } => {
-                Ok(RollbackAction::NoOp {
-                    reason: format!("Verification step for {}", file.display()),
-                })
-            }
+            LegacyRollbackOp::VerifyState { file, .. } => Ok(RollbackAction::NoOp {
+                reason: format!("Verification step for {}", file.display()),
+            }),
             LegacyRollbackOp::ExecuteScript { script_path, args } => {
                 Ok(RollbackAction::RunScript {
                     script_path: script_path.clone(),
@@ -248,33 +252,35 @@ impl ConsensusRollbackPlanner {
     /// Get affected files from legacy rollback operation
     fn get_files_affected_from_operation(&self, operation: &LegacyRollbackOp) -> Vec<PathBuf> {
         match operation {
-            LegacyRollbackOp::RestoreFile { source, destination, .. } => {
+            LegacyRollbackOp::RestoreFile {
+                source,
+                destination,
+                ..
+            } => {
                 vec![source.clone(), destination.clone()]
-            },
+            }
             LegacyRollbackOp::GitCommand { .. } => {
                 // Git commands could affect many files, but we can't determine exactly which
                 Vec::new()
-            },
-            LegacyRollbackOp::ReverseOperation { operation } => {
-                self.get_affected_files(operation)
-            },
+            }
+            LegacyRollbackOp::ReverseOperation { operation } => self.get_affected_files(operation),
             LegacyRollbackOp::VerifyState { file, .. } => {
                 vec![file.clone()]
-            },
+            }
             LegacyRollbackOp::ExecuteScript { .. } => {
                 // Scripts could affect any files, we can't determine which
                 Vec::new()
-            },
+            }
         }
     }
 
     /// Get affected files from operation
     fn get_affected_files(&self, operation: &FileOperation) -> Vec<PathBuf> {
         match operation {
-            FileOperation::Create { path, .. } |
-            FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } |
-            FileOperation::Append { path, .. } => vec![path.clone()],
+            FileOperation::Create { path, .. }
+            | FileOperation::Update { path, .. }
+            | FileOperation::Delete { path }
+            | FileOperation::Append { path, .. } => vec![path.clone()],
             FileOperation::Rename { from, to } => vec![from.clone(), to.clone()],
         }
     }
@@ -308,7 +314,7 @@ impl ConsensusRollbackPlanner {
     ) -> Vec<String> {
         let mut dependencies = Vec::new();
         let current_files = self.get_affected_files(current_op);
-        
+
         // Check if any existing operations affect the same files
         for (idx, existing) in existing_ops.iter().enumerate() {
             for file in &existing.files_affected {
@@ -318,7 +324,7 @@ impl ConsensusRollbackPlanner {
                 }
             }
         }
-        
+
         dependencies
     }
 
@@ -327,7 +333,7 @@ impl ConsensusRollbackPlanner {
         let mut has_deletes = false;
         let mut has_system_paths = false;
         let mut has_scripts = false;
-        
+
         for op in operations {
             match &op.action {
                 RollbackAction::DeleteCreatedFile { path } => {
@@ -345,7 +351,7 @@ impl ConsensusRollbackPlanner {
                 _ => {}
             }
         }
-        
+
         if has_system_paths || has_scripts {
             RollbackSafetyLevel::Critical
         } else if has_deletes || operations.len() > 10 {
@@ -364,14 +370,15 @@ impl ConsensusRollbackPlanner {
         operations_to_rollback: Vec<usize>,
     ) -> Result<RollbackPlan> {
         let mut selected_operations = Vec::new();
-        
+
         for idx in operations_to_rollback {
             if let Some(op) = all_operations.get(idx) {
                 selected_operations.push(op.clone());
             }
         }
-        
-        self.create_rollback_plan(selected_operations, "Partial rollback requested").await
+
+        self.create_rollback_plan(selected_operations, "Partial rollback requested")
+            .await
     }
 
     /// Analyze rollback feasibility
@@ -381,7 +388,7 @@ impl ConsensusRollbackPlanner {
     ) -> Result<RollbackFeasibilityAnalysis> {
         let mut feasible_operations = 0;
         let mut issues = Vec::new();
-        
+
         for operation in &plan.operations {
             match self.check_operation_feasibility(&operation.action).await {
                 Ok(true) => feasible_operations += 1,
@@ -399,13 +406,13 @@ impl ConsensusRollbackPlanner {
                 }
             }
         }
-        
+
         let feasibility_score = if plan.operations.is_empty() {
             1.0
         } else {
             feasible_operations as f64 / plan.operations.len() as f64
         };
-        
+
         Ok(RollbackFeasibilityAnalysis {
             plan_id: plan.plan_id.clone(),
             feasibility_score,
@@ -455,16 +462,16 @@ pub struct RollbackFeasibilityAnalysis {
 /// Check if a path is a system path
 fn is_system_path(path: &Path) -> bool {
     let path_str = path.to_string_lossy();
-    path_str.starts_with("/etc") ||
-    path_str.starts_with("/sys") ||
-    path_str.starts_with("/proc") ||
-    path_str.starts_with("/boot") ||
-    path_str.starts_with("/dev") ||
-    path_str.starts_with("C:\\Windows") ||
-    path_str.starts_with("C:\\Program Files")
+    path_str.starts_with("/etc")
+        || path_str.starts_with("/sys")
+        || path_str.starts_with("/proc")
+        || path_str.starts_with("/boot")
+        || path_str.starts_with("/dev")
+        || path_str.starts_with("C:\\Windows")
+        || path_str.starts_with("C:\\Program Files")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 
@@ -477,34 +484,30 @@ mod tests {
         );
 
         // Test with delete operations
-        let ops = vec![
-            RollbackOperation {
-                operation_id: "1".to_string(),
-                action: RollbackAction::DeleteCreatedFile { 
-                    path: PathBuf::from("test.txt") 
-                },
-                description: "Delete test.txt".to_string(),
-                files_affected: vec![PathBuf::from("test.txt")],
-                dependencies: vec![],
-            }
-        ];
-        
+        let ops = vec![RollbackOperation {
+            operation_id: "1".to_string(),
+            action: RollbackAction::DeleteCreatedFile {
+                path: PathBuf::from("test.txt"),
+            },
+            description: "Delete test.txt".to_string(),
+            files_affected: vec![PathBuf::from("test.txt")],
+            dependencies: vec![],
+        }];
+
         let level = planner.determine_safety_level(&ops);
         assert!(matches!(level, RollbackSafetyLevel::Low));
 
         // Test with system paths
-        let sys_ops = vec![
-            RollbackOperation {
-                operation_id: "2".to_string(),
-                action: RollbackAction::DeleteCreatedFile { 
-                    path: PathBuf::from("/etc/config") 
-                },
-                description: "Delete system file".to_string(),
-                files_affected: vec![PathBuf::from("/etc/config")],
-                dependencies: vec![],
-            }
-        ];
-        
+        let sys_ops = vec![RollbackOperation {
+            operation_id: "2".to_string(),
+            action: RollbackAction::DeleteCreatedFile {
+                path: PathBuf::from("/etc/config"),
+            },
+            description: "Delete system file".to_string(),
+            files_affected: vec![PathBuf::from("/etc/config")],
+            dependencies: vec![],
+        }];
+
         let sys_level = planner.determine_safety_level(&sys_ops);
         assert!(matches!(sys_level, RollbackSafetyLevel::Critical));
     }

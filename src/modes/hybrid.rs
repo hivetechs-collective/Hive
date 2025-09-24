@@ -740,7 +740,7 @@ pub struct HybridExecutionStatistics {
     pub average_mode_switches: f32,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

@@ -93,13 +93,19 @@ impl RefinerStage {
         structured.push_str(context);
 
         // If repository context is present, emphasize maintaining focus
-        if context.contains("CRITICAL REPOSITORY CONTEXT") || context.contains("ACTUAL FILE CONTENTS") {
+        if context.contains("CRITICAL REPOSITORY CONTEXT")
+            || context.contains("ACTUAL FILE CONTENTS")
+        {
             structured.push_str("\n\n⚠️ CRITICAL REFINEMENT REQUIREMENT:\n");
             structured.push_str("The Generator has analyzed a SPECIFIC repository with ACTUAL FILE CONTENTS. You MUST:\n");
-            structured.push_str("1. Continue analyzing the SAME repository and files mentioned above\n");
+            structured
+                .push_str("1. Continue analyzing the SAME repository and files mentioned above\n");
             structured.push_str("2. NOT introduce information about other projects\n");
-            structured.push_str("3. Base your refinements on the ACTUAL CODE shown, not generic examples\n");
-            structured.push_str("4. Reference specific files and features from THIS repository only\n");
+            structured.push_str(
+                "3. Base your refinements on the ACTUAL CODE shown, not generic examples\n",
+            );
+            structured
+                .push_str("4. Reference specific files and features from THIS repository only\n");
             structured.push_str("5. Quote actual code snippets when making improvements\n");
         }
 
@@ -110,9 +116,14 @@ impl RefinerStage {
         structured.push_str("- Enhance structure and flow\n");
         structured.push_str("- Optimize for user's specific needs\n");
 
-        if context.contains("symbols:") || context.contains("dependencies:") || context.contains("Repository Path:") {
+        if context.contains("symbols:")
+            || context.contains("dependencies:")
+            || context.contains("Repository Path:")
+        {
             structured.push_str("- Leverage repository context for technical accuracy\n");
-            structured.push_str("- Ensure all file paths and code references match the actual repository\n");
+            structured.push_str(
+                "- Ensure all file paths and code references match the actual repository\n",
+            );
         }
 
         if context.contains("TEMPORAL CONTEXT") {

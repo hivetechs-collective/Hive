@@ -1,6 +1,10 @@
 /**
  * Memory Service Entry Point
  * Can be run as a child process or standalone
+ *
+ * Diagrams
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-system-overview
+ * - electron-poc/MASTER_ARCHITECTURE.md#diagram-communication-ipc
  */
 
 import MemoryServiceServer from './server';

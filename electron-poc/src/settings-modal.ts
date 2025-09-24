@@ -277,11 +277,83 @@ export class SettingsModal {
                 ${this.renderProfiles()}
               </div>
               
-              <div class="button-group">
+              <div class="button-group" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                 <button id="create-profile" class="btn btn-secondary">+ New Profile</button>
+                <button id="btn-profile-rebind" class="btn btn-secondary">Rebind Selected to Current Best</button>
               </div>
             </div>
             
+            <!-- Advanced (Database) Section -->
+            <div class="settings-section">
+              <h3>Advanced</h3>
+              <p class="section-description">Database maintenance and backup</p>
+              <div class="button-group">
+                <button id="db-backup" class="btn btn-secondary">Backup Database…</button>
+                <button id="db-restore" class="btn btn-secondary">Restore Database…</button>
+                <button id="db-integrity" class="btn btn-secondary">Integrity Check</button>
+                <button id="db-compact" class="btn btn-secondary">Compact Database</button>
+                <button id="db-view-backups" class="btn btn-secondary">View Backups…</button>
+              </div>
+              <div class="form-group" style="margin-top: 10px;">
+                <label>Auto Backup</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <label style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" id="backup-auto-enabled" /> Enable
+                  </label>
+                  <select id="backup-frequency" style="background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;">
+                    <option value="manual">Manual</option>
+                    <option value="on-exit">On Exit</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                  <input id="backup-retention" type="number" min="1" max="60" value="7" style="width:80px;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
+                  <span style="color:#888;">retained backups</span>
+                </div>
+                <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                  <input id="backup-dir" placeholder="Backup folder" style="flex:1;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
+                  <button id="choose-backup-dir" class="btn btn-secondary">Choose…</button>
+                </div>
+                <div style="margin-top:8px; display:flex; gap:16px; align-items:center;">
+                  <label style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" id="backup-always-encrypt" /> Always encrypt backups
+                  </label>
+                  <label style="display:flex; align-items:center; gap:6px;">
+                    <input type="checkbox" id="backup-always-compress" /> Always compress backups
+                  </label>
+                  <label style="display:flex; align-items:center; gap:6px;">
+                    Reminder every
+                    <input id="backup-reminder-days" type="number" min="1" max="90" value="7" style="width:70px;background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;" />
+                    days when disabled
+                  </label>
+                </div>
+              </div>
+              <small class="help-text">Backups include all settings, sessions, recents, profiles, and analytics in ~/.hive/hive-ai.db</small>
+            </div>
+
+            <!-- Source Control Section -->
+            <div class="settings-section">
+              <h3>Source Control</h3>
+              <p class="section-description">Git integration preferences</p>
+              <div class="form-group">
+                <label style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="git-prefer-opened-folder-root" /> Prefer opened folder as Git root
+                </label>
+                <small class="help-text">When enabled, SCM binds to the currently opened folder instead of auto-detecting the nearest Git root. Disable to get repo‑root SCM for monorepos.</small>
+              </div>
+            </div>
+
+            <!-- Maintenance Section -->
+            <div class="settings-section">
+              <h3>Maintenance</h3>
+              <p class="section-description">Keep models, profiles, and usage in sync</p>
+              <div class="button-group" style="display:flex; gap:8px; flex-wrap: wrap;">
+                <button id="btn-models-sync-now" class="btn btn-secondary">Sync Models Now</button>
+                <button id="btn-profiles-migrate-v2" class="btn btn-secondary">Migrate Profiles to Internal IDs</button>
+                <button id="btn-usage-sync-now" class="btn btn-secondary">Sync Usage Now</button>
+              </div>
+              <small class="help-text">Model sync pulls the latest providers/models from OpenRouter into the unified database. Profiles migration preserves a stable internal ID per model to tolerate renames/deprecations. Usage sync flushes any queued D1 usage records.</small>
+            </div>
+          
           </div>
           
           <div class="settings-footer">
@@ -570,6 +642,67 @@ export class SettingsModal {
       });
     });
 
+    // Maintenance actions
+    const toast = (msg: string, type: 'success' | 'error' | 'info' = 'info') => {
+      const n = document.createElement('div');
+      n.className = `status-toast ${type}`;
+      n.textContent = msg;
+      document.body.appendChild(n);
+      setTimeout(() => n.remove(), 2000);
+    };
+    document.getElementById('btn-models-sync-now')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement;
+      const old = btn.textContent || '';
+      btn.disabled = true; btn.textContent = 'Syncing…';
+      try { await (window as any).maintenanceAPI?.modelsSyncNow(); toast('Models synced', 'success'); }
+      catch (e) { toast('Model sync failed', 'error'); }
+      finally { btn.disabled = false; btn.textContent = old; }
+    });
+    document.getElementById('btn-profiles-migrate-v2')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement;
+      const old = btn.textContent || '';
+      btn.disabled = true; btn.textContent = 'Migrating…';
+      try {
+        const res = await (window as any).maintenanceAPI?.profilesMigrateV2();
+        toast(res?.ok ? 'Profiles migrated' : 'Profiles migration failed', res?.ok ? 'success' : 'error');
+      } catch (e) { toast('Profiles migration failed', 'error'); }
+      finally { btn.disabled = false; btn.textContent = old; }
+    });
+    document.getElementById('btn-usage-sync-now')?.addEventListener('click', async (ev) => {
+      const btn = ev.currentTarget as HTMLButtonElement;
+      const old = btn.textContent || '';
+      btn.disabled = true; btn.textContent = 'Syncing…';
+      try { await (window as any).maintenanceAPI?.usageSyncNow(); toast('Usage sync complete', 'success'); }
+      catch (e) { toast('Usage sync failed', 'error'); }
+      finally { btn.disabled = false; btn.textContent = old; }
+    });
+
+    // Rebind selected profile to current best (internal IDs)
+    document.getElementById('btn-profile-rebind')?.addEventListener('click', async (ev) => {
+      try {
+        const pid = this.selectedProfileId;
+        if (!pid) { this.showMessage('Select a profile first', 'info'); return; }
+        const btn = ev.currentTarget as HTMLButtonElement;
+        const old = btn.textContent || '';
+        btn.disabled = true; btn.textContent = 'Rebinding…';
+        const res = await (window as any).maintenanceAPI?.profilesRebindActive(pid);
+        if (res?.ok) {
+          const msg = res.complete ? 'Profile rebound to current best' : 'Profile rebound (partial)';
+          this.showMessage(msg, 'success');
+          toast(msg, 'success');
+        } else {
+          this.showMessage('Rebind failed', 'error');
+          toast('Rebind failed', 'error');
+        }
+      } catch (e) {
+        this.showMessage('Rebind failed', 'error');
+        toast('Rebind failed', 'error');
+      } finally {
+        const btn = document.getElementById('btn-profile-rebind') as HTMLButtonElement | null;
+        if (btn) { btn.disabled = false; btn.textContent = 'Rebind Selected to Current Best'; }
+      }
+    });
+
     // Handle typing in API key fields
     ['openrouter-key', 'hive-key'].forEach(id => {
       const input = document.getElementById(id) as HTMLInputElement;
@@ -608,10 +741,354 @@ export class SettingsModal {
       this.resetToDefaults();
     });
 
-    // Create profile button
-    document.getElementById('create-profile')?.addEventListener('click', () => {
-      this.showProfileCreationModal();
+    // Database maintenance handlers
+    document.getElementById('db-integrity')?.addEventListener('click', async () => {
+      try {
+        const res = await (window as any).databaseAPI?.integrityCheck?.();
+        await (window as any).electronAPI?.showMessageBox?.({
+          type: 'info',
+          title: 'Database Integrity',
+          message: `Integrity check: ${res?.result || 'unknown'}`
+        });
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Integrity Check Failed', message: String(e) });
+      }
     });
+    document.getElementById('db-compact')?.addEventListener('click', async () => {
+      try {
+        await (window as any).databaseAPI?.compact?.();
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Database Compacted', message: 'VACUUM completed successfully.' });
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Compact Failed', message: String(e) });
+      }
+    });
+    document.getElementById('db-backup')?.addEventListener('click', async () => {
+      try {
+        const save = await (window as any).electronAPI?.showSaveDialog?.({
+          title: 'Save Database Backup',
+          defaultPath: 'hive-ai-backup.sqlite'
+        });
+        if (save && !save.canceled && save.filePath) {
+          const defEnc = ((await (window as any).databaseAPI?.getSetting?.('backup.alwaysEncrypt')) || '0') === '1';
+          const defCmp = ((await (window as any).databaseAPI?.getSetting?.('backup.alwaysCompress')) || '0') === '1';
+          const overlay = document.createElement('div');
+          overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
+          const modal = document.createElement('div');
+          modal.style.width = '460px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '20vh auto'; modal.style.padding = '16px';
+          modal.innerHTML = `
+            <div style=\"font-weight:600; margin-bottom:8px\">Backup Options</div>
+            <label style=\"display:flex;align-items:center;gap:8px;margin-bottom:8px\"><input id=\"enc-enabled\" type=\"checkbox\" ${defEnc ? 'checked' : ''}/> Encrypt backup</label>
+            <label style=\"display:flex;align-items:center;gap:8px;margin-bottom:8px\"><input id=\"cmp-enabled\" type=\"checkbox\" ${defCmp ? 'checked' : ''}/> Compress backup</label>
+            <input id=\"enc-password\" type=\"password\" placeholder=\"Password (required if encrypting)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
+            <div style=\"display:flex; gap:8px; justify-content:flex-end\">
+              <button id=\"enc-cancel\" class=\"btn btn-secondary\">Cancel</button>
+              <button id=\"enc-ok\" class=\"btn btn-primary\">Backup</button>
+            </div>
+          `;
+          overlay.appendChild(modal); document.body.appendChild(overlay);
+          await new Promise<void>((resolve) => {
+            (modal.querySelector('#enc-cancel') as HTMLElement).addEventListener('click', () => { document.body.removeChild(overlay); resolve(); });
+            (modal.querySelector('#enc-ok') as HTMLElement).addEventListener('click', async () => {
+              const enabled = (modal.querySelector('#enc-enabled') as HTMLInputElement).checked;
+              const cmp = (modal.querySelector('#cmp-enabled') as HTMLInputElement).checked;
+              const pwd = (modal.querySelector('#enc-password') as HTMLInputElement).value;
+              if (enabled && !pwd) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup', message: 'Password required when encrypting.' });
+                return;
+              }
+              document.body.removeChild(overlay);
+              try {
+                const opts: any = Object.assign({ destPath: save.filePath }, enabled ? { password: pwd } : {}, cmp ? { compress: true } : {});
+                await (window as any).databaseAPI?.backup?.(opts);
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Backup Complete', message: `Saved to: ${save.filePath}` });
+              } catch (e) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
+              }
+              resolve();
+            });
+          });
+        }
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
+      }
+    });
+    document.getElementById('db-view-backups')?.addEventListener('click', async () => {
+      try {
+        const list = await (window as any).electronAPI?.listBackups?.();
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
+        const modal = document.createElement('div');
+        modal.style.width = '720px'; modal.style.maxHeight = '70vh'; modal.style.overflow = 'auto'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '12vh auto'; modal.style.padding = '16px';
+        const rows = (list || []).map((f: any) => `
+          <div class=\"backup-row\" style=\"display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid #2d2d30\">
+            <div style=\"flex:1;min-width:0\">
+              <div style=\"font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">${f.name}</div>
+              <div style=\"font-size:11px;color:#858585\">${new Date(f.mtimeMs).toLocaleString()}</div>
+            </div>
+            <div style=\"width:120px;color:#ccc\">${(f.size/1024/1024).toFixed(2)} MB</div>
+            <button class=\"btn btn-secondary\" data-reveal=\"${f.path}\">Reveal</button>
+            <button class=\"btn btn-secondary\" data-restore=\"${f.path}\">Restore</button>
+            <button class=\"btn btn-danger\" data-delete=\"${f.path}\">Delete</button>
+          </div>`).join('');
+        modal.innerHTML = `
+          <div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:8px\">
+            <div style=\"font-weight:600\">Backups</div>
+            <div style=\"display:flex;gap:8px\">
+              <input id=\"backup-search\" placeholder=\"Search...\" style=\"background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px;\" />
+              <button id=\"open-backup-folder\" class=\"btn btn-secondary\">Open Backup Folder</button>
+              <button id=\"close-backups\" class=\"btn btn-secondary\">Close</button>
+            </div>
+          </div>
+          <div id=\"backups-list\">${rows || '<div style=\"color:#888\">No backups found</div>'}</div>
+        `;
+        overlay.appendChild(modal); document.body.appendChild(overlay);
+        (modal.querySelector('#close-backups') as HTMLElement)?.addEventListener('click', () => document.body.removeChild(overlay));
+        (modal.querySelector('#open-backup-folder') as HTMLElement)?.addEventListener('click', async () => {
+          const dir = (document.getElementById('backup-dir') as HTMLInputElement)?.value || '';
+          if (dir) await (window as any).electronAPI?.openPath?.(dir);
+        });
+        const wireActions = () => {
+          modal.querySelectorAll('button[data-reveal]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+            const p = (e.currentTarget as HTMLElement).getAttribute('data-reveal')!;
+            await (window as any).electronAPI?.revealInFolder?.(p);
+          }));
+          modal.querySelectorAll('button[data-delete]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+            const p = (e.currentTarget as HTMLElement).getAttribute('data-delete')!;
+            const confirm = await (window as any).electronAPI?.showMessageBox?.({ type: 'warning', buttons: ['Delete','Cancel'], defaultId: 1, cancelId: 1, title: 'Delete Backup', message: `Delete backup?`, detail: p });
+            if (confirm?.response === 0) {
+              await (window as any).electronAPI?.deleteBackup?.(p);
+              document.body.removeChild(overlay);
+              (document.getElementById('db-view-backups') as HTMLButtonElement)?.click();
+            }
+          }));
+          modal.querySelectorAll('button[data-restore]')?.forEach(btn => btn.addEventListener('click', async (e) => {
+            const p = (e.currentTarget as HTMLElement).getAttribute('data-restore')!;
+            // Ask for password (optional)
+            const ov = document.createElement('div');
+            ov.style.position = 'fixed'; ov.style.inset = '0'; ov.style.background = 'rgba(0,0,0,0.35)'; ov.style.zIndex = '3200';
+            const md = document.createElement('div');
+          md.style.width = '460px'; md.style.background = '#1f1f1f'; md.style.border = '1px solid #2d2d30'; md.style.borderRadius = '8px'; md.style.margin = '20vh auto'; md.style.padding = '16px';
+          md.innerHTML = `
+            <div style=\"font-weight:600; margin-bottom:8px\">Restore Options</div>
+            <input id=\"enc-password-restore2\" type=\"password\" placeholder=\"Password (leave blank if not encrypted)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
+            <div style=\"display:flex; gap:8px; justify-content:flex-end\">
+              <button id=\"enc-cancel-restore2\" class=\"btn btn-secondary\">Cancel</button>
+              <button id=\"enc-ok-restore2\" class=\"btn btn-primary\">Restore</button>
+            </div>
+          `;
+          ov.appendChild(md); document.body.appendChild(ov);
+          (md.querySelector('#enc-cancel-restore2') as HTMLElement).addEventListener('click', () => document.body.removeChild(ov));
+          (md.querySelector('#enc-ok-restore2') as HTMLElement).addEventListener('click', async () => {
+            const pwd = (md.querySelector('#enc-password-restore2') as HTMLInputElement).value;
+            document.body.removeChild(ov);
+            try {
+              const opts: any = pwd ? { srcPath: p, password: pwd } : { srcPath: p };
+              await (window as any).databaseAPI?.restore?.(opts);
+              await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Restore Complete', message: 'Database restored. Please restart the application.' });
+            } catch (err) {
+              await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(err) });
+            }
+          });
+          }));
+        };
+        wireActions();
+        (modal.querySelector('#backup-search') as HTMLInputElement)?.addEventListener('input', (e) => {
+          const q = (e.target as HTMLInputElement).value.toLowerCase();
+          const filtered = (list || []).filter((f: any) => f.name.toLowerCase().includes(q));
+          const rows2 = filtered.map((f: any) => `
+            <div class=\"backup-row\" style=\"display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid #2d2d30\">
+              <div style=\"flex:1;min-width:0\">
+                <div style=\"font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\">${f.name}</div>
+                <div style=\"font-size:11px;color:#858585\">${new Date(f.mtimeMs).toLocaleString()}</div>
+              </div>
+              <div style=\"width:120px;color:#ccc\">${(f.size/1024/1024).toFixed(2)} MB</div>
+              <button class=\"btn btn-secondary\" data-reveal=\"${f.path}\">Reveal</button>
+              <button class=\"btn btn-secondary\" data-restore=\"${f.path}\">Restore</button>
+              <button class=\"btn btn-danger\" data-delete=\"${f.path}\">Delete</button>
+            </div>`).join('');
+          (modal.querySelector('#backups-list') as HTMLElement).innerHTML = rows2 || '<div style=\"color:#888\">No backups found</div>';
+          wireActions();
+        });
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backups', message: String(e) });
+      }
+    });
+    document.getElementById('db-backup')?.addEventListener('click', async () => {
+      try {
+        const save = await (window as any).electronAPI?.showSaveDialog?.({
+          title: 'Save Database Backup',
+          defaultPath: 'hive-ai-backup.sqlite'
+        });
+        if (save && !save.canceled && save.filePath) {
+          // Simple inline prompt for encryption
+          const overlay = document.createElement('div');
+          overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
+          const modal = document.createElement('div');
+          modal.style.width = '460px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '20vh auto'; modal.style.padding = '16px';
+          // Default encryption checkbox based on setting
+          const defaultEnc = ((await (window as any).databaseAPI?.getSetting?.('backup.alwaysEncrypt')) || '0') === '1';
+          modal.innerHTML = `
+            <div style=\"font-weight:600; margin-bottom:8px\">Backup Options</div>
+            <label style=\"display:flex;align-items:center;gap:8px;margin-bottom:8px\"><input id=\"enc-enabled\" type=\"checkbox\" ${defaultEnc ? 'checked' : ''}/> Encrypt backup</label>
+            <input id=\"enc-password\" type=\"password\" placeholder=\"Password (required if encrypting)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
+            <div style=\"display:flex; gap:8px; justify-content:flex-end\">
+              <button id=\"enc-cancel\" class=\"btn btn-secondary\">Cancel</button>
+              <button id=\"enc-ok\" class=\"btn btn-primary\">Backup</button>
+            </div>
+          `;
+          overlay.appendChild(modal); document.body.appendChild(overlay);
+          await new Promise<void>((resolve) => {
+            (modal.querySelector('#enc-cancel') as HTMLElement).addEventListener('click', () => { document.body.removeChild(overlay); resolve(); });
+            (modal.querySelector('#enc-ok') as HTMLElement).addEventListener('click', async () => {
+              const enabled = (modal.querySelector('#enc-enabled') as HTMLInputElement).checked;
+              const pwd = (modal.querySelector('#enc-password') as HTMLInputElement).value;
+              if (enabled && !pwd) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup', message: 'Password required when encrypting.' });
+                return;
+              }
+              document.body.removeChild(overlay);
+              try {
+                const opts: any = enabled ? { destPath: save.filePath, password: pwd } : { destPath: save.filePath };
+                await (window as any).databaseAPI?.backup?.(opts);
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Backup Complete', message: `Saved to: ${save.filePath}` });
+              } catch (e) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
+              }
+              resolve();
+            });
+          });
+        }
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Backup Failed', message: String(e) });
+      }
+    });
+    document.getElementById('db-restore')?.addEventListener('click', async () => {
+      try {
+        const open = await (window as any).electronAPI?.showOpenDialog?.({
+          title: 'Select Database Backup',
+          properties: ['openFile']
+        });
+        if (open && !open.canceled && open.filePaths && open.filePaths[0]) {
+          // Ask for password (optional)
+          const overlay = document.createElement('div');
+          overlay.style.position = 'fixed'; overlay.style.inset = '0'; overlay.style.background = 'rgba(0,0,0,0.35)'; overlay.style.zIndex = '3000';
+          const modal = document.createElement('div');
+          modal.style.width = '460px'; modal.style.background = '#1f1f1f'; modal.style.border = '1px solid #2d2d30'; modal.style.borderRadius = '8px'; modal.style.margin = '20vh auto'; modal.style.padding = '16px';
+          modal.innerHTML = `
+            <div style=\"font-weight:600; margin-bottom:8px\">Restore Options</div>
+            <input id=\"enc-password-restore\" type=\"password\" placeholder=\"Password (leave blank if not encrypted)\" style=\"width:100%; background:#2a2a2e;border:1px solid #3a3a3a;color:#ccc;border-radius:4px;padding:6px 8px; margin-bottom:8px\" />
+            <div style=\"display:flex; gap:8px; justify-content:flex-end\">
+              <button id=\"enc-cancel-restore\" class=\"btn btn-secondary\">Cancel</button>
+              <button id=\"enc-ok-restore\" class=\"btn btn-primary\">Restore</button>
+            </div>
+          `;
+          overlay.appendChild(modal); document.body.appendChild(overlay);
+          await new Promise<void>((resolve) => {
+            (modal.querySelector('#enc-cancel-restore') as HTMLElement).addEventListener('click', () => { document.body.removeChild(overlay); resolve(); });
+            (modal.querySelector('#enc-ok-restore') as HTMLElement).addEventListener('click', async () => {
+              const pwd = (modal.querySelector('#enc-password-restore') as HTMLInputElement).value;
+              document.body.removeChild(overlay);
+              try {
+                const opts: any = pwd ? { srcPath: open.filePaths[0], password: pwd } : { srcPath: open.filePaths[0] };
+                await (window as any).databaseAPI?.restore?.(opts);
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'info', title: 'Restore Complete', message: 'Database restored. Please restart the application.' });
+              } catch (e) {
+                await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(e) });
+              }
+              resolve();
+            });
+          });
+        }
+      } catch (e) {
+        await (window as any).electronAPI?.showMessageBox?.({ type: 'error', title: 'Restore Failed', message: String(e) });
+      }
+    });
+
+    // Load backup settings
+    (async () => {
+      try {
+        const enabled = await (window as any).databaseAPI?.getSetting?.('backup.autoEnabled');
+        const freq = await (window as any).databaseAPI?.getSetting?.('backup.frequency');
+        const ret = await (window as any).databaseAPI?.getSetting?.('backup.retentionCount');
+        const dir = await (window as any).databaseAPI?.getSetting?.('backup.dir');
+        const alwaysEnc = await (window as any).databaseAPI?.getSetting?.('backup.alwaysEncrypt');
+        const alwaysComp = await (window as any).databaseAPI?.getSetting?.('backup.alwaysCompress');
+        const remindDays = await (window as any).databaseAPI?.getSetting?.('backup.reminderDays');
+        const chk = document.getElementById('backup-auto-enabled') as HTMLInputElement;
+        const sel = document.getElementById('backup-frequency') as HTMLSelectElement;
+        const num = document.getElementById('backup-retention') as HTMLInputElement;
+        const inp = document.getElementById('backup-dir') as HTMLInputElement;
+        const enc = document.getElementById('backup-always-encrypt') as HTMLInputElement;
+        const cmp = document.getElementById('backup-always-compress') as HTMLInputElement;
+        const rmd = document.getElementById('backup-reminder-days') as HTMLInputElement;
+        if (chk) chk.checked = (enabled || '0') === '1';
+        if (sel && (freq === 'manual' || freq === 'on-exit' || freq === 'daily' || freq === 'weekly')) sel.value = freq;
+        if (num) num.value = String(Math.max(1, parseInt(ret || '7', 10)));
+        if (inp) inp.value = dir || '';
+        if (enc) enc.checked = (alwaysEnc || '0') === '1';
+        if (cmp) cmp.checked = (alwaysComp || '0') === '1';
+        if (rmd) rmd.value = String(Math.max(1, parseInt(remindDays || '7', 10)));
+      } catch {}
+    })();
+
+    // Save backup settings when changed
+    document.getElementById('backup-auto-enabled')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.autoEnabled', (e.target as HTMLInputElement).checked ? '1' : '0'); } catch {}
+    });
+    document.getElementById('backup-frequency')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.frequency', (e.target as HTMLSelectElement).value); } catch {}
+    });
+    document.getElementById('backup-retention')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.retentionCount', (e.target as HTMLInputElement).value); } catch {}
+    });
+    document.getElementById('backup-always-encrypt')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.alwaysEncrypt', (e.target as HTMLInputElement).checked ? '1' : '0'); } catch {}
+    });
+    document.getElementById('backup-always-compress')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.alwaysCompress', (e.target as HTMLInputElement).checked ? '1' : '0'); } catch {}
+    });
+    document.getElementById('backup-reminder-days')?.addEventListener('change', async (e) => {
+      try { await (window as any).databaseAPI?.setSetting?.('backup.reminderDays', (e.target as HTMLInputElement).value); } catch {}
+    });
+    document.getElementById('choose-backup-dir')?.addEventListener('click', async () => {
+      const res = await (window as any).electronAPI?.showOpenDialog?.({ properties: ['openDirectory', 'createDirectory'] });
+      const inp = document.getElementById('backup-dir') as HTMLInputElement;
+      if (res && !res.canceled && res.filePaths && res.filePaths[0]) {
+        inp.value = res.filePaths[0];
+        try { await (window as any).databaseAPI?.setSetting?.('backup.dir', res.filePaths[0]); } catch {}
+      }
+    });
+
+    // Create profile button - use a more robust approach
+    setTimeout(() => {
+      const createProfileBtn = document.getElementById('create-profile');
+      console.log('🔍 Looking for create-profile button:', createProfileBtn);
+      
+      if (createProfileBtn) {
+        console.log('✅ Found create-profile button, attaching event listener');
+        // Remove any existing listeners first
+        createProfileBtn.replaceWith(createProfileBtn.cloneNode(true));
+        const newBtn = document.getElementById('create-profile');
+        
+        if (newBtn) {
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔴 Create profile button clicked!');
+            this.showProfileCreationModal();
+          });
+          
+          // Also add pointer-events to ensure it's clickable
+          (newBtn as HTMLElement).style.pointerEvents = 'auto';
+          (newBtn as HTMLElement).style.cursor = 'pointer';
+        }
+      } else {
+        console.error('❌ create-profile button not found in DOM');
+        // Let's list all buttons to see what's available
+        const allButtons = document.querySelectorAll('button');
+        console.log('Available buttons:', Array.from(allButtons).map(btn => ({ id: btn.id, text: btn.textContent })));
+      }
+    }, 100); // Small delay to ensure DOM is ready
   }
 
   private setupProfileCreationHandlers() {
@@ -721,6 +1198,13 @@ export class SettingsModal {
         // This also validates the key format and updates the display
         this.refreshLicenseStatus(settings.hiveKey);
       }
+
+      // Load Git preference
+      try {
+        const gitPrefer = settings.gitPreferOpenedFolderRoot === true || settings.gitPreferOpenedFolderRoot === 'true';
+        const gitChk = document.getElementById('git-prefer-opened-folder-root') as HTMLInputElement | null;
+        if (gitChk) gitChk.checked = !!gitPrefer;
+      } catch {}
 
       // Load selected profile from active_profile_id
       if (settings.activeProfileId || settings.activeProfileName) {
@@ -954,10 +1438,12 @@ export class SettingsModal {
 
     try {
       // Save all settings including the selected profile
+      const gitPrefer = (document.getElementById('git-prefer-opened-folder-root') as HTMLInputElement | null)?.checked || false;
       await (window as any).settingsAPI.saveAllSettings({
         openrouterKey,
         hiveKey,
-        selectedProfile: this.selectedProfileId
+        selectedProfile: this.selectedProfileId,
+        gitPreferOpenedFolderRoot: gitPrefer
       });
       
       // Profile is now saved to database, the callback will reload it
@@ -1104,11 +1590,22 @@ export class SettingsModal {
     }
   }
 
-  private showProfileCreationModal() {
+  public showProfileCreationModal() {
+    console.log('🟢 showProfileCreationModal called');
+    console.log('🟢 profileCreationModal element:', this.profileCreationModal);
+    
     if (this.profileCreationModal) {
+      console.log('🟢 Setting display to flex');
       this.profileCreationModal.style.display = 'flex';
+      // Ensure modal is on top
+      this.profileCreationModal.style.zIndex = '10000';
       // Update model dropdowns when showing modal
       this.updateModelDropdowns();
+      console.log('🟢 Profile creation modal should now be visible');
+    } else {
+      console.error('❌ profileCreationModal is null! Looking for element in DOM...');
+      const found = document.getElementById('profile-creation-modal-overlay');
+      console.log('❌ Found element by ID search:', found);
     }
   }
 
@@ -1471,9 +1968,35 @@ export class SettingsModal {
     });
   }
   
+  private ensureProfileCreationModal(): void {
+    // Check if profile creation modal already exists in DOM
+    if (!document.getElementById('profile-creation-modal-overlay')) {
+      // Add profile creation modal to body (it's an overlay, should be at body level)
+      const profileCreationHTML = this.createProfileCreationModal();
+      const profileCreationContainer = document.createElement('div');
+      profileCreationContainer.innerHTML = profileCreationHTML;
+      document.body.appendChild(profileCreationContainer.firstElementChild!);
+      
+      // Store reference to the modal
+      this.profileCreationModal = document.getElementById('profile-creation-modal-overlay');
+      
+      // Setup event handlers for the profile creation modal
+      this.setupProfileCreationHandlers();
+      
+      console.log('✅ Profile creation modal added to DOM');
+    } else {
+      // Modal already exists, just ensure we have the reference
+      this.profileCreationModal = document.getElementById('profile-creation-modal-overlay');
+      console.log('✅ Profile creation modal already in DOM');
+    }
+  }
+
   public renderInContainer(container: HTMLElement): void {
     // Store the container for context-aware toast notifications
     this.currentContainer = container;
+    
+    // Ensure profile creation modal is available in DOM
+    this.ensureProfileCreationModal();
     
     // Render the actual settings content (without modal wrapper) in the container
     const modalContent = this.createModal();

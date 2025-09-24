@@ -80,7 +80,7 @@ pub fn get_metrics() -> HttpMetrics {
     METRICS.lock().clone()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     

@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('consensusAPI', {
   onStageUpdate(callback: (data: any) => void) {
     ipcRenderer.on('consensus-stage-update', (_, data) => callback(data));
   },
+  onConsensusVoteUpdate(callback: (data: any) => void) {
+    ipcRenderer.on('consensus-vote-update', (_, data) => callback(data));
+  },
   onConsensusStatus(callback: (data: any) => void) {
     ipcRenderer.on('consensus-status', (_, data) => callback(data));
   },
@@ -77,12 +80,16 @@ contextBridge.exposeInMainWorld('consensusAPI', {
     ipcRenderer.removeAllListeners('consensus-complete');
     ipcRenderer.removeAllListeners('consensus-round-update');
     ipcRenderer.removeAllListeners('consensus-stage-update');
+    ipcRenderer.removeAllListeners('consensus-vote-update');
     ipcRenderer.removeAllListeners('consensus-status');
     ipcRenderer.removeAllListeners('updateStageStatus');
     ipcRenderer.removeAllListeners('updateStageProgress');
     ipcRenderer.removeAllListeners('updateModelDisplay');
     ipcRenderer.removeAllListeners('neuralConsciousness.updatePhase');
-  }
+  },
+  
+  // Interrupt consensus functionality
+  interruptConsensus: () => ipcRenderer.invoke('interrupt-consensus')
 });
 
 // Settings API
@@ -95,11 +102,14 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   resetSettings: () => ipcRenderer.invoke('settings-reset'),
   loadProfiles: () => ipcRenderer.invoke('settings-load-profiles'),
   loadModels: () => ipcRenderer.invoke('settings-load-models'),
+  getProfile: (profileName: string) => ipcRenderer.invoke('settings-get-profile', profileName),
+  updateProfileMaxRounds: (profileName: string, maxRounds: number) => ipcRenderer.invoke('settings-update-profile-max-rounds', profileName, maxRounds),
 });
 
 // Analytics API
 contextBridge.exposeInMainWorld('electronAPI', {
-  getAnalytics: () => ipcRenderer.invoke('get-analytics'),
+  // Proven analytics IPC handler backed by the unified DB (period-aware)
+  getAnalytics: (period?: '24h' | '7d' | '30d') => ipcRenderer.invoke('get-analytics', period),
   saveConversation: (data: any) => ipcRenderer.invoke('save-conversation', data),
   getUsageCount: () => ipcRenderer.invoke('get-usage-count'),
   showInputDialog: (title: string, defaultValue?: string) => ipcRenderer.invoke('show-input-dialog', title, defaultValue),
@@ -171,7 +181,97 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onMenuResetState: (callback: () => void) => {
     ipcRenderer.on('menu-reset-state', callback);
-  }
+  },
+  onMenuGettingStarted: (callback: () => void) => {
+    ipcRenderer.on('menu-getting-started', callback);
+  },
+  onMenuMemoryGuide: (callback: () => void) => {
+    ipcRenderer.on('menu-memory-guide', callback);
+  },
+  onMenuCloneRepo: (callback: () => void) => {
+    ipcRenderer.on('menu-clone-repo', callback);
+  },
+  onMenuInitRepo: (callback: () => void) => {
+    ipcRenderer.on('menu-init-repo', callback);
+  },
+  onMenuHelpDocumentation: (callback: () => void) => {
+    ipcRenderer.on('menu-help-documentation', callback);
+  },
+  onMenuAbout: (callback: () => void) => {
+    ipcRenderer.on('menu-about', callback);
+  },
+  onMenuShowWelcome: (callback: () => void) => {
+    ipcRenderer.on('menu-show-welcome', callback);
+  },
+  onMenuToggleExplorer: (callback: () => void) => {
+    ipcRenderer.on('menu-toggle-explorer', callback);
+  },
+  onMenuToggleGit: (callback: () => void) => {
+    ipcRenderer.on('menu-toggle-git', callback);
+  },
+  onMenuToggleTerminal: (callback: () => void) => {
+    ipcRenderer.on('menu-toggle-terminal', callback);
+  },
+  onMenuOpenMemory: (callback: () => void) => {
+    ipcRenderer.on('menu-open-memory', callback);
+  },
+  onMenuOpenCliTools: (callback: () => void) => {
+    ipcRenderer.on('menu-open-cli-tools', callback);
+  },
+  onMenuOpenAnalytics: (callback: () => void) => {
+    ipcRenderer.on('menu-open-analytics', callback);
+  },
+  onMenuTerminalNewTab: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-new-tab', callback);
+  },
+  onMenuTerminalCloseTab: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-close-tab', callback);
+  },
+  onMenuTerminalShowLog: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-show-log', callback);
+  },
+  onMenuTerminalHideLog: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-hide-log', callback);
+  },
+  onMenuTerminalClearLog: (callback: () => void) => {
+    ipcRenderer.on('menu-terminal-clear-log', callback);
+  },
+  onMenuUndo: (callback: () => void) => {
+    ipcRenderer.on('menu-undo', callback);
+  },
+  onMenuRedo: (callback: () => void) => {
+    ipcRenderer.on('menu-redo', callback);
+  },
+  onMenuCut: (callback: () => void) => {
+    ipcRenderer.on('menu-cut', callback);
+  },
+  onMenuCopy: (callback: () => void) => {
+    ipcRenderer.on('menu-copy', callback);
+  },
+  onMenuPaste: (callback: () => void) => {
+    ipcRenderer.on('menu-paste', callback);
+  },
+  onMenuSelectAll: (callback: () => void) => {
+    ipcRenderer.on('menu-select-all', callback);
+  },
+  onMenuGoToFile: (callback: () => void) => {
+    ipcRenderer.on('menu-go-to-file', callback);
+  },
+  onMenuFind: (callback: () => void) => {
+    ipcRenderer.on('menu-find', callback);
+  },
+  onMenuGoToLine: (callback: () => void) => {
+    ipcRenderer.on('menu-go-to-line', callback);
+  },
+  getVersion: () => ipcRenderer.invoke('get-app-version'),
+  refreshMenu: () => ipcRenderer.invoke('menu-refresh'),
+  updateMenuContext: (context: { autoSaveEnabled?: boolean; hasFolder?: boolean; isRepo?: boolean }) =>
+    ipcRenderer.invoke('menu-update-context', context),
+  // Backup helpers
+  listBackups: () => ipcRenderer.invoke('list-backups'),
+  deleteBackup: (filePath: string) => ipcRenderer.invoke('delete-backup', filePath),
+  revealInFolder: (filePath: string) => ipcRenderer.invoke('reveal-in-folder', filePath),
+  openPath: (targetPath: string) => ipcRenderer.invoke('open-path', targetPath)
 });
 
 // Git API
@@ -206,6 +306,17 @@ contextBridge.exposeInMainWorld('gitAPI', {
   pushForceWithLease: () => ipcRenderer.invoke('git-push-force-lease'),
   pushCustom: (command: string) => ipcRenderer.invoke('git-push-custom', command),
   pushDryRun: (options?: any) => ipcRenderer.invoke('git-push-dry-run', options)
+  ,
+  // Clone repository into a parent directory
+  clone: (url: string, parentDirectory: string) => ipcRenderer.invoke('git-clone', url, parentDirectory)
+});
+
+// Maintenance API
+contextBridge.exposeInMainWorld('maintenanceAPI', {
+  modelsSyncNow: () => ipcRenderer.invoke('models-sync-now'),
+  profilesMigrateV2: () => ipcRenderer.invoke('profiles-migrate-v2'),
+  usageSyncNow: () => ipcRenderer.invoke('usage-sync-now'),
+  profilesRebindActive: (profileIdOrName: string) => ipcRenderer.invoke('profiles-rebind-active', profileIdOrName)
 });
 
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown
@@ -247,6 +358,38 @@ contextBridge.exposeInMainWorld('fileAPI', {
   }
 });
 
+// Database API
+contextBridge.exposeInMainWorld('databaseAPI', {
+  getSetting: (key: string) => ipcRenderer.invoke('db-get-setting', key),
+  setSetting: (key: string, value: string) => ipcRenderer.invoke('db-set-setting', key, value),
+  
+  // Session persistence
+  saveSession: (folderPath: string, tabs: any[], activeTab: string | null) => 
+    ipcRenderer.invoke('db-save-session', folderPath, tabs, activeTab),
+  loadSession: (folderPath: string) => 
+    ipcRenderer.invoke('db-load-session', folderPath),
+  clearSession: (folderPath: string) => 
+    ipcRenderer.invoke('db-clear-session', folderPath),
+  
+  // Recent folders
+  addRecentFolder: (folderPath: string, tabCount: number) => 
+    ipcRenderer.invoke('db-add-recent-folder', folderPath, tabCount),
+  getRecentFolders: () => 
+    ipcRenderer.invoke('db-get-recent-folders'),
+  removeRecentFolder: (folderPath: string) => 
+    ipcRenderer.invoke('db-remove-recent-folder', folderPath)
+  ,
+  clearRecentFolders: () => 
+    ipcRenderer.invoke('db-clear-recent-folders'),
+  // Welcome analytics and DB maintenance
+  logWelcomeAction: (action: string) => ipcRenderer.invoke('db-welcome-analytics-log', action),
+  compact: () => ipcRenderer.invoke('db-compact'),
+  integrityCheck: () => ipcRenderer.invoke('db-integrity-check')
+  ,
+  backup: (destPath: string) => ipcRenderer.invoke('db-backup', destPath),
+  restore: (srcPath: string) => ipcRenderer.invoke('db-restore', srcPath)
+});
+
 // Terminal API
 // Compatibility API for components expecting window.api
 contextBridge.exposeInMainWorld('api', {
@@ -278,7 +421,10 @@ contextBridge.exposeInMainWorld('testAPI', {
       console.log('[Preload] Error:', error);
       throw error;
     }
-  }
+  },
+  
+  // Interrupt consensus functionality
+  interruptConsensus: () => ipcRenderer.invoke('interrupt-consensus')
 });
 
 contextBridge.exposeInMainWorld('terminalAPI', {

@@ -3,8 +3,8 @@
 //! Displays error/warning counts and build status in the status bar
 //! with click actions to open the problems panel.
 
-use super::problems_panel::{ProblemSeverity, ProblemsState};
 use super::build_integration::{BuildStats, BuildTool};
+use super::problems_panel::{ProblemSeverity, ProblemsState};
 use dioxus::prelude::*;
 use std::collections::HashMap;
 use tracing::debug;
@@ -20,17 +20,33 @@ pub fn ProblemsStatusBar(
     let problems = problems_state.read();
     let stats = build_stats.read();
     let builds = active_builds.read();
-    
+
     let (total_errors, total_warnings, _, _) = problems.get_counts();
     let has_active_builds = !builds.is_empty();
-    
+
     // Determine overall status
     let (status_icon, status_color, status_text) = if has_active_builds {
         ("🔄", "#FFD700", "Building...".to_string())
     } else if total_errors > 0 {
-        ("❌", "#F48771", format!("{} error{}", total_errors, if total_errors == 1 { "" } else { "s" }))
+        (
+            "❌",
+            "#F48771",
+            format!(
+                "{} error{}",
+                total_errors,
+                if total_errors == 1 { "" } else { "s" }
+            ),
+        )
     } else if total_warnings > 0 {
-        ("⚠️", "#CCA700", format!("{} warning{}", total_warnings, if total_warnings == 1 { "" } else { "s" }))
+        (
+            "⚠️",
+            "#CCA700",
+            format!(
+                "{} warning{}",
+                total_warnings,
+                if total_warnings == 1 { "" } else { "s" }
+            ),
+        )
     } else {
         ("✅", "#4EC9B0", "No problems".to_string())
     };
@@ -40,31 +56,31 @@ pub fn ProblemsStatusBar(
             class: "status-bar-problems",
             onclick: move |_| on_click.call(()),
             title: create_tooltip_text(&problems, &builds),
-            
+
             span {
                 class: "status-icon",
                 style: "color: {status_color};",
                 "{status_icon}"
             }
-            
+
             span {
                 class: "status-text",
                 "{status_text}"
             }
-            
+
             if has_active_builds {
                 span {
                     class: "build-progress",
-                    BuildProgressIndicator { 
-                        active_builds: builds.clone() 
+                    BuildProgressIndicator {
+                        active_builds: builds.clone()
                     }
                 }
             }
-            
+
             if total_errors > 0 || total_warnings > 0 {
                 span {
                     class: "problem-counts",
-                    ProblemsBreakdown { 
+                    ProblemsBreakdown {
                         errors: total_errors,
                         warnings: total_warnings,
                     }
@@ -80,7 +96,7 @@ fn BuildProgressIndicator(active_builds: Vec<BuildTool>) -> Element {
     rsx! {
         div {
             class: "build-progress-indicator",
-            
+
             for tool in active_builds {
                 span {
                     class: "build-tool-indicator",
@@ -89,7 +105,7 @@ fn BuildProgressIndicator(active_builds: Vec<BuildTool>) -> Element {
                     "{tool.icon()}"
                 }
             }
-            
+
             span {
                 class: "spinner",
                 "⟳"
@@ -104,7 +120,7 @@ fn ProblemsBreakdown(errors: u32, warnings: u32) -> Element {
     rsx! {
         div {
             class: "problems-breakdown",
-            
+
             if errors > 0 {
                 span {
                     class: "error-count",
@@ -113,7 +129,7 @@ fn ProblemsBreakdown(errors: u32, warnings: u32) -> Element {
                     "{errors}"
                 }
             }
-            
+
             if warnings > 0 {
                 span {
                     class: "warning-count",
@@ -131,7 +147,7 @@ fn ProblemsBreakdown(errors: u32, warnings: u32) -> Element {
 pub fn DetailedProblemsStatusBar(
     problems_state: Signal<ProblemsState>,
     build_stats: Signal<BuildStats>,
-    active_builds: Signal<Vec<BuildTool>>, 
+    active_builds: Signal<Vec<BuildTool>>,
     show_details: Signal<bool>,
     on_toggle_details: EventHandler<()>,
     on_open_problems: EventHandler<()>,
@@ -140,11 +156,11 @@ pub fn DetailedProblemsStatusBar(
     let stats = build_stats.read();
     let builds = active_builds.read();
     let details_visible = show_details.read();
-    
+
     rsx! {
         div {
             class: "detailed-status-bar-problems",
-            
+
             // Main status indicator
             div {
                 class: "main-status",
@@ -156,17 +172,17 @@ pub fn DetailedProblemsStatusBar(
                     on_click: move |_| on_open_problems.call(())
                 }
             }
-            
+
             // Toggle details button
             button {
                 class: "details-toggle",
                 onclick: move |_| on_toggle_details.call(()),
                 title: if *details_visible { "Hide details" } else { "Show details" },
-                span { 
-                    class: if *details_visible { "codicon codicon-chevron-up" } else { "codicon codicon-chevron-down" } 
+                span {
+                    class: if *details_visible { "codicon codicon-chevron-up" } else { "codicon codicon-chevron-down" }
                 }
             }
-            
+
             // Detailed breakdown (shown when expanded)
             if *details_visible {
                 div {
@@ -191,14 +207,14 @@ fn ProblemsDetailBreakdown(
 ) -> Element {
     let problems = problems_state.read();
     let stats = build_stats.read();
-    
+
     // Group problems by source
     let mut source_counts: HashMap<String, (u32, u32)> = HashMap::new();
-    
+
     for (source, source_problems) in &problems.problems {
         let mut errors = 0;
         let mut warnings = 0;
-        
+
         for problem in source_problems {
             match problem.severity {
                 ProblemSeverity::Error => errors += 1,
@@ -206,16 +222,16 @@ fn ProblemsDetailBreakdown(
                 _ => {}
             }
         }
-        
+
         if errors > 0 || warnings > 0 {
             source_counts.insert(source.display_name().to_string(), (errors, warnings));
         }
     }
-    
+
     rsx! {
         div {
             class: "problems-detail-breakdown",
-            
+
             // Build status section
             if !active_builds.read().is_empty() {
                 div {
@@ -232,7 +248,7 @@ fn ProblemsDetailBreakdown(
                     }
                 }
             }
-            
+
             // Problems by source section
             if !source_counts.is_empty() {
                 div {
@@ -242,9 +258,9 @@ fn ProblemsDetailBreakdown(
                         div {
                             class: "source-problem-count",
                             key: "{source}",
-                            
+
                             span { class: "source-name", "{source}" }
-                            
+
                             div {
                                 class: "source-counts",
                                 if errors > 0 {
@@ -266,28 +282,28 @@ fn ProblemsDetailBreakdown(
                     }
                 }
             }
-            
+
             // Quick actions section
             div {
                 class: "quick-actions-section",
                 h4 { "Quick Actions" }
                 div {
                     class: "quick-actions",
-                    
+
                     button {
                         class: "quick-action-btn",
                         title: "Refresh all problems",
                         span { class: "codicon codicon-refresh" }
                         "Refresh"
                     }
-                    
+
                     button {
                         class: "quick-action-btn",
                         title: "Clear all problems",
                         span { class: "codicon codicon-clear-all" }
                         "Clear"
                     }
-                    
+
                     button {
                         class: "quick-action-btn",
                         title: "Filter errors only",
@@ -303,40 +319,53 @@ fn ProblemsDetailBreakdown(
 /// Create tooltip text for status bar
 fn create_tooltip_text(problems: &ProblemsState, active_builds: &[BuildTool]) -> String {
     let (errors, warnings, info, hints) = problems.get_counts();
-    
+
     let mut tooltip = String::new();
-    
+
     if !active_builds.is_empty() {
         tooltip.push_str("Building with: ");
-        let tools: Vec<String> = active_builds.iter()
+        let tools: Vec<String> = active_builds
+            .iter()
             .map(|t| t.display_name().to_string())
             .collect();
         tooltip.push_str(&tools.join(", "));
         tooltip.push('\n');
     }
-    
+
     if errors > 0 || warnings > 0 || info > 0 || hints > 0 {
         tooltip.push_str("Problems: ");
         let mut parts = Vec::new();
-        
+
         if errors > 0 {
-            parts.push(format!("{} error{}", errors, if errors == 1 { "" } else { "s" }));
+            parts.push(format!(
+                "{} error{}",
+                errors,
+                if errors == 1 { "" } else { "s" }
+            ));
         }
         if warnings > 0 {
-            parts.push(format!("{} warning{}", warnings, if warnings == 1 { "" } else { "s" }));
+            parts.push(format!(
+                "{} warning{}",
+                warnings,
+                if warnings == 1 { "" } else { "s" }
+            ));
         }
         if info > 0 {
             parts.push(format!("{} info", info));
         }
         if hints > 0 {
-            parts.push(format!("{} hint{}", hints, if hints == 1 { "" } else { "s" }));
+            parts.push(format!(
+                "{} hint{}",
+                hints,
+                if hints == 1 { "" } else { "s" }
+            ));
         }
-        
+
         tooltip.push_str(&parts.join(", "));
     } else {
         tooltip.push_str("No problems detected");
     }
-    
+
     tooltip.push_str("\n\nClick to open Problems panel");
     tooltip
 }

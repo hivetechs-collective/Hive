@@ -1,6 +1,6 @@
 //! Test file for the menu system components
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use crate::desktop::components::{

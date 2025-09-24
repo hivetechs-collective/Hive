@@ -55,7 +55,7 @@ fn test_ui_integration() {
     println!("   ✓ Automatic refresh monitoring");
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 

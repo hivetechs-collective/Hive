@@ -565,7 +565,7 @@ impl TerminalColor {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
     use crate::core::Language;

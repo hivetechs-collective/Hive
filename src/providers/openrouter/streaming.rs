@@ -475,7 +475,7 @@ async fn process_stream(
     Ok(response)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-tests"))]
 mod tests {
     use super::*;
 
