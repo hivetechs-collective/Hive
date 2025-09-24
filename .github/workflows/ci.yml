@@ -62,9 +62,7 @@ jobs:
 
       - name: Static checks
         working-directory: electron-poc
-        run: |
-          npm run verify:all
-          npm run lint
+        run: npm run verify:all
 
   ui-smoke:
     name: UI Smoke (macOS)
