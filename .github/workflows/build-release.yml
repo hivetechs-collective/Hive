@@ -385,10 +385,22 @@ jobs:
           wrangler r2 object put "releases-hivetechs/stable/electron/${DMG_LATEST}" --file="release/${DMG_FILENAME}"
           wrangler r2 object put "releases-hivetechs/stable/electron/${DMG_LATEST}.sha256" --file="release/${DMG_FILENAME}.sha256"
 
+          # Temporary dual-write for legacy worker binding (hivetechs-releases) until Cloudflare worker is redeployed
+          wrangler r2 object put "hivetechs-releases/stable/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+          wrangler r2 object put "hivetechs-releases/stable/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+          wrangler r2 object put "hivetechs-releases/stable/${DMG_LATEST}" --file="release/${DMG_FILENAME}"
+          wrangler r2 object put "hivetechs-releases/stable/${DMG_LATEST}.sha256" --file="release/${DMG_FILENAME}.sha256"
+          wrangler r2 object put "hivetechs-releases/stable/electron/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+          wrangler r2 object put "hivetechs-releases/stable/electron/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+          wrangler r2 object put "hivetechs-releases/stable/electron/${DMG_LATEST}" --file="release/${DMG_FILENAME}"
+          wrangler r2 object put "hivetechs-releases/stable/electron/${DMG_LATEST}.sha256" --file="release/${DMG_FILENAME}.sha256"
+
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
-          wrangler r2 object put "releases-hivetechs/releases/${VERSION}/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
-          wrangler r2 object put "releases-hivetechs/releases/${VERSION}/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+            wrangler r2 object put "releases-hivetechs/releases/${VERSION}/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+            wrangler r2 object put "releases-hivetechs/releases/${VERSION}/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+            wrangler r2 object put "hivetechs-releases/releases/${VERSION}/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+            wrangler r2 object put "hivetechs-releases/releases/${VERSION}/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
           fi
 
       - name: Create GitHub Release
