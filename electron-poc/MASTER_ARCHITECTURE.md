@@ -14088,3 +14088,10 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
   - `ASC_KEY_ID`: App Store Connect Key ID (e.g. `PYR945459Z`).
   - `ASC_ISSUER_ID`: App Store Connect Issuer ID (e.g. `9a13d40a-4835-47f1-af97-dc9ee8440241`).
   - `CLOUDFLARE_API_TOKEN`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` remain unchanged for the R2 publish step.
+
+
+### Legacy Rust Desktop Stack
+- The Dioxus/Tauri/TUI experiments now live behind the `desktop-legacy` Cargo feature; default builds (and CI) compile the backend without the legacy UI, so the GitHub Actions matrix only rents macOS runners for the Electron DMG.
+- Optional crates (`dioxus*`, `manganis`, `rfd`, `arboard`, `webbrowser`) are pulled in only when `--features desktop-legacy` is specified. This keeps `cargo check`/Dependabot runs fast and avoids pulling the old GTK/GLib toolchain unless you explicitly opt in.
+- To revisit the Rust desktop prototype locally: `cargo check --features desktop-legacy` or `cargo run --features desktop-legacy`. CI dispatchers should leave the feature off unless you are actively reviving the legacy UI.
+- The Electron pipeline remains authoritative for release artifacts; the legacy flag is purely an archive of prior work and can be removed entirely once we no longer need those references.

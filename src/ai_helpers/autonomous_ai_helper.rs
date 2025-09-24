@@ -1,3 +1,4 @@
+#![cfg(feature = "desktop-legacy")]
 //! Autonomous AI Helper System
 //!
 //! This module provides true AI autonomy - no hardcoded patterns or forced behaviors.

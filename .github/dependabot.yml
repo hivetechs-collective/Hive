@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "ring"
+        reason: "Legacy desktop UI path is feature-gated; ring is only pulled for the archived build"
+      - dependency-name: "glib"
+        reason: "GTK stack is feature-gated behind the desktop-legacy feature"
+  - package-ecosystem: "npm"
+    directory: "/electron-poc"
+    schedule:
+      interval: "weekly"
+    ignore:
+      - dependency-name: "prismjs"
+        reason: "React syntax highlighter pins prismjs ~1.27; upgrading requires replacing the component"

@@ -4,6 +4,7 @@
 //! open-source models handle infrastructure and knowledge management, allowing
 //! the user's chosen consensus models to focus on their expertise.
 
+#[cfg(feature = "desktop-legacy")]
 pub mod autonomous_ai_helper;
 pub mod chroma_store;
 pub mod code_translator;
@@ -30,6 +31,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 // Re-export main components
+#[cfg(feature = "desktop-legacy")]
 pub use autonomous_ai_helper::{AutonomousAIHelper, AutonomousAction, AutonomousDecision};
 pub use chroma_store::{ChromaConfig, ChromaVectorStore as RealChromaVectorStore};
 pub use code_translator::{
@@ -209,6 +211,7 @@ pub struct AIHelperEcosystem {
     pub intelligent_executor: Arc<IntelligentExecutor>,
 
     /// Autonomous AI Helper for independent thinking
+    #[cfg(feature = "desktop-legacy")]
     pub autonomous_helper: Option<Arc<AutonomousAIHelper>>,
 
     /// Continuous learner for learning from all interactions
@@ -380,6 +383,7 @@ impl AIHelperEcosystem {
             code_translator,
             semantic_retriever,
             intelligent_executor,
+            #[cfg(feature = "desktop-legacy")]
             autonomous_helper: None, // Will be set when repository context is available
             continuous_learner,
             python_service,
@@ -688,6 +692,7 @@ impl AIHelperEcosystem {
     }
 
     /// Set repository context to enable autonomous AI Helper
+    #[cfg(feature = "desktop-legacy")]
     pub async fn set_repository_context(
         &mut self,
         repository_context: Option<
