@@ -5605,6 +5605,7 @@ This operational checklist is the same process that drove the successful end-to-
   - Version metadata lives in the accompanying `build-report.json` artifact.
 - **Verification tip:** Cloudflare’s R2 endpoint enforces modern TLS; if a CLI returns `handshake failure`, confirm via a browser or any tool that negotiates TLS 1.3. The presence of the `.dmg` and `.sha256` objects under the `stable/` prefix indicates the publish step succeeded.
 - **Standard operating order:** ensure CI contexts are updated first, merge the branch (now identical to master), then trigger the release workflow on master to publish. This sequence keeps master in lockstep with `memory-context-cicd` and guarantees the latest DMG lands in the website’s stable download section.
+- **Website download link:** the public site (`hivetechs-website` repo) should reference `https://hivetechs-releases.r2.cloudflarestorage.com/stable/Hive-Consensus-latest.dmg` for the Apple Silicon button. The release workflow maintains that alias (plus the versioned and `stable/electron/` copies), so users always receive the notarized build we just published.
 
 **8. Comprehensive Build Requirements Check System & Build Order**
 
