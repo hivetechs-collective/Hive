@@ -5600,12 +5600,12 @@ This operational checklist is the same process that drove the successful end-to-
 - **Branch protection must reference current CI contexts.** The legacy checks (`CI / Backend (Rust)`, `CI / Electron Unit & Lint`, `CI / CI Summary`) lingered on master and prevented merges even though the new macOS pipeline was green. Update the rule (Settings → Branches → master) so the required contexts match the jobs emitted by `.github/workflows/ci.yml` (`Backend (Rust)`, `Electron Unit & Lint`, `CI Summary`). Remove obsolete contexts whenever workflows change.
 - **CI workflow now mirrors the release pipeline.** The PR job spins up on macOS, rebuilds native modules, runs `npm run build:complete`, smoke-tests the memory service, and finally verifies module/type/path health. A lightweight `Backend (Rust)` step exists purely to satisfy the required status context; the comprehensive backend tests still run in the dedicated release workflow.
 - **Publishing from master:** triggering `Build Release DMG` on master (push/tag or `gh workflow run "Build Release DMG" -r master`) rebuilds, signs, notarizes, and uploads the DMG to Cloudflare R2. Example from run `actions/runs/17964794934`:
-  - DMG: `https://hivetechs-releases.r2.cloudflarestorage.com/stable/Hive-Consensus-1.8.448.dmg`
-  - Checksum: `https://hivetechs-releases.r2.cloudflarestorage.com/stable/Hive-Consensus-1.8.448.dmg.sha256`
-  - Version metadata lives in the accompanying `build-report.json` artifact.
-- **Verification tip:** Cloudflare’s R2 endpoint enforces modern TLS; if a CLI returns `handshake failure`, confirm via a browser or any tool that negotiates TLS 1.3. The presence of the `.dmg` and `.sha256` objects under the `stable/` prefix indicates the publish step succeeded.
+  - DMG: `https://releases.hivetechs.io/stable/Hive-Consensus-1.8.448.dmg`
+  - Checksum: `https://releases.hivetechs.io/stable/Hive-Consensus-1.8.448.dmg.sha256`
+  - Version metadata lives in the accompanying `build-report.json` artifact (`hives/hive-macos-dmg-ready` workflow artifact).
+- **Verification tip:** Always validate the worker-backed domain (`https://releases.hivetechs.io`). The worker proxies the R2 bucket (`releases-hivetechs`) and serves a valid TLS certificate. The presence of the versioned object **and** the `Hive-Consensus-latest.dmg` alias under the `stable/` prefix indicates the publish step succeeded.
 - **Standard operating order:** ensure CI contexts are updated first, merge the branch (now identical to master), then trigger the release workflow on master to publish. This sequence keeps master in lockstep with `memory-context-cicd` and guarantees the latest DMG lands in the website’s stable download section.
-- **Website download link:** the public site (`hivetechs-website` repo) should reference `https://hivetechs-releases.r2.cloudflarestorage.com/stable/Hive-Consensus-latest.dmg` for the Apple Silicon button. The release workflow maintains that alias (plus the versioned and `stable/electron/` copies), so users always receive the notarized build we just published.
+- **Website download link:** the public site (`hivetechs-website` repo) should reference `https://releases.hivetechs.io/stable/Hive-Consensus-latest.dmg` for the Apple Silicon button. The release workflow maintains that alias (plus the versioned and `stable/electron/` copies), so users always receive the notarized build we just published.
 
 **8. Comprehensive Build Requirements Check System & Build Order**
 
