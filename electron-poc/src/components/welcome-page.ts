@@ -1237,6 +1237,15 @@ export class WelcomePage {
 
   private async maybeShowBasicsTourPrompt() {
     try {
+      // Skip the tour prompt entirely when the app is running under automated UI
+      // control (Playwright marks navigator.webdriver = true). This keeps the
+      // smoke tests from being blocked by the overlay and mirrors the behaviour
+      // we expect in CI environments.
+      if (typeof navigator !== 'undefined' && (navigator as any).webdriver) {
+        try { await window.databaseAPI.setSetting('welcome.tourSeen', '1'); } catch {}
+        return;
+      }
+
       const seen = await window.databaseAPI.getSetting('welcome.tourSeen');
       if (seen === '1') return;
     } catch {}
