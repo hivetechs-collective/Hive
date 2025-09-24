@@ -387,8 +387,8 @@ jobs:
 
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
-            wrangler r2 object put "hivetechs-releases/releases/${VERSION}/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
-            wrangler r2 object put "hivetechs-releases/releases/${VERSION}/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
+          wrangler r2 object put "releases-hivetechs/releases/${VERSION}/${DMG_FILENAME}" --file="release/${DMG_FILENAME}"
+          wrangler r2 object put "releases-hivetechs/releases/${VERSION}/${DMG_FILENAME}.sha256" --file="release/${DMG_FILENAME}.sha256"
           fi
 
       - name: Create GitHub Release

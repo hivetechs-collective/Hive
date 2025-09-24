@@ -1,3 +1,4 @@
+#![cfg(feature = "desktop-legacy")]
 //! Minimal wrapper to run ConsensusEngine on Tokio thread
 //!
 //! This follows the CONSENSUS_ARCHITECTURE_2025.md design:

@@ -13,6 +13,7 @@ use tracing::{debug, info, instrument, warn};
 
 use crate::analysis::repository_intelligence::{RepositoryAnalysis, RepositoryAnalyzer};
 use crate::core::error::HiveResult;
+#[cfg(feature = "desktop-legacy")]
 use crate::desktop::state::{AppState, FileExplorerState};
 
 /// Repository context for consensus pipeline
@@ -126,6 +127,7 @@ impl RepositoryContextManager {
     /// Update repository context from IDE state
     /// This is called whenever the IDE state changes (file selection, project change, etc.)
     #[instrument(skip(self, app_state))]
+    #[cfg(feature = "desktop-legacy")]
     pub async fn update_from_ide_state(&self, app_state: &AppState) -> HiveResult<()> {
         let mut context = self.context.write().await;
 

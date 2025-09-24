@@ -1,3 +1,4 @@
+#![cfg(feature = "desktop-legacy")]
 //! IDE-level AI Helper Broker Service
 //!
 //! This service runs in the IDE (hive-consensus GUI) and acts as an intelligent

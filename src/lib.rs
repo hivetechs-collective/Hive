@@ -16,6 +16,7 @@ pub mod commands;
 pub mod consensus;
 pub mod core;
 pub mod database;
+#[cfg(feature = "desktop-legacy")]
 pub mod desktop;
 pub mod hooks;
 pub mod ide;
@@ -46,4 +47,5 @@ pub use core::{
 
 // Re-export major subsystems
 pub use cli::CliFramework;
+#[cfg(feature = "desktop-legacy")]
 pub use desktop::launch_desktop_app;

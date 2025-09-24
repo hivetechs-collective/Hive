@@ -387,6 +387,7 @@ impl ConsensusPipeline {
         cancellation_token.throw_if_cancelled()?;
 
         // AUTONOMOUS AI HELPER: Let the AI think independently about the user's question
+        #[cfg(feature = "desktop-legacy")]
         let autonomous_context = if let Some(ref ai_helpers) = self.ai_helpers {
             if let Some(ref autonomous_helper) = ai_helpers.autonomous_helper {
                 tracing::info!("🤖 Autonomous AI Helper processing raw user input...");
@@ -399,21 +400,20 @@ impl ConsensusPipeline {
                             decision.confidence
                         );
 
-                        // Log the autonomous actions taken
                         for action in &decision.actions {
                             tracing::info!("🎯 AI autonomously decided to: {:?}", action);
                         }
 
-                        // Use the context the AI gathered autonomously
                         if let Some(ref gathered_context) = decision.gathered_context {
                             tracing::info!(
                                 "✅ AI autonomously gathered {} chars of context",
                                 gathered_context.len()
                             );
 
-                            // Merge with existing context if any
                             if let Some(existing_context) = context {
-                                Some(format!("{}\n\n{}", existing_context, gathered_context))
+                                Some(format!("{}
+
+{}", existing_context, gathered_context))
                             } else {
                                 Some(gathered_context.clone())
                             }
@@ -437,7 +437,11 @@ impl ConsensusPipeline {
             context
         };
 
-        // Use the autonomous context (which may include AI-gathered information)
+        #[cfg(not(feature = "desktop-legacy"))]
+        let autonomous_context = context;
+
+        
+// Use the autonomous context (which may include AI-gathered information)
         let context = autonomous_context;
 
         // TODO: Re-enable usage tracking when database is unified
