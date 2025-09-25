@@ -5454,6 +5454,17 @@ jobs:
 - **Hermetic macOS build** – `build-release.yml` and the manual `build-binaries.yml` now mirror the 17-phase `npm run build:complete` flow used locally. Each run installs dependencies with `npm ci`, executes `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty`, and then drives the full script so native modules, Python runtime, and bundled Node align exactly with the shipped DMG.
 - **Native-module attestations** – After rebuilding, both workflows capture `otool -L` and `shasum -a 256` fingerprints for `node_sqlite3.node` into `electron-poc/build-logs/native-modules/` and upload them as artifacts. We can now verify ABI 136 alignment (Electron 37.3.1 / Node 22.18.0) before promoting a release.
 - **Post-build smoke test** – `npm run smoke:memory-health` loads the packaged memory-service entry through the same PortManager allocation used in production, verifies the `/health` endpoint responds, and tears the process down so every artifact proves sqlite bindings work before upload.
+- **Pre‑package permission lock** – Webpack `FixBinaryPermissionsPlugin` chmods the bundled Node runtime, `ttyd`, and Git helpers immediately after CopyWebpackPlugin runs. Because this happens before `electron-forge make`, the DMG ships with executables even on read‑only volumes.
+- **Nested binary entitlements** – `scripts/sign-notarize-macos.sh` signs every embedded Mach‑O (Node runtime, `ttyd`, git helpers, plugins, frameworks) with the same entitlements as the main app bundle (`allow-jit`, `disable-library-validation`, etc.), eliminating hardened‑runtime SIGTRAP when helpers launch from the DMG.
+
+**Four‑Stage Release Pipeline (single workflow with 4 jobs)**
+- We use one workflow file (`.github/workflows/build-release.yml`) with four independent jobs:
+  1) Release Preconditions (derive flags), 2) Resolve Artifact Sources (compose artifact refs), 3) Build & Sign macOS DMG (macOS), 4) Publish DMG to R2 / GitHub Release (Ubuntu).
+- Jobs are controlled via `workflow_dispatch` inputs for targeted reruns without rebuilding:
+  - `publish_only=true` → run only publish using a previously signed artifact (`reuse_artifact_run_id`, `reuse_ready_artifact_name`).
+  - `sign_only=true` → run only signing using a previously built unsigned artifact (`reuse_artifact_run_id`, `reuse_artifact_name`).
+  - `skip_sign=true` / `skip_publish=true` → quickly disable downstream jobs while debugging.
+- Artifact reuse is explicit (run id + artifact name) so expensive stages need not rerun, matching the operational intent of separate workflows while keeping orchestration simple and cheaper.
 - **Manual binary smoke builds** – `build-binaries.yml` remains `workflow_dispatch`-only for ad-hoc verification but inherits the same rebuild/fingerprint guardrails so every artifact matches production expectations.
 - **Rust + multi-language scanning** – `codeql.yml` continues to analyze JavaScript/TypeScript, Python, and Rust only on pushes to `main`/`master`, the Saturday cron, or manual dispatches to conserve GitHub minutes.
 - **Concurrency & caching** – All macOS and CodeQL workflows enable `cancel-in-progress`; npm caching (scoped to `electron-poc/package-lock.json`) keeps re-runs fast without reinstalling the toolchain.
