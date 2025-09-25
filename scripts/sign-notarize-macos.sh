@@ -91,7 +91,8 @@ find "$APP_PATH" -type f -print0 |
     if file "$file" | grep -q 'Mach-O'; then
       echo "  • codesign $(basename "$file")"
       codesign --force --options runtime --timestamp \
-        "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$file"
+        "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
+        --sign "$SIGN_ID" "$file"
     fi
   done
 
@@ -100,7 +101,8 @@ APP_MAIN_BINARY="$APP_PATH/Contents/MacOS/$APP_DISPLAY_NAME"
 if [[ -f "$APP_MAIN_BINARY" ]]; then
   echo "  • sealing main binary $(basename \"$APP_MAIN_BINARY\")"
   codesign --force --options runtime --timestamp \
-    "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$APP_MAIN_BINARY"
+    "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
+    --sign "$SIGN_ID" "$APP_MAIN_BINARY"
 fi
 
 # Sign frameworks and helper apps at the directory level
@@ -115,19 +117,23 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
 
         if [[ -f "$FRAMEWORK_VERSION_BINARY" ]]; then
           codesign --force --options runtime --timestamp \
-            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_BINARY"
+            "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
+            --sign "$SIGN_ID" "$FRAMEWORK_VERSION_BINARY"
         fi
 
         if [[ -d "$FRAMEWORK_VERSION_DIR" ]]; then
           codesign --force --options runtime --timestamp --deep \
-            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
+            "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
+            --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
         else
           codesign --force --options runtime --timestamp \
-            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
+            "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
+            --sign "$SIGN_ID" "$bundle"
         fi
       else
         codesign --force --options runtime --timestamp \
-          "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
+          "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
+          --sign "$SIGN_ID" "$bundle"
       fi
     done
 fi
@@ -138,7 +144,8 @@ if [[ -d "$APP_PATH/Contents/PlugIns" ]]; then
     while IFS= read -r -d '' plugin; do
       echo "  • sealing plugin $(basename "$plugin")"
       codesign --force --options runtime --timestamp \
-        "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$plugin"
+        "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
+        --sign "$SIGN_ID" "$plugin"
     done
 fi
 
