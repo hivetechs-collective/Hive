@@ -221,12 +221,28 @@ async function main() {
   console.log(`${CYAN}                 POST-BUILD FIXES FOR PRODUCTION                ${RESET}`);
   console.log(`${CYAN}═══════════════════════════════════════════════════════════════${RESET}`);
   
-  // Find the app bundle
-  const appPath = path.join(__dirname, '../out/Hive Consensus-darwin-arm64/Hive Consensus.app');
-  
+  // Find the app bundle (support both arm64 and x64 runners)
+  let appPath = path.join(__dirname, '../out/Hive Consensus-darwin-arm64/Hive Consensus.app');
   if (!fs.existsSync(appPath)) {
-    logError('App bundle not found! Build must complete first.');
-    process.exit(1);
+    const outDir = path.join(__dirname, '../out');
+    let found = null;
+    if (fs.existsSync(outDir)) {
+      const entries = fs.readdirSync(outDir);
+      for (const e of entries) {
+        if (/darwin/.test(e)) {
+          const candidate = path.join(outDir, e, 'Hive Consensus.app');
+          if (fs.existsSync(candidate)) { found = candidate; break; }
+        }
+      }
+    }
+    if (found) {
+      appPath = found;
+    } else {
+      logError('App bundle not found! Build must complete first.');
+      logWarning(`Checked: ${appPath}`);
+      try { console.log('out/ contents:', fs.readdirSync(path.join(__dirname, '../out'))); } catch {}
+      process.exit(1);
+    }
   }
   
   console.log(`${GREEN}✓ Found app bundle${RESET}`);
