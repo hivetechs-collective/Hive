@@ -11,6 +11,11 @@ on:
       - '.github/dependabot.yml'
   workflow_dispatch:
     inputs:
+      publish_only:
+        description: 'Skip build/sign and only run the publish job using an existing signed artifact'
+        required: false
+        default: false
+        type: boolean
       sign_only:
         description: 'Skip build/publish and only run the signing job against an existing artifact'
         required: false
@@ -32,9 +37,14 @@ on:
         default: ''
         type: string
       reuse_artifact_name:
-        description: 'Artifact name to download when reusing (defaults to hive-macos-dmg)'
+        description: 'Unsigned artifact name to download when reusing (defaults to hive-macos-dmg)'
         required: false
         default: 'hive-macos-dmg'
+        type: string
+      reuse_ready_artifact_name:
+        description: 'Signed artifact name to download when publish_only is true (defaults to hive-macos-dmg-ready)'
+        required: false
+        default: 'hive-macos-dmg-ready'
         type: string
 
 concurrency:
@@ -46,15 +56,180 @@ permissions:
   actions: read
 
 jobs:
+  release-preflight:
+    name: Release Preconditions
+    runs-on: ubuntu-latest
+    outputs:
+      publish_only: ${{ steps.flags.outputs.publish_only }}
+      sign_only: ${{ steps.flags.outputs.sign_only }}
+      skip_sign: ${{ steps.flags.outputs.skip_sign }}
+      skip_publish: ${{ steps.flags.outputs.skip_publish }}
+      reuse_run_id: ${{ steps.flags.outputs.reuse_run_id }}
+      reuse_unsigned_artifact_name: ${{ steps.flags.outputs.reuse_unsigned_artifact_name }}
+      reuse_ready_artifact_name: ${{ steps.flags.outputs.reuse_ready_artifact_name }}
+      should_build: ${{ steps.flags.outputs.should_build }}
+      should_sign: ${{ steps.flags.outputs.should_sign }}
+      run_publish: ${{ steps.flags.outputs.run_publish }}
+      needs_unsigned_reuse: ${{ steps.flags.outputs.needs_unsigned_reuse }}
+      needs_ready_reuse: ${{ steps.flags.outputs.needs_ready_reuse }}
+    steps:
+      - name: Derive run mode
+        id: flags
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PUBLISH_ONLY: ${{ github.event.inputs.publish_only || 'false' }}
+          INPUT_SIGN_ONLY: ${{ github.event.inputs.sign_only || 'false' }}
+          INPUT_SKIP_SIGN: ${{ github.event.inputs.skip_sign || 'false' }}
+          INPUT_SKIP_PUBLISH: ${{ github.event.inputs.skip_publish || 'false' }}
+          INPUT_REUSE_RUN_ID: ${{ github.event.inputs.reuse_artifact_run_id || '' }}
+          INPUT_REUSE_UNSIGNED: ${{ github.event.inputs.reuse_artifact_name || 'hive-macos-dmg' }}
+          INPUT_REUSE_READY: ${{ github.event.inputs.reuse_ready_artifact_name || 'hive-macos-dmg-ready' }}
+        run: |
+          set -euo pipefail
+
+          publish_only=$INPUT_PUBLISH_ONLY
+          sign_only=$INPUT_SIGN_ONLY
+          skip_sign=$INPUT_SKIP_SIGN
+          skip_publish=$INPUT_SKIP_PUBLISH
+          reuse_run_id=$INPUT_REUSE_RUN_ID
+          reuse_unsigned=$INPUT_REUSE_UNSIGNED
+          reuse_ready=$INPUT_REUSE_READY
+
+          if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+            publish_only=false
+            sign_only=false
+            skip_sign=false
+            skip_publish=false
+          fi
+
+          if [[ "$publish_only" == "true" ]]; then
+            sign_only=false
+          fi
+
+          should_build=true
+          should_sign=true
+
+          if [[ "$publish_only" == "true" ]]; then
+            should_build=false
+            should_sign=false
+          elif [[ "$sign_only" == "true" ]]; then
+            should_build=false
+            should_sign=true
+          fi
+
+          if [[ "$skip_sign" == "true" ]]; then
+            should_sign=false
+          fi
+
+          run_publish=true
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$skip_publish" == "true" ]]; then
+              run_publish=false
+            elif [[ "$sign_only" == "true" ]]; then
+              run_publish=false
+            elif [[ "$publish_only" == "true" ]]; then
+              run_publish=true
+            fi
+            if [[ "$skip_sign" == "true" ]]; then
+              run_publish=false
+            fi
+          fi
+
+          needs_unsigned_reuse=false
+          if [[ "$should_build" != "true" && "$should_sign" == "true" ]]; then
+            needs_unsigned_reuse=true
+          fi
+
+          needs_ready_reuse=false
+          if [[ "$publish_only" == "true" ]]; then
+            needs_ready_reuse=true
+          fi
+
+          {
+            echo "publish_only=$publish_only"
+            echo "sign_only=$sign_only"
+            echo "skip_sign=$skip_sign"
+            echo "skip_publish=$skip_publish"
+            echo "reuse_run_id=$reuse_run_id"
+            echo "reuse_unsigned_artifact_name=$reuse_unsigned"
+            echo "reuse_ready_artifact_name=$reuse_ready"
+            echo "should_build=$should_build"
+            echo "should_sign=$should_sign"
+            echo "run_publish=$run_publish"
+            echo "needs_unsigned_reuse=$needs_unsigned_reuse"
+            echo "needs_ready_reuse=$needs_ready_reuse"
+          } >> "$GITHUB_OUTPUT"
+
+  artifact-plan:
+    name: Resolve Artifact Sources
+    runs-on: ubuntu-latest
+    needs: [release-preflight]
+    outputs:
+      unsigned_artifact_run_id: ${{ steps.plan.outputs.unsigned_run_id }}
+      unsigned_artifact_name: ${{ steps.plan.outputs.unsigned_name }}
+      ready_artifact_run_id: ${{ steps.plan.outputs.ready_run_id }}
+      ready_artifact_name: ${{ steps.plan.outputs.ready_name }}
+    steps:
+      - name: Compose artifact references
+        id: plan
+        shell: bash
+        env:
+          SHOULD_BUILD: ${{ needs.release-preflight.outputs.should_build }}
+          SHOULD_SIGN: ${{ needs.release-preflight.outputs.should_sign }}
+          NEEDS_UNSIGNED_REUSE: ${{ needs.release-preflight.outputs.needs_unsigned_reuse }}
+          NEEDS_READY_REUSE: ${{ needs.release-preflight.outputs.needs_ready_reuse }}
+          REUSE_RUN_ID: ${{ needs.release-preflight.outputs.reuse_run_id }}
+          REUSE_UNSIGNED_NAME: ${{ needs.release-preflight.outputs.reuse_unsigned_artifact_name }}
+          REUSE_READY_NAME: ${{ needs.release-preflight.outputs.reuse_ready_artifact_name }}
+        run: |
+          set -euo pipefail
+
+          unsigned_run_id="$GITHUB_RUN_ID"
+          unsigned_name="hive-macos-dmg"
+          if [[ "$SHOULD_BUILD" != "true" ]]; then
+            unsigned_run_id="$REUSE_RUN_ID"
+            unsigned_name="$REUSE_UNSIGNED_NAME"
+          fi
+
+          if [[ "$NEEDS_UNSIGNED_REUSE" == "true" ]]; then
+            if [[ -z "$unsigned_run_id" ]]; then
+              echo "A reusable unsigned artifact run ID is required when skipping the build step." >&2
+              exit 1
+            fi
+            if [[ -z "$unsigned_name" ]]; then
+              echo "An unsigned artifact name is required when skipping the build step." >&2
+              exit 1
+            fi
+          fi
+
+          ready_run_id="$unsigned_run_id"
+          ready_name="hive-macos-dmg-ready"
+          if [[ "$NEEDS_READY_REUSE" == "true" ]]; then
+            if [[ -z "$REUSE_RUN_ID" ]]; then
+              echo "A reusable ready artifact run ID is required when publish_only=true." >&2
+              exit 1
+            fi
+            ready_run_id="$REUSE_RUN_ID"
+            ready_name="$REUSE_READY_NAME"
+          fi
+
+          {
+            echo "unsigned_run_id=$unsigned_run_id"
+            echo "unsigned_name=$unsigned_name"
+            echo "ready_run_id=$ready_run_id"
+            echo "ready_name=$ready_name"
+          } >> "$GITHUB_OUTPUT"
+
   build-dmg:
     name: Build macOS DMG
+    needs: [artifact-plan]
     runs-on: macos-latest
-    # Always instantiate the job so downstream sign job has a dependency,
-    # but gate heavy steps when we are doing a sign-only dispatch that reuses an artifact.
     defaults:
       run:
         working-directory: electron-poc
     steps:
+      
       - name: Check out repository
         uses: actions/checkout@v4
 
@@ -67,7 +242,7 @@ jobs:
           fi
 
       - name: Set up Node.js
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -75,7 +250,7 @@ jobs:
           cache-dependency-path: electron-poc/package-lock.json
 
       - name: Install build prerequisites
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -86,31 +261,31 @@ jobs:
           fi
 
       - name: Install npm dependencies
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         run: npm ci
 
       - name: Rebuild native modules for Electron
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
 
       - name: Verify build requirements
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         run: npm run requirements
 
       - name: Build production DMG
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         env:
           CI: true
         run: npm run build:complete
 
       - name: Smoke test memory service /health
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         run: npm run smoke:memory-health
 
       - name: List build outputs
         if: always()
         env:
-          SKIP_BUILD: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.sign_only == 'true') }}
+          SKIP_BUILD: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id != github.run_id }}
         run: |
           if [[ "$SKIP_BUILD" == "true" ]]; then
             echo "Build skipped; no new artifacts generated."
@@ -122,14 +297,14 @@ jobs:
           fi
 
       - name: Capture native module metadata
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true' }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         run: |
           mkdir -p build-logs/native-modules
           otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
           shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256
 
       - name: Upload macOS build artifact
-        if: ${{ success() && (github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true') }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id && success() }}
         uses: actions/upload-artifact@v4
         with:
           name: hive-macos-dmg
@@ -140,7 +315,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload build logs
-        if: ${{ (github.event_name != 'workflow_dispatch' || github.event.inputs.sign_only != 'true') }}
+        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
         uses: actions/upload-artifact@v4
         with:
           name: hive-build-logs
@@ -149,9 +324,9 @@ jobs:
 
   sign-macos:
     name: Sign & Notarize macOS DMG
-    needs: [build-dmg]
+    needs: [release-preflight, artifact-plan, build-dmg]
     runs-on: macos-latest
-    if: ${{ needs.build-dmg.result != 'failure' && (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_sign != 'true') }}
+    if: ${{ needs.release-preflight.outputs.should_sign == 'true' }}
     outputs:
       artifact-name: hive-macos-dmg-ready
       signing-enabled: ${{ steps.setup-signing.outputs.enabled }}
@@ -162,21 +337,11 @@ jobs:
       - name: Determine artifact source
         id: artifact-source
         env:
-          REUSE_RUN_ID: ${{ github.event.inputs.reuse_artifact_run_id || '' }}
-          REUSE_ARTIFACT: ${{ github.event.inputs.reuse_artifact_name || 'hive-macos-dmg' }}
+          REUSE_RUN_ID: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id }}
+          REUSE_ARTIFACT: ${{ needs.artifact-plan.outputs.unsigned_artifact_name }}
         run: |
-          if [[ -n "$REUSE_RUN_ID" ]]; then
-            echo "Using existing artifact $REUSE_ARTIFACT from run $REUSE_RUN_ID"
-            echo "run-id=$REUSE_RUN_ID" >> "$GITHUB_OUTPUT"
-          else
-            echo "Using artifact from current run $GITHUB_RUN_ID"
-            echo "run-id=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
-          fi
-          if [[ -n "$REUSE_ARTIFACT" ]]; then
-            echo "artifact-name=$REUSE_ARTIFACT" >> "$GITHUB_OUTPUT"
-          else
-            echo "artifact-name=hive-macos-dmg" >> "$GITHUB_OUTPUT"
-          fi
+          echo "run-id=$REUSE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=$REUSE_ARTIFACT" >> "$GITHUB_OUTPUT"
 
       - name: Download DMG artifact
         uses: actions/download-artifact@v4
@@ -253,11 +418,13 @@ jobs:
           } >> "$GITHUB_ENV"
 
           echo "enabled=true" >> "$GITHUB_OUTPUT"
-
+*** End Patch
       - name: Sign and notarize macOS artifacts
         if: ${{ success() && steps.setup-signing.outputs.enabled == 'true' }}
         env:
           SIGN_ID: ${{ env.SIGN_ID }}
+          HIVE_SIGNING_KEYCHAIN: ${{ env.HIVE_SIGNING_KEYCHAIN }}
+          HIVE_SIGNING_KEYCHAIN_PASSWORD: ${{ env.HIVE_SIGNING_KEYCHAIN_PASSWORD }}
           NOTARY_PROFILE: HiveNotaryProfile
         run: |
           set -euo pipefail
@@ -313,11 +480,10 @@ jobs:
 
   publish:
     name: Publish DMG to R2 / GitHub Release
-    needs: [sign-macos]
+    needs: [release-preflight, sign-macos]
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_publish != 'true' && github.event.inputs.sign_only != 'true')
+      needs.release-preflight.outputs.run_publish == 'true'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -382,19 +548,10 @@ jobs:
               --content-type "$content_type"
           }
 
-          # Versioned objects
           upload "release/${DMG_FILENAME}" "stable/${DMG_FILENAME}"
           upload "release/${DMG_FILENAME}.sha256" "stable/${DMG_FILENAME}.sha256" text/plain
-
-          # Latest aliases consumed by the website download button and direct checksum link
           upload "release/${DMG_FILENAME}" "stable/${DMG_LATEST}"
           upload "release/${DMG_FILENAME}.sha256" "stable/${DMG_LATEST}.sha256" text/plain
-
-          # Legacy electron/ path retained for compatibility during transition
-          upload "release/${DMG_FILENAME}" "stable/electron/${DMG_FILENAME}"
-          upload "release/${DMG_FILENAME}.sha256" "stable/electron/${DMG_FILENAME}.sha256" text/plain
-          upload "release/${DMG_FILENAME}" "stable/electron/${DMG_LATEST}"
-          upload "release/${DMG_FILENAME}.sha256" "stable/electron/${DMG_LATEST}.sha256" text/plain
 
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
