@@ -5451,10 +5451,12 @@ jobs:
 
 **7.1 GitHub Actions Implementation (2025 Update)**
 
-- **Hermetic macOS build** – `build-release.yml` and the manual `build-binaries.yml` now mirror the 17-phase `npm run build:complete` flow used locally. Each run installs dependencies with `npm ci`, executes `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty`, and then drives the full script so native modules, Python runtime, and bundled Node align exactly with the shipped DMG.
+- **Four-stage release workflow** – `build-release.yml` is now split into `release-preflight` (flag derivation), `artifact-plan` (artifact resolution), `macos-build-sign` (combined build + notarization), and `publish` (Cloudflare R2 / GitHub Release). Each stage can be selectively skipped with workflow inputs, enabling publish-only retries without paying for macOS build minutes.
+- **Hermetic macOS build** – The `macos-build-sign` job mirrors the 17-phase `npm run build:complete` flow used locally. Each run installs dependencies with `npm ci`, executes `npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty`, and then drives the full script so native modules, Python runtime, and bundled Node align exactly with the shipped DMG.
 - **Native-module attestations** – After rebuilding, both workflows capture `otool -L` and `shasum -a 256` fingerprints for `node_sqlite3.node` into `electron-poc/build-logs/native-modules/` and upload them as artifacts. We can now verify ABI 136 alignment (Electron 37.3.1 / Node 22.18.0) before promoting a release.
 - **Post-build smoke test** – `npm run smoke:memory-health` loads the packaged memory-service entry through the same PortManager allocation used in production, verifies the `/health` endpoint responds, and tears the process down so every artifact proves sqlite bindings work before upload.
 - **Manual binary smoke builds** – `build-binaries.yml` remains `workflow_dispatch`-only for ad-hoc verification but inherits the same rebuild/fingerprint guardrails so every artifact matches production expectations.
+- **Publish-only circuit** – Dispatching `build-release.yml` with `publish_only=true` plus `reuse_artifact_run_id`/`reuse_ready_artifact_name` downloads the notarized DMG from a previous run and executes only the R2/GitHub upload job—perfect for billing-sensitive retries when the artifact is already signed.
 - **Rust + multi-language scanning** – `codeql.yml` continues to analyze JavaScript/TypeScript, Python, and Rust only on pushes to `main`/`master`, the Saturday cron, or manual dispatches to conserve GitHub minutes.
 - **Concurrency & caching** – All macOS and CodeQL workflows enable `cancel-in-progress`; npm caching (scoped to `electron-poc/package-lock.json`) keeps re-runs fast without reinstalling the toolchain.
 - **Formatting + smoke checks** – `ci-simple.yml` still owns `cargo fmt` + fast health checks, ensuring style/quick regressions fail cheaply before the macOS jobs spin up.
@@ -5590,7 +5592,7 @@ _This section captures the exact command sequences the automation agent uses so 
 | Cancel stuck macOS runner | `gh run cancel <run_id>` |
 | Trigger CodeQL scan | `gh workflow run codeql.yml` |
 | Trigger build-only | `gh workflow run "Build Release DMG" --field skip_sign=true --field skip_publish=true` |
-| Trigger publish-only with existing artifact | `gh workflow run "Build Release DMG" --field sign_only=true --field reuse_artifact_run_id=<id>` |
+| Trigger publish-only with existing artifact | `gh workflow run "Build Release DMG" --field publish_only=true --field reuse_artifact_run_id=<id> --field reuse_ready_artifact_name=hive-macos-dmg-ready` |
 | Download notarized DMG | `gh run download <run_id> --name hive-macos-dmg-ready --dir ./artifacts` |
 
 This operational checklist is the same process that drove the successful end-to-end run (`actions/runs/17959967757`) that produced `hivetechs-releases/stable/Hive-Consensus-1.8.448.dmg`. Automation can follow it step-for-step to reproduce or debug any stage of the pipeline.
@@ -5605,6 +5607,7 @@ This operational checklist is the same process that drove the successful end-to-
   - Version metadata lives in the accompanying `build-report.json` artifact (`hives/hive-macos-dmg-ready` workflow artifact).
 - **Verification tip:** Always validate the worker-backed domain (`https://releases.hivetechs.io`). The worker proxies the R2 bucket (`releases-hivetechs`) and serves a valid TLS certificate. The presence of the versioned object **and** the `Hive-Consensus-latest.dmg` alias under the `stable/` prefix indicates the publish step succeeded.
 - **Standard operating order:** ensure CI contexts are updated first, merge the branch (now identical to master), then trigger the release workflow on master to publish. This sequence keeps master in lockstep with `memory-context-cicd` and guarantees the latest DMG lands in the website’s stable download section.
+- **Publish-only rerun:** when a signed DMG already exists (for example after a billing interruption), re-dispatch `Build Release DMG` with `publish_only=true`, `reuse_artifact_run_id=<signed_run_id>`, and `reuse_ready_artifact_name=hive-macos-dmg-ready` to execute only the upload stage.
 - **Website download link:** the public site (`hivetechs-website` repo) should reference `https://releases.hivetechs.io/stable/Hive-Consensus-latest.dmg` for the Apple Silicon button. The release workflow maintains that alias (plus the versioned and `stable/electron/` copies), so users always receive the notarized build we just published.
 
 **8. Comprehensive Build Requirements Check System & Build Order**
