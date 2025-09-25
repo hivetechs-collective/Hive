@@ -142,6 +142,21 @@ if [[ -d "$APP_PATH/Contents/PlugIns" ]]; then
     done
 fi
 
+# Ensure key embedded executables inherit required entitlements
+echo "🔏 Applying entitlements to embedded executables (node/ttyd/git)"
+EMBED_BASE="$APP_PATH/Contents/Resources/app.asar.unpacked/.webpack/main"
+EMBED_EXECUTABLES=(
+  "$EMBED_BASE/binaries/node"
+  "$EMBED_BASE/binaries/ttyd"
+  "$EMBED_BASE/binaries/git-bundle/bin/git"
+)
+for exe in "${EMBED_EXECUTABLES[@]}"; do
+  if [[ -f "$exe" ]] && file "$exe" | grep -q 'Mach-O'; then
+    echo "  • entitlements for $(basename "$exe")"
+    codesign --force --options runtime --timestamp       "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS"       --sign "$SIGN_ID" "$exe"
+    (codesign -d --entitlements :- "$exe" 2>/dev/null || true) | sed 's/^/      /'
+  fi
+ done
 # Sign the app bundle with entitlements
 codesign --force --options runtime --timestamp \
   "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \

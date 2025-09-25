@@ -468,6 +468,24 @@ jobs:
           if [[ -n "$BUILD_REPORT_SRC" ]]; then
             cp "$BUILD_REPORT_SRC" signed-output/build-report.json
           fi
+      - name: Set up Node.js for guardrail
+        if: ${{ env.RUN_SIGN == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Guardrail: Verify helpers in signed DMG
+        if: ${{ env.RUN_SIGN == 'true' }}
+        run: |
+          set -euo pipefail
+          DMG=$(ls signed-output/*.dmg | head -n 1)
+          if [[ -z "$DMG" ]]; then echo "No DMG in signed-output" >&2; exit 1; fi
+          node electron-poc/scripts/verify-dmg-helpers.js "$DMG"
+      - name: Guardrail: DMG-mounted memory /health
+        if: ${{ env.RUN_SIGN == 'true' }}
+        run: |
+          set -euo pipefail
+          DMG=$(ls signed-output/*.dmg | head -n 1)
+          node electron-poc/scripts/test-dmg-memory-service.js "$DMG"
       - name: Upload ready DMG artifact
         if: ${{ env.RUN_SIGN == 'true' }}
         uses: actions/upload-artifact@v4
