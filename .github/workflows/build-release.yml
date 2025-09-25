@@ -58,6 +58,7 @@ permissions:
 jobs:
   release-preflight:
     name: Release Preconditions
+    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     outputs:
       publish_only: ${{ steps.flags.outputs.publish_only }}
@@ -175,13 +176,13 @@ jobs:
         id: plan
         shell: bash
         env:
-          SHOULD_BUILD: ${{ needs.release-preflight.outputs.should_build }}
-          SHOULD_SIGN: ${{ needs.release-preflight.outputs.should_sign }}
-          NEEDS_UNSIGNED_REUSE: ${{ needs.release-preflight.outputs.needs_unsigned_reuse }}
-          NEEDS_READY_REUSE: ${{ needs.release-preflight.outputs.needs_ready_reuse }}
-          REUSE_RUN_ID: ${{ needs.release-preflight.outputs.reuse_run_id }}
-          REUSE_UNSIGNED_NAME: ${{ needs.release-preflight.outputs.reuse_unsigned_artifact_name }}
-          REUSE_READY_NAME: ${{ needs.release-preflight.outputs.reuse_ready_artifact_name }}
+          SHOULD_BUILD: ${{ needs['release-preflight'].outputs.should_build }}
+          SHOULD_SIGN: ${{ needs['release-preflight'].outputs.should_sign }}
+          NEEDS_UNSIGNED_REUSE: ${{ needs['release-preflight'].outputs.needs_unsigned_reuse }}
+          NEEDS_READY_REUSE: ${{ needs['release-preflight'].outputs.needs_ready_reuse }}
+          REUSE_RUN_ID: ${{ needs['release-preflight'].outputs.reuse_run_id }}
+          REUSE_UNSIGNED_NAME: ${{ needs['release-preflight'].outputs.reuse_unsigned_artifact_name }}
+          REUSE_READY_NAME: ${{ needs['release-preflight'].outputs.reuse_ready_artifact_name }}
         run: |
           set -euo pipefail
 
@@ -242,7 +243,7 @@ jobs:
           fi
 
       - name: Set up Node.js
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -250,7 +251,7 @@ jobs:
           cache-dependency-path: electron-poc/package-lock.json
 
       - name: Install build prerequisites
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -261,31 +262,31 @@ jobs:
           fi
 
       - name: Install npm dependencies
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         run: npm ci
 
       - name: Rebuild native modules for Electron
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
 
       - name: Verify build requirements
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         run: npm run requirements
 
       - name: Build production DMG
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         env:
           CI: true
         run: npm run build:complete
 
       - name: Smoke test memory service /health
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         run: npm run smoke:memory-health
 
       - name: List build outputs
         if: always()
         env:
-          SKIP_BUILD: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id != github.run_id }}
+          SKIP_BUILD: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id != github.run_id }}
         run: |
           if [[ "$SKIP_BUILD" == "true" ]]; then
             echo "Build skipped; no new artifacts generated."
@@ -297,14 +298,14 @@ jobs:
           fi
 
       - name: Capture native module metadata
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         run: |
           mkdir -p build-logs/native-modules
           otool -L node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.otool.txt
           shasum -a 256 node_modules/sqlite3/build/Release/node_sqlite3.node > build-logs/native-modules/sqlite3.sha256
 
       - name: Upload macOS build artifact
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id && success() }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id && success() }}
         uses: actions/upload-artifact@v4
         with:
           name: hive-macos-dmg
@@ -315,7 +316,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload build logs
-        if: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id == github.run_id }}
+        if: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id == github.run_id }}
         uses: actions/upload-artifact@v4
         with:
           name: hive-build-logs
@@ -326,7 +327,7 @@ jobs:
     name: Sign & Notarize macOS DMG
     needs: [release-preflight, artifact-plan, build-dmg]
     runs-on: macos-latest
-    if: ${{ needs.release-preflight.outputs.should_sign == 'true' }}
+    if: ${{ needs['release-preflight'].outputs.should_sign == 'true' }}
     outputs:
       artifact-name: hive-macos-dmg-ready
       signing-enabled: ${{ steps.setup-signing.outputs.enabled }}
@@ -337,8 +338,8 @@ jobs:
       - name: Determine artifact source
         id: artifact-source
         env:
-          REUSE_RUN_ID: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id }}
-          REUSE_ARTIFACT: ${{ needs.artifact-plan.outputs.unsigned_artifact_name }}
+          REUSE_RUN_ID: ${{ needs['artifact-plan'].outputs.unsigned_artifact_run_id }}
+          REUSE_ARTIFACT: ${{ needs['artifact-plan'].outputs.unsigned_artifact_name }}
         run: |
           echo "run-id=$REUSE_RUN_ID" >> "$GITHUB_OUTPUT"
           echo "artifact-name=$REUSE_ARTIFACT" >> "$GITHUB_OUTPUT"
@@ -483,7 +484,7 @@ jobs:
     needs: [release-preflight, sign-macos]
     runs-on: ubuntu-latest
     if: |
-      needs.release-preflight.outputs.run_publish == 'true'
+      needs['release-preflight'].outputs.run_publish == 'true'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
