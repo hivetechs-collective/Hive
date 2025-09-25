@@ -9,7 +9,17 @@ const path = require('path');
 const DMG_DEFAULT = path.join(__dirname, '..', 'out', 'make', 'Hive Consensus.dmg');
 
 function sh(cmd) { return execSync(cmd, { encoding: 'utf8', stdio: ['ignore','pipe','pipe'] }); }
-function findMount(out) { const t = out.split(/\s+/).filter(x=>x.startsWith('/Volumes/')); return t[t.length-1] || null; }
+function findMount(out) {
+  try {
+    const vols = fs.readdirSync('/Volumes');
+    for (const v of vols) {
+      const mp = path.join('/Volumes', v);
+      if (fs.existsSync(path.join(mp, 'Hive Consensus.app'))) return mp;
+    }
+  } catch {}
+  const t = out.split(/\s+/).filter(x=>x.startsWith('/Volumes/'));
+  return t.length ? t[t.length-1] : null;
+}
 
 function checkExec(p) {
   const st = fs.statSync(p);

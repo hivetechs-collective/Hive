@@ -42,6 +42,34 @@ const config: ForgeConfig = {
       }
     })
   ],
+  
+  hooks: {
+    async preMake() {
+      const fs = require('fs');
+      const path = require('path');
+      const outDir = path.resolve(__dirname, 'out');
+      const candidates = [
+        path.join(outDir, 'Hive Consensus-darwin-arm64', 'Hive Consensus.app'),
+        path.join(outDir, 'Hive Consensus-darwin-x64', 'Hive Consensus.app'),
+      ];
+      for (const appPath of candidates) {
+        const nodeP = path.join(appPath, 'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/node');
+        const ttydP = path.join(appPath, 'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/ttyd');
+        const gitP = path.join(appPath, 'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/git-bundle/bin/git');
+        for (const [label, pth] of [['node', nodeP], ['ttyd', ttydP], ['git', gitP]]) {
+          try {
+            if (fs.existsSync(pth)) {
+              fs.chmodSync(pth, 0o755);
+              console.log(`[forge preMake] chmod 755 ${label}: ${pth}`);
+            }
+          } catch (e) {
+            console.log(`[forge preMake] chmod failed for ${label}: ${e.message}`);
+          }
+        }
+      }
+    }
+  },
+
   plugins: [
     new AutoUnpackNativesPlugin({}),
     new WebpackPlugin({

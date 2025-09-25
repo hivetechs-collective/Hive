@@ -16,9 +16,18 @@ function sh(cmd, opts = {}) {
 }
 
 function findMountPointFromAttachOutput(out) {
+  // Prefer a mount that actually contains our app
+  try {
+    const vols = fs.readdirSync('/Volumes');
+    for (const v of vols) {
+      const mp = path.join('/Volumes', v);
+      if (fs.existsSync(path.join(mp, 'Hive Consensus.app'))) return mp;
+    }
+  } catch {}
+  // Fallback: last /Volumes token from attach output
   const tokens = out.split(/\s+/);
-  const vols = tokens.filter(t => t.startsWith('/Volumes/'));
-  return vols.length ? vols[vols.length - 1] : null;
+  const vols2 = tokens.filter(t => t.startsWith('/Volumes/'));
+  return vols2.length ? vols2[vols2.length - 1] : null;
 }
 
 async function findFreePort(start = 3900, end = 3999) {
