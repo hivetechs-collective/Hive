@@ -1,7 +1,7 @@
 {
   "name": "hive-consensus",
   "productName": "Hive Consensus",
-  "version": "1.8.447",
+  "version": "1.8.448",
   "description": "Hive Consensus - AI-powered development environment",
   "main": ".webpack/main",
   "scripts": {
@@ -29,7 +29,9 @@
     "test:ui": "node scripts/run-ui-tests.js",
     "test:welcome": "npm run verify:types && node scripts/test-welcome-db.js && ts-node tests/welcome-logic.test.ts && ts-node tests/template-scaffold.test.ts && ts-node tests/clone-validate.test.ts && ts-node tests/welcome-layout.test.ts && ts-node tests/backup-policy.test.ts && ts-node tests/panel-state.test.ts && ts-node tests/welcome-prefs.test.ts && ts-node tests/analytics-compute.test.ts && ts-node tests/center-view.test.ts && ts-node tests/openrouter-sync.test.ts",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "test:dmg:memory": "node scripts/test-dmg-memory-service.js",
+    "verify:dmg:helpers": "node scripts/verify-dmg-helpers.js"
   },
   "keywords": [],
   "author": {
