@@ -265,7 +265,7 @@ jobs:
         if: ${{ env.RUN_BUILD == 'true' }}
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "22"
           cache: npm
           cache-dependency-path: electron-poc/package-lock.json
       - name: Install build prerequisites
@@ -472,9 +472,11 @@ jobs:
         if: ${{ env.RUN_SIGN == 'true' }}
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "22"
       - name: Guardrail: Verify helpers in signed DMG
         if: ${{ env.RUN_SIGN == 'true' }}
+        shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
           DMG=$(ls signed-output/*.dmg | head -n 1)
@@ -482,6 +484,8 @@ jobs:
           node electron-poc/scripts/verify-dmg-helpers.js "$DMG"
       - name: Guardrail: DMG-mounted memory /health
         if: ${{ env.RUN_SIGN == 'true' }}
+        shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
           DMG=$(ls signed-output/*.dmg | head -n 1)
