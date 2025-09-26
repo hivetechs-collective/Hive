@@ -107,3 +107,5 @@ export const mainConfig: Configuration = {
     'node-pty': 'commonjs node-pty'
   }
 };
+
+export default mainConfig;

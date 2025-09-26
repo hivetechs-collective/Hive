@@ -80,7 +80,6 @@ jobs:
         run: |
           set -euo pipefail
 
-
           EVENT_NAME="${GITHUB_EVENT_NAME:-}"
           # Defaults for push/tag events
           publish_only=false
@@ -91,33 +90,21 @@ jobs:
           reuse_unsigned="hive-macos-dmg"
           reuse_ready="hive-macos-dmg-ready"
 
-          # When manually dispatched, read inputs from the event payload
+          # For manual runs, parse inputs at runtime from $GITHUB_EVENT_PATH
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            eval "$(python3 - << 'PY2'
-import json, os
-p = os.environ.get('GITHUB_EVENT_PATH', '')
-d = {}
-try:
-  with open(p, 'r') as f:
-    d = json.load(f)
-except Exception:
-  d = {}
-inputs = d.get('inputs') or {}
-def as_bool(name, default='false'):
-  v = str(inputs.get(name, default)).lower()
-  return 'true' if v in ('1','true','yes','on') else 'false'
-print(f"publish_only={as_bool('publish_only')}")
-print(f"sign_only={as_bool('sign_only')}")
-print(f"skip_sign={as_bool('skip_sign')}")
-print(f"skip_publish={as_bool('skip_publish')}")
-print(f"reuse_run_id={inputs.get('reuse_artifact_run_id','')}")
-print(f"reuse_unsigned={inputs.get('reuse_artifact_name','hive-macos-dmg')}")
-print(f"reuse_ready={inputs.get('reuse_ready_artifact_name','hive-macos-dmg-ready')}")
-PY2
-            )"
+            jb() {
+              local key=$1; local def=${2:-false};
+              local raw=$(jq -r ".inputs.${key} // "${def}"" "$GITHUB_EVENT_PATH" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+              if [[ "$raw" == "true" || "$raw" == "1" || "$raw" == "yes" || "$raw" == "on" ]]; then echo true; else echo false; fi
+            }
+            publish_only=$(jb publish_only false)
+            sign_only=$(jb sign_only false)
+            skip_sign=$(jb skip_sign false)
+            skip_publish=$(jb skip_publish false)
+            reuse_run_id=$(jq -r '.inputs.reuse_artifact_run_id // ""' "$GITHUB_EVENT_PATH" 2>/dev/null)
+            reuse_unsigned=$(jq -r '.inputs.reuse_artifact_name // "hive-macos-dmg"' "$GITHUB_EVENT_PATH" 2>/dev/null)
+            reuse_ready=$(jq -r '.inputs.reuse_ready_artifact_name // "hive-macos-dmg-ready"' "$GITHUB_EVENT_PATH" 2>/dev/null)
           fi
-
-
 
           if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
             publish_only=false
@@ -132,7 +119,6 @@ PY2
 
           should_build=true
           should_sign=true
-
           if [[ "$publish_only" == "true" ]]; then
             should_build=false
             should_sign=false
@@ -183,7 +169,6 @@ PY2
             echo "needs_unsigned_reuse=$needs_unsigned_reuse"
             echo "needs_ready_reuse=$needs_ready_reuse"
           } >> "$GITHUB_OUTPUT"
-
   artifact-plan:
     name: Resolve Artifact Sources
     runs-on: ubuntu-latest
