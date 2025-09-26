@@ -64,9 +64,9 @@ jobs:
       # Skipping webpack build + smoke here to keep PR checks fast and reliable
       # Full build and DMG-mounted smoke run in release workflows
 
-      - name: Static checks
+      - name: Static checks (modules + types)
         working-directory: electron-poc
-        run: npm run verify:all
+        run: npm run verify:modules && npm run verify:types
 
   ui-smoke:
     name: UI Smoke (macOS)
