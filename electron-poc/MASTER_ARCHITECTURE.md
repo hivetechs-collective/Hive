@@ -5471,6 +5471,59 @@ jobs:
 - **Formatting + smoke checks** – `ci-simple.yml` still owns `cargo fmt` + fast health checks, ensuring style/quick regressions fail cheaply before the macOS jobs spin up.
 - **Actions budget requirement** – macOS runners respect the organization spending limit. Keep a non-zero Actions budget (currently `$30`) otherwise jobs fail during dependency installation with the billing warning surfaced directly in the logs.
 - **Release gating & deprecation guard** – Cloudflare R2 uploads only occur for pushes to `main`/`master` or version tags. The workflows intentionally omit any legacy Dioxos Rust app or deprecated TUI build steps; those artifacts stay archived in the repo but are never compiled or published.
+
+### CI/CD Technical Notes (DMG Memory Service + Workflow Stability)
+
+This subsection documents the production issues we hit in CI, what worked locally, what failed in Actions, and the corrective actions and guardrails we have in place now.
+
+- Problem summary
+  - CI‑built DMG failed to start the Memory Service from the mounted DMG (read‑only) while the local 17‑phase `npm run build:complete` DMG worked.
+  - Separately, our GitHub Actions workflow began failing before any jobs started (“workflow file issue”) after conflicting merges, blocking manual dispatch and making all master runs fail instantly.
+
+- Root causes discovered
+  - Read‑only DMG semantics: helpers inside the DMG must already be executable and signed with hardened‑runtime entitlements. Local installs to `/Applications` could “heal” permissions; DMG cannot.
+  - Missing entitlements on nested helpers (Node/ttyd/git) inside the DMG on CI → hardened runtime killed the helper when launching Memory Service from the mounted DMG.
+  - Workflow invalidation on push: `.github/workflows/build-release.yml` contained merge‑conflict markers and referenced `github.event.inputs.*` inside YAML `env:` for the preflight step. On push events `inputs` don’t exist and the YAML is evaluated before the step runs, so the workflow was rejected immediately with no jobs.
+
+- Fixes implemented
+  - Packaging/signing
+    - Pre‑package permissions: ensure packaged executables under `app.asar.unpacked/.webpack/main/binaries/**` (node/ttyd/git) ship as executable (chmod 755) before DMG creation.
+    - Signing scope: `scripts/sign-notarize-macos.sh` now signs all embedded Mach‑O helpers with hardened‑runtime entitlements (e.g., `allow-jit`, `disable-library-validation`) prior to final app sign and notarization.
+  - Fast local validation harness (no Actions cost)
+    - `scripts/verify-dmg-helpers.js` mounts a DMG, verifies helpers exist, are executable, codesigned, and prints entitlements.
+    - `scripts/test-dmg-memory-service.js` mounts a DMG, launches the packaged Memory Service via the DMG’s Node on a dynamic port, and checks `/health`.
+    - Usage: `npm run verify:dmg:helpers "<dmg>"` and `npm run test:dmg:memory "<dmg>"`.
+  - Workflow stability (preflight hardening)
+    - Removed conflict markers from `.github/workflows/build-release.yml` and eliminated `github.event.inputs` from YAML `env:` blocks.
+    - The “Release Preconditions / Derive run mode” step is push‑safe: it defaults flags for push/tag; for `workflow_dispatch`, it parses inputs at runtime from `$GITHUB_EVENT_PATH` (bash/jq), then emits outputs. This avoids pre‑evaluation errors and restores normal job execution on push.
+
+- Why many attempts were required
+  - Two independent failure classes overlapped:
+    1) The DMG runtime failure (permissions/entitlements) required packaging/signing changes and a reproducible local harness.
+    2) The workflow‑file invalidation (merge conflict + inputs in YAML) prevented any CI job from starting on master. Until that YAML was cleaned and the preflight step made push‑safe, runs failed instantly with no logs.
+  - Rerunning old Actions runs couldn’t validate fixes because reruns execute the original commit, not the updated workflow/signing scripts.
+
+- Current approach (cost‑aware and deterministic)
+  - Use the harness to validate locally first (seconds) against the latest DMG (from R2 or local build).
+  - In Actions, rely on selective reruns with artifact reuse to avoid rebuilds:
+    - `sign_only=true` with `reuse_artifact_run_id` to re‑sign an existing unsigned DMG.
+    - `publish_only=true` with `reuse_artifact_run_id` to upload an existing signed DMG.
+  - Guardrails (optional but cheap): after signing, run the helper verifier and a brief DMG‑mounted `/health` smoke to prevent regressions before publishing.
+
+- Operational checklist (CI runs on master)
+  - Ensure `.github/workflows/build-release.yml` has no conflict markers and the preflight step does not reference `github.event.inputs` in YAML.
+  - If manual dispatch is hidden in the UI, the workflow on the default branch is invalid; fix the YAML first.
+  - Prefer sign‑only/publish‑only with artifact reuse to save minutes; avoid rebuilds unless packaging changed.
+  - After a CI publish, validate the R2 DMG locally with:
+    - `npm run verify:dmg:helpers "<downloaded dmg>"`
+    - `npm run test:dmg:memory "<downloaded dmg>"`
+
+- Lessons learned / recommendations
+  - Keep the preflight step minimal and push‑safe; parse inputs at runtime only for `workflow_dispatch`.
+  - Add a tiny, fast gate after signing (entitlements print + DMG‑mounted `/health`) to catch regressions early.
+  - When runs fail with “workflow file issue,” check for conflict markers and YAML‑time `inputs` usage; jobs won’t start until YAML is valid on the default branch.
+  - Use local harnesses to debug DMG behavior and reduce Actions spend.
+
 - **Operational reminder** – If a run stalls on billing or toolchain provisioning, adjust the Actions budget and rerun; the guardrails log native-module status early so we can cancel quickly if prerequisites are missing.
 
 **7.2 Operations Playbook (GitHub, Workflows, and Deployment Control)**
@@ -14106,3 +14159,34 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
 - Optional crates (`dioxus*`, `manganis`, `rfd`, `arboard`, `webbrowser`) are pulled in only when `--features desktop-legacy` is specified. This keeps `cargo check`/Dependabot runs fast and avoids pulling the old GTK/GLib toolchain unless you explicitly opt in.
 - To revisit the Rust desktop prototype locally: `cargo check --features desktop-legacy` or `cargo run --features desktop-legacy`. CI dispatchers should leave the feature off unless you are actively reviving the legacy UI.
 - The Electron pipeline remains authoritative for release artifacts; the legacy flag is purely an archive of prior work and can be removed entirely once we no longer need those references.
+
+
+#### CI/CD References (Runs / PRs / Commits)
+
+- Key PRs
+  - #17 feat(test): add DMG-mounted memory-service harness — adds verify/test scripts; commit 63a7dbc.
+  - #18 fix/ci entitlements guardrail — initial guardrail and CI doc update; commit eea2c50.
+  - #19 ci: trigger Build Release DMG at HEAD (noop) — no-op to force a HEAD run.
+  - #20 ci: fix preflight inputs expressions — drop `||` defaults in YAML for push events.
+  - #21 ci(preflight): avoid `github.event.inputs` in YAML on push; parse inputs at runtime via `$GITHUB_EVENT_PATH`.
+  - #22 ci(preflight): remove leftover conflict markers & env inputs; make preflight push-safe.
+  - #23 ci(preflight): hard-replace Derive run mode with push-safe runtime parsing; remove all YAML-time inputs.
+
+- Notable release runs (Build Release DMG)
+  - 18010285795 (master) — success; provided unsigned DMG artifact reused for sign-only.
+  - 18012607930 (master, workflow_dispatch rerun) — sign-only success (reused pre-fix commit); signed DMG failed local harness (/health) → proved reruns use old code.
+  - 18013008482 (master) — immediate failure; workflow invalid on push after conflict.
+  - 18021854108 (master, 7df895b) — immediate failure; “workflow file issue”.
+  - 18022135919 (master) — immediate failure; no jobs executed.
+  - 18026684024 (master) — immediate failure; no jobs executed.
+
+- Commits / anchors
+  - a015a87 ci: restore four-stage release workflow (#15)
+  - 63a7dbc feat(test): add DMG-mounted memory-service harness (#17)
+  - 453389c ci(sign): apply entitlements to nested helpers (node/ttyd/git) before app sign
+  - eea2c50 fix/ci entitlements guardrail (#18)
+  - 7df895b ci: trigger Build Release DMG at HEAD (noop)
+
+- Harness commands (local)
+  - Check helpers: `cd electron-poc; npm run verify:dmg:helpers "<dmg>"`
+  - DMG-mounted /health: `cd electron-poc; npm run test:dmg:memory "<dmg>"`
