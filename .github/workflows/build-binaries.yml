@@ -1,9 +1,6 @@
 name: Build Binaries
 
 on:
-  push:
-    branches:
-      - 'release/**'
   workflow_dispatch:
     inputs:
       mode:
