@@ -3,13 +3,7 @@ name: Build Release DMG
 
 on:
   push:
-    branches: [ main, master ]
-    tags:
-      - 'v*'
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - '.github/dependabot.yml'
+    branches: [ 'release/**' ]
   workflow_dispatch:
     inputs:
       publish_only:
@@ -518,6 +512,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Ensure awscli present
+        run: |
+          if ! command -v aws >/dev/null 2>&1; then
+            sudo apt-get update -y
+            sudo apt-get install -y awscli
+          fi
 
       - name: Download DMG artifact
         uses: actions/download-artifact@v4

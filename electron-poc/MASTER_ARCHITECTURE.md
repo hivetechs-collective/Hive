@@ -5508,6 +5508,44 @@ This subsection documents the production issues we hit in CI, what worked locall
   - In Actions, rely on selective reruns with artifact reuse to avoid rebuilds:
     - `sign_only=true` with `reuse_artifact_run_id` to re‑sign an existing unsigned DMG.
     - `publish_only=true` with `reuse_artifact_run_id` to upload an existing signed DMG.
+
+### CI/CD v2 — Single “Build Release DMG” Pipeline
+
+We now standardize on a single end‑to‑end workflow that produces a production‑ready DMG automatically. The workflow runs in four jobs and is designed to be deterministic, cheap, and easy to rerun.
+
+Triggers
+- Push to `release/**` branches (controlled releases without touching `master`).
+- Optional `workflow_dispatch` for manual runs (no parameters needed).
+
+Pipeline (4 jobs)
+1) Preflight (Ubuntu): derive metadata (branch/ref) and set outputs used by downstream jobs.
+2) Build (macOS):
+   - Node 22 + cached npm
+   - Rebuild native modules for the current Electron ABI
+   - Full 17‑phase build (`npm run build:complete`)
+   - Upload unsigned DMG + build report + build logs as artifacts
+3) Sign + Notarize + Guardrails (macOS):
+   - Import Apple Developer ID cert into a temporary keychain
+   - Sign every nested Mach‑O and the app bundle; notarize the DMG (notarytool)
+   - Guardrails:
+     - `verify-dmg-helpers.js`: validates exec bits/entitlements/codesign on node/ttyd/git inside the DMG
+     - `test-dmg-memory-service.js`: mounts the DMG, launches the packaged memory‑service via the bundled Node, and verifies `/health`
+   - Upload signed “ready” DMG as artifact
+4) Publish (Ubuntu):
+   - Ensure `awscli` is present
+   - Compute SHA256; upload to Cloudflare R2 under `stable/Hive-Consensus-latest.dmg` and `.sha256`
+
+Rationale
+- UI smoke tests are not part of the release pipeline. They are useful during PRs but brittle in headless CI. Instead, we rely on runtime guardrails that prove the signed DMG actually boots the Memory Service from the mounted DMG (read‑only semantics).
+- Keeping the trigger on `release/**` avoids accidental releases on `master` and supports easy re‑runs without manipulating tags.
+- Every job uploads logs/artifacts so failures can be diagnosed without rerunning expensive steps.
+
+Operator Flow (simple)
+- Create a release branch (e.g., `release/v1.8.460`) and push a small change (or empty commit) to trigger the workflow.
+- Wait for the pipeline to finish and grab the download links:
+  - `stable/Hive-Consensus-latest.dmg`
+  - `stable/Hive-Consensus-latest.dmg.sha256`
+
   - Guardrails (optional but cheap): after signing, run the helper verifier and a brief DMG‑mounted `/health` smoke to prevent regressions before publishing.
 
 - Operational checklist (CI runs on master)
