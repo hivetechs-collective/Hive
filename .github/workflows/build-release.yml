@@ -5,17 +5,21 @@ on:
     branches: [ 'release/**' ]
   workflow_dispatch:
 
-concurrency:
-  group: build-release-${{ github.ref }}
-  cancel-in-progress: true
+  
 
 permissions:
   contents: write
 
 jobs:
+  setup:
+    name: 00 Setup (probe)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
   preflight:
     name: 01 Preflight
     runs-on: ubuntu-latest
+    needs: setup
     outputs:
       release_ref: ${{ steps.meta.outputs.release_ref }}
     steps:
