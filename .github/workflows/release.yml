@@ -143,6 +143,16 @@ jobs:
       - name: Guardrail: DMG-mounted memory /health
         run: node electron-poc/scripts/test-dmg-memory-service.js "$(ls electron-poc/out/make/*.dmg | head -n 1)"
 
+      - name: Upload build logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-logs-${{ github.run_id }}
+          path: |
+            electron-poc/build-logs/**
+            electron-poc/out/build-report.json
+          if-no-files-found: ignore
+
       - name: Prepare release files
         run: |
           set -euo pipefail
