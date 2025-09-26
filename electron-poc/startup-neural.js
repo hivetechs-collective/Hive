@@ -250,4 +250,4 @@ if (window.electronAPI) {
             neuralNetwork.destroy();
         }
     });
-}
+}// ci-release-trigger 2025-09-26T18:38:03Z
