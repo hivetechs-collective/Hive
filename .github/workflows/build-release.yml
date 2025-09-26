@@ -11,4 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "probe ok"
-
+  preflight:
+    name: 01 Preflight
+    runs-on: ubuntu-latest
+    needs: setup
+    outputs:
+      release_ref: ${{ steps.meta.outputs.release_ref }}
+    steps:
+      - name: Derive metadata
+        id: meta
+        run: echo "release_ref=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
