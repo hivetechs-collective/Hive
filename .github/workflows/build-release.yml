@@ -21,3 +21,10 @@ jobs:
       - name: Derive metadata
         id: meta
         run: echo "release_ref=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+  build:
+    name: 02 Build (macOS)
+    runs-on: macos-latest
+    needs: preflight
+    if: ${{ false }}
+    steps:
+      - run: echo "skip build (probe)"
