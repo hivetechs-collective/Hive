@@ -61,15 +61,8 @@ jobs:
         working-directory: electron-poc
         run: npm run requirements
 
-      - name: Build webpack outputs (no packaging)
-        working-directory: electron-poc
-        env:
-          CI: true
-        run: npm run build
-
-      - name: Smoke test memory service (webpack build)
-        working-directory: electron-poc
-        run: npm run smoke:memory-health
+      # Skipping webpack build + smoke here to keep PR checks fast and reliable
+      # Full build and DMG-mounted smoke run in release workflows
 
       - name: Static checks
         working-directory: electron-poc
