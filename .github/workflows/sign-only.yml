@@ -1,0 +1,131 @@
+name: Sign Only (Reuse Artifact)
+
+on:
+  push:
+    branches:
+      - 'signonly/**'
+
+permissions:
+  contents: read
+
+jobs:
+  sign_only:
+    name: Sign & Notarize from Reused Artifact
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive reuse run id and artifact name
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          BR="${GITHUB_REF_NAME}"
+          RUN_ID="${BR#signonly/}"
+          if [[ -z "$RUN_ID" || "$RUN_ID" == "$BR" ]]; then
+            echo "Branch name must be signonly/<run_id>" >&2
+            exit 64
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=unsigned-dmg" >> "$GITHUB_OUTPUT"
+
+      - name: Download unsigned DMG (reused)
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          run-id: ${{ steps.meta.outputs.run_id }}
+          path: signed-input
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up signing keychain
+        id: setup-signing
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/hive-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/apple-cert.p12"
+          security import "$RUNNER_TEMP/apple-cert.p12" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/apple-cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "HIVE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "HIVE_SIGNING_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Store notary credentials
+        env:
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          NOTARY_PROFILE: HiveNotaryProfile
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/notary"
+          echo "$ASC_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
+          xcrun notarytool store-credentials "$NOTARY_PROFILE" \
+            --key "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8" \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --keychain "$HIVE_SIGNING_KEYCHAIN"
+          rm -f "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
+
+      - name: Sign and notarize DMG
+        env:
+          SIGN_ID: "Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"
+          NOTARY_PROFILE: HiveNotaryProfile
+        run: |
+          set -euo pipefail
+          DMG_PATH="$(find signed-input -maxdepth 3 -type f -name '*.dmg' | head -n 1)"
+          if [[ -z "$DMG_PATH" ]]; then echo "No DMG found to sign" >&2; exit 1; fi
+          APP_MOUNT_DIR="$(mktemp -d)"; APP_WORK_DIR="$(mktemp -d)"
+          trap 'hdiutil detach "$APP_MOUNT_DIR" >/dev/null 2>&1 || true; rm -rf "$APP_MOUNT_DIR" "$APP_WORK_DIR"' EXIT
+          hdiutil attach "$DMG_PATH" -mountpoint "$APP_MOUNT_DIR" -nobrowse
+          ditto "$APP_MOUNT_DIR/Hive Consensus.app" "$APP_WORK_DIR/Hive Consensus.app"
+          hdiutil detach "$APP_MOUNT_DIR"
+          scripts/sign-notarize-macos.sh "$APP_WORK_DIR/Hive Consensus.app" "$DMG_PATH"
+
+      - name: "Guardrail: Verify helpers"
+        run: |
+          DMG_PATH="$(find signed-input -maxdepth 3 -type f -name '*.dmg' | head -n 1)"
+          node electron-poc/scripts/verify-dmg-helpers.js "$DMG_PATH"
+
+      - name: "Guardrail: DMG-mounted memory /health"
+        run: |
+          DMG_PATH="$(find signed-input -maxdepth 3 -type f -name '*.dmg' | head -n 1)"
+          node electron-poc/scripts/test-dmg-memory-service.js "$DMG_PATH"
+
+      - name: Upload ready DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: hive-macos-dmg-ready
+          path: |
+            signed-input/*.dmg
+            signed-input/build-report.json
+          if-no-files-found: error
+
+      - name: Publish to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          DMG_SRC=$(find signed-input -maxdepth 1 -type f -name '*.dmg' | head -n 1)
+          if [[ -z "$DMG_SRC" ]]; then echo "No DMG file found" >&2; exit 1; fi
+          cp "$DMG_SRC" release/Hive-Consensus.dmg
+          (cd release && shasum -a 256 Hive-Consensus.dmg > Hive-Consensus.dmg.sha256)
+          aws s3 cp release/Hive-Consensus.dmg "s3://releases-hivetechs/stable/Hive-Consensus-latest.dmg" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION"
+          aws s3 cp release/Hive-Consensus.dmg.sha256 "s3://releases-hivetechs/stable/Hive-Consensus-latest.dmg.sha256" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION" --content-type text/plain
+
