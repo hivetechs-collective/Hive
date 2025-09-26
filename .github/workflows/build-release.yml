@@ -1,46 +1,9 @@
 name: Build Release DMG
-# ci trigger: noop change to force release run at HEAD
 
 on:
   push:
     branches: [ 'release/**' ]
   workflow_dispatch:
-    inputs:
-      publish_only:
-        description: 'Skip build/sign and only run the publish job using an existing signed artifact'
-        required: false
-        default: false
-        type: boolean
-      sign_only:
-        description: 'Skip build/publish and only run the signing job against an existing artifact'
-        required: false
-        default: false
-        type: boolean
-      skip_sign:
-        description: 'Skip the signing job (useful for build-only iterations)'
-        required: false
-        default: false
-        type: boolean
-      skip_publish:
-        description: 'Skip the publish job (e.g. while debugging build/sign)'
-        required: false
-        default: false
-        type: boolean
-      reuse_artifact_run_id:
-        description: 'Optional run ID containing an existing macOS DMG artifact to reuse'
-        required: false
-        default: ''
-        type: string
-      reuse_artifact_name:
-        description: 'Unsigned artifact name to download when reusing (defaults to hive-macos-dmg)'
-        required: false
-        default: 'hive-macos-dmg'
-        type: string
-      reuse_ready_artifact_name:
-        description: 'Signed artifact name to download when publish_only is true (defaults to hive-macos-dmg-ready)'
-        required: false
-        default: 'hive-macos-dmg-ready'
-        type: string
 
 concurrency:
   group: build-release-${{ github.ref }}
@@ -48,323 +11,79 @@ concurrency:
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
-  release-preflight:
-    name: Release Preconditions
+  preflight:
+    name: 01 Preflight
     runs-on: ubuntu-latest
     outputs:
-      publish_only: ${{ steps.flags.outputs.publish_only }}
-      sign_only: ${{ steps.flags.outputs.sign_only }}
-      skip_sign: ${{ steps.flags.outputs.skip_sign }}
-      skip_publish: ${{ steps.flags.outputs.skip_publish }}
-      reuse_run_id: ${{ steps.flags.outputs.reuse_run_id }}
-      reuse_unsigned_artifact_name: ${{ steps.flags.outputs.reuse_unsigned_artifact_name }}
-      reuse_ready_artifact_name: ${{ steps.flags.outputs.reuse_ready_artifact_name }}
-      should_build: ${{ steps.flags.outputs.should_build }}
-      should_sign: ${{ steps.flags.outputs.should_sign }}
-      run_publish: ${{ steps.flags.outputs.run_publish }}
-      needs_unsigned_reuse: ${{ steps.flags.outputs.needs_unsigned_reuse }}
-      needs_ready_reuse: ${{ steps.flags.outputs.needs_ready_reuse }}
+      release_ref: ${{ steps.meta.outputs.release_ref }}
     steps:
-      - name: Derive run mode
-        id: flags
-        shell: bash
-        run: |
-          set -euo pipefail
+      - name: Derive metadata
+        id: meta
+        run: echo "release_ref=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
 
-          EVENT_NAME="${GITHUB_EVENT_NAME:-}"
-          # Defaults for push/tag events
-          publish_only=false
-          sign_only=false
-          skip_sign=false
-          skip_publish=false
-          reuse_run_id=""
-          reuse_unsigned="hive-macos-dmg"
-          reuse_ready="hive-macos-dmg-ready"
-
-          # For manual runs, parse inputs at runtime from $GITHUB_EVENT_PATH
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            jb() {
-              local key=$1; local def=${2:-false};
-              local raw=$(jq -r ".inputs.${key} // "${def}"" "$GITHUB_EVENT_PATH" 2>/dev/null | tr '[:upper:]' '[:lower:]')
-              if [[ "$raw" == "true" || "$raw" == "1" || "$raw" == "yes" || "$raw" == "on" ]]; then echo true; else echo false; fi
-            }
-            publish_only=$(jb publish_only false)
-            sign_only=$(jb sign_only false)
-            skip_sign=$(jb skip_sign false)
-            skip_publish=$(jb skip_publish false)
-            reuse_run_id=$(jq -r '.inputs.reuse_artifact_run_id // ""' "$GITHUB_EVENT_PATH" 2>/dev/null)
-            reuse_unsigned=$(jq -r '.inputs.reuse_artifact_name // "hive-macos-dmg"' "$GITHUB_EVENT_PATH" 2>/dev/null)
-            reuse_ready=$(jq -r '.inputs.reuse_ready_artifact_name // "hive-macos-dmg-ready"' "$GITHUB_EVENT_PATH" 2>/dev/null)
-          fi
-
-          if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
-            publish_only=false
-            sign_only=false
-            skip_sign=false
-            skip_publish=false
-          fi
-
-          if [[ "$publish_only" == "true" ]]; then
-            sign_only=false
-          fi
-
-          should_build=true
-          should_sign=true
-          if [[ "$publish_only" == "true" ]]; then
-            should_build=false
-            should_sign=false
-          elif [[ "$sign_only" == "true" ]]; then
-            should_build=false
-            should_sign=true
-          fi
-
-          if [[ "$skip_sign" == "true" ]]; then
-            should_sign=false
-          fi
-
-          run_publish=true
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            if [[ "$skip_publish" == "true" ]]; then
-              run_publish=false
-            elif [[ "$sign_only" == "true" ]]; then
-              run_publish=false
-            elif [[ "$publish_only" == "true" ]]; then
-              run_publish=true
-            fi
-            if [[ "$skip_sign" == "true" ]]; then
-              run_publish=false
-            fi
-          fi
-
-          needs_unsigned_reuse=false
-          if [[ "$should_build" != "true" && "$should_sign" == "true" ]]; then
-            needs_unsigned_reuse=true
-          fi
-
-          needs_ready_reuse=false
-          if [[ "$publish_only" == "true" ]]; then
-            needs_ready_reuse=true
-          fi
-
-          {
-            echo "publish_only=$publish_only"
-            echo "sign_only=$sign_only"
-            echo "skip_sign=$skip_sign"
-            echo "skip_publish=$skip_publish"
-            echo "reuse_run_id=$reuse_run_id"
-            echo "reuse_unsigned_artifact_name=$reuse_unsigned"
-            echo "reuse_ready_artifact_name=$reuse_ready"
-            echo "should_build=$should_build"
-            echo "should_sign=$should_sign"
-            echo "run_publish=$run_publish"
-            echo "needs_unsigned_reuse=$needs_unsigned_reuse"
-            echo "needs_ready_reuse=$needs_ready_reuse"
-          } >> "$GITHUB_OUTPUT"
-  artifact-plan:
-    name: Resolve Artifact Sources
-    runs-on: ubuntu-latest
-    needs: [release-preflight]
-    outputs:
-      unsigned_artifact_run_id: ${{ steps.plan.outputs.unsigned_run_id }}
-      unsigned_artifact_name: ${{ steps.plan.outputs.unsigned_name }}
-      ready_artifact_run_id: ${{ steps.plan.outputs.ready_run_id }}
-      ready_artifact_name: ${{ steps.plan.outputs.ready_name }}
-    steps:
-      - name: Compose artifact references
-        id: plan
-        shell: bash
-        env:
-          SHOULD_BUILD: ${{ needs.release-preflight.outputs.should_build }}
-          SHOULD_SIGN: ${{ needs.release-preflight.outputs.should_sign }}
-          NEEDS_UNSIGNED_REUSE: ${{ needs.release-preflight.outputs.needs_unsigned_reuse }}
-          NEEDS_READY_REUSE: ${{ needs.release-preflight.outputs.needs_ready_reuse }}
-          REUSE_RUN_ID: ${{ needs.release-preflight.outputs.reuse_run_id }}
-          REUSE_UNSIGNED_NAME: ${{ needs.release-preflight.outputs.reuse_unsigned_artifact_name }}
-          REUSE_READY_NAME: ${{ needs.release-preflight.outputs.reuse_ready_artifact_name }}
-        run: |
-          set -euo pipefail
-
-          unsigned_run_id="$GITHUB_RUN_ID"
-          unsigned_name="hive-macos-dmg"
-          if [[ "$SHOULD_BUILD" != "true" ]]; then
-            unsigned_run_id="$REUSE_RUN_ID"
-            unsigned_name="$REUSE_UNSIGNED_NAME"
-          fi
-
-          if [[ "$NEEDS_UNSIGNED_REUSE" == "true" ]]; then
-            if [[ -z "$unsigned_run_id" ]]; then
-              echo "A reusable unsigned artifact run ID is required when skipping the build step." >&2
-              exit 1
-            fi
-            if [[ -z "$unsigned_name" ]]; then
-              echo "A reusable unsigned artifact name is required when skipping the build step." >&2
-              exit 1
-            fi
-          fi
-
-          ready_run_id="$GITHUB_RUN_ID"
-          ready_name="hive-macos-dmg-ready"
-
-          if [[ "$NEEDS_READY_REUSE" == "true" ]]; then
-            ready_run_id="$REUSE_RUN_ID"
-            ready_name="$REUSE_READY_NAME"
-            if [[ -z "$ready_run_id" ]]; then
-              echo "publish_only requires reuse_artifact_run_id pointing to a signed artifact run." >&2
-              exit 1
-            fi
-            if [[ -z "$ready_name" ]]; then
-              echo "publish_only requires reuse_ready_artifact_name." >&2
-              exit 1
-            fi
-          fi
-
-          echo "unsigned_run_id=$unsigned_run_id" >> "$GITHUB_OUTPUT"
-          echo "unsigned_name=$unsigned_name" >> "$GITHUB_OUTPUT"
-          echo "ready_run_id=$ready_run_id" >> "$GITHUB_OUTPUT"
-          echo "ready_name=$ready_name" >> "$GITHUB_OUTPUT"
-
-  macos-build-sign:
-    name: Build & Sign macOS DMG
+  build:
+    name: 02 Build (macOS)
     runs-on: macos-latest
-    needs: [release-preflight, artifact-plan]
-    if: ${{ needs.release-preflight.outputs.publish_only != 'true' }}
+    needs: preflight
+    defaults:
+      run:
+        working-directory: electron-poc
     steps:
-      - name: Initialize ready artifact outputs
-        id: ready-default
-        run: |
-          echo "run_id=${{ needs.artifact-plan.outputs.ready_artifact_run_id }}" >> "$GITHUB_OUTPUT"
-          echo "name=${{ needs.artifact-plan.outputs.ready_artifact_name }}" >> "$GITHUB_OUTPUT"
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set job flags
-        id: job-flags
-        run: |
-          {
-            echo "RUN_BUILD=${{ needs.release-preflight.outputs.should_build }}";
-            echo "RUN_SIGN=${{ needs.release-preflight.outputs.should_sign }}";
-            echo "SIGN_ONLY=${{ needs.release-preflight.outputs.sign_only }}";
-            echo "PUBLISH_ONLY=${{ needs.release-preflight.outputs.publish_only }}";
-            echo "SKIP_SIGN=${{ needs.release-preflight.outputs.skip_sign }}";
-            echo "UNSIGNED_ARTIFACT_RUN_ID=${{ needs.artifact-plan.outputs.unsigned_artifact_run_id }}";
-            echo "UNSIGNED_ARTIFACT_NAME=${{ needs.artifact-plan.outputs.unsigned_artifact_name }}";
-          } >> "$GITHUB_ENV"
-      - name: Build mode summary
-        run: |
-          if [[ "$RUN_BUILD" == "true" ]]; then
-            echo "Will perform a fresh Electron build."
-          else
-            echo "Skipping build; relying on reusable artifact."
-          fi
-          if [[ "$RUN_SIGN" == "true" ]]; then
-            echo "Signing and notarization enabled."
-          else
-            echo "Skipping signing/notarization."
-          fi
+      - uses: actions/checkout@v4
       - name: Set up Node.js
-        if: ${{ env.RUN_BUILD == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: electron-poc/package-lock.json
       - name: Install build prerequisites
-        if: ${{ env.RUN_BUILD == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           export HOMEBREW_NO_AUTO_UPDATE=1
           export HOMEBREW_NO_INSTALL_CLEANUP=1
-          if ! command -v ttyd >/dev/null 2>&1; then
-            brew install ttyd
-          fi
+          if ! command -v ttyd >/dev/null 2>&1; then brew install ttyd; fi
       - name: Install npm dependencies
-        if: ${{ env.RUN_BUILD == 'true' }}
         run: npm ci
-        working-directory: electron-poc
-      - name: Rebuild native modules for Electron
-        if: ${{ env.RUN_BUILD == 'true' }}
+      - name: Rebuild native modules
         run: npx electron-rebuild --force --only sqlite3,better-sqlite3,node-pty
-        working-directory: electron-poc
       - name: Verify build requirements
-        if: ${{ env.RUN_BUILD == 'true' }}
         run: npm run requirements
-        working-directory: electron-poc
-      - name: Build production DMG
-        if: ${{ env.RUN_BUILD == 'true' }}
+      - name: Build production DMG (17 phases)
         env:
           CI: true
         run: npm run build:complete
-        working-directory: electron-poc
-      - name: Smoke test memory service /health
-        if: ${{ env.RUN_BUILD == 'true' }}
-        run: npm run smoke:memory-health
-        working-directory: electron-poc
-      - name: List build outputs
-        if: always()
-        run: |
-          if [[ "$RUN_BUILD" == "true" ]]; then
-            echo "Contents of electron-poc/out/make:"
-            ls -R electron-poc/out/make || true
-            echo "Generated build report:"
-            cat electron-poc/out/build-report.json || true
-          else
-            echo "Build skipped; no new artifacts staged."
-          fi
-      - name: Capture native module metadata
-        if: ${{ env.RUN_BUILD == 'true' }}
-        run: |
-          mkdir -p electron-poc/build-logs/native-modules
-          otool -L electron-poc/node_modules/sqlite3/build/Release/node_sqlite3.node > electron-poc/build-logs/native-modules/sqlite3.otool.txt
-          shasum -a 256 electron-poc/node_modules/sqlite3/build/Release/node_sqlite3.node > electron-poc/build-logs/native-modules/sqlite3.sha256
-      - name: Upload macOS build artifact
-        if: ${{ success() && env.RUN_BUILD == 'true' }}
+      - name: Upload unsigned DMG
         uses: actions/upload-artifact@v4
         with:
-          name: hive-macos-dmg
+          name: unsigned-dmg
           path: |
             electron-poc/out/make/*.dmg
             electron-poc/out/build-report.json
-            electron-poc/out/Hive Consensus-darwin-arm64/Hive Consensus.app
           if-no-files-found: error
       - name: Upload build logs
-        if: ${{ env.RUN_BUILD == 'true' }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hive-build-logs
+          name: build-logs
           path: electron-poc/build-logs/**
           if-no-files-found: ignore
-      - name: Prepare signing input directory
-        if: ${{ env.RUN_SIGN == 'true' }}
-        run: mkdir -p signed-input
-      - name: Stage built DMG for signing
-        if: ${{ env.RUN_SIGN == 'true' && env.RUN_BUILD == 'true' }}
-        run: |
-          shopt -s nullglob
-          for dmg in electron-poc/out/make/*.dmg; do
-            cp "$dmg" signed-input/
-          done
-          if [[ -f electron-poc/out/build-report.json ]]; then
-            cp electron-poc/out/build-report.json signed-input/
-          fi
-      - name: Download unsigned artifact for signing
-        if: ${{ env.RUN_SIGN == 'true' && env.RUN_BUILD != 'true' }}
+
+  sign:
+    name: 03 Sign, Notarize & Guardrails (macOS)
+    runs-on: macos-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download unsigned DMG
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.artifact-plan.outputs.unsigned_artifact_name }}
-          run-id: ${{ needs.artifact-plan.outputs.unsigned_artifact_run_id }}
+          name: unsigned-dmg
           path: signed-input
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Show signing inputs
-        if: ${{ env.RUN_SIGN == 'true' }}
-        run: |
-          echo "Signed input contents:"
-          ls -R signed-input || true
-      - name: Configure macOS signing keychain
+      - name: Set up signing keychain
         id: setup-signing
-        if: ${{ env.RUN_SIGN == 'true' }}
         env:
           APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
@@ -373,251 +92,89 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           set -euo pipefail
-
-          if [[ -z "${APPLE_CERT_P12}" || -z "${APPLE_CERT_PASSWORD}" || -z "${ASC_API_KEY}" || -z "${ASC_KEY_ID}" || -z "${ASC_ISSUER_ID}" ]]; then
-            echo "Mac signing secrets not fully configured. Skipping notarization setup."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           KEYCHAIN_PATH="$RUNNER_TEMP/hive-signing.keychain-db"
           KEYCHAIN_PASSWORD=$(uuidgen)
-
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
           echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/apple-cert.p12"
-          security import "$RUNNER_TEMP/apple-cert.p12" \
-            -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" \
-            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcrun
+          security import "$RUNNER_TEMP/apple-cert.p12" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           rm -f "$RUNNER_TEMP/apple-cert.p12"
-
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          echo "Available code signing identities:" >&2
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
-          EXPECTED_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"
-          SIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' -v expected="$EXPECTED_ID" '($2 == expected) {print $2}')
-          if [[ -z "$SIGN_IDENTITY" ]]; then
-            echo "Expected signing identity '$EXPECTED_ID' not found in keychain $KEYCHAIN_PATH" >&2
-            exit 1
-          fi
-          echo "Using signing identity: $SIGN_IDENTITY"
-
-          mkdir -p "$RUNNER_TEMP/notary"
-          echo "$ASC_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
-          xcrun notarytool store-credentials "HiveNotaryProfile" \
-            --key "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8" \
-            --key-id "$ASC_KEY_ID" \
-            --issuer "$ASC_ISSUER_ID" \
-            --keychain "$KEYCHAIN_PATH"
-          rm -f "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
-
           security default-keychain -s "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          {
-            echo "HIVE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH"
-            echo "HIVE_SIGNING_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
-            echo "SIGN_ID=$SIGN_IDENTITY"
-          } >> "$GITHUB_ENV"
-
+          echo "HIVE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "HIVE_SIGNING_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
           echo "enabled=true" >> "$GITHUB_OUTPUT"
-      - name: Sign and notarize macOS artifacts
-        if: ${{ env.RUN_SIGN == 'true' && steps.setup-signing.outputs.enabled == 'true' }}
+      - name: Sign and notarize DMG
+        if: ${{ steps.setup-signing.outputs.enabled == 'true' }}
         env:
-          SIGN_ID: ${{ env.SIGN_ID }}
+          SIGN_ID: Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)
           NOTARY_PROFILE: HiveNotaryProfile
         run: |
           set -euo pipefail
-
-          DMG_PATH="$(find signed-input -maxdepth 5 -name 'Hive Consensus.dmg' -type f | head -n 1)"
-          if [[ -z "$DMG_PATH" ]]; then
-            echo "Could not locate DMG within signing inputs" >&2
-            exit 1
-          fi
-
-          APP_MOUNT_DIR="$(mktemp -d)"
-          APP_WORK_DIR="$(mktemp -d)"
+          DMG_PATH="$(ls signed-input/*.dmg | head -n 1)"
+          if [[ -z "$DMG_PATH" ]]; then echo "No DMG found to sign" >&2; exit 1; fi
+          APP_MOUNT_DIR="$(mktemp -d)"; APP_WORK_DIR="$(mktemp -d)"
           trap 'hdiutil detach "$APP_MOUNT_DIR" >/dev/null 2>&1 || true; rm -rf "$APP_MOUNT_DIR" "$APP_WORK_DIR"' EXIT
-
           hdiutil attach "$DMG_PATH" -mountpoint "$APP_MOUNT_DIR" -nobrowse
-          if [[ ! -d "$APP_MOUNT_DIR/Hive Consensus.app" ]]; then
-            echo "Mounted DMG does not contain Hive Consensus.app" >&2
-            exit 1
-          fi
-
           ditto "$APP_MOUNT_DIR/Hive Consensus.app" "$APP_WORK_DIR/Hive Consensus.app"
           hdiutil detach "$APP_MOUNT_DIR"
-
-          APP_PATH="$APP_WORK_DIR/Hive Consensus.app"
-          echo "Signing app at $APP_PATH using DMG $DMG_PATH"
-          scripts/sign-notarize-macos.sh "$APP_PATH" "$DMG_PATH"
-      - name: Stage release artifacts
-        if: ${{ env.RUN_SIGN == 'true' }}
-        run: |
-          set -euo pipefail
-          mkdir -p signed-output
-          DMG_SRC="$(find signed-input -maxdepth 5 -name '*.dmg' -type f | head -n 1)"
-          if [[ -z "$DMG_SRC" ]]; then
-            echo "No DMG found to stage" >&2
-            exit 1
-          fi
-          cp "$DMG_SRC" signed-output/
-          BUILD_REPORT_SRC="$(find signed-input -maxdepth 5 -name 'build-report.json' -type f | head -n 1)"
-          if [[ -n "$BUILD_REPORT_SRC" ]]; then
-            cp "$BUILD_REPORT_SRC" signed-output/build-report.json
-          fi
-      - name: Set up Node.js for guardrail
-        if: ${{ env.RUN_SIGN == 'true' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Guardrail: Verify helpers in signed DMG
-        if: ${{ env.RUN_SIGN == 'true' }}
-        run: |
-          set -euo pipefail
-          DMG=$(ls signed-output/*.dmg | head -n 1)
-          if [[ -z "$DMG" ]]; then echo "No DMG in signed-output" >&2; exit 1; fi
-          node electron-poc/scripts/verify-dmg-helpers.js "$DMG"
+          scripts/sign-notarize-macos.sh "$APP_WORK_DIR/Hive Consensus.app" "$DMG_PATH"
+      - name: Guardrail: Verify helpers
+        run: node electron-poc/scripts/verify-dmg-helpers.js "$(ls signed-input/*.dmg | head -n 1)"
       - name: Guardrail: DMG-mounted memory /health
-        if: ${{ env.RUN_SIGN == 'true' }}
-        run: |
-          set -euo pipefail
-          DMG=$(ls signed-output/*.dmg | head -n 1)
-          node electron-poc/scripts/test-dmg-memory-service.js "$DMG"
-      - name: Upload ready DMG artifact
-        if: ${{ env.RUN_SIGN == 'true' }}
+        run: node electron-poc/scripts/test-dmg-memory-service.js "$(ls signed-input/*.dmg | head -n 1)"
+      - name: Upload ready DMG
         uses: actions/upload-artifact@v4
         with:
-          name: hive-macos-dmg-ready
+          name: ready-dmg
           path: |
-            signed-output/*.dmg
-            signed-output/build-report.json
+            signed-input/*.dmg
+            signed-input/build-report.json
           if-no-files-found: error
-      - name: Record ready artifact from current run
-        if: ${{ env.RUN_SIGN == 'true' }}
-        id: ready-current
-        run: |
-          echo "run_id=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "name=hive-macos-dmg-ready" >> "$GITHUB_OUTPUT"
 
   publish:
-    name: Publish DMG to R2 / GitHub Release
-    needs: [release-preflight, artifact-plan, macos-build-sign]
+    name: 04 Publish to R2 (Ubuntu)
     runs-on: ubuntu-latest
-    if: ${{ needs.release-preflight.outputs.run_publish == 'true' && (needs.release-preflight.outputs.publish_only == 'true' || needs.macos-build-sign.result == 'success') }}
+    needs: sign
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Ensure awscli present
         run: |
           if ! command -v aws >/dev/null 2>&1; then
             sudo apt-get update -y
             sudo apt-get install -y awscli
           fi
-
-      - name: Download DMG artifact
+      - name: Download signed DMG
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.artifact-plan.outputs.ready_artifact_name }}
-          run-id: ${{ needs.artifact-plan.outputs.ready_artifact_run_id }}
+          name: ready-dmg
           path: artifacts
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Prepare release files
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p release
-
           DMG_SRC=$(find artifacts -maxdepth 1 -type f -name '*.dmg' | head -n 1)
-          if [[ -z "$DMG_SRC" ]]; then
-            echo "No DMG file found in artifacts" >&2
-            exit 1
-          fi
-
-          BUILD_REPORT_SRC="artifacts/build-report.json"
-          if [[ -f "$BUILD_REPORT_SRC" ]]; then
-            cp "$BUILD_REPORT_SRC" release/build-report.json
-          fi
-
-          DMG_NAME="Hive-Consensus.dmg"
-          if [[ -f release/build-report.json ]]; then
-            VERSION=$(python -c "import json, pathlib; path = pathlib.Path('release/build-report.json'); data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}; print(data.get('buildTimings', {}).get('buildVersion', ''))")
-            if [[ -n "$VERSION" ]]; then
-              DMG_NAME="Hive-Consensus-${VERSION}.dmg"
-              echo "Detected build version $VERSION"
-            fi
-          fi
-
-          cp "$DMG_SRC" "release/${DMG_NAME}"
-          (cd release && shasum -a 256 "$DMG_NAME" > "${DMG_NAME}.sha256")
-
-          echo "DMG_FILENAME=${DMG_NAME}" >> "$GITHUB_ENV"
-          echo "DMG_LATEST=Hive-Consensus-latest.dmg" >> "$GITHUB_ENV"
-
+          if [[ -z "$DMG_SRC" ]]; then echo "No DMG file found in artifacts" >&2; exit 1; fi
+          cp "$DMG_SRC" release/Hive-Consensus.dmg
+          if [[ -f artifacts/build-report.json ]]; then cp artifacts/build-report.json release/build-report.json; fi
+          (cd release && shasum -a 256 Hive-Consensus.dmg > Hive-Consensus.dmg.sha256)
       - name: Upload to R2
         env:
-          DMG_FILENAME: ${{ env.DMG_FILENAME }}
-          DMG_LATEST: ${{ env.DMG_LATEST }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
           R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
           set -euo pipefail
-
           upload() {
             local source=$1
             local key=$2
             local content_type=${3:-application/octet-stream}
-
-            aws s3 cp "$source" "s3://releases-hivetechs/$key" \
-              --endpoint-url "$R2_ENDPOINT" \
-              --region "$AWS_REGION" \
-              --content-type "$content_type"
+            aws s3 cp "$source" "s3://releases-hivetechs/$key" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION" --content-type "$content_type"
           }
+          upload release/Hive-Consensus.dmg stable/Hive-Consensus-latest.dmg
+          upload release/Hive-Consensus.dmg.sha256 stable/Hive-Consensus-latest.dmg.sha256 text/plain
 
-          # Versioned objects
-          upload "release/${DMG_FILENAME}" "stable/${DMG_FILENAME}"
-          upload "release/${DMG_FILENAME}.sha256" "stable/${DMG_FILENAME}.sha256" text/plain
-
-          # Latest aliases consumed by the website download button and direct checksum link
-          upload "release/${DMG_FILENAME}" "stable/${DMG_LATEST}"
-          upload "release/${DMG_FILENAME}.sha256" "stable/${DMG_LATEST}.sha256" text/plain
-
-          # Legacy electron/ path retained for compatibility during transition
-          upload "release/${DMG_FILENAME}" "stable/electron/${DMG_FILENAME}"
-          upload "release/${DMG_FILENAME}.sha256" "stable/electron/${DMG_FILENAME}.sha256" text/plain
-          upload "release/${DMG_FILENAME}" "stable/electron/${DMG_LATEST}"
-          upload "release/${DMG_FILENAME}.sha256" "stable/electron/${DMG_LATEST}.sha256" text/plain
-
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            upload "release/${DMG_FILENAME}" "releases/${VERSION}/${DMG_FILENAME}"
-            upload "release/${DMG_FILENAME}.sha256" "releases/${VERSION}/${DMG_FILENAME}.sha256" text/plain
-          fi
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            release/${{ env.DMG_FILENAME }}
-            release/${{ env.DMG_FILENAME }}.sha256
-            release/build-report.json
-          body: |
-            ## Hive Consensus Release
-
-            ### Installation
-            Download the macOS DMG (`${{ env.DMG_FILENAME }}`), open it, and drag **Hive Consensus** into _Applications_.
-
-            ### Requirements
-            - License key from hivetechs.io
-            - OpenRouter API key
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
