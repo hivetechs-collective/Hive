@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     branches: [ master ]
+    tags:
+      - 'v*.*.*'
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
@@ -18,9 +20,6 @@ on:
           - stable
           - beta
           - nightly
-  push:
-    tags:
-      - 'v*.*.*'
 
 concurrency:
   group: release-${{ github.ref }}
