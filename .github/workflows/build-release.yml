@@ -119,9 +119,9 @@ jobs:
           ditto "$APP_MOUNT_DIR/Hive Consensus.app" "$APP_WORK_DIR/Hive Consensus.app"
           hdiutil detach "$APP_MOUNT_DIR"
           scripts/sign-notarize-macos.sh "$APP_WORK_DIR/Hive Consensus.app" "$DMG_PATH"
-      - name: Guardrail: Verify helpers
+      - name: "Guardrail: Verify helpers"
         run: node electron-poc/scripts/verify-dmg-helpers.js "$(ls signed-input/*.dmg | head -n 1)"
-      - name: Guardrail: DMG-mounted memory /health
+      - name: "Guardrail: DMG-mounted memory /health"
         run: node electron-poc/scripts/test-dmg-memory-service.js "$(ls signed-input/*.dmg | head -n 1)"
       - name: Upload ready DMG
         uses: actions/upload-artifact@v4
