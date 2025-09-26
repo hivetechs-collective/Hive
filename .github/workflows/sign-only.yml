@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   sign_only:
@@ -128,4 +129,3 @@ jobs:
           (cd release && shasum -a 256 Hive-Consensus.dmg > Hive-Consensus.dmg.sha256)
           aws s3 cp release/Hive-Consensus.dmg "s3://releases-hivetechs/stable/Hive-Consensus-latest.dmg" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION"
           aws s3 cp release/Hive-Consensus.dmg.sha256 "s3://releases-hivetechs/stable/Hive-Consensus-latest.dmg.sha256" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION" --content-type text/plain
-
