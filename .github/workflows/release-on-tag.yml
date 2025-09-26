@@ -86,7 +86,7 @@ jobs:
 
       - name: Sign and notarize DMG
         env:
-          SIGN_ID: Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)
+          SIGN_ID: "Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"
           NOTARY_PROFILE: HiveNotaryProfile
           ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
