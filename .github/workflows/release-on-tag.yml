@@ -1,0 +1,148 @@
+name: Release On Tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+concurrency:
+  group: release-on-tag-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-sign-publish:
+    name: Build, Sign, Verify, Publish
+    runs-on: macos-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_REGION: auto
+      AWS_DEFAULT_REGION: auto
+      AWS_ENDPOINT_URL_S3: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      AWS_EC2_METADATA_DISABLED: 'true'
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: releases-hivetechs
+      R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron-poc/package-lock.json
+
+      - name: Install build prerequisites
+        run: |
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          if ! command -v ttyd >/dev/null 2>&1; then
+            brew install ttyd
+          fi
+
+      - name: Install dependencies
+        working-directory: electron-poc
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: electron-poc
+        run: npx playwright install chromium
+
+      - name: Build DMG (17-phase)
+        working-directory: electron-poc
+        env:
+          CI: true
+          PLAYWRIGHT_REMOTE_DEBUG_PORT: '61323'
+        run: npm run build:complete
+
+      - name: Set up signing keychain
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/hive-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/apple-cert.p12"
+          security import "$RUNNER_TEMP/apple-cert.p12" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/apple-cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "HIVE_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "HIVE_SIGNING_KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Sign and notarize DMG
+        env:
+          SIGN_ID: Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)
+          NOTARY_PROFILE: HiveNotaryProfile
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/notary"
+          echo "$ASC_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
+          xcrun notarytool store-credentials "$NOTARY_PROFILE" \
+            --key "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8" \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --keychain "$HIVE_SIGNING_KEYCHAIN"
+          rm -f "$RUNNER_TEMP/notary/AuthKey_${ASC_KEY_ID}.p8"
+          DMG_PATH="$(ls electron-poc/out/make/*.dmg | head -n 1)"
+          if [[ -z "$DMG_PATH" ]]; then echo "No DMG found" >&2; exit 1; fi
+          APP_PATH="$(ls -d electron-poc/out/*-darwin-*/"Hive Consensus.app" | head -n 1)"
+          if [[ -z "$APP_PATH" ]]; then
+            MPOINT=$(mktemp -d)
+            hdiutil attach "$DMG_PATH" -mountpoint "$MPOINT" -nobrowse
+            ditto "$MPOINT/Hive Consensus.app" "$RUNNER_TEMP/Hive Consensus.app"
+            hdiutil detach "$MPOINT"
+            APP_PATH="$RUNNER_TEMP/Hive Consensus.app"
+          fi
+          scripts/sign-notarize-macos.sh "$APP_PATH" "$DMG_PATH"
+
+      - name: Guardrail: Verify helpers
+        run: node electron-poc/scripts/verify-dmg-helpers.js "$(ls electron-poc/out/make/*.dmg | head -n 1)"
+
+      - name: Guardrail: DMG-mounted memory /health
+        run: node electron-poc/scripts/test-dmg-memory-service.js "$(ls electron-poc/out/make/*.dmg | head -n 1)"
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-on-tag-logs-${{ github.run_id }}
+          path: |
+            electron-poc/build-logs/**
+            electron-poc/out/build-report.json
+          if-no-files-found: ignore
+
+      - name: Prepare release files
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          DMG_SRC=$(ls electron-poc/out/make/*.dmg | head -n 1)
+          cp "$DMG_SRC" release/Hive-Consensus.dmg
+          if [[ -f electron-poc/out/build-report.json ]]; then cp electron-poc/out/build-report.json release/build-report.json; fi
+          (cd release && shasum -a 256 Hive-Consensus.dmg > Hive-Consensus.dmg.sha256)
+
+      - name: Upload to R2
+        env:
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          set -euo pipefail
+          upload() { aws s3 cp "$1" "s3://releases-hivetechs/$2" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION" --content-type "${3:-application/octet-stream}"; }
+          upload release/Hive-Consensus.dmg stable/Hive-Consensus-latest.dmg
+          upload release/Hive-Consensus.dmg.sha256 stable/Hive-Consensus-latest.dmg.sha256 text/plain
+
