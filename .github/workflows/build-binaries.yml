@@ -241,16 +241,10 @@ jobs:
           scripts/sign-notarize-macos.sh "$APP_WORK_DIR/Hive Consensus.app" "$DMG_PATH"
 
       - name: Guardrail: Verify helpers in signed DMG
-        run: |
-          set -euo pipefail
-          DMG=$(ls signed-input/*.dmg | head -n 1)
-          node electron-poc/scripts/verify-dmg-helpers.js "$DMG"
+        run: node electron-poc/scripts/verify-dmg-helpers.js "$(ls signed-input/*.dmg | head -n 1)"
 
       - name: Guardrail: DMG-mounted memory /health
-        run: |
-          set -euo pipefail
-          DMG=$(ls signed-input/*.dmg | head -n 1)
-          node electron-poc/scripts/test-dmg-memory-service.js "$DMG"
+        run: node electron-poc/scripts/test-dmg-memory-service.js "$(ls signed-input/*.dmg | head -n 1)"
 
       - name: Upload signed DMG artifact
         uses: actions/upload-artifact@v4
