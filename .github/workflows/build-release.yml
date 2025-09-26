@@ -111,7 +111,7 @@ jobs:
           NOTARY_PROFILE: HiveNotaryProfile
         run: |
           set -euo pipefail
-          DMG_PATH="$(ls signed-input/*.dmg | head -n 1)"
+          DMG_PATH="$(find signed-input -maxdepth 3 -type f -name '*.dmg' | head -n 1)"
           if [[ -z "$DMG_PATH" ]]; then echo "No DMG found to sign" >&2; exit 1; fi
           APP_MOUNT_DIR="$(mktemp -d)"; APP_WORK_DIR="$(mktemp -d)"
           trap 'hdiutil detach "$APP_MOUNT_DIR" >/dev/null 2>&1 || true; rm -rf "$APP_MOUNT_DIR" "$APP_WORK_DIR"' EXIT
@@ -120,9 +120,13 @@ jobs:
           hdiutil detach "$APP_MOUNT_DIR"
           scripts/sign-notarize-macos.sh "$APP_WORK_DIR/Hive Consensus.app" "$DMG_PATH"
       - name: "Guardrail: Verify helpers"
-        run: node electron-poc/scripts/verify-dmg-helpers.js "$(ls signed-input/*.dmg | head -n 1)"
+        run: |
+          DMG_PATH="$(find signed-input -maxdepth 3 -type f -name '*.dmg' | head -n 1)"
+          node electron-poc/scripts/verify-dmg-helpers.js "$DMG_PATH"
       - name: "Guardrail: DMG-mounted memory /health"
-        run: node electron-poc/scripts/test-dmg-memory-service.js "$(ls signed-input/*.dmg | head -n 1)"
+        run: |
+          DMG_PATH="$(find signed-input -maxdepth 3 -type f -name '*.dmg' | head -n 1)"
+          node electron-poc/scripts/test-dmg-memory-service.js "$DMG_PATH"
       - name: Upload ready DMG
         uses: actions/upload-artifact@v4
         with:
