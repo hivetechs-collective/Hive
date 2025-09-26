@@ -37,8 +37,6 @@ jobs:
   release:
     name: Build, sign & publish
     runs-on: macos-latest
-    environment:
-      name: production
     env:
       # AWS-compatible env used by AWS CLI
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
