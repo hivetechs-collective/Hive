@@ -42,9 +42,8 @@ jobs:
           set -euo pipefail
           export HOMEBREW_NO_AUTO_UPDATE=1
           export HOMEBREW_NO_INSTALL_CLEANUP=1
-          if ! command -v ttyd >/dev/null 2>&1; then
-            brew install ttyd
-          fi
+          if ! command -v ttyd >/dev/null 2>&1; then brew install ttyd; fi
+          if ! command -v aws >/dev/null 2>&1; then brew install awscli; fi
 
       - name: Install dependencies
         working-directory: electron-poc
@@ -59,6 +58,8 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_REMOTE_DEBUG_PORT: '61323'
+          PLAYWRIGHT_E2E: '0'
+          PLAYWRIGHT_RUN_TESTS: '0'
         run: npm run build:complete
 
       - name: Set up signing keychain
@@ -145,4 +146,3 @@ jobs:
           upload() { aws s3 cp "$1" "s3://releases-hivetechs/$2" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION" --content-type "${3:-application/octet-stream}"; }
           upload release/Hive-Consensus.dmg stable/Hive-Consensus-latest.dmg
           upload release/Hive-Consensus.dmg.sha256 stable/Hive-Consensus-latest.dmg.sha256 text/plain
-
