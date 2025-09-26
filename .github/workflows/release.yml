@@ -110,7 +110,7 @@ jobs:
 
       - name: Sign and notarize DMG
         env:
-          SIGN_ID: Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)
+          SIGN_ID: "Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"
           NOTARY_PROFILE: HiveNotaryProfile
         run: |
           set -euo pipefail
@@ -168,6 +168,10 @@ jobs:
           AWS_REGION: auto
         run: |
           set -euo pipefail
+          if ! command -v aws >/dev/null 2>&1; then
+            brew update >/dev/null 2>&1 || true
+            brew install awscli
+          fi
           upload() { aws s3 cp "$1" "s3://releases-hivetechs/$2" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION" --content-type "${3:-application/octet-stream}"; }
           upload release/Hive-Consensus.dmg stable/Hive-Consensus-latest.dmg
           upload release/Hive-Consensus.dmg.sha256 stable/Hive-Consensus-latest.dmg.sha256 text/plain
