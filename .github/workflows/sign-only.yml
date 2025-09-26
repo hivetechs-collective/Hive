@@ -109,7 +109,7 @@ jobs:
         with:
           name: hive-macos-dmg-ready
           path: |
-            signed-input/*.dmg
+            signed-input/**/*.dmg
             signed-input/build-report.json
           if-no-files-found: error
 
@@ -122,10 +122,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          DMG_SRC=$(find signed-input -maxdepth 1 -type f -name '*.dmg' | head -n 1)
+          DMG_SRC=$(find signed-input -maxdepth 3 -type f -name '*.dmg' | head -n 1)
           if [[ -z "$DMG_SRC" ]]; then echo "No DMG file found" >&2; exit 1; fi
           cp "$DMG_SRC" release/Hive-Consensus.dmg
           (cd release && shasum -a 256 Hive-Consensus.dmg > Hive-Consensus.dmg.sha256)
           aws s3 cp release/Hive-Consensus.dmg "s3://releases-hivetechs/stable/Hive-Consensus-latest.dmg" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION"
           aws s3 cp release/Hive-Consensus.dmg.sha256 "s3://releases-hivetechs/stable/Hive-Consensus-latest.dmg.sha256" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION" --content-type text/plain
-
