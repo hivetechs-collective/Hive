@@ -32,6 +32,7 @@ jobs:
     name: 02 Build (macOS)
     runs-on: macos-latest
     needs: preflight
+    if: ${{ false }}
     defaults:
       run:
         working-directory: electron-poc
@@ -80,6 +81,7 @@ jobs:
     name: 03 Sign, Notarize & Guardrails (macOS)
     runs-on: macos-latest
     needs: build
+    if: ${{ false }}
     steps:
       - uses: actions/checkout@v4
       - name: Download unsigned DMG
@@ -144,6 +146,7 @@ jobs:
     name: 04 Publish to R2 (Ubuntu)
     runs-on: ubuntu-latest
     needs: sign
+    if: ${{ false }}
     steps:
       - uses: actions/checkout@v4
       - name: Ensure awscli present
