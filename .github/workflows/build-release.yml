@@ -76,6 +76,8 @@ jobs:
     steps:
       - name: Derive run mode
         id: flags
+<<<<<<< HEAD
+=======
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -86,16 +88,48 @@ jobs:
           INPUT_REUSE_RUN_ID: ${{ github.event.inputs.reuse_artifact_run_id }}
           INPUT_REUSE_UNSIGNED: ${{ github.event.inputs.reuse_artifact_name }}
           INPUT_REUSE_READY: ${{ github.event.inputs.reuse_ready_artifact_name }}
+>>>>>>> origin/master
         run: |
           set -euo pipefail
 
-          publish_only=$INPUT_PUBLISH_ONLY
-          sign_only=$INPUT_SIGN_ONLY
-          skip_sign=$INPUT_SKIP_SIGN
-          skip_publish=$INPUT_SKIP_PUBLISH
-          reuse_run_id=$INPUT_REUSE_RUN_ID
-          reuse_unsigned=$INPUT_REUSE_UNSIGNED
-          reuse_ready=$INPUT_REUSE_READY
+
+          EVENT_NAME="${GITHUB_EVENT_NAME:-}"
+          # Defaults for push/tag events
+          publish_only=false
+          sign_only=false
+          skip_sign=false
+          skip_publish=false
+          reuse_run_id=""
+          reuse_unsigned="hive-macos-dmg"
+          reuse_ready="hive-macos-dmg-ready"
+
+          # When manually dispatched, read inputs from the event payload
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            eval "$(python3 - << 'PY2'
+import json, os
+p = os.environ.get('GITHUB_EVENT_PATH', '')
+d = {}
+try:
+  with open(p, 'r') as f:
+    d = json.load(f)
+except Exception:
+  d = {}
+inputs = d.get('inputs') or {}
+def as_bool(name, default='false'):
+  v = str(inputs.get(name, default)).lower()
+  return 'true' if v in ('1','true','yes','on') else 'false'
+print(f"publish_only={as_bool('publish_only')}")
+print(f"sign_only={as_bool('sign_only')}")
+print(f"skip_sign={as_bool('skip_sign')}")
+print(f"skip_publish={as_bool('skip_publish')}")
+print(f"reuse_run_id={inputs.get('reuse_artifact_run_id','')}")
+print(f"reuse_unsigned={inputs.get('reuse_artifact_name','hive-macos-dmg')}")
+print(f"reuse_ready={inputs.get('reuse_ready_artifact_name','hive-macos-dmg-ready')}")
+PY2
+            )"
+          fi
+
+
 
           if [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
             publish_only=false
