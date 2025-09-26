@@ -76,6 +76,19 @@ jobs:
     steps:
       - name: Derive run mode
         id: flags
+<<<<<<< HEAD
+=======
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PUBLISH_ONLY: ${{ github.event.inputs.publish_only }}
+          INPUT_SIGN_ONLY: ${{ github.event.inputs.sign_only }}
+          INPUT_SKIP_SIGN: ${{ github.event.inputs.skip_sign }}
+          INPUT_SKIP_PUBLISH: ${{ github.event.inputs.skip_publish }}
+          INPUT_REUSE_RUN_ID: ${{ github.event.inputs.reuse_artifact_run_id }}
+          INPUT_REUSE_UNSIGNED: ${{ github.event.inputs.reuse_artifact_name }}
+          INPUT_REUSE_READY: ${{ github.event.inputs.reuse_ready_artifact_name }}
+>>>>>>> origin/master
         run: |
           set -euo pipefail
 
