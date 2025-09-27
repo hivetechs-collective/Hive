@@ -108,6 +108,7 @@ export class HelpViewer {
         <div class="tool-grid">
           <div class="tool-card">Claude Code</div>
           <div class="tool-card">Gemini CLI</div>
+          <div class="tool-card">GitHub Copilot CLI</div>
           <div class="tool-card">Grok CLI</div>
           <div class="tool-card">aichat</div>
           <div class="tool-card">mods</div>

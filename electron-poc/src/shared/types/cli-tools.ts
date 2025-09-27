@@ -147,14 +147,14 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
   },
   'github-copilot': {
     id: 'github-copilot',
-    name: 'GitHub Copilot',
-    description: 'Official GitHub AI pair programmer - now FREE with limited usage',
-    command: 'gh',  // Base command for detection
-    installCommand: 'gh extension install github/gh-copilot',
-    updateCommand: 'gh extension upgrade github/gh-copilot',
-    versionCommand: 'gh copilot --version',
-    versionRegex: /version (\d+\.\d+\.\d+)/,
-    docsUrl: 'https://docs.github.com/copilot/using-github-copilot/using-github-copilot-in-the-command-line',
+    name: 'GitHub Copilot CLI',
+    description: 'Terminal-native Copilot coding agent (official CLI)',
+    command: 'copilot',
+    installCommand: 'npm install -g @github/copilot',
+    updateCommand: 'npm update -g @github/copilot',
+    versionCommand: 'copilot --version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli',
     icon: '🤖',
     requiresNode: false
   },

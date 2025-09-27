@@ -4660,19 +4660,18 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
         }),
       );
 
-      // GitHub Copilot - Official AI pair programmer
+      // GitHub Copilot CLI - Official terminal-native agent
       const githubCopilotStatus =
         await electronAPI.detectCliTool("github-copilot");
       gridContainer.appendChild(
         createCliToolCard({
           id: "github-copilot",
-          name: "GitHub Copilot",
-          description:
-            "Official GitHub AI pair programmer - now FREE with limited usage",
+          name: "GitHub Copilot CLI",
+          description: "Terminal-native Copilot coding agent (official CLI)",
           status: githubCopilotStatus,
           docsUrl:
-            "https://docs.github.com/copilot/using-github-copilot/using-github-copilot-in-the-command-line",
-          badgeText: "FREE TIER",
+            "https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli",
+          badgeText: githubCopilotStatus?.installed ? "INSTALLED" : null,
         }),
       );
 
