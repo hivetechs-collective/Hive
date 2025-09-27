@@ -4360,12 +4360,23 @@ const registerSimpleCliToolHandlers = () => {
           if (stderr && !stderr.toLowerCase().includes("warn")) {
             logger.warn(`[Main] Specify update stderr: ${stderr}`);
           }
-          const versionResult = await execAsync("specify --version", {
-            env: { ...process.env, PATH: enhancedPath },
-          });
-          const version =
-            versionResult.stdout.trim().match(/(\d+\.\d+\.\d+)/)?.[1] ||
-            "Unknown";
+          let version = 'Unknown'
+          ;
+          const tryCmd = async (cmd) => {
+            try { const { stdout } = await execAsync(cmd, { env: { ...process.env, PATH: enhancedPath } }); const m = stdout.match(/(\d+\.\d+\.\d+)/); return m ? m[1] : null; } catch { return null; }
+          };
+          version = (await tryCmd('specify version')) || (await tryCmd('specify --help')) || version;
+          if (version === 'Unknown') {
+            try {
+              let uvCmd2 = 'uv';
+              const packagedUv2 = ProductionPaths.getBinaryPath('uv');
+              if (fs.existsSync(packagedUv2)) uvCmd2 = `"${packagedUv2}"`;
+              const { stdout: lout } = await execAsync(`${uvCmd2} tool list`, { env: { ...process.env, PATH: enhancedPath } });
+              const line = (lout.split('\n').find(l=>l.includes('specify-cli'))||'');
+              const m = line.match(/specify-cli\s+([0-9]+\.[0-9]+\.[0-9]+)/);
+              if (m) version = m[1];
+            } catch {}
+          }
           cliToolsDetector.clearCache(toolId);
           return { success: true, version, message: `Updated to ${version}` };
         } catch (error: any) {
@@ -4808,7 +4819,15 @@ Or try: npm install -g ${installCmd} --force --no-cache
           "rm -f ~/.local/bin/cursor-agent /usr/local/bin/cursor-agent /opt/homebrew/bin/cursor-agent ~/bin/cursor-agent && rm -rf ~/.cursor-agent";
         logger.info(`[Main] Running Cursor CLI uninstall: ${uninstallCommand}`);
       } else if (toolId === "specify") {
-        uninstallCommand = "uv tool uninstall specify-cli";
+        // Prefer packaged uv if available for deterministic uninstall
+        let uvCmd = "uv";
+        try {
+          const packagedUv = ProductionPaths.getBinaryPath('uv');
+          if (fs.existsSync(packagedUv)) {
+            uvCmd = `"${packagedUv}"`;
+          }
+        } catch {}
+        uninstallCommand = `${uvCmd} tool uninstall specify-cli`;
         logger.info(`[Main] Running Specify CLI uninstall: ${uninstallCommand}`);
       } else {
         // Map tool IDs to npm package names
@@ -4840,7 +4859,7 @@ Or try: npm install -g ${installCmd} --force --no-cache
         const { stdout, stderr } = await execAsync(uninstallCommand, {
           env: ((()=>{
             const npmPrefix = require('path').join(require('os').homedir(), '.hive', 'npm-global');
-            const env = { ...process.env, PATH: enhancedPath, npm_config_prefix: npmPrefix, NPM_CONFIG_PREFIX: npmPrefix };
+            const env: any = { ...process.env, PATH: enhancedPath, npm_config_prefix: npmPrefix, NPM_CONFIG_PREFIX: npmPrefix };
             if (toolId === 'specify') {
               const hiveCliBin = require('path').join(require('os').homedir(), '.hive', 'cli-bin');
               const hiveXdgData = require('path').join(require('os').homedir(), '.hive', 'xdg-data');
