@@ -28,9 +28,11 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
 NOTARY_PROFILE=${NOTARY_PROFILE:-HiveNotaryProfile}
 ENTITLEMENTS=${ENTITLEMENTS_PATH:-$REPO_ROOT/scripts/entitlements.plist}
-KEYCHAIN_ARGS=()
+# Build a reusable base codesign command with optional keychain
+declare -a CS_BASE
+CS_BASE=(codesign --force --options runtime --timestamp)
 if [[ -n "${HIVE_SIGNING_KEYCHAIN:-}" ]]; then
-  KEYCHAIN_ARGS+=(--keychain "$HIVE_SIGNING_KEYCHAIN")
+  CS_BASE+=(--keychain "$HIVE_SIGNING_KEYCHAIN")
 fi
 
 IDENTITY_SEARCH_ARGS=(-v -p codesigning)
@@ -79,8 +81,7 @@ echo "🔐 Signing app bundle: $APP_PATH"
 
 # Sign every Mach-O binary (executables, dylibs, native modules)
 echo "🔍 Scanning for Mach-O binaries..."
-find "$APP_PATH" -type f -print0 |
-  while IFS= read -r -d '' file; do
+while IFS= read -r -d '' file; do
     if [[ "$file" == *.framework/* ]]; then
       framework_dir="${file%%.framework/*}.framework"
       framework_name=$(basename "$framework_dir" .framework)
@@ -90,23 +91,20 @@ find "$APP_PATH" -type f -print0 |
     fi
     if file "$file" | grep -q 'Mach-O'; then
       echo "  • codesign $(basename "$file")"
-      codesign --force --options runtime --timestamp \
-        "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$file"
+      "${CS_BASE[@]}" --sign "$SIGN_ID" "$file"
     fi
-  done
+done < <(find "$APP_PATH" -type f -print0)
 
 APP_DISPLAY_NAME=${APP_DISPLAY_NAME:-${APP_NAME%.app}}
 APP_MAIN_BINARY="$APP_PATH/Contents/MacOS/$APP_DISPLAY_NAME"
 if [[ -f "$APP_MAIN_BINARY" ]]; then
   echo "  • sealing main binary $(basename \"$APP_MAIN_BINARY\")"
-  codesign --force --options runtime --timestamp \
-    "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$APP_MAIN_BINARY"
+  "${CS_BASE[@]}" --sign "$SIGN_ID" "$APP_MAIN_BINARY"
 fi
 
 # Sign frameworks and helper apps at the directory level
 if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
-  find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -type d \( -name '*.framework' -o -name '*.app' \) -print0 |
-    while IFS= read -r -d '' bundle; do
+  while IFS= read -r -d '' bundle; do
       echo "  • sealing $(basename "$bundle")"
       if [[ "$bundle" == *.framework ]]; then
         FRAMEWORK_BASENAME=$(basename "$bundle" .framework)
@@ -114,32 +112,26 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
         FRAMEWORK_VERSION_BINARY="$FRAMEWORK_VERSION_DIR/$FRAMEWORK_BASENAME"
 
         if [[ -f "$FRAMEWORK_VERSION_BINARY" ]]; then
-          codesign --force --options runtime --timestamp \
-            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_BINARY"
+          "${CS_BASE[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_BINARY"
         fi
 
         if [[ -d "$FRAMEWORK_VERSION_DIR" ]]; then
-          codesign --force --options runtime --timestamp --deep \
-            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
+          "${CS_BASE[@]}" --deep --sign "$SIGN_ID" "$FRAMEWORK_VERSION_DIR"
         else
-          codesign --force --options runtime --timestamp \
-            "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
+          "${CS_BASE[@]}" --sign "$SIGN_ID" "$bundle"
         fi
       else
-        codesign --force --options runtime --timestamp \
-          "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$bundle"
+        "${CS_BASE[@]}" --sign "$SIGN_ID" "$bundle"
       fi
-    done
+    done < <(find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -type d \( -name '*.framework' -o -name '*.app' \) -print0)
 fi
 
 # Sign Plugins (if any)
 if [[ -d "$APP_PATH/Contents/PlugIns" ]]; then
-  find "$APP_PATH/Contents/PlugIns" -maxdepth 1 -type d -name '*.plugin' -print0 |
-    while IFS= read -r -d '' plugin; do
+  while IFS= read -r -d '' plugin; do
       echo "  • sealing plugin $(basename "$plugin")"
-      codesign --force --options runtime --timestamp \
-        "${KEYCHAIN_ARGS[@]}" --sign "$SIGN_ID" "$plugin"
-    done
+      "${CS_BASE[@]}" --sign "$SIGN_ID" "$plugin"
+    done < <(find "$APP_PATH/Contents/PlugIns" -maxdepth 1 -type d -name '*.plugin' -print0)
 fi
 
 # Ensure key embedded executables inherit required entitlements
@@ -153,14 +145,12 @@ EMBED_EXECUTABLES=(
 for exe in "${EMBED_EXECUTABLES[@]}"; do
   if [[ -f "$exe" ]] && file "$exe" | grep -q 'Mach-O'; then
     echo "  • entitlements for $(basename "$exe")"
-    codesign --force --options runtime --timestamp       "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS"       --sign "$SIGN_ID" "$exe"
+    "${CS_BASE[@]}" --entitlements "$ENTITLEMENTS" --sign "$SIGN_ID" "$exe"
     (codesign -d --entitlements :- "$exe" 2>/dev/null || true) | sed 's/^/      /'
   fi
  done
 # Sign the app bundle with entitlements
-codesign --force --options runtime --timestamp \
-  "${KEYCHAIN_ARGS[@]}" --entitlements "$ENTITLEMENTS" \
-  --sign "$SIGN_ID" "$APP_PATH"
+"${CS_BASE[@]}" --entitlements "$ENTITLEMENTS" --sign "$SIGN_ID" "$APP_PATH"
 
 echo "🧪 Verifying code signatures"
 verify_or_warn "$APP_PATH/Contents/MacOS/$APP_DISPLAY_NAME"
@@ -199,8 +189,7 @@ rsync -a "$APP_PATH" "$STAGING_DIR/"
 hdiutil create -volname "$VOLUME_NAME" \
   -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
 
-codesign --force --sign "$SIGN_ID" --timestamp \
-  "${KEYCHAIN_ARGS[@]}" "$DMG_PATH"
+"${CS_BASE[@]}" --sign "$SIGN_ID" "$DMG_PATH"
 
 echo "📨 Submitting DMG for notarization..."
 SUBMISSION_INFO=$(mktemp)

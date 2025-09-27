@@ -1,7 +1,7 @@
 {
   "name": "hive-consensus",
   "productName": "Hive Consensus",
-  "version": "1.8.449",
+  "version": "1.8.451",
   "description": "Hive Consensus - AI-powered development environment",
   "main": ".webpack/main",
   "scripts": {
@@ -23,6 +23,7 @@
     "clean": "rm -rf .webpack/ out/ node_modules/.cache/ dist/ .electron-forge/",
     "build:fresh": "npm run clean && npm run make:production",
     "build:complete": "node scripts/build-production-dmg.js",
+    "sign:notarize:local": "bash scripts/sign-notarize-local.sh",
     "build:visual": "node scripts/build-with-progress.js",
     "requirements": "node scripts/comprehensive-build-check.js",
     "test": "npm run test:welcome",
