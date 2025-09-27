@@ -5001,21 +5001,28 @@ Or try: npm install -g ${installCmd} --force --no-cache
 
       // Special handling for Cursor CLI
       if (toolId === "cursor-cli") {
-        // Only remove if installed under Hive-managed directories; preserve external installs
-        if (!isManagedInstall) {
-          logger.info(`[Main] Cursor CLI detected at external path (${installedPath || 'unknown'}). Preserving external installation; no managed copy to remove.`);
-          return {
-            success: true,
-            message: `No managed installation found (external preserved at ${installedPath || 'unknown'})`,
-          };
+        // Always remove the managed shim, regardless of which resolution
+        try {
+          const hiveCliBin = path.join(os.homedir(), '.hive', 'cli-bin');
+          const managedShim = path.join(hiveCliBin, 'cursor-agent');
+          if (fs.existsSync(managedShim)) {
+            fs.rmSync(managedShim, { force: true });
+            logger.info(`[Main] Removed managed Cursor CLI shim at ${managedShim}`);
+          }
+        } catch (err) {
+          logger.warn('[Main] Failed to remove managed Cursor CLI shim:', err);
         }
-        // Remove only the managed shim/binary path
-        if (installedPath) {
-          uninstallCommand = `rm -f "${installedPath}"`;
-          logger.info(`[Main] Removing managed Cursor CLI binary at ${installedPath}`);
-        } else {
-          return { success: true, skipped: true, message: 'No managed Cursor CLI install found' };
+        // If a managed copy was present (isManagedInstall), we can return success immediately
+        if (isManagedInstall) {
+          cliToolsDetector.clearCache(toolId);
+          return { success: true, message: 'Managed Cursor CLI removed' };
         }
+        // Otherwise, there is nothing for Hive to remove
+        logger.info(`[Main] Cursor CLI detected at external path (${installedPath || 'unknown'}). Preserving external installation; no managed copy to remove.`);
+        return {
+          success: true,
+          message: `No managed installation found (external preserved at ${installedPath || 'unknown'})`,
+        };
       } else if (toolId === "specify") {
         // Prefer packaged uv if available for deterministic uninstall
         let uvCmd = "uv";
