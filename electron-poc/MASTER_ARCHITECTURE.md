@@ -7582,6 +7582,11 @@ To guarantee deterministic control over versions, updates, uninstalls, and MCP/m
 - Specify (Spec Kit) uv fallback
   - `uv tool upgrade specify-cli` falls back to `uv tool install specify-cli` if not installed, all scoped to `~/.hive/cli-bin`.
 
+- Cursor CLI (curl installer) integration
+  - The upstream installer places `cursor-agent` under user locations (commonly `~/.local/bin`).
+  - Hive creates a managed shim at `~/.hive/cli-bin/cursor-agent` pointing to the upstream binary so detection, updates, and launches resolve through the managed prefix.
+  - This keeps external installs intact while providing isolated control within Hive.
+
 This policy supersedes any earlier implication that external installs are managed by Hive. External/system installs are detected for visibility but are not part of Hive’s lifecycle operations unless the user explicitly reinstalls them into the Hive prefixes.
 
 ### Architecture

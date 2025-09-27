@@ -4034,7 +4034,49 @@ const registerSimpleCliToolHandlers = () => {
           logger.warn(`[Main] Installation stderr: ${stderr}`);
         }
 
-        // Verify installation by checking if command exists
+        // Verify installation by checking if command exists; ensure managed shim where needed
+        if (toolId === 'cursor-cli') {
+          try {
+            const hiveCliBin = path.join(os.homedir(), '.hive', 'cli-bin');
+            try { fs.mkdirSync(hiveCliBin, { recursive: true }); } catch {}
+            // Locate the actual cursor-agent binary installed by the script
+            let actualPath = '';
+            try {
+              const { stdout: whichCursor } = await execAsync('which cursor-agent', { env: { ...process.env, PATH: getEnhancedPath() }, timeout: 5000 });
+              actualPath = (whichCursor || '').trim();
+            } catch {}
+            if (actualPath) {
+              const managedShim = path.join(hiveCliBin, 'cursor-agent');
+              try { fs.rmSync(managedShim, { force: true }); } catch {}
+              try {
+                fs.symlinkSync(actualPath, managedShim);
+                fs.chmodSync(managedShim, 0o755);
+                logger.info(`[Main] Created managed shim for Cursor CLI at ${managedShim} -> ${actualPath}`);
+              } catch (shimErr) {
+                logger.warn('[Main] Failed to create Cursor CLI managed shim:', shimErr);
+              }
+            } else {
+              logger.warn('[Main] Could not locate cursor-agent after install to create managed shim');
+            }
+          } catch (cursorShimError) {
+            logger.warn('[Main] Cursor CLI shim setup error:', cursorShimError);
+          }
+        }
+
+        // Validate managed detection for Cursor after shim creation
+        if (toolId === 'cursor-cli') {
+          try {
+            const hiveCliBin = path.join(os.homedir(), '.hive', 'cli-bin');
+            const { stdout: whichManaged } = await execAsync('which cursor-agent', { env: { ...process.env, PATH: `${hiveCliBin}:${getEnhancedPath()}` }, timeout: 5000 });
+            const resolved = (whichManaged || '').trim();
+            const isManaged = !!(resolved && (resolved.startsWith(hiveCliBin + path.sep) || resolved === hiveCliBin));
+            if (!isManaged) {
+              logger.warn(`[Main] Cursor CLI still not resolving to managed prefix after install (got: ${resolved}).`);
+            }
+          } catch {}
+        }
+
+        // Continue with version extraction
         let version = "Unknown";
         try {
           if (toolConfig.versionCommand) {
@@ -4466,6 +4508,20 @@ const registerSimpleCliToolHandlers = () => {
           if (stderr && !stderr.includes("WARN")) {
             logger.warn(`[Main] Cursor CLI update stderr: ${stderr}`);
           }
+
+          // Ensure managed shim after update
+          try {
+            const hiveCliBin = path.join(os.homedir(), '.hive', 'cli-bin');
+            try { fs.mkdirSync(hiveCliBin, { recursive: true }); } catch {}
+            const { stdout: whichCursor } = await execAsync('which cursor-agent', { env: { ...process.env, PATH: enhancedPath }, timeout: 5000 });
+            const actualPath = (whichCursor || '').trim();
+            if (actualPath) {
+              const managedShim = path.join(hiveCliBin, 'cursor-agent');
+              try { fs.rmSync(managedShim, { force: true }); } catch {}
+              try { fs.symlinkSync(actualPath, managedShim); fs.chmodSync(managedShim, 0o755); } catch {}
+              logger.info(`[Main] Ensured managed shim for Cursor CLI at ${managedShim} -> ${actualPath}`);
+            }
+          } catch {}
 
           // Get updated version
           const versionResult = await execAsync("cursor-agent --version", {
