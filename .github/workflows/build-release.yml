@@ -1,8 +1,7 @@
-name: Build Release DMG
+name: Build Release DMG (disabled)
 
 on:
-  push:
-    branches: [ 'release/**' ]
+  # CI/CD disabled; manual dispatch only
   workflow_dispatch:
 
 concurrency:
@@ -177,4 +176,3 @@ jobs:
           }
           upload release/Hive-Consensus.dmg stable/Hive-Consensus-latest.dmg
           upload release/Hive-Consensus.dmg.sha256 stable/Hive-Consensus-latest.dmg.sha256 text/plain
-
