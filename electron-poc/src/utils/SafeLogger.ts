@@ -50,12 +50,19 @@ class SafeLogger {
     if (options.logDir) {
       this.logDir = options.logDir;
     } else {
-      try {
-        // Try to use Electron's app if available (main process)
-        const { app } = require('electron');
-        this.logDir = path.join(app.getPath('userData'), 'logs');
-      } catch {
-        // Fallback for child processes or when Electron is not available
+      // Only use Electron's app path when running in the Electron main (browser) process.
+      // Child processes (like memory-service) must not import Electron at all.
+      const isElectron = !!(process as any).versions?.electron;
+      const isBrowserProcess = (process as any).type === 'browser';
+      if (isElectron && isBrowserProcess) {
+        try {
+          const { app } = require('electron');
+          this.logDir = path.join(app.getPath('userData'), 'logs');
+        } catch {
+          this.logDir = path.join(os.homedir(), '.hive-consensus', 'logs');
+        }
+      } else {
+        // Node child or renderer: write under home directory to avoid Electron initialization
         this.logDir = path.join(os.homedir(), '.hive-consensus', 'logs');
       }
     }
