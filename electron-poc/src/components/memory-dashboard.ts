@@ -184,7 +184,6 @@ export class MemoryDashboard {
         const version = installed ? status?.version || "Unknown" : "—";
         const path = installed ? status?.path || "—" : "—";
 
-        const isCopilot = entry.id === "github-copilot";
         const memoryConnected = status?.memoryServiceConnected || false;
 
         const statusLabel = installed ? "Installed" : "Not installed";
@@ -192,10 +191,7 @@ export class MemoryDashboard {
 
         let memoryLabel = "—";
         let memoryClass = "neutral";
-        if (isCopilot) {
-          memoryLabel = "N/A";
-          memoryClass = "neutral";
-        } else if (installed) {
+        if (installed) {
           memoryLabel = memoryConnected ? "Connected" : "Not connected";
           memoryClass = memoryConnected ? "connected" : "warning";
         }

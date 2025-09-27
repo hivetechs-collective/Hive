@@ -4754,9 +4754,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     : '<span class="status-pill pending">Not installed</span>';
 
   let memoryPill = '<span class="status-pill neutral">—</span>';
-  if (id === "github-copilot") {
-    memoryPill = '<span class="status-pill neutral">N/A</span>';
-  } else if (isInstalled) {
+  if (isInstalled) {
     memoryPill = memoryConnected
       ? '<span class="status-pill connected">Connected</span>'
       : '<span class="status-pill error">Not connected</span>';
