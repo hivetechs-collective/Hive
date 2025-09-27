@@ -24,6 +24,7 @@
     "build:fresh": "npm run clean && npm run make:production",
     "build:complete": "node scripts/build-production-dmg.js",
     "sign:notarize:local": "bash scripts/sign-notarize-local.sh",
+    "release:local": "bash scripts/local-sign-and-upload.sh",
     "build:visual": "node scripts/build-with-progress.js",
     "requirements": "node scripts/comprehensive-build-check.js",
     "test": "npm run test:welcome",
