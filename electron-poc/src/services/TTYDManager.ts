@@ -105,9 +105,9 @@ export class TTYDManager extends EventEmitter {
     const shell = config.shell || '/bin/zsh';
     const shellArgs: string[] = [];
     
-    // If we have a command to auto-execute (like 'claude'), prepare it
+    // If we have a command to auto-execute (like 'claude' or 'copilot'), prepare it
     if (config.command) {
-      // For commands with spaces like 'gh copilot', we need to handle them carefully
+      // For commands with spaces, we need to handle them carefully
       // Check if the command contains spaces that need special handling
       if (config.command.includes(' ') && !config.command.startsWith('cd ')) {
         // For multi-word commands, execute directly then drop to interactive shell

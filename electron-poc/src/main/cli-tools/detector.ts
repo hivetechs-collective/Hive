@@ -110,30 +110,7 @@ export class CliToolsDetector {
       
       toolInfo.path = toolPath;
 
-      // Special handling for GitHub Copilot - check if extension is installed
-      if (toolId === 'github-copilot') {
-        try {
-          const { stdout: extensionList } = await execAsync(
-            'gh extension list',
-            { env }
-          );
-
-          if (!extensionList.includes('gh-copilot') && !extensionList.includes('github/gh-copilot')) {
-            logger.info(`[CliToolsDetector] GitHub CLI found but Copilot extension not installed`);
-            toolInfo.installed = false;
-            toolInfo.status = CliToolStatus.NOT_INSTALLED;
-            this.updateCache(toolId, toolInfo);
-            return toolInfo;
-          }
-          logger.info(`[CliToolsDetector] GitHub Copilot extension is installed`);
-        } catch (extError) {
-          logger.warn(`[CliToolsDetector] Could not check GitHub Copilot extension:`, extError);
-          toolInfo.installed = false;
-          toolInfo.status = CliToolStatus.NOT_INSTALLED;
-          this.updateCache(toolId, toolInfo);
-          return toolInfo;
-        }
-      }
+      // GitHub Copilot now uses the official copilot CLI; no gh extension check required
 
       toolInfo.installed = true;
       toolInfo.status = CliToolStatus.INSTALLED;

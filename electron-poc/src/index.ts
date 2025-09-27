@@ -3839,6 +3839,53 @@ function getEnhancedPath(): string {
     .join(":");
 }
 
+function updateCopilotMcpConfiguration(toolId: string, explicitToken?: string) {
+  try {
+    const memoryStatus = processManager.getProcessStatus("memory-service");
+    const port = memoryStatus?.port;
+    if (!port) {
+      logger.warn("[Main] Memory Service not running; skipping Copilot MCP config");
+      return;
+    }
+
+    const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+    const configDir = path.join(homeDir, ".copilot");
+    const configPath = path.join(configDir, "mcp.json");
+    try { fs.mkdirSync(configDir, { recursive: true }); } catch {}
+
+    let existing: any = {};
+    if (fs.existsSync(configPath)) {
+      try { existing = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
+    }
+    if (!existing.mcpServers) existing.mcpServers = {};
+
+    // Resolve token
+    let token = explicitToken;
+    if (!token) {
+      const toolsCfgPath = path.join(homeDir, ".hive", "cli-tools-config.json");
+      if (fs.existsSync(toolsCfgPath)) {
+        try {
+          const toolsCfg = JSON.parse(fs.readFileSync(toolsCfgPath, "utf-8"));
+          token = toolsCfg?.[toolId]?.memoryService?.token;
+        } catch {}
+      }
+    }
+
+    const serverName = "hive-memory-service";
+    const serverCfg: any = {
+      type: "http",
+      url: `http://localhost:${port}/mcp/v1`,
+    };
+    if (token) serverCfg.headers = { Authorization: `Bearer ${token}` };
+
+    existing.mcpServers[serverName] = serverCfg;
+    writeJsonFileSafely(configPath, existing);
+    logger.info(`[Main] Copilot MCP configured at ${configPath} (server: ${serverName})`);
+  } catch (err: any) {
+    logger.warn("[Main] Failed to configure Copilot MCP:", err?.message || err);
+  }
+}
+
 const registerSimpleCliToolHandlers = () => {
   logger.info("[Main] Registering simple CLI tool detection handlers");
 
@@ -4031,6 +4078,11 @@ const registerSimpleCliToolHandlers = () => {
             fs.writeFileSync(configPath, JSON.stringify(cliConfig, null, 2));
             memoryServiceToken = token;
 
+            // Auto-generate Copilot MCP config
+            if (toolId === "github-copilot") {
+              try { updateCopilotMcpConfiguration(toolId, token); } catch {}
+            }
+
             logger.info(
               `[Main] Successfully registered ${toolId} with Memory Service`,
             );
@@ -4213,46 +4265,29 @@ const registerSimpleCliToolHandlers = () => {
       const { promisify } = require("util");
       const execAsync = promisify(exec);
 
-      // Special handling for GitHub Copilot
+      // GitHub Copilot CLI uses npm for updates
       if (toolId === "github-copilot") {
-        logger.info(`[Main] Updating GitHub Copilot via gh extension...`);
-        const command = "gh extension upgrade github/gh-copilot";
-
+        logger.info(`[Main] Updating GitHub Copilot CLI via npm...`);
+        const enhancedPath = getEnhancedPath();
         try {
-          const { stdout, stderr } = await execAsync(command, {
-            env: {
-              ...process.env,
-              PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`,
-            },
-          });
-
-          logger.info(`[Main] GitHub Copilot update output: ${stdout}`);
-          if (stderr && !stderr.includes("WARN")) {
-            logger.warn(`[Main] GitHub Copilot update stderr: ${stderr}`);
-          }
-
-          // Get updated version
-          const versionResult = await execAsync("gh copilot --version", {
-            env: {
-              ...process.env,
-              PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`,
-            },
-          });
-
-          const version =
-            versionResult.stdout.trim().match(/version (\d+\.\d+\.\d+)/)?.[1] ||
-            "Unknown";
-
-          logger.info(
-            `[Main] GitHub Copilot updated successfully to version ${version}`,
+          const { stdout, stderr } = await execAsync(
+            "npm update -g @github/copilot",
+            { env: { ...process.env, PATH: enhancedPath } },
           );
-          return {
-            success: true,
-            version,
-            message: `Updated to version ${version}`,
-          };
+          logger.info(`[Main] Copilot CLI update output: ${stdout}`);
+          if (stderr && !stderr.toLowerCase().includes("warn")) {
+            logger.warn(`[Main] Copilot CLI update stderr: ${stderr}`);
+          }
+          const versionResult = await execAsync("copilot --version", {
+            env: { ...process.env, PATH: enhancedPath },
+          });
+          const version =
+            versionResult.stdout.trim().match(/(\d+\.\d+\.\d+)/)?.[1] ||
+            "Unknown";
+          cliToolsDetector.clearCache(toolId);
+          return { success: true, version, message: `Updated to ${version}` };
         } catch (error: any) {
-          logger.error(`[Main] Failed to update GitHub Copilot:`, error);
+          logger.error(`[Main] Failed to update Copilot CLI:`, error);
           return { success: false, error: error.message || "Update failed" };
         }
       }
@@ -4684,13 +4719,8 @@ Or try: npm install -g ${installCmd} --force --no-cache
 
       let uninstallCommand: string;
 
-      // Special handling for GitHub Copilot (uses gh extension)
-      if (toolId === "github-copilot") {
-        uninstallCommand = "gh extension remove github/gh-copilot";
-        logger.info(
-          `[Main] Running GitHub Copilot uninstall: ${uninstallCommand}`,
-        );
-      } else if (toolId === "cursor-cli") {
+      // Special handling for Cursor CLI
+      if (toolId === "cursor-cli") {
         // Special handling for Cursor CLI (installed via curl)
         // Remove cursor-agent from common installation paths (including ~/.local/bin where it's typically installed)
         uninstallCommand =
@@ -4703,6 +4733,7 @@ Or try: npm install -g ${installCmd} --force --no-cache
           "gemini-cli": "@google/gemini-cli",
           "qwen-code": "@qwen-code/qwen-code",
           "openai-codex": "@openai/codex",
+          "github-copilot": "@github/copilot",
           grok: "@vibe-kit/grok-cli",
         };
 
@@ -4732,14 +4763,7 @@ Or try: npm install -g ${installCmd} --force --no-cache
           logger.warn(`[Main] Uninstall stderr: ${stderr}`);
         }
 
-        if (toolId === "github-copilot") {
-          logger.info("[Main] GitHub Copilot extension removed successfully");
-          cliToolsDetector.clearCache(toolId);
-          return {
-            success: true,
-            message: "GitHub Copilot extension has been removed",
-          };
-        }
+        // Clear cache if Copilot CLI was removed
 
         // Verify uninstallation by checking if command still exists
         try {
@@ -5064,9 +5088,8 @@ Or try: npm install -g ${installCmd} --force --no-cache
         } else if (toolId === "openai-codex") {
           command = "codex";
         } else if (toolId === "github-copilot") {
-          // GitHub Copilot doesn't have an interactive mode like Claude
-          // Just launch with the base command to show help
-          command = "gh copilot";
+          // Launch the official GitHub Copilot CLI
+          command = "copilot";
         } else if (toolId === "grok") {
           // SMART GROK LAUNCH: Check if API key is configured
           // Grok stores config in ~/.grok/user-settings.json
@@ -5126,6 +5149,15 @@ Or try: npm install -g ${installCmd} --force --no-cache
             logger.warn(
               "[Main] Failed to refresh Cursor MCP configuration before launch:",
               cursorConfigError,
+            );
+          }
+        } else if (toolId === "github-copilot") {
+          try {
+            updateCopilotMcpConfiguration(toolId);
+          } catch (copilotCfgError) {
+            logger.warn(
+              "[Main] Failed to refresh Copilot MCP configuration before launch:",
+              copilotCfgError,
             );
           }
         }
