@@ -149,8 +149,8 @@ jobs:
         with:
           name: ready-dmg
           path: |
-            signed-input/*.dmg
-            signed-input/build-report.json
+            signed-input/**/*.dmg
+            signed-input/**/build-report.json
           if-no-files-found: error
   publish:
     name: 04 Publish to R2 (Ubuntu)
