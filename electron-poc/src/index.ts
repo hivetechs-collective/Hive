@@ -3945,6 +3945,29 @@ const registerSimpleCliToolHandlers = () => {
       );
 
       try {
+        // Special handling: ensure prerequisites for certain tools
+        const enhancedPath = getEnhancedPath();
+        if (toolId === "specify") {
+          // Ensure 'uv' is available; try Homebrew if missing
+          try {
+            await execAsync("which uv", { env: { ...process.env, PATH: enhancedPath } });
+          } catch {
+            try {
+              // Attempt to install uv via Homebrew if available
+              await execAsync("brew --version", { env: { ...process.env, PATH: enhancedPath } });
+              logger.info("[Main] Installing 'uv' via Homebrew...");
+              await execAsync("brew install uv", { env: { ...process.env, PATH: enhancedPath } });
+            } catch (brewErr: any) {
+              logger.error("[Main] 'uv' not found and Homebrew install failed or not available", brewErr?.message || brewErr);
+              return {
+                success: false,
+                error:
+                  "'uv' is required to install Specify CLI. Please install Homebrew (https://brew.sh) and run 'brew install uv', or follow https://astral.sh/uv to install uv, then retry.",
+              };
+            }
+          }
+        }
+
         // Run the installation command
         const { stdout, stderr } = await execAsync(toolConfig.installCommand, {
           env: { ...process.env, PATH: enhancedPath },
