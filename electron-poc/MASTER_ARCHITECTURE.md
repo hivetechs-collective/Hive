@@ -14282,6 +14282,16 @@ npm run sign:notarize:local
 
 This mirrors CI but runs entirely on your machine with the visual 17‑phase progress window.
 
+Alternatively, run everything (sign + notarize + upload) with embedded values:
+
+```bash
+# One-shot local sign + upload (uses embedded SIGN_ID and NOTARY_PROFILE)
+cd electron-poc
+npm run release:local                # defaults to stable channel
+# or specify channel / DMG explicitly:
+npm run release:local -- beta "out/make/Hive Consensus.dmg"
+```
+
 **Next Actions (when ready to sign releases)**
 - Set the signing identity once per shell: `export SIGN_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"`.
 - Recursively sign every Mach-O inside the bundle (Python runtime, torch, SciPy, helper binaries, etc.):
