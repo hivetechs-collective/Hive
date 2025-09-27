@@ -5219,6 +5219,7 @@ async function installAllCliTools(): Promise<void> {
         "github-copilot",
         "cursor-cli",
         "grok",
+        "specify",
       ];
       for (const toolId of toolsToInstall) {
         await refreshSidebarToolIcon(toolId);
@@ -5268,11 +5269,8 @@ async function updateAllCliTools(): Promise<void> {
       // Check if installed
       const status = await electronAPI.detectCliTool(toolId);
 
-      if (!status?.installed) {
-        console.log(`[CLI Tools] ${toolId} not installed, skipping update`);
-        skippedCount++;
-        continue;
-      }
+      // If a managed copy isn't installed, updateCliTool will bootstrap a managed install.
+      // Do not skip; proceed to call update for consistent, isolated control.
 
       // Update the tool
       if (statusDiv) {
@@ -5353,6 +5351,7 @@ async function updateAllCliTools(): Promise<void> {
         "github-copilot",
         "cursor-cli",
         "grok",
+        "specify",
       ];
       for (const toolId of toolsToUpdate) {
         await refreshSidebarToolIcon(toolId);
@@ -5376,7 +5375,7 @@ async function uninstallCliTool(toolId: string): Promise<void> {
   // Confirm with user first
   const toolName = (window as any).CLI_TOOLS_REGISTRY?.[toolId]?.name || toolId;
   const confirmed = confirm(
-    `Are you sure you want to uninstall ${toolName}?\n\nThis will remove the tool globally from your system.`,
+    `Are you sure you want to uninstall ${toolName}?\n\nThis removes the tool from Hive-managed directories only (~/.hive). External installations are preserved.`,
   );
 
   if (!confirmed) {
@@ -5413,11 +5412,13 @@ async function uninstallCliTool(toolId: string): Promise<void> {
       }
 
       // Refresh the panel after a short delay to update buttons
+      try {
+        await (window as any).electronAPI.detectCliTool(toolId);
+      } catch {}
       setTimeout(async () => {
         await renderCliToolsPanel(true);
-        // Also refresh the sidebar icon to show it's uninstalled
         await refreshSidebarToolIcon(toolId);
-      }, 1500);
+      }, 500);
     } else {
       console.error(
         `[CLI Tools] Failed to uninstall ${toolId}:`,
@@ -5461,7 +5462,7 @@ async function uninstallAllCliTools(): Promise<void> {
 
   // Confirm with user first
   const confirmed = confirm(
-    "Are you sure you want to uninstall ALL AI CLI tools?\n\nThis will remove all tools globally from your system.\nYour configurations will be preserved for potential reinstallation.",
+    "Are you sure you want to uninstall ALL AI CLI tools?\n\nThis removes tools from Hive-managed directories only (~/.hive). External installations are preserved.\nYour configurations will be preserved for potential reinstallation.",
   );
 
   if (!confirmed) {
@@ -5495,16 +5496,7 @@ async function uninstallAllCliTools(): Promise<void> {
     let failedCount = 0;
 
     for (const toolId of toolsToUninstall) {
-      // Check if installed
-      const status = await electronAPI.detectCliTool(toolId);
-
-      if (!status?.installed) {
-        console.log(`[CLI Tools] ${toolId} not installed, skipping`);
-        skippedCount++;
-        continue;
-      }
-
-      // Uninstall the tool
+      // Always call uninstall; API is scoped to managed installs and will no-op if none exists
       if (statusDiv) {
         statusDiv.innerHTML = `🗑️ Uninstalling ${toolId}... (${uninstalledCount} uninstalled so far)`;
       }
@@ -5543,10 +5535,10 @@ async function uninstallAllCliTools(): Promise<void> {
     // Final status
     if (statusDiv) {
       if (failedCount === 0) {
-        statusDiv.innerHTML = `✅ Complete! ${uninstalledCount} uninstalled, ${skippedCount} not installed`;
+        statusDiv.innerHTML = `✅ Complete! ${uninstalledCount} uninstalled`;
         statusDiv.style.color = "#4ec9b0";
       } else {
-        statusDiv.innerHTML = `⚠️ Complete with errors: ${uninstalledCount} uninstalled, ${skippedCount} skipped, ${failedCount} failed`;
+        statusDiv.innerHTML = `⚠️ Complete with errors: ${uninstalledCount} uninstalled, ${failedCount} failed`;
         statusDiv.style.color = "#ffa500";
       }
 

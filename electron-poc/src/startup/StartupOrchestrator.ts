@@ -389,12 +389,21 @@ export class StartupOrchestrator {
         const osmod = await import('os');
         const pathmod = await import('path');
         const fsm = await import('fs');
+        const { ProductionPaths } = await import('../utils/ProductionPaths');
         const home = osmod.homedir();
         const hiveNpmBin = pathmod.join(home, '.hive', 'npm-global', 'bin');
         const hiveCliBin = pathmod.join(home, '.hive', 'cli-bin');
         try { fsm.mkdirSync(hiveNpmBin, { recursive: true }); } catch {}
         try { fsm.mkdirSync(hiveCliBin, { recursive: true }); } catch {}
-        process.env.PATH = `${hiveNpmBin}:${hiveCliBin}:${process.env.PATH || ''}`;
+        let packagedBinDir = '';
+        try {
+            const packagedNpm = ProductionPaths.getBinaryPath('npm');
+            if (fsm.existsSync(packagedNpm)) {
+                packagedBinDir = pathmod.dirname(packagedNpm);
+            }
+        } catch {}
+        const additions = [packagedBinDir, hiveNpmBin, hiveCliBin].filter(Boolean).join(':');
+        process.env.PATH = `${additions}:${process.env.PATH || ''}`;
 
         // Ensure uv is available (for Spec Kit / Specify CLI)
         try {

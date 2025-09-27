@@ -2635,8 +2635,9 @@ this.wss = new WebSocketServer({ server: this.server });
 - **Type**: Child process managed by ProcessManager
 - **Entry Point**: `src/memory-service/index.ts`
 - **Server**: `src/memory-service/server.ts`
-- **Port**: 3457 (with automatic fallback to 3458-3460)
-- **IPC Communication**: Fork with ts-node for TypeScript support
+- Port: Dynamically allocated from the `memory-service` pool (default range 3000–3099) by PortManager; no hardcoded ports
+- Spawn (production): spawn packaged Node binary with IPC; no Electron-as-Node in the child
+- Spawn (development): fork with ts-node
 
 #### Database Access Pattern
 ```typescript
@@ -2669,10 +2670,11 @@ handleMemoryServiceDbQuery(msg) {
    - IPC handlers - Line 948: `memory-service-start`, `memory-service-stop`
 
 2. **ProcessManager** (`src/utils/ProcessManager.ts`):
-   - Port allocation using PortManager
-   - Health check monitoring
-   - Auto-restart on crash (max 5 attempts)
-   - IPC message routing
+   - Delegates port allocation to PortManager (no port numbers in code)
+   - Spawns Memory Service with the packaged Node binary (`.env.production` → `NODE_PATH=./binaries/node`)
+   - Waits on IPC `ready` after server.listen; may assert a health probe for strict readiness
+   - Auto-restart on crash (bounded attempts) and releases ports
+   - IPC routing for DB queries/results
 
 3. **PortManager** (`src/utils/PortManager.ts`):
    - `allocatePort()` - Ensures port availability
@@ -2762,10 +2764,50 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
    - Port reallocation on each restart
 
 #### Health Monitoring
-- Health check endpoint: `http://localhost:3457/health`
+- Health check endpoint: `http://localhost:<allocated>/health`
 - Checked every 30 seconds by ProcessManager
 - Returns: `{ status, port, database, uptime }`
 - Auto-restart triggered on health check failures
+
+
+### Memory Service Startup (v3.1) — Packaged Node, No Fallbacks
+
+- Packaged Node binary lives at `app.asar.unpacked/.webpack/main/binaries/node` and is a real Mach‑O on macOS.
+- `.env.production` includes `NODE_PATH=./binaries/node` and sets `USE_ELECTRON_AS_NODE=true` only if Electron must be used (we do not for Memory Service).
+- ProcessManager spawns the child as: `spawn(<NODE_PATH>, [service.js], { stdio: ['pipe','pipe','pipe','ipc'], env })`.
+- The child sends an IPC `ready` only after `server.listen(port)` succeeds.
+- SafeLogger does not import Electron in child processes; child logs go to `~/.hive-consensus/logs` to avoid Chromium keychain/OS crypt issues.
+
+---
+
+## First‑Run Toolchain Bootstrap (CLI Tools)
+
+- Purpose: zero‑touch setup on first launch; idempotent when tools already present.
+- uv installation: ensure `uv` exists (Homebrew first; official installer fallback) without blocking app usage.
+- Standardized install locations (user‑scoped):
+  - npm globals → `~/.hive/npm-global/bin` (`npm_config_prefix=~/.hive/npm-global`)
+  - uv tools (e.g., Specify) → `~/.hive/cli-bin` via `XDG_BIN_HOME`
+- PATH precedence: both bins are prepended for detection and execution.
+- Existing installs in common locations (e.g., `~/.local/bin`) remain detected; new installs prefer the `~/.hive/*` bins.
+
+### CLI Tools — Paths in UI
+
+- Paths are user‑specific (anchored to `$HOME`). Examples (macOS user `veronelazio`):
+  - Claude/Gemini/Qwen/Codex/Grok: `/Users/veronelazio/.hive/npm-global/bin/<tool>`
+  - Copilot CLI: `/Users/veronelazio/.hive/npm-global/bin/copilot`
+  - Cursor: `/Users/veronelazio/.local/bin/cursor-agent` (upstream installer)
+  - Specify (Spec Kit): new installs → `~/.hive/cli-bin/specify`; existing installs may remain under `~/.local/bin/specify`
+
+---
+
+## Packaging Notes — DMG Size and Node Runtime
+
+- We bundle a full Node distribution to guarantee a clean, non‑Electron child runtime for Memory Service and include npm/npx shims for tooling. The Node binary is placed at `binaries/node` inside the app’s unpacked resources.
+- Impact: DMG increased from ~392 MB to ~548 MB when including Node runtime + npm/npx shims. Node v22 arm64 adds ~80–120 MB uncompressed; compression and other assets account for the remainder.
+- Future optimization options:
+  - Ship only the `node` binary + minimal libs instead of the full `node-dist` tree.
+  - Offer a “lite” DMG that downloads Node on first run.
+  - Strip unneeded files where permitted.
 
 ---
 
@@ -7515,6 +7557,38 @@ CREATE TABLE tool_metrics (
 ### Overview
 The CLI Tools Management system provides automated installation, updates, and integration for AI-powered CLI tools, with seamless Memory Service integration via MCP (Model Context Protocol). This system enables one-click installation, configuration, and updates for AI coding assistants, making them feel "out of the box" integrated without user configuration.
 
+### Isolated Managed Copies (2025‑09)
+
+To guarantee deterministic control over versions, updates, uninstalls, and MCP/memory wiring, Hive operates on isolated, Hive‑managed copies of CLI tools. External/system installs are preserved and never modified.
+
+- Managed prefixes
+  - npm tools: `~/.hive/npm-global/bin` (via `NPM_CONFIG_PREFIX=~/.hive/npm-global`)
+  - uv tools (e.g., Specify): `~/.hive/cli-bin` (via `XDG_BIN_HOME=~/.hive/cli-bin`, `XDG_DATA_HOME=~/.hive/xdg-data`)
+- Detection policy (managed‑only)
+  - A tool is considered Installed only if `which <cmd>` resolves to a path within a managed prefix.
+  - External installs (e.g., `/opt/homebrew/bin`, `~/.local/bin`) do not count as installed for Hive operations. They remain visible to users but are isolated from Hive’s lifecycle.
+- Batch operations semantics
+  - Install / Install All: always installs a managed copy into Hive prefixes, even if an external install exists.
+  - Update / Update All: if no managed copy exists, bootstrap a managed install first, then update.
+  - Uninstall / Uninstall All: removes only the managed copy; external installs are preserved. UI no longer reports “skipped” items; only managed removals and failures are counted.
+- MCP/memory integration
+  - Managed copies receive automatic MCP/memory endpoint configuration and dynamic port/token updates on startup.
+- PATH strategy (scoped to app processes)
+  - Packaged binaries → `~/.hive/npm-global/bin` → `~/.hive/cli-bin` → `~/.local/bin` → system paths. We do not mutate user shell profiles.
+- Robust npm/npx bundling
+  - Packaged shims for `binaries/npm` and `binaries/npx` invoke the bundled Node against npm’s CLI entrypoints (`…/npm/bin/npm-cli.js`).
+  - A small forwarder is written to `binaries/node-dist/lib/cli.js` to avoid `require('../lib/cli.js')` launch errors.
+  - Result: update/uninstall flows work reliably in packaged builds.
+- Specify (Spec Kit) uv fallback
+  - `uv tool upgrade specify-cli` falls back to `uv tool install specify-cli` if not installed, all scoped to `~/.hive/cli-bin`.
+
+- Cursor CLI (curl installer) integration
+  - The upstream installer places `cursor-agent` under user locations (commonly `~/.local/bin`).
+  - Hive creates a managed shim at `~/.hive/cli-bin/cursor-agent` pointing to the upstream binary so detection, updates, and launches resolve through the managed prefix.
+  - This keeps external installs intact while providing isolated control within Hive.
+
+This policy supersedes any earlier implication that external installs are managed by Hive. External/system installs are detected for visibility but are not part of Hive’s lifecycle operations unless the user explicitly reinstalls them into the Hive prefixes.
+
 ### Architecture
 **Location**: `src/utils/CliToolsManager.ts`
 **Purpose**: Manage lifecycle of external AI CLI tools with full Memory Service integration
@@ -7626,14 +7700,18 @@ When Grok is launched without an API key, a custom interactive setup wizard is t
 ```
 1. Show confirmation dialog to user
 2. Map tool ID to package name
-3. Execute uninstall command (npm uninstall -g / pip uninstall)
-4. Clean up tool-specific configurations:
-   a. Remove Cline config file (~/.cline/config.json)
-   b. Preserve Grok API keys for potential reinstall
+3. Execute uninstall command (scoped to Hive-managed locations only):
+   - NPM tools: `npm uninstall -g <package>` with `NPM_CONFIG_PREFIX=~/.hive/npm-global`
+   - uv tools (e.g., Specify): `uv tool uninstall ...` with `XDG_BIN_HOME=~/.hive/cli-bin`
+   - We never remove external/system installations (e.g., /usr/local/bin, /opt/homebrew/bin)
+   - For tools like Cursor CLI installed via curl, we only remove managed shims; external installs are preserved
+4. Clean up tool-specific configurations (non-destructive):
+   a. Remove app-created shims under `~/.hive/cli-bin` only
+   b. Preserve user configs and API keys (e.g., `~/.grok`)
    c. Keep Memory Service registration for reuse
 5. Clear tool from detection cache
-6. Verify tool is no longer accessible
-7. Update UI to show uninstalled state
+6. Verify removal from Hive-managed PATH; if an external install remains, mark as "skipped (external)"
+7. Update UI to show uninstalled or skipped state
 ```
 
 ### Memory Service Integration
@@ -7812,7 +7890,7 @@ next_sync_due: next update check time
 
 #### Batch Operations (Top of Panel)
 1. **Install All Tools Button** (Blue):
-   - Installs all 6 AI CLI tools in sequence
+   - Installs all AI CLI tools in sequence
    - Skips already installed tools automatically
    - Shows progress counter (e.g., "Installing 3 of 6...")
    - Automatically configures Memory Service for compatible tools
@@ -7848,21 +7926,26 @@ next_sync_due: next update check time
    - **Implementation**: See [Update Button Architecture](#update-button-architecture) below
 
 4. **Install Button** (Blue - for uninstalled tools):
-   - Runs appropriate package manager (npm/pip)
+   - Runs appropriate package manager (npm/pip/uv)
    - Shows progress indicators
    - **Automatically configures Memory Service** after successful installation
    - **For Cline**: Sets OpenRouter API key from Hive settings
    - **For Grok**: Detects missing API key and launches setup wizard
    - Refreshes panel on completion with configuration status
+   - Best practices:
+     - npm installs use `NPM_CONFIG_PREFIX=~/.hive/npm-global` and prefer packaged `npm` if available
+     - uv installs use `XDG_BIN_HOME=~/.hive/cli-bin` and `XDG_DATA_HOME=~/.hive/xdg-data` (prefer packaged `uv`)
+     - pip installs use `--user` where applicable to avoid system-level writes
 
 5. **Uninstall Button** (Red - for installed tools):
    - Shows confirmation dialog before proceeding
-   - Runs `npm uninstall -g <package>` or `pip uninstall <package>`
+   - Runs uninstall scoped to Hive-managed dirs only (`~/.hive/npm-global` via `NPM_CONFIG_PREFIX` or `~/.hive/cli-bin` via `XDG_*`)
+   - External/system installs are preserved and reported as "skipped (external)"
    - Clears tool from cache after uninstall
    - **Preserves user configurations** (e.g., Grok API keys)
    - Removes Cline config file if present
-   - Verifies tool was successfully removed
-   - Updates UI to show uninstalled state
+   - Verifies tool was successfully removed from Hive-managed PATH
+   - Updates UI to show uninstalled or skipped state
 
 ### Configuration Storage
 ```
@@ -8065,7 +8148,7 @@ updateCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-update', toolId)
 ```
 
 ##### 3. Main Process Handler
-**Location**: `src/index.ts` (lines 1396-1518)
+**Location**: `src/index.ts`
 
 ```typescript
 ipcMain.handle('cli-tool-update', async (_, toolId: string) => {
@@ -8091,6 +8174,11 @@ ipcMain.handle('cli-tool-update', async (_, toolId: string) => {
   return { success: true, version, message };
 });
 ```
+##### Best Practices (Updates)
+- Scope all npm updates to the Hive prefix with `NPM_CONFIG_PREFIX=~/.hive/npm-global`.
+- Prefer the packaged `npm` binary when bundled for deterministic behavior.
+- For uv tools (e.g., Specify), set `XDG_BIN_HOME=~/.hive/cli-bin` and `XDG_DATA_HOME=~/.hive/xdg-data` during upgrades.
+- Special cases (e.g., Grok) may pin to known-good versions to avoid upstream issues.
 
 #### Update Flow Sequence
 
@@ -14430,17 +14518,27 @@ To keep the DMG small, we do not ship heavy developer toolchains. On first app l
 - Standardizes install locations for CLI tools:
   - npm globals → `~/.hive/npm-global/bin`
   - uv tools (e.g., Specify CLI) → `~/.hive/cli-bin`
+- Sets PATH precedence to prefer bundled binaries (when present) followed by Hive-managed bins to ensure deterministic behavior during bootstrap and beyond.
 - Installs baseline AI CLIs if missing (Claude, Gemini CLI, Qwen Code, OpenAI Codex, GitHub Copilot CLI, Cursor CLI, Grok, Specify) and configures memory integration.
 - Writes an idempotent marker to skip on subsequent launches.
 
 This bootstrap avoids bundling large runtimes in the DMG while guaranteeing fresh users can launch and use all integrated tools without manual steps.
 
 ### Path Detection and Consistency
-- The app now prioritizes `~/.hive/npm-global/bin` and `~/.hive/cli-bin` on PATH for detection and execution, ensuring consistent installation locations across users.
+- The app prioritizes the packaged binaries directory (for bundled `npm`, `uv`, etc.) when present, followed by `~/.hive/npm-global/bin` and `~/.hive/cli-bin`, ensuring deterministic behavior across users and environments.
 - Specify (Spec Kit) installs/updates via `uv tool ...` are directed to `~/.hive/cli-bin` by setting XDG env vars at install/update time.
+- Terminal launch uses the same enhanced PATH precedence (packaged binaries → Hive-managed dirs → system), enforced by the TTYD terminal manager and main-process launch handlers.
+
+### External Install Preservation Policy
+- Uninstall operations are scoped to Hive-managed directories only.
+- If a tool exists outside `~/.hive/npm-global/bin` or `~/.hive/cli-bin`, the app preserves it and reports “Skipped (external install)”.
+- Cursor CLI and other curl-installed tools are never removed from system/user locations by the app.
+
+### Batch Operations Consistency
+- “Install All”, “Update All”, and “Uninstall All” buttons invoke the same scoped handlers as individual actions.
+- Post-action refresh includes all tools (Claude, Gemini, Qwen, OpenAI Codex, GitHub Copilot, Cursor CLI, Grok, Specify) to keep the UI in sync.
 
 ### Known Fixes
 - Specify update no longer uses `--from` (uv rejects it for upgrade). We now run `uv tool upgrade specify-cli`.
 - “Uninstall All” refresh now correctly updates the Spec Kit card and sidebar icon.
 - TTYD terminal view waits for the ttyd URL to be reachable before loading the webview, eliminating initial ERR_FAILED (-2) flaps.
-

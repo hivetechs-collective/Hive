@@ -10,6 +10,10 @@ import { PortManager } from '../utils/PortManager';
 import { PidTracker } from '../utils/PidTracker';
 import { logger } from '../utils/SafeLogger';
 import ProcessManager from '../utils/ProcessManager';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+import { ProductionPaths } from '../utils/ProductionPaths';
 
 export interface TTYDConfig {
   id: string;
@@ -74,6 +78,29 @@ export class TTYDManager extends EventEmitter {
    */
   async createTerminal(config: TTYDConfig): Promise<TTYDInstance> {
     logger.info(`[TTYDManager] Creating terminal: ${config.title}`);
+
+    // Compute enhanced PATH: prefer packaged binaries, then Hive-managed bins, then system
+    const buildEnhancedPath = (): string => {
+      let packagedBinDir: string | null = null;
+      try {
+        const packagedNpm = ProductionPaths.getBinaryPath('npm');
+        if (fs.existsSync(packagedNpm)) packagedBinDir = path.dirname(packagedNpm);
+      } catch {}
+      const home = os.homedir();
+      const additions = [
+        ...(packagedBinDir ? [packagedBinDir] : []),
+        path.join(home, '.hive', 'npm-global', 'bin'),
+        path.join(home, '.hive', 'cli-bin'),
+        path.join(home, '.local', 'bin'),
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+        '/usr/bin',
+        '/bin',
+      ];
+      const current = (config.env?.PATH || process.env.PATH || '').split(path.delimiter);
+      const all = [...new Set([...additions, ...current])].filter(Boolean);
+      return all.join(path.delimiter);
+    };
     
     // Allocate port through ProcessManager's PortManager
     // No hardcoded ports - PortManager handles allocation from configured pools
@@ -133,6 +160,7 @@ export class TTYDManager extends EventEmitter {
       env: {
         ...process.env,
         ...config.env,
+        PATH: buildEnhancedPath(),
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
         // Force proper terminal dimensions to prevent 9-row issue
