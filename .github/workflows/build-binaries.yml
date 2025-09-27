@@ -1,36 +1,8 @@
-name: Build Binaries
+name: Build Binaries (disabled)
 
 on:
-  push:
-    branches:
-      - 'release/**'
+  # CI/CD disabled; manual dispatch only
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'Pipeline mode'
-        required: false
-        default: build_sign_publish
-        type: choice
-        options:
-          - build_sign_publish
-          - build_only
-          - sign_only
-          - publish_only
-      reuse_artifact_run_id:
-        description: 'Run ID to reuse artifacts from (for sign_only/publish_only)'
-        required: false
-        default: ''
-        type: string
-      reuse_artifact_name:
-        description: 'Unsigned DMG artifact name'
-        required: false
-        default: 'hive-macos-dmg'
-        type: string
-      reuse_ready_artifact_name:
-        description: 'Signed DMG artifact name'
-        required: false
-        default: 'hive-macos-dmg-ready'
-        type: string
 
 concurrency:
   group: build-binaries-${{ github.ref }}

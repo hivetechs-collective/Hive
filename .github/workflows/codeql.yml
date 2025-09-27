@@ -9,18 +9,10 @@
 # the `language` matrix defined below to confirm you have the correct set of
 # supported CodeQL languages.
 #
-name: CodeQL Security Scan
+name: CodeQL Security Scan (disabled)
 
 on:
-  push:
-    branches: [main, master]
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - 'electron-poc/MASTER_ARCHITECTURE.md'
-      - '.github/dependabot.yml'
-  schedule:
-    - cron: '18 22 * * 6'
+  # CI/CD disabled; manual dispatch only
   workflow_dispatch:
 
 concurrency:
