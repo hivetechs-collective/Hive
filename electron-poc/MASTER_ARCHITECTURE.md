@@ -14294,9 +14294,22 @@ npm run release:local -- beta "out/make/Hive Consensus.dmg"
 
 ##### CI/CD Policy (Disabled)
 
-- All GitHub Actions pipelines (build/release/publish/scans) are intentionally disabled in favor of the local flow documented here.
-- PR checks remain as lightweight no-ops solely to satisfy required status contexts. They do not build, sign, or publish artifacts.
-- Authoritative release path: `npm run build:complete` → `npm run release:local`.
+- Organization-level GitHub Actions have been disabled and budget set to $0; no automated workflows run on push/PR.
+- Workflow files remain in the repo for reference, but are manual-only (workflow_dispatch) and considered disabled.
+- No required status checks block merges; branch protection no longer expects CI contexts.
+- Authoritative release path is local-only: `npm run build:complete` → `npm run release:local`.
+
+Release flow (authoritative, local-only)
+- Build (17 phases with visual monitor):
+  - `cd electron-poc && npm ci && npm run build:complete`
+- Sign + Notarize + Upload (one-shot):
+  - `cd electron-poc && npm run release:local`
+  - Uses embedded `SIGN_ID` and `NOTARY_PROFILE`, then uploads to R2 via Wrangler.
+- Optional guardrails (DMG-mounted verification):
+  - `node electron-poc/scripts/verify-dmg-helpers.js "electron-poc/out/make/Hive Consensus.dmg"`
+  - `node electron-poc/scripts/test-dmg-memory-service.js "electron-poc/out/make/Hive Consensus.dmg"`
+
+Note: If CI/CD is reintroduced later, re-enable workflow triggers and restore required status checks. Until then, the local scripts and this section are the source of truth for releases.
 
 **Next Actions (when ready to sign releases)**
 - Set the signing identity once per shell: `export SIGN_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"`.
