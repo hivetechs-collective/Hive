@@ -823,15 +823,36 @@ try {
   console.log(`${CYAN}  Extracting Node.js archive...${RESET}`);
   execSync(`tar -xzf "${downloadPath}" -C "${os.tmpdir()}"`, { stdio: 'inherit' });
 
-  const nodeBinarySource = path.join(extractPath, 'bin', platform === 'win32' ? 'node.exe' : 'node');
+  // Copy full Node distribution so npm/npx work
+  const nodeDistTarget = path.join(binariesDir, 'node-dist');
+  fs.copySync(extractPath, nodeDistTarget, { overwrite: true, dereference: true });
+
+  const nodeBinarySource = path.join(nodeDistTarget, 'bin', platform === 'win32' ? 'node.exe' : 'node');
   if (!fs.existsSync(nodeBinarySource)) {
     throw new Error(`Failed to find node binary at ${nodeBinarySource}`);
   }
 
+  // Create wrapper shims in binaries/
   fs.copyFileSync(nodeBinarySource, nodeTargetPath);
   fs.chmodSync(nodeTargetPath, 0o755);
+  const npmShim = path.join(binariesDir, 'npm');
+  const npxShim = path.join(binariesDir, 'npx');
+  const npmSource = path.join(nodeDistTarget, 'bin', 'npm');
+  const npxSource = path.join(nodeDistTarget, 'bin', 'npx');
+  const writeShim = (src, dest) => {
+    if (fs.existsSync(src)) {
+      const shim = `#!/bin/sh\nexec \"${src}\" \"$@\"\n`;
+      fs.writeFileSync(dest, shim);
+      fs.chmodSync(dest, 0o755);
+    }
+  };
+  writeShim(npmSource, npmShim);
+  writeShim(npxSource, npxShim);
+
   console.log(`${GREEN}✓ Bundled Node.js: ${nodeVersionRaw}${RESET}`);
   bundledBinaries.push('node');
+  if (fs.existsSync(npmShim)) bundledBinaries.push('npm');
+  if (fs.existsSync(npxShim)) bundledBinaries.push('npx');
   nodeBundled = true;
 
   // Clean up extracted directory to save space
@@ -849,13 +870,63 @@ if (!nodeBundled) {
   nodeBundled = true;
 }
 
+// 3b. Bundle uv (for Spec Kit / Specify CLI)
+console.log(`${CYAN}Bundling uv (Specify CLI dependency)...${RESET}`);
+const uvTargetPath = path.join(binariesDir, 'uv');
+let uvBundled = false;
+
+try {
+  const uvSystemPaths = [
+    '/opt/homebrew/bin/uv',
+    '/usr/local/bin/uv',
+    '/usr/bin/uv',
+  ];
+  let uvFound = '';
+  for (const p of uvSystemPaths) {
+    if (fs.existsSync(p)) { uvFound = p; break; }
+  }
+  if (!uvFound) {
+    try {
+      const whichUv = execSync('which uv 2>/dev/null', { encoding: 'utf8' }).trim();
+      if (whichUv) uvFound = whichUv;
+    } catch {}
+  }
+
+  if (!uvFound && process.env.CI !== 'true') {
+    console.log(`${YELLOW}uv not found on builder; attempting brew install uv...${RESET}`);
+    try {
+      execCommand('brew install uv', 'Installing uv via Homebrew', { timeout: 60000 });
+      const whichUv = execSync('which uv 2>/dev/null', { encoding: 'utf8' }).trim();
+      if (whichUv) uvFound = whichUv;
+    } catch (e) {
+      console.log(`${YELLOW}⚠ Failed to install uv via brew: ${e.message}${RESET}`);
+    }
+  }
+
+  if (uvFound) {
+    fs.copyFileSync(uvFound, uvTargetPath);
+    fs.chmodSync(uvTargetPath, 0o755);
+    const uvVersion = execSync(`"${uvTargetPath}" --version 2>&1`, { encoding: 'utf8' }).trim();
+    console.log(`${GREEN}✓ Bundled uv: ${uvVersion}${RESET}`);
+    bundledBinaries.push('uv');
+    uvBundled = true;
+  } else {
+    console.log(`${YELLOW}⚠ uv not bundled; Specify CLI install will attempt user-side bootstrap${RESET}`);
+  }
+} catch (e) {
+  console.log(`${YELLOW}⚠ Failed to bundle uv: ${e.message}${RESET}`);
+}
+
 // 4. Create binary manifest for runtime
 const binaryManifest = {
   bundled: bundledBinaries,
   paths: {
     ttyd: ttydBundled ? 'binaries/ttyd' : null,
     git: gitBundled ? 'binaries/git-bundle/bin/git' : null,
-    node: nodeBundled ? 'binaries/node' : null
+    node: nodeBundled ? 'binaries/node' : null,
+    uv: uvBundled ? 'binaries/uv' : null,
+    npm: fs.existsSync(path.join(binariesDir, 'npm')) ? 'binaries/npm' : null,
+    npx: fs.existsSync(path.join(binariesDir, 'npx')) ? 'binaries/npx' : null,
   },
   bundledAt: new Date().toISOString(),
   versions: binaryRequirements

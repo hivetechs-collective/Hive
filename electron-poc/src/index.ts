@@ -42,6 +42,7 @@ import {
   cleanupTerminals,
 } from "./terminal-ipc-handlers";
 import { StartupOrchestrator } from "./startup/StartupOrchestrator";
+import { ProductionPaths } from "./utils/ProductionPaths";
 import { AIToolsDatabase } from "./services/AIToolsDatabase";
 import * as zlib from "zlib";
 import { isBackupDue, computeRetentionDeletes } from "./utils/backup-policy";
@@ -3947,30 +3948,51 @@ const registerSimpleCliToolHandlers = () => {
       try {
         // Special handling: ensure prerequisites for certain tools
         const enhancedPath = getEnhancedPath();
+        let effectiveInstallCommand = toolConfig.installCommand;
         if (toolId === "specify") {
-          // Ensure 'uv' is available; try Homebrew if missing
+          // Ensure 'uv' is available; prefer packaged uv if present
+          let hasUv = false;
           try {
             await execAsync("which uv", { env: { ...process.env, PATH: enhancedPath } });
-          } catch {
-            try {
-              // Attempt to install uv via Homebrew if available
-              await execAsync("brew --version", { env: { ...process.env, PATH: enhancedPath } });
-              logger.info("[Main] Installing 'uv' via Homebrew...");
-              await execAsync("brew install uv", { env: { ...process.env, PATH: enhancedPath } });
-            } catch (brewErr: any) {
-              logger.error("[Main] 'uv' not found and Homebrew install failed or not available", brewErr?.message || brewErr);
-              return {
-                success: false,
-                error:
-                  "'uv' is required to install Specify CLI. Please install Homebrew (https://brew.sh) and run 'brew install uv', or follow https://astral.sh/uv to install uv, then retry.",
-              };
+            hasUv = true;
+          } catch {}
+          if (!hasUv) {
+            const packagedUv = ProductionPaths.getBinaryPath('uv');
+            if (fs.existsSync(packagedUv)) {
+              logger.info(`[Main] Using packaged uv binary at ${packagedUv}`);
+              effectiveInstallCommand = `"${packagedUv}" tool install specify-cli --from git+https://github.com/github/spec-kit.git`;
+            } else {
+              // Attempt Homebrew install of uv as last resort
+              try {
+                await execAsync("brew --version", { env: { ...process.env, PATH: enhancedPath } });
+                logger.info("[Main] Installing 'uv' via Homebrew...");
+                await execAsync("brew install uv", { env: { ...process.env, PATH: enhancedPath } });
+              } catch (brewErr: any) {
+                logger.error("[Main] 'uv' not found and Homebrew install failed or not available", brewErr?.message || brewErr);
+                return {
+                  success: false,
+                  error:
+                    "'uv' is required to install Specify CLI. Please install Homebrew (https://brew.sh) and run 'brew install uv', or follow https://astral.sh/uv to install uv, then retry.",
+                };
+              }
             }
           }
         }
 
+        // For npm-based installs, use local prefix so we don't require system-level npm setup
+        const envVars: any = { ...process.env, PATH: enhancedPath };
+        let npmPrefixBin: string | undefined;
+        if (effectiveInstallCommand.startsWith('npm ') || effectiveInstallCommand.includes('/npm ')) {
+          const npmPrefix = path.join(os.homedir(), '.hive', 'npm-global');
+          npmPrefixBin = path.join(npmPrefix, 'bin');
+          try { fs.mkdirSync(npmPrefixBin, { recursive: true }); } catch {}
+          envVars['npm_config_prefix'] = npmPrefix;
+          envVars['NPM_CONFIG_PREFIX'] = npmPrefix;
+        }
+
         // Run the installation command
-        const { stdout, stderr } = await execAsync(toolConfig.installCommand, {
-          env: { ...process.env, PATH: enhancedPath },
+        const { stdout, stderr } = await execAsync(effectiveInstallCommand, {
+          env: envVars,
           timeout: 120000, // 2 minutes timeout for installation
         });
 
@@ -3984,7 +4006,7 @@ const registerSimpleCliToolHandlers = () => {
         try {
           if (toolConfig.versionCommand) {
             const versionResult = await execAsync(toolConfig.versionCommand, {
-              env: { ...process.env, PATH: enhancedPath },
+              env: envVars,
               timeout: 5000,
             });
 
@@ -4319,9 +4341,15 @@ const registerSimpleCliToolHandlers = () => {
       if (toolId === "specify") {
         logger.info(`[Main] Updating Specify CLI via uv...`);
         const enhancedPath = getEnhancedPath();
+        // Prefer packaged uv if present
+        let uvCmd = 'uv';
+        const packagedUv = ProductionPaths.getBinaryPath('uv');
+        if (fs.existsSync(packagedUv)) {
+          uvCmd = `"${packagedUv}"`;
+        }
         try {
           const { stdout, stderr } = await execAsync(
-            "uv tool upgrade specify-cli --from git+https://github.com/github/spec-kit.git",
+            `${uvCmd} tool upgrade specify-cli --from git+https://github.com/github/spec-kit.git`,
             { env: { ...process.env, PATH: enhancedPath } },
           );
           logger.info(`[Main] Specify update output: ${stdout}`);
@@ -4515,7 +4543,12 @@ const registerSimpleCliToolHandlers = () => {
 
               // Uninstall
               try {
-                await execAsync(`npm uninstall -g ${packageName}`, {
+                const npmPrefix = path.join(os.homedir(), '.hive', 'npm-global');
+                try { fs.mkdirSync(path.join(npmPrefix, 'bin'), { recursive: true }); } catch {}
+                let npmCmd = 'npm';
+                const packagedNpm = ProductionPaths.getBinaryPath('npm');
+                if (fs.existsSync(packagedNpm)) npmCmd = `"${packagedNpm}"`;
+                await execAsync(`${npmCmd} uninstall -g ${packageName}`, {
                   env: enhancedEnv,
                 });
                 logger.info(`[Main] Uninstalled ${toolId}`);
@@ -4532,10 +4565,7 @@ const registerSimpleCliToolHandlers = () => {
               // Reinstall (with pinned version for Grok)
               const reinstallPackage =
                 toolId === "grok" ? updatePackage : packageName;
-              const { stdout } = await execAsync(
-                `npm install -g ${reinstallPackage}`,
-                { env: enhancedEnv },
-              );
+              const { stdout } = await execAsync(`${npmCmd} install -g ${reinstallPackage}`, { env: enhancedEnv });
               logger.info(`[Main] Strategy 3 SUCCESS: ${stdout}`);
               updateSucceeded = true;
               strategyUsed = "uninstall + reinstall";
@@ -4613,10 +4643,7 @@ const registerSimpleCliToolHandlers = () => {
                   // Try reinstall again (with pinned version for Grok)
                   const finalReinstallPackage =
                     toolId === "grok" ? updatePackage : packageName;
-                  const { stdout } = await execAsync(
-                    `npm install -g ${finalReinstallPackage}`,
-                    { env: enhancedEnv },
-                  );
+                  const { stdout } = await execAsync(`${npmCmd} install -g ${finalReinstallPackage}`, { env: enhancedEnv });
                   logger.info(`[Main] Strategy 4 SUCCESS: ${stdout}`);
                   updateSucceeded = true;
                   strategyUsed = "manual cleanup + reinstall";
@@ -5254,6 +5281,7 @@ Or try: npm install -g ${installCmd} --force --no-cache
               "/usr/local/bin", // Standard location
               "/Users/" + process.env.USER + "/.npm-global/bin", // User npm global
               process.env.HOME + "/.npm/bin", // Alternative user npm location
+              path.join(os.homedir(), '.hive', 'npm-global', 'bin'), // App-managed npm prefix
               "/usr/bin",
               "/bin",
             ];
