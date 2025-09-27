@@ -68,7 +68,7 @@ import grokIcon from "../resources/ai-cli-icons/grok.svg";
 import qwenIcon from "../resources/ai-cli-icons/qwen.svg";
 import openaiIcon from "../resources/ai-cli-icons/openai.svg";
 import githubCopilotIcon from "../resources/ai-cli-icons/github-copilot.svg";
-import specKitIcon from "../resources/ai-cli-icons/spec-kit.svg";
+import specKitIcon from "../resources/ai-cli-icons/spec-kit.webp";
 import cursorIcon from "../resources/ai-cli-icons/cdnlogo.com_cursor.svg";
 import {
   ConsensusWebSocket,
