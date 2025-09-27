@@ -19,11 +19,11 @@ REPO_ROOT=$(cd "$ELECTRON_DIR/.." && pwd)
 DMG_PATH_ARG=${1:-}
 
 if [[ -n "$DMG_PATH_ARG" ]]; then
-  DMG_PATH=$(python3 - <<'PY'
+  DMG_PATH=$(python3 - "$DMG_PATH_ARG" <<'PY'
 import pathlib,sys
 print(pathlib.Path(sys.argv[1]).expanduser().resolve())
 PY
-"$DMG_PATH_ARG")
+)
 else
   # Auto-detect DMG built by Electron Forge
   DMG_PATH=$(ls "$ELECTRON_DIR"/out/make/*.dmg 2>/dev/null | head -n 1 || true)
@@ -78,4 +78,3 @@ echo "🔑 Using notary profile:  $NOTARY_PROFILE"
 "$REPO_ROOT"/scripts/sign-notarize-macos.sh "$APP_PATH" "$DMG_PATH"
 
 echo "✅ DMG signed, notarized and stapled: $DMG_PATH"
-

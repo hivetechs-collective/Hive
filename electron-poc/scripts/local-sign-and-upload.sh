@@ -20,11 +20,11 @@ ELECTRON_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 
 DMG_PATH=""
 if [[ -n "$DMG_ARG" ]]; then
-  DMG_PATH=$(python3 - <<'PY'
+  DMG_PATH=$(python3 - "$DMG_ARG" <<'PY'
 import pathlib,sys
 print(pathlib.Path(sys.argv[1]).expanduser().resolve())
 PY
-"$DMG_ARG")
+)
 else
   DMG_PATH=$(ls "$ELECTRON_DIR"/out/make/*.dmg 2>/dev/null | head -n 1 || true)
 fi
@@ -61,4 +61,3 @@ echo "☁️  Uploading DMG to R2 via Wrangler ($CHANNEL)…"
 
 echo "✅ Local sign + notarize + upload complete"
 popd >/dev/null
-
