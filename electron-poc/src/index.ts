@@ -3825,7 +3825,16 @@ function getEnhancedPath(): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || "";
   const hiveNpmBin = path.join(homeDir, ".hive", "npm-global", "bin");
   const hiveCliBin = path.join(homeDir, ".hive", "cli-bin");
+  // Prefer packaged binaries (npm, uv, etc.) when available
+  let packagedBinDir: string | null = null;
+  try {
+    const packagedNpm = ProductionPaths.getBinaryPath('npm');
+    if (fs.existsSync(packagedNpm)) {
+      packagedBinDir = path.dirname(packagedNpm);
+    }
+  } catch {}
   const pathAdditions = [
+    ...(packagedBinDir ? [packagedBinDir] : []),
     hiveNpmBin,
     hiveCliBin,
     `${homeDir}/.local/bin`,
@@ -3983,7 +3992,7 @@ const registerSimpleCliToolHandlers = () => {
           }
         }
 
-        // For npm-based installs, use local prefix so we don't require system-level npm setup
+        // For npm-based installs, use Hive-managed prefix and prefer packaged npm if available
         const envVars: any = { ...process.env, PATH: enhancedPath };
         let npmPrefixBin: string | undefined;
         if (effectiveInstallCommand.startsWith('npm ') || effectiveInstallCommand.includes('/npm ')) {
@@ -3992,6 +4001,26 @@ const registerSimpleCliToolHandlers = () => {
           try { fs.mkdirSync(npmPrefixBin, { recursive: true }); } catch {}
           envVars['npm_config_prefix'] = npmPrefix;
           envVars['NPM_CONFIG_PREFIX'] = npmPrefix;
+          try {
+            const packagedNpm = ProductionPaths.getBinaryPath('npm');
+            if (fs.existsSync(packagedNpm)) {
+              // Replace leading 'npm ' with packaged npm
+              if (effectiveInstallCommand.startsWith('npm ')) {
+                effectiveInstallCommand = `"${packagedNpm}"` + effectiveInstallCommand.slice(3);
+              }
+            }
+          } catch {}
+        }
+
+        // For uv-based installs (Specify), scope to Hive-managed XDG dirs
+        if (toolId === 'specify') {
+          const hiveCliBin = path.join(os.homedir(), '.hive', 'cli-bin');
+          const hiveXdgData = path.join(os.homedir(), '.hive', 'xdg-data');
+          try { fs.mkdirSync(hiveCliBin, { recursive: true }); } catch {}
+          try { fs.mkdirSync(hiveXdgData, { recursive: true }); } catch {}
+          envVars['XDG_BIN_HOME'] = hiveCliBin;
+          envVars['XDG_DATA_HOME'] = hiveXdgData;
+          envVars['PATH'] = `${hiveCliBin}:${envVars['PATH']}`;
         }
 
         // Run the installation command
@@ -4314,14 +4343,20 @@ const registerSimpleCliToolHandlers = () => {
       const { promisify } = require("util");
       const execAsync = promisify(exec);
 
-      // GitHub Copilot CLI uses npm for updates
+      // GitHub Copilot CLI uses npm for updates (scoped to Hive prefix)
       if (toolId === "github-copilot") {
         logger.info(`[Main] Updating GitHub Copilot CLI via npm...`);
         const enhancedPath = getEnhancedPath();
+        const npmPrefix = path.join(os.homedir(), '.hive', 'npm-global');
+        let npmCmd = 'npm';
+        try {
+          const packagedNpm = ProductionPaths.getBinaryPath('npm');
+          if (fs.existsSync(packagedNpm)) npmCmd = `"${packagedNpm}"`;
+        } catch {}
         try {
           const { stdout, stderr } = await execAsync(
-            "npm update -g @github/copilot",
-            { env: { ...process.env, PATH: enhancedPath } },
+            `${npmCmd} update -g @github/copilot`,
+            { env: { ...process.env, PATH: enhancedPath, npm_config_prefix: npmPrefix, NPM_CONFIG_PREFIX: npmPrefix } },
           );
           logger.info(`[Main] Copilot CLI update output: ${stdout}`);
           if (stderr && !stderr.toLowerCase().includes("warn")) {
@@ -4352,17 +4387,20 @@ const registerSimpleCliToolHandlers = () => {
           uvCmd = `"${packagedUv}"`;
         }
         try {
+          const hiveCliBin = path.join(os.homedir(), '.hive', 'cli-bin');
+          const hiveXdgData = path.join(os.homedir(), '.hive', 'xdg-data');
+          try { fs.mkdirSync(hiveCliBin, { recursive: true }); } catch {}
+          try { fs.mkdirSync(hiveXdgData, { recursive: true }); } catch {}
           const { stdout, stderr } = await execAsync(
             `${uvCmd} tool upgrade specify-cli`,
-            { env: { ...process.env, PATH: enhancedPath } },
+            { env: { ...process.env, PATH: `${hiveCliBin}:${enhancedPath}`, XDG_BIN_HOME: hiveCliBin, XDG_DATA_HOME: hiveXdgData } },
           );
           logger.info(`[Main] Specify update output: ${stdout}`);
           if (stderr && !stderr.toLowerCase().includes("warn")) {
             logger.warn(`[Main] Specify update stderr: ${stderr}`);
           }
-          let version = 'Unknown'
-          ;
-          const tryCmd = async (cmd) => {
+          let version = 'Unknown';
+          const tryCmd = async (cmd: string): Promise<string | null> => {
             try { const { stdout } = await execAsync(cmd, { env: { ...process.env, PATH: enhancedPath } }); const m = stdout.match(/(\d+\.\d+\.\d+)/); return m ? m[1] : null; } catch { return null; }
           };
           version = (await tryCmd('specify version')) || (await tryCmd('specify --help')) || version;
@@ -4372,7 +4410,7 @@ const registerSimpleCliToolHandlers = () => {
               const packagedUv2 = ProductionPaths.getBinaryPath('uv');
               if (fs.existsSync(packagedUv2)) uvCmd2 = `"${packagedUv2}"`;
               const { stdout: lout } = await execAsync(`${uvCmd2} tool list`, { env: { ...process.env, PATH: enhancedPath } });
-              const line = (lout.split('\n').find(l=>l.includes('specify-cli'))||'');
+              const line = (lout.split('\n').find((line: string)=>line.includes('specify-cli'))||'');
               const m = line.match(/specify-cli\s+([0-9]+\.[0-9]+\.[0-9]+)/);
               if (m) version = m[1];
             } catch {}
@@ -4451,13 +4489,13 @@ const registerSimpleCliToolHandlers = () => {
       // For Python-based tools like aider, use pip
       if (toolId === "aider") {
         logger.info(`[Main] Updating ${toolId} via pip...`);
-        const command = "pip install --upgrade aider-chat";
+        const command = "python3 -m pip install --upgrade --user aider-chat";
 
         try {
           const { stdout, stderr } = await execAsync(command, {
             env: {
               ...process.env,
-              PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`,
+              PATH: `${getEnhancedPath()}`,
             },
           });
 
@@ -4493,7 +4531,12 @@ const registerSimpleCliToolHandlers = () => {
       logger.info(`[Main] Updating ${toolId} via npm...`);
 
       // Robust multi-strategy npm update
-      const enhancedEnv = { ...process.env, PATH: getEnhancedPath() };
+      const enhancedEnv = { ...process.env, PATH: getEnhancedPath(), npm_config_prefix: path.join(os.homedir(), '.hive', 'npm-global'), NPM_CONFIG_PREFIX: path.join(os.homedir(), '.hive', 'npm-global') };
+      let npmCmd = 'npm';
+      try {
+        const packagedNpm = ProductionPaths.getBinaryPath('npm');
+        if (fs.existsSync(packagedNpm)) npmCmd = `"${packagedNpm}"`;
+      } catch {}
 
       // Special handling for Grok to avoid broken v0.0.29
       const updatePackage =
@@ -4508,13 +4551,11 @@ const registerSimpleCliToolHandlers = () => {
         // Use install instead of update for pinned versions
         const updateCommand =
           toolId === "grok"
-            ? `npm install -g ${updatePackage}`
-            : `npm update -g ${packageName}`;
+            ? `${npmCmd} install -g ${updatePackage}`
+            : `${npmCmd} update -g ${packageName}`;
         logger.info(`[Main] Running: ${updateCommand}`);
 
-        const { stdout, stderr } = await execAsync(updateCommand, {
-          env: enhancedEnv,
-        });
+        const { stdout, stderr } = await execAsync(updateCommand, { env: enhancedEnv });
         logger.info(`[Main] Strategy 1 SUCCESS: ${stdout}`);
         if (stderr && !stderr.includes("npm WARN")) {
           logger.warn(`[Main] Non-critical stderr: ${stderr}`);
@@ -4534,16 +4575,14 @@ const registerSimpleCliToolHandlers = () => {
             logger.info(
               `[Main] Strategy 2: Clear cache + force update for ${toolId}`,
             );
-            await execAsync("npm cache clean --force", { env: enhancedEnv });
+            await execAsync(`${npmCmd} cache clean --force`, { env: enhancedEnv });
 
             // Use install with pinned version for Grok
             const forceCommand =
               toolId === "grok"
-                ? `npm install -g ${updatePackage} --force`
-                : `npm update -g ${packageName} --force`;
-            const { stdout } = await execAsync(forceCommand, {
-              env: enhancedEnv,
-            });
+                ? `${npmCmd} install -g ${updatePackage} --force`
+                : `${npmCmd} update -g ${packageName} --force`;
+            const { stdout } = await execAsync(forceCommand, { env: enhancedEnv });
             logger.info(`[Main] Strategy 2 SUCCESS: ${stdout}`);
             updateSucceeded = true;
             strategyUsed = "cache clear + force";
@@ -4556,17 +4595,19 @@ const registerSimpleCliToolHandlers = () => {
                 `[Main] Strategy 3: Nuclear uninstall + reinstall for ${toolId}`,
               );
 
-              // Uninstall
+              // Uninstall (scoped to Hive-managed npm prefix only)
               try {
                 const npmPrefix = path.join(os.homedir(), '.hive', 'npm-global');
                 try { fs.mkdirSync(path.join(npmPrefix, 'bin'), { recursive: true }); } catch {}
                 let npmCmd = 'npm';
-                const packagedNpm = ProductionPaths.getBinaryPath('npm');
-                if (fs.existsSync(packagedNpm)) npmCmd = `"${packagedNpm}"`;
+                try {
+                  const packagedNpm = ProductionPaths.getBinaryPath('npm');
+                  if (fs.existsSync(packagedNpm)) npmCmd = `"${packagedNpm}"`;
+                } catch {}
                 await execAsync(`${npmCmd} uninstall -g ${packageName}`, {
-                  env: enhancedEnv,
+                  env: { ...enhancedEnv, npm_config_prefix: npmPrefix, NPM_CONFIG_PREFIX: npmPrefix },
                 });
-                logger.info(`[Main] Uninstalled ${toolId}`);
+                logger.info(`[Main] Uninstalled ${toolId} from Hive-managed prefix`);
               } catch (uninstallError) {
                 logger.warn(
                   `[Main] Uninstall warning (continuing):`,
@@ -4580,7 +4621,9 @@ const registerSimpleCliToolHandlers = () => {
               // Reinstall (with pinned version for Grok)
               const reinstallPackage =
                 toolId === "grok" ? updatePackage : packageName;
-              const { stdout } = await execAsync(`npm install -g ${reinstallPackage}`, { env: enhancedEnv });
+              const { stdout } = await execAsync(`npm install -g ${reinstallPackage}`, {
+                env: { ...enhancedEnv, npm_config_prefix: path.join(os.homedir(), '.hive', 'npm-global'), NPM_CONFIG_PREFIX: path.join(os.homedir(), '.hive', 'npm-global') },
+              });
               logger.info(`[Main] Strategy 3 SUCCESS: ${stdout}`);
               updateSucceeded = true;
               strategyUsed = "uninstall + reinstall";
@@ -4658,7 +4701,12 @@ const registerSimpleCliToolHandlers = () => {
                   // Try reinstall again (with pinned version for Grok)
                   const finalReinstallPackage =
                     toolId === "grok" ? updatePackage : packageName;
-                  const { stdout } = await execAsync(`npm install -g ${finalReinstallPackage}`, { env: enhancedEnv });
+                  let npmCmd2 = 'npm';
+                  try {
+                    const packagedNpm2 = ProductionPaths.getBinaryPath('npm');
+                    if (fs.existsSync(packagedNpm2)) npmCmd2 = `"${packagedNpm2}"`;
+                  } catch {}
+                  const { stdout } = await execAsync(`${npmCmd2} install -g ${finalReinstallPackage}`, { env: enhancedEnv });
                   logger.info(`[Main] Strategy 4 SUCCESS: ${stdout}`);
                   updateSucceeded = true;
                   strategyUsed = "manual cleanup + reinstall";
@@ -4811,13 +4859,41 @@ Or try: npm install -g ${installCmd} --force --no-cache
 
       let uninstallCommand: string;
 
+      // Determine install path and whether it's managed by Hive
+      let installedPath: string | null = null;
+      try {
+        const { stdout: whichOut } = await execAsync(`which ${toolConfig.command}`, {
+          env: { ...process.env, PATH: enhancedPath },
+          timeout: 5000,
+        });
+        installedPath = (whichOut || '').trim() || null;
+      } catch {}
+
+      const homeDir = os.homedir();
+      const managedDirs = [
+        path.join(homeDir, '.hive', 'npm-global', 'bin'),
+        path.join(homeDir, '.hive', 'cli-bin'),
+      ];
+      const isManagedInstall = !!(installedPath && managedDirs.some(d => installedPath!.startsWith(d + path.sep) || installedPath === d));
+
       // Special handling for Cursor CLI
       if (toolId === "cursor-cli") {
-        // Special handling for Cursor CLI (installed via curl)
-        // Remove cursor-agent from common installation paths (including ~/.local/bin where it's typically installed)
-        uninstallCommand =
-          "rm -f ~/.local/bin/cursor-agent /usr/local/bin/cursor-agent /opt/homebrew/bin/cursor-agent ~/bin/cursor-agent && rm -rf ~/.cursor-agent";
-        logger.info(`[Main] Running Cursor CLI uninstall: ${uninstallCommand}`);
+        // Only remove if installed under Hive-managed directories; preserve external installs
+        if (!isManagedInstall) {
+          logger.info(`[Main] Cursor CLI detected at external path (${installedPath || 'unknown'}). Preserving installation; skipping uninstall.`);
+          return {
+            success: true,
+            skipped: true,
+            message: `External installation preserved at ${installedPath || 'unknown'}`,
+          };
+        }
+        // Remove only the managed shim/binary path
+        if (installedPath) {
+          uninstallCommand = `rm -f "${installedPath}"`;
+          logger.info(`[Main] Removing managed Cursor CLI binary at ${installedPath}`);
+        } else {
+          return { success: true, skipped: true, message: 'No managed Cursor CLI install found' };
+        }
       } else if (toolId === "specify") {
         // Prefer packaged uv if available for deterministic uninstall
         let uvCmd = "uv";
@@ -4827,8 +4903,13 @@ Or try: npm install -g ${installCmd} --force --no-cache
             uvCmd = `"${packagedUv}"`;
           }
         } catch {}
+        // Only uninstall if managed; skip external installs (e.g., ~/.local/bin/specify)
+        if (!isManagedInstall) {
+          logger.info(`[Main] Specify CLI detected at external path (${installedPath || 'unknown'}). Preserving installation; skipping uninstall.`);
+          return { success: true, skipped: true, message: `External installation preserved at ${installedPath || 'unknown'}` };
+        }
         uninstallCommand = `${uvCmd} tool uninstall specify-cli`;
-        logger.info(`[Main] Running Specify CLI uninstall: ${uninstallCommand}`);
+        logger.info(`[Main] Running Specify CLI uninstall (managed): ${uninstallCommand}`);
       } else {
         // Map tool IDs to npm package names
         const npmPackages: Record<string, string> = {
@@ -4849,9 +4930,19 @@ Or try: npm install -g ${installCmd} --force --no-cache
             error: `Cannot uninstall ${toolConfig.name}: package mapping not found`,
           };
         }
-
-        uninstallCommand = `npm uninstall -g ${packageName}`;
-        logger.info(`[Main] Running npm uninstall: ${uninstallCommand}`);
+        // Only uninstall managed installs; preserve external installs
+        if (!isManagedInstall) {
+          logger.info(`[Main] ${toolConfig.name} detected at external path (${installedPath || 'unknown'}). Preserving installation; skipping uninstall.`);
+          return { success: true, skipped: true, message: `External installation preserved at ${installedPath || 'unknown'}` };
+        }
+        // Prefer packaged npm if available
+        let npmCmd = 'npm';
+        try {
+          const packagedNpm = ProductionPaths.getBinaryPath('npm');
+          if (fs.existsSync(packagedNpm)) npmCmd = `"${packagedNpm}"`;
+        } catch {}
+        uninstallCommand = `${npmCmd} uninstall -g ${packageName}`;
+        logger.info(`[Main] Running npm uninstall (managed): ${uninstallCommand}`);
       }
 
       try {
@@ -4899,15 +4990,11 @@ Or try: npm install -g ${installCmd} --force --no-cache
             },
           );
 
-          if (
-            pathOutput.includes("/usr/local/bin") ||
-            pathOutput.includes("/opt/homebrew/bin")
-          ) {
-            // It's still in a global location, uninstall might have failed
-            return {
-              success: false,
-              error: `Tool appears to still be installed at ${pathOutput.trim()}. You may need to uninstall manually.`,
-            };
+          const remainingPath = pathOutput.trim();
+          const stillManaged = managedDirs.some(d => remainingPath.startsWith(d + path.sep) || remainingPath === d);
+          if (!stillManaged) {
+            // External installation remains; treat as preserved rather than failure
+            return { success: true, skipped: true, message: `External installation preserved at ${remainingPath}` };
           }
         } catch {
           // Command not found - uninstall was successful
@@ -5320,25 +5407,8 @@ Or try: npm install -g ${installCmd} --force --no-cache
             // Start with the current process environment
             let env: Record<string, string> = { ...process.env };
 
-            // Add npm global bin directories to PATH for CLI tools
-            const npmGlobalPaths = [
-              process.env.HOME + "/.local/bin", // User-specific tools (cursor-agent, etc.)
-              "/opt/homebrew/bin", // Homebrew on Apple Silicon
-              "/usr/local/bin", // Standard location
-              "/Users/" + process.env.USER + "/.npm-global/bin", // User npm global
-              process.env.HOME + "/.npm/bin", // Alternative user npm location
-              path.join(os.homedir(), '.hive', 'npm-global', 'bin'), // App-managed npm prefix
-              "/usr/bin",
-              "/bin",
-            ];
-
-            // Combine with existing PATH
-            const enhancedPath = [
-              ...npmGlobalPaths,
-              ...(process.env.PATH || "").split(":"),
-            ]
-              .filter(Boolean)
-              .join(":");
+            // Use the unified enhanced PATH (packaged binaries + Hive-managed bins + system)
+            const enhancedPath = getEnhancedPath();
             env.PATH = enhancedPath;
 
             logger.info(`[Main] Enhanced PATH for AI tool: ${enhancedPath}`);

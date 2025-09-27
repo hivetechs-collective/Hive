@@ -16,6 +16,7 @@ import {
   CLI_TOOLS_REGISTRY 
 } from '../../shared/types/cli-tools';
 import { logger } from '../../utils/SafeLogger';
+import { ProductionPaths } from '../../utils/ProductionPaths';
 
 const execAsync = promisify(exec);
 
@@ -47,7 +48,16 @@ export class CliToolsDetector {
    */
   private getEnhancedPath(): string {
     const home = process.env.HOME || '';
+    // Prefer packaged binaries directory (for bundled npm/uv) when present
+    let packagedBinDir: string | null = null;
+    try {
+      const packagedNpm = ProductionPaths.getBinaryPath('npm');
+      if (fs.existsSync(packagedNpm)) {
+        packagedBinDir = path.dirname(packagedNpm);
+      }
+    } catch {}
     const pathAdditions = [
+      ...(packagedBinDir ? [packagedBinDir] : []),
       path.join(home, '.hive', 'npm-global', 'bin'),  // App-managed npm global bin
       path.join(home, '.hive', 'cli-bin'),            // App-managed uv tool bin
       '/opt/homebrew/bin',     // Homebrew on Apple Silicon

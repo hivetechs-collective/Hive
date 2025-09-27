@@ -7668,14 +7668,18 @@ When Grok is launched without an API key, a custom interactive setup wizard is t
 ```
 1. Show confirmation dialog to user
 2. Map tool ID to package name
-3. Execute uninstall command (npm uninstall -g / pip uninstall)
-4. Clean up tool-specific configurations:
-   a. Remove Cline config file (~/.cline/config.json)
-   b. Preserve Grok API keys for potential reinstall
+3. Execute uninstall command (scoped to Hive-managed locations only):
+   - NPM tools: `npm uninstall -g <package>` with `NPM_CONFIG_PREFIX=~/.hive/npm-global`
+   - uv tools (e.g., Specify): `uv tool uninstall ...` with `XDG_BIN_HOME=~/.hive/cli-bin`
+   - We never remove external/system installations (e.g., /usr/local/bin, /opt/homebrew/bin)
+   - For tools like Cursor CLI installed via curl, we only remove managed shims; external installs are preserved
+4. Clean up tool-specific configurations (non-destructive):
+   a. Remove app-created shims under `~/.hive/cli-bin` only
+   b. Preserve user configs and API keys (e.g., `~/.grok`)
    c. Keep Memory Service registration for reuse
 5. Clear tool from detection cache
-6. Verify tool is no longer accessible
-7. Update UI to show uninstalled state
+6. Verify removal from Hive-managed PATH; if an external install remains, mark as "skipped (external)"
+7. Update UI to show uninstalled or skipped state
 ```
 
 ### Memory Service Integration
@@ -7854,7 +7858,7 @@ next_sync_due: next update check time
 
 #### Batch Operations (Top of Panel)
 1. **Install All Tools Button** (Blue):
-   - Installs all 6 AI CLI tools in sequence
+   - Installs all AI CLI tools in sequence
    - Skips already installed tools automatically
    - Shows progress counter (e.g., "Installing 3 of 6...")
    - Automatically configures Memory Service for compatible tools
@@ -7890,21 +7894,26 @@ next_sync_due: next update check time
    - **Implementation**: See [Update Button Architecture](#update-button-architecture) below
 
 4. **Install Button** (Blue - for uninstalled tools):
-   - Runs appropriate package manager (npm/pip)
+   - Runs appropriate package manager (npm/pip/uv)
    - Shows progress indicators
    - **Automatically configures Memory Service** after successful installation
    - **For Cline**: Sets OpenRouter API key from Hive settings
    - **For Grok**: Detects missing API key and launches setup wizard
    - Refreshes panel on completion with configuration status
+   - Best practices:
+     - npm installs use `NPM_CONFIG_PREFIX=~/.hive/npm-global` and prefer packaged `npm` if available
+     - uv installs use `XDG_BIN_HOME=~/.hive/cli-bin` and `XDG_DATA_HOME=~/.hive/xdg-data` (prefer packaged `uv`)
+     - pip installs use `--user` where applicable to avoid system-level writes
 
 5. **Uninstall Button** (Red - for installed tools):
    - Shows confirmation dialog before proceeding
-   - Runs `npm uninstall -g <package>` or `pip uninstall <package>`
+   - Runs uninstall scoped to Hive-managed dirs only (`~/.hive/npm-global` via `NPM_CONFIG_PREFIX` or `~/.hive/cli-bin` via `XDG_*`)
+   - External/system installs are preserved and reported as "skipped (external)"
    - Clears tool from cache after uninstall
    - **Preserves user configurations** (e.g., Grok API keys)
    - Removes Cline config file if present
-   - Verifies tool was successfully removed
-   - Updates UI to show uninstalled state
+   - Verifies tool was successfully removed from Hive-managed PATH
+   - Updates UI to show uninstalled or skipped state
 
 ### Configuration Storage
 ```
@@ -8107,7 +8116,7 @@ updateCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-update', toolId)
 ```
 
 ##### 3. Main Process Handler
-**Location**: `src/index.ts` (lines 1396-1518)
+**Location**: `src/index.ts`
 
 ```typescript
 ipcMain.handle('cli-tool-update', async (_, toolId: string) => {
@@ -8133,6 +8142,11 @@ ipcMain.handle('cli-tool-update', async (_, toolId: string) => {
   return { success: true, version, message };
 });
 ```
+##### Best Practices (Updates)
+- Scope all npm updates to the Hive prefix with `NPM_CONFIG_PREFIX=~/.hive/npm-global`.
+- Prefer the packaged `npm` binary when bundled for deterministic behavior.
+- For uv tools (e.g., Specify), set `XDG_BIN_HOME=~/.hive/cli-bin` and `XDG_DATA_HOME=~/.hive/xdg-data` during upgrades.
+- Special cases (e.g., Grok) may pin to known-good versions to avoid upstream issues.
 
 #### Update Flow Sequence
 
@@ -14472,17 +14486,27 @@ To keep the DMG small, we do not ship heavy developer toolchains. On first app l
 - Standardizes install locations for CLI tools:
   - npm globals → `~/.hive/npm-global/bin`
   - uv tools (e.g., Specify CLI) → `~/.hive/cli-bin`
+- Sets PATH precedence to prefer bundled binaries (when present) followed by Hive-managed bins to ensure deterministic behavior during bootstrap and beyond.
 - Installs baseline AI CLIs if missing (Claude, Gemini CLI, Qwen Code, OpenAI Codex, GitHub Copilot CLI, Cursor CLI, Grok, Specify) and configures memory integration.
 - Writes an idempotent marker to skip on subsequent launches.
 
 This bootstrap avoids bundling large runtimes in the DMG while guaranteeing fresh users can launch and use all integrated tools without manual steps.
 
 ### Path Detection and Consistency
-- The app now prioritizes `~/.hive/npm-global/bin` and `~/.hive/cli-bin` on PATH for detection and execution, ensuring consistent installation locations across users.
+- The app prioritizes the packaged binaries directory (for bundled `npm`, `uv`, etc.) when present, followed by `~/.hive/npm-global/bin` and `~/.hive/cli-bin`, ensuring deterministic behavior across users and environments.
 - Specify (Spec Kit) installs/updates via `uv tool ...` are directed to `~/.hive/cli-bin` by setting XDG env vars at install/update time.
+- Terminal launch uses the same enhanced PATH precedence (packaged binaries → Hive-managed dirs → system), enforced by the TTYD terminal manager and main-process launch handlers.
+
+### External Install Preservation Policy
+- Uninstall operations are scoped to Hive-managed directories only.
+- If a tool exists outside `~/.hive/npm-global/bin` or `~/.hive/cli-bin`, the app preserves it and reports “Skipped (external install)”.
+- Cursor CLI and other curl-installed tools are never removed from system/user locations by the app.
+
+### Batch Operations Consistency
+- “Install All”, “Update All”, and “Uninstall All” buttons invoke the same scoped handlers as individual actions.
+- Post-action refresh includes all tools (Claude, Gemini, Qwen, OpenAI Codex, GitHub Copilot, Cursor CLI, Grok, Specify) to keep the UI in sync.
 
 ### Known Fixes
 - Specify update no longer uses `--from` (uv rejects it for upgrade). We now run `uv tool upgrade specify-cli`.
 - “Uninstall All” refresh now correctly updates the Spec Kit card and sidebar icon.
 - TTYD terminal view waits for the ttyd URL to be reachable before loading the webview, eliminating initial ERR_FAILED (-2) flaps.
-

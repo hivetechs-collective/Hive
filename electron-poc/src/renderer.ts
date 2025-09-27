@@ -5219,6 +5219,7 @@ async function installAllCliTools(): Promise<void> {
         "github-copilot",
         "cursor-cli",
         "grok",
+        "specify",
       ];
       for (const toolId of toolsToInstall) {
         await refreshSidebarToolIcon(toolId);
@@ -5353,6 +5354,7 @@ async function updateAllCliTools(): Promise<void> {
         "github-copilot",
         "cursor-cli",
         "grok",
+        "specify",
       ];
       for (const toolId of toolsToUpdate) {
         await refreshSidebarToolIcon(toolId);
@@ -5376,7 +5378,7 @@ async function uninstallCliTool(toolId: string): Promise<void> {
   // Confirm with user first
   const toolName = (window as any).CLI_TOOLS_REGISTRY?.[toolId]?.name || toolId;
   const confirmed = confirm(
-    `Are you sure you want to uninstall ${toolName}?\n\nThis will remove the tool globally from your system.`,
+    `Are you sure you want to uninstall ${toolName}?\n\nThis removes the tool from Hive-managed directories only (~/.hive). External installations are preserved.`,
   );
 
   if (!confirmed) {
@@ -5400,7 +5402,7 @@ async function uninstallCliTool(toolId: string): Promise<void> {
     const electronAPI = window.electronAPI as any;
     const result = await electronAPI.uninstallCliTool(toolId);
 
-    if (result && result.success) {
+    if (result && result.success && !result.skipped) {
       console.log(`[CLI Tools] ${toolId} uninstalled successfully`);
 
       // Update UI immediately to show not installed
@@ -5416,6 +5418,19 @@ async function uninstallCliTool(toolId: string): Promise<void> {
       try {
         await (window as any).electronAPI.detectCliTool(toolId);
       } catch {}
+      setTimeout(async () => {
+        await renderCliToolsPanel(true);
+        await refreshSidebarToolIcon(toolId);
+      }, 500);
+    } else if (result && result.success && result.skipped) {
+      console.log(`[CLI Tools] ${toolId} uninstall skipped (external installation preserved)`);
+      if (card) {
+        const statusDiv = card.querySelector(".tool-status") as HTMLElement;
+        if (statusDiv) {
+          statusDiv.innerHTML = "⏭️ Skipped (external install)";
+          statusDiv.style.color = "#ffa500";
+        }
+      }
       setTimeout(async () => {
         await renderCliToolsPanel(true);
         await refreshSidebarToolIcon(toolId);
@@ -5463,7 +5478,7 @@ async function uninstallAllCliTools(): Promise<void> {
 
   // Confirm with user first
   const confirmed = confirm(
-    "Are you sure you want to uninstall ALL AI CLI tools?\n\nThis will remove all tools globally from your system.\nYour configurations will be preserved for potential reinstallation.",
+    "Are you sure you want to uninstall ALL AI CLI tools?\n\nThis removes tools from Hive-managed directories only (~/.hive). External installations are preserved.\nYour configurations will be preserved for potential reinstallation.",
   );
 
   if (!confirmed) {
@@ -5514,7 +5529,7 @@ async function uninstallAllCliTools(): Promise<void> {
       try {
         const result = await electronAPI.uninstallCliTool(toolId);
 
-        if (result?.success) {
+        if (result?.success && !result?.skipped) {
           uninstalledCount++;
           console.log(`[CLI Tools] Successfully uninstalled ${toolId}`);
 
@@ -5527,6 +5542,20 @@ async function uninstallAllCliTools(): Promise<void> {
             if (statusDiv) {
               statusDiv.innerHTML = "✅ Uninstalled";
               statusDiv.style.color = "#4ec9b0";
+            }
+          }
+        } else if (result?.success && result?.skipped) {
+          skippedCount++;
+          console.log(`[CLI Tools] Skipped (external install preserved) for ${toolId}`);
+          // Update the specific card UI
+          const card = document.querySelector(
+            `[data-tool-id="${toolId}"]`,
+          ) as HTMLElement;
+          if (card) {
+            const statusDiv = card.querySelector(".tool-status") as HTMLElement;
+            if (statusDiv) {
+              statusDiv.innerHTML = "⏭️ Skipped (external install)";
+              statusDiv.style.color = "#ffa500";
             }
           }
         } else {
