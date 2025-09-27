@@ -3839,6 +3839,53 @@ function getEnhancedPath(): string {
     .join(":");
 }
 
+function updateCopilotMcpConfiguration(toolId: string, explicitToken?: string) {
+  try {
+    const memoryStatus = processManager.getProcessStatus("memory-service");
+    const port = memoryStatus?.port;
+    if (!port) {
+      logger.warn("[Main] Memory Service not running; skipping Copilot MCP config");
+      return;
+    }
+
+    const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+    const configDir = path.join(homeDir, ".copilot");
+    const configPath = path.join(configDir, "mcp.json");
+    try { fs.mkdirSync(configDir, { recursive: true }); } catch {}
+
+    let existing: any = {};
+    if (fs.existsSync(configPath)) {
+      try { existing = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
+    }
+    if (!existing.mcpServers) existing.mcpServers = {};
+
+    // Resolve token
+    let token = explicitToken;
+    if (!token) {
+      const toolsCfgPath = path.join(homeDir, ".hive", "cli-tools-config.json");
+      if (fs.existsSync(toolsCfgPath)) {
+        try {
+          const toolsCfg = JSON.parse(fs.readFileSync(toolsCfgPath, "utf-8"));
+          token = toolsCfg?.[toolId]?.memoryService?.token;
+        } catch {}
+      }
+    }
+
+    const serverName = "hive-memory-service";
+    const serverCfg: any = {
+      type: "http",
+      url: `http://localhost:${port}/mcp/v1`,
+    };
+    if (token) serverCfg.headers = { Authorization: `Bearer ${token}` };
+
+    existing.mcpServers[serverName] = serverCfg;
+    writeJsonFileSafely(configPath, existing);
+    logger.info(`[Main] Copilot MCP configured at ${configPath} (server: ${serverName})`);
+  } catch (err: any) {
+    logger.warn("[Main] Failed to configure Copilot MCP:", err?.message || err);
+  }
+}
+
 const registerSimpleCliToolHandlers = () => {
   logger.info("[Main] Registering simple CLI tool detection handlers");
 
@@ -4030,6 +4077,11 @@ const registerSimpleCliToolHandlers = () => {
 
             fs.writeFileSync(configPath, JSON.stringify(cliConfig, null, 2));
             memoryServiceToken = token;
+
+            // Auto-generate Copilot MCP config
+            if (toolId === "github-copilot") {
+              try { updateCopilotMcpConfiguration(toolId, token); } catch {}
+            }
 
             logger.info(
               `[Main] Successfully registered ${toolId} with Memory Service`,
@@ -5097,6 +5149,15 @@ Or try: npm install -g ${installCmd} --force --no-cache
             logger.warn(
               "[Main] Failed to refresh Cursor MCP configuration before launch:",
               cursorConfigError,
+            );
+          }
+        } else if (toolId === "github-copilot") {
+          try {
+            updateCopilotMcpConfiguration(toolId);
+          } catch (copilotCfgError) {
+            logger.warn(
+              "[Main] Failed to refresh Copilot MCP configuration before launch:",
+              copilotCfgError,
             );
           }
         }
