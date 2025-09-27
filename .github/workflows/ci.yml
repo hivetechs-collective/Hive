@@ -1,37 +1,12 @@
-name: CI
+name: CI (disabled)
 
 on:
-  pull_request:
-    branches: [ main, master ]
-  push:
-    branches: [ main, master ]
+  # CI disabled to avoid minutes; manual-only if explicitly dispatched
+  workflow_dispatch:
 
 jobs:
-  backend-rust:
-    name: Backend (Rust)
+  noop:
+    name: CI Disabled
     runs-on: ubuntu-latest
     steps:
-      - run: echo "CI disabled; backend checks handled locally"
-
-  electron-unit:
-    name: Electron Unit & Lint
-    runs-on: macos-latest
-    needs: backend-rust
-    steps:
-      - run: echo "CI disabled; electron checks handled locally"
-
-  ui-smoke:
-    name: UI Smoke (macOS)
-    runs-on: macos-latest
-    needs: [electron-unit]
-    if: false
-    steps:
-      - run: echo "skipped"
-
-  summary:
-    name: CI Summary
-    runs-on: ubuntu-latest
-    needs: [backend-rust, electron-unit, ui-smoke]
-    if: always()
-    steps:
-      - run: echo "CI/CD disabled; use local build:complete + release:local" >> "$GITHUB_STEP_SUMMARY"
+      - run: echo "CI/CD disabled; use local build:complete + release:local"
