@@ -1,0 +1,62 @@
+name: Publish Only (Reuse Signed DMG)
+
+on:
+  push:
+    branches:
+      - 'publishonly/**'
+
+concurrency:
+  group: publish-only-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish_only:
+    name: Upload signed DMG to R2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive source run id
+        id: meta
+        run: |
+          set -euo pipefail
+          BR="${GITHUB_REF_NAME}"
+          RUN_ID="${BR#publishonly/}"
+          if [[ -z "$RUN_ID" || "$RUN_ID" == "$BR" ]]; then
+            echo "Branch name must be publishonly/<run_id>" >&2
+            exit 64
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download ready DMG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ready-dmg
+          run-id: ${{ steps.meta.outputs.run_id }}
+          path: artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare release files
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          DMG_SRC=$(find artifacts -maxdepth 3 -type f -name '*.dmg' | head -n 1)
+          if [[ -z "$DMG_SRC" ]]; then echo "No DMG file found in artifacts" >&2; exit 1; fi
+          cp "$DMG_SRC" release/Hive-Consensus.dmg
+          (cd release && shasum -a 256 Hive-Consensus.dmg > Hive-Consensus.dmg.sha256)
+
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          set -euo pipefail
+          aws s3 cp release/Hive-Consensus.dmg "s3://releases-hivetechs/stable/Hive-Consensus-latest.dmg" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION"
+          aws s3 cp release/Hive-Consensus.dmg.sha256 "s3://releases-hivetechs/stable/Hive-Consensus-latest.dmg.sha256" --endpoint-url "$R2_ENDPOINT" --region "$AWS_REGION" --content-type text/plain
+

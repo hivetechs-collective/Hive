@@ -1,14 +1,6 @@
 name: Release
 
 on:
-  push:
-    branches: [ master ]
-    tags:
-      - 'v*.*.*'
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - '.github/dependabot.yml'
   workflow_dispatch:
     inputs:
       channel:
