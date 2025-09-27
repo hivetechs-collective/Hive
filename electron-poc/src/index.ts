@@ -4292,6 +4292,33 @@ const registerSimpleCliToolHandlers = () => {
         }
       }
 
+      // Spec Kit (Specify CLI) uses uv for updates
+      if (toolId === "specify") {
+        logger.info(`[Main] Updating Specify CLI via uv...`);
+        const enhancedPath = getEnhancedPath();
+        try {
+          const { stdout, stderr } = await execAsync(
+            "uv tool upgrade specify-cli --from git+https://github.com/github/spec-kit.git",
+            { env: { ...process.env, PATH: enhancedPath } },
+          );
+          logger.info(`[Main] Specify update output: ${stdout}`);
+          if (stderr && !stderr.toLowerCase().includes("warn")) {
+            logger.warn(`[Main] Specify update stderr: ${stderr}`);
+          }
+          const versionResult = await execAsync("specify --version", {
+            env: { ...process.env, PATH: enhancedPath },
+          });
+          const version =
+            versionResult.stdout.trim().match(/(\d+\.\d+\.\d+)/)?.[1] ||
+            "Unknown";
+          cliToolsDetector.clearCache(toolId);
+          return { success: true, version, message: `Updated to ${version}` };
+        } catch (error: any) {
+          logger.error(`[Main] Failed to update Specify CLI:`, error);
+          return { success: false, error: error.message || "Update failed" };
+        }
+      }
+
       // Special handling for Cursor CLI
       if (toolId === "cursor-cli") {
         logger.info(`[Main] Updating Cursor CLI via curl reinstall...`);
@@ -4726,6 +4753,9 @@ Or try: npm install -g ${installCmd} --force --no-cache
         uninstallCommand =
           "rm -f ~/.local/bin/cursor-agent /usr/local/bin/cursor-agent /opt/homebrew/bin/cursor-agent ~/bin/cursor-agent && rm -rf ~/.cursor-agent";
         logger.info(`[Main] Running Cursor CLI uninstall: ${uninstallCommand}`);
+      } else if (toolId === "specify") {
+        uninstallCommand = "uv tool uninstall specify-cli";
+        logger.info(`[Main] Running Specify CLI uninstall: ${uninstallCommand}`);
       } else {
         // Map tool IDs to npm package names
         const npmPackages: Record<string, string> = {

@@ -57,6 +57,19 @@ export interface CliToolConfig {
  * Registry of all supported CLI tools
  */
 export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
+  'specify': {
+    id: 'specify',
+    name: 'Spec Kit (Specify CLI)',
+    description: 'GitHub’s spec-driven development CLI (Specify)',
+    command: 'specify',
+    installCommand: 'uv tool install specify-cli --from git+https://github.com/github/spec-kit.git',
+    updateCommand: 'uv tool upgrade specify-cli --from git+https://github.com/github/spec-kit.git',
+    versionCommand: 'specify --version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://github.com/github/spec-kit',
+    icon: '🌱',
+    requiresPython: true
+  },
   'claude-code': {
     id: 'claude-code',
     name: 'Claude Code',

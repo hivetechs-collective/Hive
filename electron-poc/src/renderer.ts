@@ -68,6 +68,7 @@ import grokIcon from "../resources/ai-cli-icons/grok.svg";
 import qwenIcon from "../resources/ai-cli-icons/qwen.svg";
 import openaiIcon from "../resources/ai-cli-icons/openai.svg";
 import githubCopilotIcon from "../resources/ai-cli-icons/github-copilot.svg";
+import specKitIcon from "../resources/ai-cli-icons/spec-kit.svg";
 import cursorIcon from "../resources/ai-cli-icons/cdnlogo.com_cursor.svg";
 import {
   ConsensusWebSocket,
@@ -487,6 +488,10 @@ document.body.innerHTML = `
           <button class="activity-btn cli-quick-launch" data-tool="cursor-cli" aria-label="Cursor CLI">
             <img src="${cursorIcon}" width="24" height="24" alt="Cursor CLI" style="object-fit: contain;" />
             <span class="activity-tooltip">Cursor CLI</span>
+          </button>
+          <button class="activity-btn cli-quick-launch" data-tool="specify" aria-label="Spec Kit">
+            <img src="${specKitIcon}" width="24" height="24" alt="Spec Kit" style="object-fit: contain;" />
+            <span class="activity-tooltip">Spec Kit</span>
           </button>
 
           <!-- Consensus Panel Toggle - Our Revolutionary Feature -->
@@ -4701,6 +4706,19 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
         }),
       );
 
+      // Spec Kit (Specify CLI) - Spec-driven development
+      const specifyStatus = await electronAPI.detectCliTool("specify");
+      gridContainer.appendChild(
+        createCliToolCard({
+          id: "specify",
+          name: "Spec Kit (Specify CLI)",
+          description: "GitHub’s spec-driven development CLI",
+          status: specifyStatus,
+          docsUrl: "https://github.com/github/spec-kit",
+          badgeText: specifyStatus?.installed ? "INSTALLED" : null,
+        }),
+      );
+
       console.log("[CLI Tools] Panel rendered successfully");
 
       // Attach event listeners to all dynamically created buttons
@@ -5108,6 +5126,7 @@ async function installAllCliTools(): Promise<void> {
     "github-copilot",
     "cursor-cli",
     "grok",
+    "specify",
   ];
 
   // Show status
@@ -5229,6 +5248,7 @@ async function updateAllCliTools(): Promise<void> {
     "github-copilot",
     "cursor-cli",
     "grok",
+    "specify",
   ];
 
   // Show status
@@ -5458,6 +5478,7 @@ async function uninstallAllCliTools(): Promise<void> {
     "github-copilot",
     "cursor-cli",
     "grok",
+    "specify",
   ];
 
   // Show status
