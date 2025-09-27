@@ -2635,8 +2635,9 @@ this.wss = new WebSocketServer({ server: this.server });
 - **Type**: Child process managed by ProcessManager
 - **Entry Point**: `src/memory-service/index.ts`
 - **Server**: `src/memory-service/server.ts`
-- **Port**: 3457 (with automatic fallback to 3458-3460)
-- **IPC Communication**: Fork with ts-node for TypeScript support
+- Port: Dynamically allocated from the `memory-service` pool (default range 3000–3099) by PortManager; no hardcoded ports
+- Spawn (production): spawn packaged Node binary with IPC; no Electron-as-Node in the child
+- Spawn (development): fork with ts-node
 
 #### Database Access Pattern
 ```typescript
@@ -2669,10 +2670,11 @@ handleMemoryServiceDbQuery(msg) {
    - IPC handlers - Line 948: `memory-service-start`, `memory-service-stop`
 
 2. **ProcessManager** (`src/utils/ProcessManager.ts`):
-   - Port allocation using PortManager
-   - Health check monitoring
-   - Auto-restart on crash (max 5 attempts)
-   - IPC message routing
+   - Delegates port allocation to PortManager (no port numbers in code)
+   - Spawns Memory Service with the packaged Node binary (`.env.production` → `NODE_PATH=./binaries/node`)
+   - Waits on IPC `ready` after server.listen; may assert a health probe for strict readiness
+   - Auto-restart on crash (bounded attempts) and releases ports
+   - IPC routing for DB queries/results
 
 3. **PortManager** (`src/utils/PortManager.ts`):
    - `allocatePort()` - Ensures port availability
@@ -2762,10 +2764,50 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
    - Port reallocation on each restart
 
 #### Health Monitoring
-- Health check endpoint: `http://localhost:3457/health`
+- Health check endpoint: `http://localhost:<allocated>/health`
 - Checked every 30 seconds by ProcessManager
 - Returns: `{ status, port, database, uptime }`
 - Auto-restart triggered on health check failures
+
+
+### Memory Service Startup (v3.1) — Packaged Node, No Fallbacks
+
+- Packaged Node binary lives at `app.asar.unpacked/.webpack/main/binaries/node` and is a real Mach‑O on macOS.
+- `.env.production` includes `NODE_PATH=./binaries/node` and sets `USE_ELECTRON_AS_NODE=true` only if Electron must be used (we do not for Memory Service).
+- ProcessManager spawns the child as: `spawn(<NODE_PATH>, [service.js], { stdio: ['pipe','pipe','pipe','ipc'], env })`.
+- The child sends an IPC `ready` only after `server.listen(port)` succeeds.
+- SafeLogger does not import Electron in child processes; child logs go to `~/.hive-consensus/logs` to avoid Chromium keychain/OS crypt issues.
+
+---
+
+## First‑Run Toolchain Bootstrap (CLI Tools)
+
+- Purpose: zero‑touch setup on first launch; idempotent when tools already present.
+- uv installation: ensure `uv` exists (Homebrew first; official installer fallback) without blocking app usage.
+- Standardized install locations (user‑scoped):
+  - npm globals → `~/.hive/npm-global/bin` (`npm_config_prefix=~/.hive/npm-global`)
+  - uv tools (e.g., Specify) → `~/.hive/cli-bin` via `XDG_BIN_HOME`
+- PATH precedence: both bins are prepended for detection and execution.
+- Existing installs in common locations (e.g., `~/.local/bin`) remain detected; new installs prefer the `~/.hive/*` bins.
+
+### CLI Tools — Paths in UI
+
+- Paths are user‑specific (anchored to `$HOME`). Examples (macOS user `veronelazio`):
+  - Claude/Gemini/Qwen/Codex/Grok: `/Users/veronelazio/.hive/npm-global/bin/<tool>`
+  - Copilot CLI: `/Users/veronelazio/.hive/npm-global/bin/copilot`
+  - Cursor: `/Users/veronelazio/.local/bin/cursor-agent` (upstream installer)
+  - Specify (Spec Kit): new installs → `~/.hive/cli-bin/specify`; existing installs may remain under `~/.local/bin/specify`
+
+---
+
+## Packaging Notes — DMG Size and Node Runtime
+
+- We bundle a full Node distribution to guarantee a clean, non‑Electron child runtime for Memory Service and include npm/npx shims for tooling. The Node binary is placed at `binaries/node` inside the app’s unpacked resources.
+- Impact: DMG increased from ~392 MB to ~548 MB when including Node runtime + npm/npx shims. Node v22 arm64 adds ~80–120 MB uncompressed; compression and other assets account for the remainder.
+- Future optimization options:
+  - Ship only the `node` binary + minimal libs instead of the full `node-dist` tree.
+  - Offer a “lite” DMG that downloads Node on first run.
+  - Strip unneeded files where permitted.
 
 ---
 
