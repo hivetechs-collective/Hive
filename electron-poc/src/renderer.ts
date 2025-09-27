@@ -461,6 +461,10 @@ document.body.innerHTML = `
         
         <!-- AI CLI Tool Quick Launch Icons -->
         <div class="ai-cli-icons-section">
+          <button class="activity-btn cli-quick-launch" data-tool="specify" aria-label="Spec Kit (Specify CLI)">
+            <img src="${specKitIcon}" width="24" height="24" alt="Spec Kit" style="object-fit: contain;" />
+            <span class="activity-tooltip">Spec Kit (Specify CLI)</span>
+          </button>
           <button class="activity-btn cli-quick-launch claude-icon" data-tool="claude-code" aria-label="Claude Code">
             <img src="${claudeIcon}" width="24" height="24" alt="Claude" style="object-fit: contain;" />
             <span class="activity-tooltip">Claude Code</span>
@@ -488,10 +492,6 @@ document.body.innerHTML = `
           <button class="activity-btn cli-quick-launch" data-tool="cursor-cli" aria-label="Cursor CLI">
             <img src="${cursorIcon}" width="24" height="24" alt="Cursor CLI" style="object-fit: contain;" />
             <span class="activity-tooltip">Cursor CLI</span>
-          </button>
-          <button class="activity-btn cli-quick-launch" data-tool="specify" aria-label="Spec Kit">
-            <img src="${specKitIcon}" width="24" height="24" alt="Spec Kit" style="object-fit: contain;" />
-            <span class="activity-tooltip">Spec Kit</span>
           </button>
 
           <!-- Consensus Panel Toggle - Our Revolutionary Feature -->
