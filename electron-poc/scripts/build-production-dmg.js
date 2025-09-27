@@ -790,8 +790,8 @@ if (!gitBundled) {
 console.log(`${CYAN}Bundling Node.js runtime (for Memory Service)...${RESET}`);
 const nodeTargetPath = path.join(binariesDir, 'node');
 let nodeBundled = false;
-if (process.env.HIVE_BUNDLE_NODE_DIST !== '1') {
-  console.log(`${YELLOW}Skipping Node.js dist bundling (HIVE_BUNDLE_NODE_DIST!=1)${RESET}`);
+if (process.env.HIVE_BUNDLE_NODE_DIST === '0') {
+  console.log(`${YELLOW}Skipping Node.js dist bundling (HIVE_BUNDLE_NODE_DIST=0)${RESET}`);
 } else {
 let nodeBundled = false;
 
@@ -869,7 +869,7 @@ try {
 
 if (!nodeBundled) {
   console.log(`${YELLOW}Using Electron's built-in Node.js for Memory Service${RESET}`);
-  const nodeWrapperScript = `#!/bin/sh\n# Wrapper to use Electron's Node.js runtime\nELECTRON_RUN_AS_NODE=1 exec \"$(dirname \"$0\")/../MacOS/Hive Consensus\" \"$@\"\n`;
+  const nodeWrapperScript = `#!/bin/sh\n# Wrapper to use Electron's Node.js runtime\nAPP_BIN=\"$(dirname \"$0\")/../../../../../MacOS/Hive Consensus\"\nELECTRON_RUN_AS_NODE=1 exec \"$APP_BIN\" \"$@\"\n`;
   fs.writeFileSync(nodeTargetPath, nodeWrapperScript);
   fs.chmodSync(nodeTargetPath, 0o755);
   bundledBinaries.push('node');
@@ -1184,6 +1184,7 @@ logPhase('RUNTIME DISCOVERY', 'Find and configure Node.js for production');
 
 // Discover Node.js path for Memory Service (critical for production)
 let nodePath = null;
+let usedElectronAsNode = false; // track if we fell back to Electron
 const possibleNodePaths = [
   process.execPath, // Current Node.js/Electron binary
   '/usr/local/bin/node',
@@ -1216,6 +1217,7 @@ if (!nodePath) {
   console.log(`${YELLOW}⚠ Node.js not found in standard locations${RESET}`);
   console.log(`${CYAN}  Will use Electron binary as Node.js (ELECTRON_RUN_AS_NODE)${RESET}`);
   nodePath = process.execPath; // Fallback to Electron
+  usedElectronAsNode = true;
 }
 
 // Write configuration for ProcessManager
@@ -1237,10 +1239,13 @@ if (nodeBundled) {
 }
 
 // Also save whether we need ELECTRON_RUN_AS_NODE
-if (nodePath === process.execPath) {
+if (usedElectronAsNode) {
   if (!envConfig.includes('USE_ELECTRON_AS_NODE=')) {
     envConfig += 'USE_ELECTRON_AS_NODE=true\n';
   }
+} else {
+  // Ensure flag is removed if previously set
+  envConfig = envConfig.replace(/USE_ELECTRON_AS_NODE=.*\n/g, '');
 }
 
 // Add Python runtime paths for Backend Server AI Helpers
