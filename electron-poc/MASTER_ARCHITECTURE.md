@@ -7557,6 +7557,33 @@ CREATE TABLE tool_metrics (
 ### Overview
 The CLI Tools Management system provides automated installation, updates, and integration for AI-powered CLI tools, with seamless Memory Service integration via MCP (Model Context Protocol). This system enables one-click installation, configuration, and updates for AI coding assistants, making them feel "out of the box" integrated without user configuration.
 
+### Isolated Managed Copies (2025‑09)
+
+To guarantee deterministic control over versions, updates, uninstalls, and MCP/memory wiring, Hive operates on isolated, Hive‑managed copies of CLI tools. External/system installs are preserved and never modified.
+
+- Managed prefixes
+  - npm tools: `~/.hive/npm-global/bin` (via `NPM_CONFIG_PREFIX=~/.hive/npm-global`)
+  - uv tools (e.g., Specify): `~/.hive/cli-bin` (via `XDG_BIN_HOME=~/.hive/cli-bin`, `XDG_DATA_HOME=~/.hive/xdg-data`)
+- Detection policy (managed‑only)
+  - A tool is considered Installed only if `which <cmd>` resolves to a path within a managed prefix.
+  - External installs (e.g., `/opt/homebrew/bin`, `~/.local/bin`) do not count as installed for Hive operations. They remain visible to users but are isolated from Hive’s lifecycle.
+- Batch operations semantics
+  - Install / Install All: always installs a managed copy into Hive prefixes, even if an external install exists.
+  - Update / Update All: if no managed copy exists, bootstrap a managed install first, then update.
+  - Uninstall / Uninstall All: removes only the managed copy; external installs are preserved. UI no longer reports “skipped” items; only managed removals and failures are counted.
+- MCP/memory integration
+  - Managed copies receive automatic MCP/memory endpoint configuration and dynamic port/token updates on startup.
+- PATH strategy (scoped to app processes)
+  - Packaged binaries → `~/.hive/npm-global/bin` → `~/.hive/cli-bin` → `~/.local/bin` → system paths. We do not mutate user shell profiles.
+- Robust npm/npx bundling
+  - Packaged shims for `binaries/npm` and `binaries/npx` invoke the bundled Node against npm’s CLI entrypoints (`…/npm/bin/npm-cli.js`).
+  - A small forwarder is written to `binaries/node-dist/lib/cli.js` to avoid `require('../lib/cli.js')` launch errors.
+  - Result: update/uninstall flows work reliably in packaged builds.
+- Specify (Spec Kit) uv fallback
+  - `uv tool upgrade specify-cli` falls back to `uv tool install specify-cli` if not installed, all scoped to `~/.hive/cli-bin`.
+
+This policy supersedes any earlier implication that external installs are managed by Hive. External/system installs are detected for visibility but are not part of Hive’s lifecycle operations unless the user explicitly reinstalls them into the Hive prefixes.
+
 ### Architecture
 **Location**: `src/utils/CliToolsManager.ts`
 **Purpose**: Manage lifecycle of external AI CLI tools with full Memory Service integration

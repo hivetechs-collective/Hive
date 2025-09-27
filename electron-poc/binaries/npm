@@ -1,0 +1,5 @@
+#!/bin/sh
+BIN_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+NODE_BIN="$BIN_DIR/node"
+NPM_CLI="$BIN_DIR/node-dist/lib/node_modules/npm/bin/npm-cli.js"
+exec "$NODE_BIN" "$NPM_CLI" "$@"

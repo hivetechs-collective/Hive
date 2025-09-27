@@ -4419,6 +4419,34 @@ const registerSimpleCliToolHandlers = () => {
           return { success: true, version, message: `Updated to ${version}` };
         } catch (error: any) {
           logger.error(`[Main] Failed to update Specify CLI:`, error);
+          // Fallback: if not installed according to uv, perform install instead of upgrade
+          const msg = String(error?.message || '');
+          if (msg.includes('is not installed') || msg.includes('not installed')) {
+            try {
+              logger.info('[Main] Specify CLI not installed per uv. Attempting install via uv...');
+              let uvCmd3 = 'uv';
+              const packagedUv3 = ProductionPaths.getBinaryPath('uv');
+              if (fs.existsSync(packagedUv3)) uvCmd3 = `"${packagedUv3}"`;
+              const hiveCliBin = path.join(os.homedir(), '.hive', 'cli-bin');
+              const hiveXdgData = path.join(os.homedir(), '.hive', 'xdg-data');
+              try { fs.mkdirSync(hiveCliBin, { recursive: true }); } catch {}
+              try { fs.mkdirSync(hiveXdgData, { recursive: true }); } catch {}
+              const installCmd = `${uvCmd3} tool install specify-cli --from git+https://github.com/github/spec-kit.git`;
+              const { stdout: instOut } = await execAsync(installCmd, { env: { ...process.env, PATH: `${hiveCliBin}:${enhancedPath}`, XDG_BIN_HOME: hiveCliBin, XDG_DATA_HOME: hiveXdgData } });
+              logger.info(`[Main] Specify install output: ${instOut}`);
+              // Try to read version after install
+              let version = 'Unknown';
+              try {
+                const { stdout } = await execAsync('specify --version', { env: { ...process.env, PATH: `${hiveCliBin}:${enhancedPath}` } });
+                version = stdout.trim().match(/(\d+\.\d+\.\d+)/)?.[1] || version;
+              } catch {}
+              cliToolsDetector.clearCache(toolId);
+              return { success: true, version, message: `Installed ${version}` };
+            } catch (installErr: any) {
+              logger.error('[Main] Specify CLI install after upgrade failure also failed:', installErr);
+              return { success: false, error: installErr.message || 'Update failed' };
+            }
+          }
           return { success: false, error: error.message || "Update failed" };
         }
       }
@@ -4530,8 +4558,47 @@ const registerSimpleCliToolHandlers = () => {
       // For NPM-based tools
       logger.info(`[Main] Updating ${toolId} via npm...`);
 
-      // Robust multi-strategy npm update
+      // Ensure a managed copy exists; if not, install it into the Hive prefix first
+      let installedPath: string | null = null;
+      try {
+        const { stdout: whichOut } = await execAsync(`which ${CLI_TOOLS_REGISTRY[toolId].command}`, { env: { ...process.env, PATH: getEnhancedPath() }, timeout: 5000 });
+        installedPath = (whichOut || '').trim() || null;
+      } catch {}
+      const homeDirForUpdate = os.homedir();
+      const managedDirsForUpdate = [
+        path.join(homeDirForUpdate, '.hive', 'npm-global', 'bin'),
+        path.join(homeDirForUpdate, '.hive', 'cli-bin'),
+      ];
+      const isManagedInstallForUpdate = !!(installedPath && managedDirsForUpdate.some(d => installedPath!.startsWith(d + path.sep) || installedPath === d));
+
       const enhancedEnv = { ...process.env, PATH: getEnhancedPath(), npm_config_prefix: path.join(os.homedir(), '.hive', 'npm-global'), NPM_CONFIG_PREFIX: path.join(os.homedir(), '.hive', 'npm-global') };
+      let npmCmdBootstrap = 'npm';
+      try {
+        const packagedNpmBootstrap = ProductionPaths.getBinaryPath('npm');
+        if (fs.existsSync(packagedNpmBootstrap)) npmCmdBootstrap = `"${packagedNpmBootstrap}"`;
+      } catch {}
+      if (!isManagedInstallForUpdate) {
+        try {
+          const installPkg = toolId === 'grok' ? `${packageName}@0.0.28` : packageName;
+          logger.info(`[Main] No managed installation detected for ${toolId}. Installing managed copy via npm: ${installPkg}`);
+          const { stdout } = await execAsync(`${npmCmdBootstrap} install -g ${installPkg}`, { env: enhancedEnv });
+          logger.info(`[Main] Managed install output: ${stdout}`);
+          // Proceed to version detection after bootstrap install
+          let version = 'Unknown';
+          try {
+            const cmd = CLI_TOOLS_REGISTRY[toolId].versionCommand || `${CLI_TOOLS_REGISTRY[toolId].command} --version`;
+            const { stdout: vout } = await execAsync(cmd, { env: enhancedEnv });
+            const m = vout.match(/(\d+\.\d+\.\d+)/);
+            if (m) version = m[1];
+          } catch {}
+          cliToolsDetector.clearCache(toolId);
+          return { success: true, version, message: `Installed ${version}` };
+        } catch (bootstrapErr: any) {
+          logger.warn(`[Main] Managed bootstrap install failed for ${toolId}, continuing with update strategies: ${bootstrapErr?.message || bootstrapErr}`);
+        }
+      }
+
+      // Robust multi-strategy npm update using the same managed-prefix env
       let npmCmd = 'npm';
       try {
         const packagedNpm = ProductionPaths.getBinaryPath('npm');
@@ -4880,11 +4947,10 @@ Or try: npm install -g ${installCmd} --force --no-cache
       if (toolId === "cursor-cli") {
         // Only remove if installed under Hive-managed directories; preserve external installs
         if (!isManagedInstall) {
-          logger.info(`[Main] Cursor CLI detected at external path (${installedPath || 'unknown'}). Preserving installation; skipping uninstall.`);
+          logger.info(`[Main] Cursor CLI detected at external path (${installedPath || 'unknown'}). Preserving external installation; no managed copy to remove.`);
           return {
             success: true,
-            skipped: true,
-            message: `External installation preserved at ${installedPath || 'unknown'}`,
+            message: `No managed installation found (external preserved at ${installedPath || 'unknown'})`,
           };
         }
         // Remove only the managed shim/binary path
@@ -4932,8 +4998,8 @@ Or try: npm install -g ${installCmd} --force --no-cache
         }
         // Only uninstall managed installs; preserve external installs
         if (!isManagedInstall) {
-          logger.info(`[Main] ${toolConfig.name} detected at external path (${installedPath || 'unknown'}). Preserving installation; skipping uninstall.`);
-          return { success: true, skipped: true, message: `External installation preserved at ${installedPath || 'unknown'}` };
+          logger.info(`[Main] ${toolConfig.name} detected at external path (${installedPath || 'unknown'}). Preserving external installation; no managed copy to remove.`);
+          return { success: true, message: `No managed installation found (external preserved at ${installedPath || 'unknown'})` };
         }
         // Prefer packaged npm if available
         let npmCmd = 'npm';

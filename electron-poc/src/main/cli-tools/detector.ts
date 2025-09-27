@@ -108,28 +108,32 @@ export class CliToolsDetector {
       // Check if command exists
       const enhancedPath = this.getEnhancedPath();
       const env = { ...process.env, PATH: enhancedPath };
-      
-      const { stdout: whichOutput } = await execAsync(
-        `which ${config.command}`,
-        { env }
-      );
-      
-      const toolPath = whichOutput.trim();
-      if (!toolPath) {
+
+      const { stdout: whichOutput } = await execAsync(`which ${config.command}`, { env });
+      const resolvedPath = whichOutput.trim();
+
+      // Determine if the resolved path is a Hive-managed install
+      const home = process.env.HOME || '';
+      const managedDirs = [
+        path.join(home, '.hive', 'npm-global', 'bin'),
+        path.join(home, '.hive', 'cli-bin'),
+      ];
+      const isManaged = !!(resolvedPath && managedDirs.some(d => resolvedPath.startsWith(d + path.sep) || resolvedPath === d));
+
+      // Record discovered path for diagnostics (may be external)
+      toolInfo.path = resolvedPath || undefined;
+
+      // For UI/operations: treat installed === managed-only
+      if (isManaged) {
+        toolInfo.installed = true;
+        toolInfo.status = CliToolStatus.INSTALLED;
+      } else {
+        toolInfo.installed = false;
         toolInfo.status = CliToolStatus.NOT_INSTALLED;
-        this.updateCache(toolId, toolInfo);
-        return toolInfo;
       }
       
-      toolInfo.path = toolPath;
-
-      // GitHub Copilot now uses the official copilot CLI; no gh extension check required
-
-      toolInfo.installed = true;
-      toolInfo.status = CliToolStatus.INSTALLED;
-      
       // Try to get version if command is provided
-      if (config.versionCommand) {
+      if (config.versionCommand && isManaged) {
         try {
           const { stdout: versionOutput } = await execAsync(
             config.versionCommand,
@@ -149,8 +153,8 @@ export class CliToolsDetector {
       
       // Check for memory service connection (for supported tools)
       // Tools using direct API or MCP bridge can connect to Memory Service
-      if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' ||
-          toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok' || toolId === 'cursor-cli' || toolId === 'github-copilot' || toolId === 'specify') {
+      if (isManaged && (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' ||
+          toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok' || toolId === 'cursor-cli' || toolId === 'github-copilot' || toolId === 'specify')) {
         toolInfo.memoryServiceConnected = await this.checkMemoryServiceConnection(toolId);
       }
       

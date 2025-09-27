@@ -5269,11 +5269,8 @@ async function updateAllCliTools(): Promise<void> {
       // Check if installed
       const status = await electronAPI.detectCliTool(toolId);
 
-      if (!status?.installed) {
-        console.log(`[CLI Tools] ${toolId} not installed, skipping update`);
-        skippedCount++;
-        continue;
-      }
+      // If a managed copy isn't installed, updateCliTool will bootstrap a managed install.
+      // Do not skip; proceed to call update for consistent, isolated control.
 
       // Update the tool
       if (statusDiv) {
@@ -5402,7 +5399,7 @@ async function uninstallCliTool(toolId: string): Promise<void> {
     const electronAPI = window.electronAPI as any;
     const result = await electronAPI.uninstallCliTool(toolId);
 
-    if (result && result.success && !result.skipped) {
+    if (result && result.success) {
       console.log(`[CLI Tools] ${toolId} uninstalled successfully`);
 
       // Update UI immediately to show not installed
@@ -5418,19 +5415,6 @@ async function uninstallCliTool(toolId: string): Promise<void> {
       try {
         await (window as any).electronAPI.detectCliTool(toolId);
       } catch {}
-      setTimeout(async () => {
-        await renderCliToolsPanel(true);
-        await refreshSidebarToolIcon(toolId);
-      }, 500);
-    } else if (result && result.success && result.skipped) {
-      console.log(`[CLI Tools] ${toolId} uninstall skipped (external installation preserved)`);
-      if (card) {
-        const statusDiv = card.querySelector(".tool-status") as HTMLElement;
-        if (statusDiv) {
-          statusDiv.innerHTML = "⏭️ Skipped (external install)";
-          statusDiv.style.color = "#ffa500";
-        }
-      }
       setTimeout(async () => {
         await renderCliToolsPanel(true);
         await refreshSidebarToolIcon(toolId);
@@ -5512,16 +5496,7 @@ async function uninstallAllCliTools(): Promise<void> {
     let failedCount = 0;
 
     for (const toolId of toolsToUninstall) {
-      // Check if installed
-      const status = await electronAPI.detectCliTool(toolId);
-
-      if (!status?.installed) {
-        console.log(`[CLI Tools] ${toolId} not installed, skipping`);
-        skippedCount++;
-        continue;
-      }
-
-      // Uninstall the tool
+      // Always call uninstall; API is scoped to managed installs and will no-op if none exists
       if (statusDiv) {
         statusDiv.innerHTML = `🗑️ Uninstalling ${toolId}... (${uninstalledCount} uninstalled so far)`;
       }
@@ -5529,7 +5504,7 @@ async function uninstallAllCliTools(): Promise<void> {
       try {
         const result = await electronAPI.uninstallCliTool(toolId);
 
-        if (result?.success && !result?.skipped) {
+        if (result?.success) {
           uninstalledCount++;
           console.log(`[CLI Tools] Successfully uninstalled ${toolId}`);
 
@@ -5542,20 +5517,6 @@ async function uninstallAllCliTools(): Promise<void> {
             if (statusDiv) {
               statusDiv.innerHTML = "✅ Uninstalled";
               statusDiv.style.color = "#4ec9b0";
-            }
-          }
-        } else if (result?.success && result?.skipped) {
-          skippedCount++;
-          console.log(`[CLI Tools] Skipped (external install preserved) for ${toolId}`);
-          // Update the specific card UI
-          const card = document.querySelector(
-            `[data-tool-id="${toolId}"]`,
-          ) as HTMLElement;
-          if (card) {
-            const statusDiv = card.querySelector(".tool-status") as HTMLElement;
-            if (statusDiv) {
-              statusDiv.innerHTML = "⏭️ Skipped (external install)";
-              statusDiv.style.color = "#ffa500";
             }
           }
         } else {
@@ -5574,10 +5535,10 @@ async function uninstallAllCliTools(): Promise<void> {
     // Final status
     if (statusDiv) {
       if (failedCount === 0) {
-        statusDiv.innerHTML = `✅ Complete! ${uninstalledCount} uninstalled, ${skippedCount} not installed`;
+        statusDiv.innerHTML = `✅ Complete! ${uninstalledCount} uninstalled`;
         statusDiv.style.color = "#4ec9b0";
       } else {
-        statusDiv.innerHTML = `⚠️ Complete with errors: ${uninstalledCount} uninstalled, ${skippedCount} skipped, ${failedCount} failed`;
+        statusDiv.innerHTML = `⚠️ Complete with errors: ${uninstalledCount} uninstalled, ${failedCount} failed`;
         statusDiv.style.color = "#ffa500";
       }
 
