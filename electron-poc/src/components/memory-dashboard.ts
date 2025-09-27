@@ -13,6 +13,7 @@ const MEMORY_ENABLED_TOOLS = [
   "github-copilot",
   "cursor-cli",
   "grok",
+  "specify",
 ];
 
 export class MemoryDashboard {

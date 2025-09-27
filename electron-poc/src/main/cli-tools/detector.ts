@@ -135,10 +135,9 @@ export class CliToolsDetector {
       }
       
       // Check for memory service connection (for supported tools)
-      // Note: GitHub Copilot, Cursor, Continue, Cody, and AWS Q don't support Memory Service integration
-      // Only npm-based AI CLI tools with MCP or direct API support can connect to Memory Service
+      // Tools using direct API or MCP bridge can connect to Memory Service
       if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' ||
-          toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok' || toolId === 'cursor-cli') {
+          toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok' || toolId === 'cursor-cli' || toolId === 'github-copilot' || toolId === 'specify') {
         toolInfo.memoryServiceConnected = await this.checkMemoryServiceConnection(toolId);
       }
       
