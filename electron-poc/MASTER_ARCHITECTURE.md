@@ -14130,6 +14130,158 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
   rm /tmp/true_copy
   ```
 
+#### Local Sign + Notarize (No CI/CD)
+
+You can sign, notarize, and staple a locally built DMG entirely outside GitHub Actions.
+
+Prerequisites
+- Xcode Command Line Tools installed (for `xcrun`, `codesign`, `stapler`).
+- Developer ID Application identity available in your login keychain.
+- Notary Tool credentials stored once via `xcrun notarytool store-credentials` (profile name must match your `NOTARY_PROFILE`).
+
+Steps
+```bash
+# 1) Build the DMG locally (17-phase build)
+cd electron-poc
+npm ci
+npm run build:complete
+
+# 2) Sign + Notarize the generated DMG
+#    Optionally override SIGN_ID / NOTARY_PROFILE for your machine
+SIGN_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)" \
+NOTARY_PROFILE=HiveNotaryProfile \
+npm run sign:notarize:local
+
+#    You can also target a specific DMG explicitly:
+# npm run sign:notarize:local -- out/make/"Hive Consensus".dmg
+
+# 3) Upload to R2 (choose one)
+# Wrangler-based (requires `wrangler login`):
+./scripts/upload-dmg-to-r2.sh stable
+
+# AWS CLI (S3-compatible) route:
+export R2_ACCESS_KEY_ID=…
+export R2_SECRET_ACCESS_KEY=…
+export R2_BUCKET=releases-hivetechs
+export R2_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+./scripts/upload-to-r2.sh
+```
+
+Notes
+- The local command `npm run sign:notarize:local` is a thin wrapper around the shared `scripts/sign-notarize-macos.sh` and will:
+  - Extract the app bundle from your DMG if needed
+  - Deep-sign binaries/frameworks with entitlements
+  - Submit to Apple Notary Service and wait
+  - Staple tickets to both the app and the DMG
+  - Verify Gatekeeper assessment
+- If your keychain is locked after reboot, run the `security unlock-keychain` and `set-key-partition-list` commands from the section above before signing.
+
+##### 17‑Phase Build with Visual Monitor
+
+The command `npm run build:complete` runs `scripts/build-production-dmg.js`, a 17‑phase orchestrator that:
+
+1) Pre-build cleanup (old out/.webpack/dist, caches)
+2) Tool verification (Node/npm/Cargo)
+3) Binary bundling (ttyd, git, Node runtime)
+4) Dependency installation (npm install/ci)
+5) Electron + native module rebuilds (sqlite3, better-sqlite3, node-pty) for the active Electron ABI
+6) Runtime discovery and .env.production generation
+7) Consensus engine mode selection (DirectConsensusEngine)
+8) Python runtime preparation (permissions, dylib path safety)
+9) Webpack plugin presence checks (FixBinaryPermissions, MemoryService)
+10) Prebuild scripts (module checks + Python bundling)
+11) Application build (electron-forge make)
+12) Post-build fixes (permissions and app structure)
+13) Post-build verification (DMG exists, ASAR unpack layout)
+14) Permission verification (helpers, Python, git, node)
+15) Build report (JSON + human summary)
+16) Critical fix verification (Python extraction + memory envs)
+17) Auto-installation + optional auto-launch for sanity checks
+
+Visual progress monitor
+- On local runs (non-CI), a Terminal window tails `/tmp/hive-build-progress.log` with live phase status.
+- Disable auto-launch after install by setting `HIVE_SKIP_AUTO_LAUNCH=1`.
+
+Logs and artifacts
+- Real-time status JSON: `electron-poc/build-logs/current-status.json`
+- Full build logs: `electron-poc/build-logs/build-*.log`
+- DMG output: `electron-poc/out/make/Hive Consensus.dmg`
+- Packaged app (staging): `electron-poc/out/Hive Consensus-darwin-*/Hive Consensus.app`
+- Build report (if generated): `electron-poc/out/build-report.json`
+
+##### Signing and Notarization Internals
+
+Wrapper script
+- `electron-poc/scripts/sign-notarize-local.sh`:
+  - Detects or accepts a DMG path
+  - Extracts `.app` from DMG if needed (via `hdiutil` + `ditto`)
+  - Sets defaults `SIGN_ID` and `NOTARY_PROFILE` if not provided
+  - Invokes the shared signer `scripts/sign-notarize-macos.sh`
+
+Shared signer
+- `scripts/sign-notarize-macos.sh` performs:
+  - Deep scan for Mach-O binaries (executables, dylibs, native modules) and codesigns each with runtime flags
+  - Explicit entitlements signing for embedded helpers: Node, ttyd, git
+  - Directory-level sealing for Frameworks and Helper apps
+  - App-level signing with `scripts/entitlements.plist`
+  - DMG rebuild/sign + `xcrun notarytool submit --wait`
+  - Stapling (`xcrun stapler staple`) to both `.app` and `.dmg`
+  - Gatekeeper check (`spctl --assess --type exec --verbose`)
+
+Environment variables
+- `SIGN_ID`: Developer ID Application identity string (must match your keychain identity)
+- `NOTARY_PROFILE`: `xcrun notarytool store-credentials` profile name
+- `HIVE_SIGNING_KEYCHAIN` (optional): path to custom keychain (CI uses this); local runs default to login keychain
+- `ENTITLEMENTS_PATH` (optional): override entitlements file; defaults to `scripts/entitlements.plist`
+
+Troubleshooting
+- Identity not found: open Keychain Access → login → ensure the Developer ID Application cert + private key exist and are trusted; confirm exact `SIGN_ID` string.
+- Notarization Invalid: the script prints the Notary log on failure; look for missing signatures or quarantine attributes on nested binaries.
+- `set -u` array errors: the signer is hardened to avoid empty-array expansion; ensure you’re using the updated script in this repo.
+
+##### Guardrails and Health Checks
+
+After signing, validate that embedded helpers retain entitlements and work from the DMG mount:
+
+```bash
+node electron-poc/scripts/verify-dmg-helpers.js "electron-poc/out/make/Hive Consensus.dmg"
+node electron-poc/scripts/test-dmg-memory-service.js "electron-poc/out/make/Hive Consensus.dmg"
+```
+
+The health harness mounts the DMG, launches the Memory Service on a random port, and hits `/health` to ensure the runtime is functional from a read-only volume.
+
+##### R2 Upload Details
+
+Wrangler route (recommended if using Cloudflare tokens)
+- Script: `electron-poc/scripts/upload-dmg-to-r2.sh [stable|beta]`
+- Uploads:
+  - `stable/electron/Hive-Consensus-v<version>.dmg`
+  - `stable/electron/Hive-Consensus-latest.dmg`
+  - `stable/electron/version.json`
+  - Optional zip (if present): `stable/electron/Hive-Consensus-v<version>-darwin-arm64.zip`
+
+AWS S3-compatible route
+- Script: `electron-poc/scripts/upload-to-r2.sh`
+- Required env:
+  - `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
+  - `R2_BUCKET`
+  - `R2_ENDPOINT` (e.g., `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`)
+- Uploads versioned and `latest/` paths plus a simple `version.json` manifest.
+
+##### One-command Local Release (Summary)
+
+```bash
+cd electron-poc
+npm ci
+npm run build:complete
+SIGN_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)" \
+NOTARY_PROFILE=HiveNotaryProfile \
+npm run sign:notarize:local
+./scripts/upload-dmg-to-r2.sh stable
+```
+
+This mirrors CI but runs entirely on your machine with the visual 17‑phase progress window.
+
 **Next Actions (when ready to sign releases)**
 - Set the signing identity once per shell: `export SIGN_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"`.
 - Recursively sign every Mach-O inside the bundle (Python runtime, torch, SciPy, helper binaries, etc.):
