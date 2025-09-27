@@ -4838,7 +4838,18 @@ Or try: npm install -g ${installCmd} --force --no-cache
       try {
         // Run the uninstall command
         const { stdout, stderr } = await execAsync(uninstallCommand, {
-          env: { ...process.env, PATH: enhancedPath },
+          env: ((()=>{
+            const npmPrefix = require('path').join(require('os').homedir(), '.hive', 'npm-global');
+            const env = { ...process.env, PATH: enhancedPath, npm_config_prefix: npmPrefix, NPM_CONFIG_PREFIX: npmPrefix };
+            if (toolId === 'specify') {
+              const hiveCliBin = require('path').join(require('os').homedir(), '.hive', 'cli-bin');
+              const hiveXdgData = require('path').join(require('os').homedir(), '.hive', 'xdg-data');
+              env['XDG_BIN_HOME'] = hiveCliBin;
+              env['XDG_DATA_HOME'] = hiveXdgData;
+              env['PATH'] = hiveCliBin + ':' + env['PATH'];
+            }
+            return env;
+          })()),
           timeout: 60000, // 1 minute timeout for uninstall
         });
 
@@ -4891,6 +4902,18 @@ Or try: npm install -g ${installCmd} --force --no-cache
           `[Main] Clearing detector cache for ${toolId} after successful uninstall`,
         );
         cliToolsDetector.clearCache(toolId);
+
+        // Remove leftover shims for Specify CLI
+        if (toolId === 'specify') {
+          try {
+            const leftovers = [
+              require('path').join(require('os').homedir(), '.local', 'bin', 'specify'),
+              require('path').join(require('os').homedir(), '.hive', 'cli-bin', 'specify'),
+            ];
+            const fs = require('fs');
+            for (const lp of leftovers) { try { if (fs.existsSync(lp)) fs.unlinkSync(lp); } catch {} }
+          } catch {}
+        }
 
         // Also clean up any configuration files if they exist
         if (toolId === "grok") {
