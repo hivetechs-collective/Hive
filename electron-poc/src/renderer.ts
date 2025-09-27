@@ -5413,11 +5413,13 @@ async function uninstallCliTool(toolId: string): Promise<void> {
       }
 
       // Refresh the panel after a short delay to update buttons
+      try {
+        await (window as any).electronAPI.detectCliTool(toolId);
+      } catch {}
       setTimeout(async () => {
         await renderCliToolsPanel(true);
-        // Also refresh the sidebar icon to show it's uninstalled
         await refreshSidebarToolIcon(toolId);
-      }, 1500);
+      }, 500);
     } else {
       console.error(
         `[CLI Tools] Failed to uninstall ${toolId}:`,

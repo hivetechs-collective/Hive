@@ -433,11 +433,8 @@ export class TTYDTerminalPanel {
         webview.src = 'about:blank';
         
         // Load the webview immediately - flex layout ensures proper size
-        console.log('[TTYDTerminalPanel] Deferring ttyd webview load until server is ready');
-        const targetUrl = terminalInfo.url;
-        this.waitForUrl(targetUrl, 6000).then(() => {
-            try { (webview as any).src = targetUrl; } catch {}
-        });
+        console.log('[TTYDTerminalPanel] Loading ttyd webview');
+        webview.src = terminalInfo.url;
         
         webview.style.cssText = `
             width: 100%;
