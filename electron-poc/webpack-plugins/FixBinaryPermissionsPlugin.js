@@ -38,6 +38,9 @@ class FixBinaryPermissionsPlugin {
         { label: 'node', p: path.join(outputPath, 'binaries', 'node') },
         { label: 'ttyd', p: path.join(outputPath, 'binaries', 'ttyd') },
         { label: 'git',  p: path.join(outputPath, 'binaries', 'git-bundle', 'bin', 'git') },
+        { label: 'uv',   p: path.join(outputPath, 'binaries', 'uv') },
+        { label: 'npm',  p: path.join(outputPath, 'binaries', 'npm') },
+        { label: 'npx',  p: path.join(outputPath, 'binaries', 'npx') },
       ];
       for (const h of helpers) {
         if (fs.existsSync(h.p)) {
