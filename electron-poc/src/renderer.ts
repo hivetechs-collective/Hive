@@ -5568,6 +5568,7 @@ async function uninstallAllCliTools(): Promise<void> {
         "github-copilot",
         "cursor-cli",
         "grok",
+        "specify",
       ];
       for (const toolId of toolsToUninstall) {
         await refreshSidebarToolIcon(toolId);

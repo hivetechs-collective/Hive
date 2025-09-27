@@ -14409,3 +14409,38 @@ Note: If CI/CD is reintroduced later, re-enable workflow triggers and restore re
 - Harness commands (local)
   - Check helpers: `cd electron-poc; npm run verify:dmg:helpers "<dmg>"`
   - DMG-mounted /health: `cd electron-poc; npm run test:dmg:memory "<dmg>"`
+
+## Local Release Flow (CI Disabled)
+
+We’ve intentionally disabled GitHub Actions to reduce costs. Releases are now produced locally and uploaded to R2. Use these commands end‑to‑end:
+
+- Build DMG (17 phases): `npm run build:complete`
+- Sign + Notarize locally: `npm run sign:notarize:local`
+- Publish to R2: `npm run release:local`
+
+Notes
+- The 17‑phase build logs to `electron-poc/build-logs/` and streams a progress terminal. Expect the full phase banner output.
+- The signing step uses your Apple Developer credentials configured on this machine (Apple ID + Developer ID Application cert). The script validates notarization and staples the DMG.
+- The publish step uploads the signed DMG to Cloudflare R2 under the configured path and writes a SHA256 alongside it.
+
+### First‑Run Dependency Bootstrap (Smaller DMG)
+To keep the DMG small, we do not ship heavy developer toolchains. On first app launch (during the splash screen), Hive verifies and bootstraps dependencies non‑interactively:
+
+- Ensures Node/npm and uv are present in user space; if missing, installs them for the current user.
+- Standardizes install locations for CLI tools:
+  - npm globals → `~/.hive/npm-global/bin`
+  - uv tools (e.g., Specify CLI) → `~/.hive/cli-bin`
+- Installs baseline AI CLIs if missing (Claude, Gemini CLI, Qwen Code, OpenAI Codex, GitHub Copilot CLI, Cursor CLI, Grok, Specify) and configures memory integration.
+- Writes an idempotent marker to skip on subsequent launches.
+
+This bootstrap avoids bundling large runtimes in the DMG while guaranteeing fresh users can launch and use all integrated tools without manual steps.
+
+### Path Detection and Consistency
+- The app now prioritizes `~/.hive/npm-global/bin` and `~/.hive/cli-bin` on PATH for detection and execution, ensuring consistent installation locations across users.
+- Specify (Spec Kit) installs/updates via `uv tool ...` are directed to `~/.hive/cli-bin` by setting XDG env vars at install/update time.
+
+### Known Fixes
+- Specify update no longer uses `--from` (uv rejects it for upgrade). We now run `uv tool upgrade specify-cli`.
+- “Uninstall All” refresh now correctly updates the Spec Kit card and sidebar icon.
+- TTYD terminal view waits for the ttyd URL to be reachable before loading the webview, eliminating initial ERR_FAILED (-2) flaps.
+

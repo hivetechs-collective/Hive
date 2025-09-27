@@ -46,16 +46,19 @@ export class CliToolsDetector {
    * Get enhanced PATH with common installation directories
    */
   private getEnhancedPath(): string {
+    const home = process.env.HOME || '';
     const pathAdditions = [
+      path.join(home, '.hive', 'npm-global', 'bin'),  // App-managed npm global bin
+      path.join(home, '.hive', 'cli-bin'),            // App-managed uv tool bin
       '/opt/homebrew/bin',     // Homebrew on Apple Silicon
       '/usr/local/bin',        // Homebrew on Intel Mac / common Unix
       '/usr/bin',              // System binaries
       '/bin',                  // Core binaries
       '/usr/sbin',             // System admin binaries
       '/sbin',                 // Core admin binaries
-      path.join(process.env.HOME || '', '.local', 'bin'), // User local binaries
-      path.join(process.env.HOME || '', '.cargo', 'bin'),  // Rust/Cargo binaries
-      path.join(process.env.HOME || '', 'go', 'bin'),      // Go binaries
+      path.join(home, '.local', 'bin'), // User local binaries
+      path.join(home, '.cargo', 'bin'),  // Rust/Cargo binaries
+      path.join(home, 'go', 'bin'),      // Go binaries
     ];
     
     const currentPath = process.env.PATH || '';

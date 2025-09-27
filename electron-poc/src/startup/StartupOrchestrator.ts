@@ -63,6 +63,17 @@ export class StartupOrchestrator {
             weight: 10,
             required: true
         },
+
+        {
+            id: 'toolchain',
+            name: 'Toolchain',
+            init: async () => {
+                logger.info('[Startup] Bootstrapping toolchain...');
+                await this.bootstrapToolchain();
+            },
+            weight: 20,
+            required: true
+        },
         {
             id: 'ipcHandlers',
             name: 'IPC Handlers',
@@ -370,6 +381,45 @@ export class StartupOrchestrator {
                 resolve(false);
             }
         });
+    }
+
+
+    private async bootstrapToolchain(): Promise<void> {
+        // Ensure our managed bin directories exist and are on PATH for this process
+        const osmod = await import('os');
+        const pathmod = await import('path');
+        const fsm = await import('fs');
+        const home = osmod.homedir();
+        const hiveNpmBin = pathmod.join(home, '.hive', 'npm-global', 'bin');
+        const hiveCliBin = pathmod.join(home, '.hive', 'cli-bin');
+        try { fsm.mkdirSync(hiveNpmBin, { recursive: true }); } catch {}
+        try { fsm.mkdirSync(hiveCliBin, { recursive: true }); } catch {}
+        process.env.PATH = `${hiveNpmBin}:${hiveCliBin}:${process.env.PATH || ''}`;
+
+        // Ensure uv is available (for Spec Kit / Specify CLI)
+        try {
+            const childProc = await import('child_process');
+            childProc.execSync('which uv', { stdio: 'ignore', env: process.env });
+            logger.info('[Startup] uv already present');
+        } catch {
+            // Try Homebrew first
+            try {
+                logger.info('[Startup] Installing uv via Homebrew...');
+                const childProc = await import('child_process');
+                childProc.execSync('brew install uv', { stdio: 'inherit', env: process.env });
+                logger.info('[Startup] uv installed via Homebrew');
+            } catch (e) {
+                // Fallback: official installer (installs to ~/.local/bin by default)
+                try {
+                    logger.info('[Startup] Installing uv via official installer...');
+                    const childProc = await import('child_process');
+                    childProc.execSync('curl -LsSf https://astral.sh/uv/install.sh | sh', { shell: '/bin/bash', stdio: 'inherit', env: process.env });
+                    logger.info('[Startup] uv installed via official installer');
+                } catch (e2) {
+                    logger.warn('[Startup] Failed to install uv automatically; Specify CLI install may prompt user to install uv later');
+                }
+            }
+        }
     }
     
     

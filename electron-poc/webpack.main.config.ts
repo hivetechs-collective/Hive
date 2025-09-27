@@ -1,5 +1,6 @@
 import type { Configuration } from 'webpack';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
+import TerserPlugin from 'terser-webpack-plugin';
 const BuildMemoryServicePlugin = require('./webpack-plugins/BuildMemoryServicePlugin');
 const FixBinaryPermissionsPlugin = require('./webpack-plugins/FixBinaryPermissionsPlugin');
 
@@ -84,8 +85,14 @@ export const mainConfig: Configuration = {
   optimization: {
     minimize: true,
     minimizer: [
-      // Use default minimizer but preserve critical strings
-      '...',
+      // Default minimizer with exclusions for bundled toolchains
+      new TerserPlugin({
+        extractComments: false,
+        terserOptions: {
+          mangle: true,
+        },
+        exclude: [/binaries\/node-dist\//],
+      }),
     ],
     // Prevent aggressive optimizations that could break stdio config
     usedExports: true,
