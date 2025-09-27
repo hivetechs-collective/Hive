@@ -14292,6 +14292,12 @@ npm run release:local                # defaults to stable channel
 npm run release:local -- beta "out/make/Hive Consensus.dmg"
 ```
 
+##### CI/CD Policy (Disabled)
+
+- All GitHub Actions pipelines (build/release/publish/scans) are intentionally disabled in favor of the local flow documented here.
+- PR checks remain as lightweight no-ops solely to satisfy required status contexts. They do not build, sign, or publish artifacts.
+- Authoritative release path: `npm run build:complete` → `npm run release:local`.
+
 **Next Actions (when ready to sign releases)**
 - Set the signing identity once per shell: `export SIGN_ID="Developer ID Application: HiveTechs Collective LLC (FWBLB27H52)"`.
 - Recursively sign every Mach-O inside the bundle (Python runtime, torch, SciPy, helper binaries, etc.):

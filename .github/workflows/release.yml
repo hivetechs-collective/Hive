@@ -1,25 +1,8 @@
-name: Release
+name: Release (disabled)
 
 on:
-  push:
-    branches: [ master ]
-    tags:
-      - 'v*.*.*'
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - '.github/dependabot.yml'
+  # CI/CD disabled; manual dispatch only
   workflow_dispatch:
-    inputs:
-      channel:
-        description: 'Release channel'
-        required: true
-        default: stable
-        type: choice
-        options:
-          - stable
-          - beta
-          - nightly
 
 concurrency:
   group: release-${{ github.ref }}

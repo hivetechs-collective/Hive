@@ -1,9 +1,8 @@
-name: Release On Tag
+name: Release On Tag (disabled)
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  # CI/CD disabled; manual dispatch only
+  workflow_dispatch:
 
 concurrency:
   group: release-on-tag-${{ github.ref }}
