@@ -13,6 +13,19 @@ import fetch from "node-fetch";
 // Set the app name immediately
 app.setName("Hive Consensus");
 
+// Production-safe runtime flags
+// - Disable GPU to avoid first-paint/ANGLE issues on some macOS setups
+// - Disable V8 JIT (jitless) to avoid CodeRange OOM seen on certain hosts
+// These are no-ops in dev but ensure CI-built DMG behaves like the stable local build.
+if (app.isPackaged) {
+  try {
+    app.disableHardwareAcceleration();
+  } catch (e) {
+    // best-effort; ignore
+  }
+  app.commandLine.appendSwitch("js-flags", "--jitless");
+}
+
 import * as path from "path";
 import * as fs from "fs";
 import simpleGit from "simple-git";

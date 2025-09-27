@@ -5508,6 +5508,12 @@ This subsection documents the production issues we hit in CI, what worked locall
   - In Actions, rely on selective reruns with artifact reuse to avoid rebuilds:
     - `sign_only=true` with `reuse_artifact_run_id` to re‑sign an existing unsigned DMG.
     - `publish_only=true` with `reuse_artifact_run_id` to upload an existing signed DMG.
+  - Renderer safety toggles (production only)
+    - The production app now forces safe runtime flags so CI‑built DMGs behave like the stable local build on all hosts:
+      - `app.disableHardwareAcceleration()` to avoid ANGLE/GPU first‑paint issues.
+      - `app.commandLine.appendSwitch('js-flags','--jitless')` to avoid V8 CodeRange OOM.
+    - These apply only when `app.isPackaged` is true and are no‑ops in development.
+    - Code location: `electron-poc/src/index.ts` (top of file, before any window creation).
 
 ### CI/CD v2 — Single “Build Release DMG” Pipeline
 
