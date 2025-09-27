@@ -6,7 +6,7 @@ Read the file at ~/.MEMORY.md to understand how to access my memory and context 
 ```
 
 ## For Users: Starting Your Day
-When you open your AI CLI tool (Claude, Gemini, etc.), simply tell it:
+When you open your AI CLI tool (Claude, Gemini, GitHub Copilot CLI, etc.), simply tell it:
 > "Read ~/.MEMORY.md for context"
 
 This gives your AI tool access to the same memory system as Hive Consensus.
