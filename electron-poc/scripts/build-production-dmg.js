@@ -793,7 +793,6 @@ let nodeBundled = false;
 if (process.env.HIVE_BUNDLE_NODE_DIST === '0') {
   console.log(`${YELLOW}Skipping Node.js dist bundling (HIVE_BUNDLE_NODE_DIST=0)${RESET}`);
 } else {
-let nodeBundled = false;
 
 try {
   const nodeVersionRaw = execSync('node --version', { encoding: 'utf8' }).trim();
