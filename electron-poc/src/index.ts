@@ -3823,7 +3823,11 @@ function updateCursorMcpConfiguration(toolId: string, token?: string) {
 
 function getEnhancedPath(): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+  const hiveNpmBin = path.join(homeDir, ".hive", "npm-global", "bin");
+  const hiveCliBin = path.join(homeDir, ".hive", "cli-bin");
   const pathAdditions = [
+    hiveNpmBin,
+    hiveCliBin,
     `${homeDir}/.local/bin`,
     `${homeDir}/bin`,
     "/opt/homebrew/bin",
@@ -4349,7 +4353,7 @@ const registerSimpleCliToolHandlers = () => {
         }
         try {
           const { stdout, stderr } = await execAsync(
-            `${uvCmd} tool upgrade specify-cli --from git+https://github.com/github/spec-kit.git`,
+            `${uvCmd} tool upgrade specify-cli`,
             { env: { ...process.env, PATH: enhancedPath } },
           );
           logger.info(`[Main] Specify update output: ${stdout}`);
@@ -4565,7 +4569,7 @@ const registerSimpleCliToolHandlers = () => {
               // Reinstall (with pinned version for Grok)
               const reinstallPackage =
                 toolId === "grok" ? updatePackage : packageName;
-              const { stdout } = await execAsync(`${npmCmd} install -g ${reinstallPackage}`, { env: enhancedEnv });
+              const { stdout } = await execAsync(`npm install -g ${reinstallPackage}`, { env: enhancedEnv });
               logger.info(`[Main] Strategy 3 SUCCESS: ${stdout}`);
               updateSucceeded = true;
               strategyUsed = "uninstall + reinstall";
@@ -4643,7 +4647,7 @@ const registerSimpleCliToolHandlers = () => {
                   // Try reinstall again (with pinned version for Grok)
                   const finalReinstallPackage =
                     toolId === "grok" ? updatePackage : packageName;
-                  const { stdout } = await execAsync(`${npmCmd} install -g ${finalReinstallPackage}`, { env: enhancedEnv });
+                  const { stdout } = await execAsync(`npm install -g ${finalReinstallPackage}`, { env: enhancedEnv });
                   logger.info(`[Main] Strategy 4 SUCCESS: ${stdout}`);
                   updateSucceeded = true;
                   strategyUsed = "manual cleanup + reinstall";

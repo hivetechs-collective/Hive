@@ -4,6 +4,7 @@ import CopyWebpackPlugin from 'copy-webpack-plugin';
 import MiniCssExtractPlugin from 'mini-css-extract-plugin';
 
 import { rules } from './webpack.rules';
+import TerserPlugin from 'terser-webpack-plugin';
 import { plugins } from './webpack.plugins';
 
 // Use style-loader for development, MiniCssExtractPlugin for production
@@ -52,6 +53,16 @@ export const rendererConfig: Configuration = {
     rules,
   },
   plugins,
+  optimization: {
+    minimize: true,
+    minimizer: [
+      new TerserPlugin({
+        extractComments: false,
+        terserOptions: { mangle: true },
+        exclude: [/binaries\/node-dist\//],
+      }),
+    ],
+  },
   resolve: {
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css'],
     fallback: {

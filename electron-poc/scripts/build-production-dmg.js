@@ -790,6 +790,10 @@ if (!gitBundled) {
 console.log(`${CYAN}Bundling Node.js runtime (for Memory Service)...${RESET}`);
 const nodeTargetPath = path.join(binariesDir, 'node');
 let nodeBundled = false;
+if (process.env.HIVE_BUNDLE_NODE_DIST !== '1') {
+  console.log(`${YELLOW}Skipping Node.js dist bundling (HIVE_BUNDLE_NODE_DIST!=1)${RESET}`);
+} else {
+let nodeBundled = false;
 
 try {
   const nodeVersionRaw = execSync('node --version', { encoding: 'utf8' }).trim();
@@ -861,6 +865,8 @@ try {
   console.log(`${YELLOW}⚠ Failed to bundle standalone Node.js runtime: ${error.message}${RESET}`);
 }
 
+} // end HIVE_BUNDLE_NODE_DIST guard
+
 if (!nodeBundled) {
   console.log(`${YELLOW}Using Electron's built-in Node.js for Memory Service${RESET}`);
   const nodeWrapperScript = `#!/bin/sh\n# Wrapper to use Electron's Node.js runtime\nELECTRON_RUN_AS_NODE=1 exec \"$(dirname \"$0\")/../MacOS/Hive Consensus\" \"$@\"\n`;
@@ -873,6 +879,10 @@ if (!nodeBundled) {
 // 3b. Bundle uv (for Spec Kit / Specify CLI)
 console.log(`${CYAN}Bundling uv (Specify CLI dependency)...${RESET}`);
 const uvTargetPath = path.join(binariesDir, 'uv');
+let uvBundled = false;
+if (process.env.HIVE_BUNDLE_UV !== '1') {
+  console.log(`${YELLOW}Skipping uv bundling (HIVE_BUNDLE_UV!=1)${RESET}`);
+} else {
 let uvBundled = false;
 
 try {
@@ -915,6 +925,7 @@ try {
   }
 } catch (e) {
   console.log(`${YELLOW}⚠ Failed to bundle uv: ${e.message}${RESET}`);
+}
 }
 
 // 4. Create binary manifest for runtime

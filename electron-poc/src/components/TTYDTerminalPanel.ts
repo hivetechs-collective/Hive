@@ -433,8 +433,11 @@ export class TTYDTerminalPanel {
         webview.src = 'about:blank';
         
         // Load the webview immediately - flex layout ensures proper size
-        console.log('[TTYDTerminalPanel] Loading ttyd webview');
-        webview.src = terminalInfo.url;
+        console.log('[TTYDTerminalPanel] Deferring ttyd webview load until server is ready');
+        const targetUrl = terminalInfo.url;
+        this.waitForUrl(targetUrl, 6000).then(() => {
+            try { (webview as any).src = targetUrl; } catch {}
+        });
         
         webview.style.cssText = `
             width: 100%;
@@ -1015,6 +1018,16 @@ export class TTYDTerminalPanel {
         });
     }
     
+    private async waitForUrl(url: string, timeoutMs: number = 6000, intervalMs: number = 200): Promise<void> {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            try {
+                await fetch(url, { cache: 'no-store' as RequestCache } as RequestInit);
+                return;
+            } catch {}
+            await new Promise(r => setTimeout(r, intervalMs));
+        }
+    }
     private async restartAllTerminals(): Promise<void> {
         // Restart all ttyd processes to get fresh PTY with correct size
         // This is the only reliable way to fix the terminal size issue
