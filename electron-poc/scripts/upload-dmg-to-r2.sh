@@ -40,6 +40,9 @@ SIZE=$(stat -f%z "$DMG_PATH" 2>/dev/null || stat -c%s "$DMG_PATH")
 SIZE_MB=$(echo "scale=2; $SIZE / 1024 / 1024" | bc)
 echo "📦 Uploading DMG (${SIZE_MB} MiB) to R2 via S3-compatible API..."
 
+# Compute SHA256 for integrity (used by in-app updater)
+SHA256=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+
 # Endpoint args for AWS CLI
 ENDPOINT_ARGS=(--endpoint-url "$R2_ENDPOINT")
 
@@ -62,6 +65,7 @@ cat > /tmp/electron-version.json <<EOF
     "url": "https://releases.hivetechs.io/$CHANNEL/Hive-Consensus-v${VERSION}.dmg",
     "size": $SIZE,
     "size_mb": "$SIZE_MB",
+    "sha256": "$SHA256",
     "date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
     "type": "electron-app"
 }

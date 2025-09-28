@@ -46,6 +46,7 @@ import { ProductionPaths } from "./utils/ProductionPaths";
 import { AIToolsDatabase } from "./services/AIToolsDatabase";
 import * as zlib from "zlib";
 import { isBackupDue, computeRetentionDeletes } from "./utils/backup-policy";
+import { AppUpdater } from "./utils/AppUpdater";
 import {
   ensureOpenRouterSchema,
   syncOpenRouter,
@@ -2593,6 +2594,17 @@ const createApplicationMenu = async (): Promise<void> => {
     {
       label: "Help",
       submenu: [
+        {
+          label: "Check for Updates…",
+          click: async () => {
+            try {
+              await AppUpdater.getInstance().checkForUpdates('stable', { force: true });
+            } catch (e) {
+              logger.warn('[Main] Manual update check failed', e);
+            }
+          },
+        },
+        { type: "separator" },
         {
           label: "Getting Started",
           click: () => {
@@ -5709,6 +5721,13 @@ app.on("ready", async () => {
 
     // Success - app is now running with main window shown
     logger.info("[Main] ✅ Application started successfully");
+
+    // Start auto update checks: on launch and every 24 hours
+    try {
+      AppUpdater.getInstance().startAutoChecks('stable');
+    } catch (e) {
+      logger.warn('[Main] Failed to start auto update checks', e);
+    }
   } catch (error) {
     logger.error("[Main] Unexpected startup error:", error);
     dialog.showErrorBox(
