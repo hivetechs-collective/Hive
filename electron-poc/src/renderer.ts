@@ -68,7 +68,7 @@ import grokIcon from "../resources/ai-cli-icons/grok.svg";
 import qwenIcon from "../resources/ai-cli-icons/qwen.svg";
 import openaiIcon from "../resources/ai-cli-icons/openai.svg";
 import githubCopilotIcon from "../resources/ai-cli-icons/github-copilot.svg";
-import specKitIcon from "../resources/ai-cli-icons/spec-kit.webp";
+import specKitIcon from "../resources/ai-cli-icons/spec-kit.svg";
 import cursorIcon from "../resources/ai-cli-icons/cdnlogo.com_cursor.svg";
 import {
   ConsensusWebSocket,
@@ -461,7 +461,7 @@ document.body.innerHTML = `
         
         <!-- AI CLI Tool Quick Launch Icons -->
         <div class="ai-cli-icons-section">
-          <button class="activity-btn cli-quick-launch" data-tool="specify" aria-label="Spec Kit (Specify CLI)">
+          <button class="activity-btn cli-quick-launch spec-kit-icon" data-tool="specify" aria-label="Spec Kit (Specify CLI)">
             <img src="${specKitIcon}" width="24" height="24" alt="Spec Kit" style="object-fit: contain;" />
             <span class="activity-tooltip">Spec Kit (Specify CLI)</span>
           </button>

@@ -157,22 +157,27 @@ export class HelpViewer {
       title: "What's New",
       icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4 4 .5-3 3 .8 4.5L8 11l-3.8 2 1-4.5-3-3L6 5z"/></svg>`,
       content: `
-        <h2>Hive v1.8.345 — Highlights</h2>
+        <h2>Hive v1.8.486 — Highlights</h2>
         <ul>
-          <li>Welcome v1.9: Recents UX, templates, clone (URL/GitHub/GitLab), layout modes.</li>
-          <li>Session restore and one-time Basics Tour prompt.</li>
-          <li>Unified SQLite DB with WAL, integrity check, and analytics logging.</li>
-          <li>Backup/Restore with encryption (AES-256-GCM), compression, retention, and reminders.</li>
-          <li>Settings visibility fix when switching panels.</li>
+          <li><strong>In‑App Updater</strong>: checks for updates on launch and every 24 hours while running. Manual “Help → Check for Updates…” added.</li>
+          <li><strong>Notarized DMG Stability</strong>: helper apps (Renderer/GPU/Utility) now signed with entitlements to prevent post‑notarization renderer crashes.</li>
+          <li><strong>ULFO DMG</strong>: standardized LZFSE compression for smaller downloads and faster mounts.</li>
+          <li><strong>Startup Robustness</strong>: hardened splash → main transition to eliminate rare “stuck splash/black box”.</li>
+          <li><strong>CLI Tools Policy</strong>: no blocking installers at startup; installs run after UI or from “Install All”.</li>
         </ul>
 
         <h3>Quick Actions</h3>
         <div class="code-block">
-          <div class="code-header">Explore the new features</div>
-          <pre><code>Open Welcome → Try New Project (template)
-Open Welcome → Clone Repository (GitHub tab)
-Settings → Advanced → View Backups</code></pre>
+          <div class="code-header">Try the new updater</div>
+          <pre><code>Help → Check for Updates…
+Restart app to see launch-time prompt</code></pre>
         </div>
+
+        <h3>Recent Maintenance Releases</h3>
+        <ul>
+          <li><strong>v1.8.485</strong>: Optimizations and stability fixes for signing/notarization + upload pipeline.</li>
+          <li><strong>v1.8.484</strong>: Security & bug fixes; R2 release feed alignment.</li>
+        </ul>
       `
     },
     {
