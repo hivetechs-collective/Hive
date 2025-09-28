@@ -5749,7 +5749,7 @@ This operational checklist is the same process that drove the successful end-to-
   - Version metadata lives in the accompanying `build-report.json` artifact (`hives/hive-macos-dmg-ready` workflow artifact).
 - **Verification tip:** Always validate the worker-backed domain (`https://releases.hivetechs.io`). The worker proxies the R2 bucket (`releases-hivetechs`) and serves a valid TLS certificate. The presence of the versioned object **and** the `Hive-Consensus-latest.dmg` alias under the `stable/` prefix indicates the publish step succeeded.
 - **Standard operating order:** ensure CI contexts are updated first, merge the branch (now identical to master), then trigger the release workflow on master to publish. This sequence keeps master in lockstep with `memory-context-cicd` and guarantees the latest DMG lands in the website’s stable download section.
-- **Website download link:** the public site (`hivetechs-website` repo) should reference `https://releases.hivetechs.io/stable/Hive-Consensus-latest.dmg` for the Apple Silicon button. The release workflow maintains that alias (plus the versioned and `stable/electron/` copies), so users always receive the notarized build we just published.
+- **Website download link:** the public site (`hivetechs-website` repo) must reference `https://releases.hivetechs.io/stable/Hive-Consensus-latest.dmg` (single source of truth). The upload script maintains this alias and the versioned object under `stable/`.
 
 **8. Comprehensive Build Requirements Check System & Build Order**
 
@@ -14338,15 +14338,15 @@ node electron-poc/scripts/test-dmg-memory-service.js "electron-poc/out/make/Hive
 
 The health harness mounts the DMG, launches the Memory Service on a random port, and hits `/health` to ensure the runtime is functional from a read-only volume.
 
-##### R2 Upload Details
+##### R2 Upload Details (Single Source of Truth)
 
 Wrangler route (recommended if using Cloudflare tokens)
 - Script: `electron-poc/scripts/upload-dmg-to-r2.sh [stable|beta]`
-- Uploads:
-  - `stable/electron/Hive-Consensus-v<version>.dmg`
-  - `stable/electron/Hive-Consensus-latest.dmg`
-  - `stable/electron/version.json`
-  - Optional zip (if present): `stable/electron/Hive-Consensus-v<version>-darwin-arm64.zip`
+- Uploads (canonical public paths served by Cloudflare Worker at `releases.hivetechs.io`):
+  - `stable/Hive-Consensus-v<version>.dmg`
+  - `stable/Hive-Consensus-latest.dmg`
+  - `stable/version.json`
+  - Optional zip: `stable/Hive-Consensus-v<version>-darwin-arm64.zip`
 
 AWS S3-compatible route
 - Script: `electron-poc/scripts/upload-to-r2.sh`

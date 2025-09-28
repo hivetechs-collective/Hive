@@ -31,15 +31,13 @@ SIZE_MB=$(echo "scale=2; $SIZE / 1024 / 1024" | bc)
 
 echo "📦 Uploading DMG (${SIZE_MB}MB) to R2..."
 
-# Upload DMG to R2
+## Upload DMG to R2 (canonical public paths)
 echo "  📱 Uploading macOS DMG..."
-wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/Hive-Consensus-v${VERSION}.dmg" \
+wrangler r2 object put "$BUCKET_NAME/$CHANNEL/Hive-Consensus-v${VERSION}.dmg" \
     --file="$DMG_PATH" \
     --content-type="application/x-apple-diskimage"
 
-# Also upload as 'latest' for easy access
-echo "  📱 Uploading as latest..."
-wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/Hive-Consensus-latest.dmg" \
+wrangler r2 object put "$BUCKET_NAME/$CHANNEL/Hive-Consensus-latest.dmg" \
     --file="$DMG_PATH" \
     --content-type="application/x-apple-diskimage"
 
@@ -59,7 +57,7 @@ cat > /tmp/electron-version.json <<EOF
 EOF
 
 echo "  📋 Uploading version metadata..."
-wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/version.json" \
+wrangler r2 object put "$BUCKET_NAME/$CHANNEL/version.json" \
     --file="/tmp/electron-version.json" \
     --content-type="application/json"
 
@@ -67,7 +65,7 @@ wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/version.json" \
 ZIP_PATH="out/make/zip/darwin/arm64/Hive Consensus-darwin-arm64-${VERSION}.zip"
 if [ -f "$ZIP_PATH" ]; then
     echo "  📦 Uploading ZIP archive..."
-    wrangler r2 object put "$BUCKET_NAME/$CHANNEL/electron/Hive-Consensus-v${VERSION}-darwin-arm64.zip" \
+    wrangler r2 object put "$BUCKET_NAME/$CHANNEL/Hive-Consensus-v${VERSION}-darwin-arm64.zip" \
         --file="$ZIP_PATH" \
         --content-type="application/zip"
 fi
@@ -76,11 +74,11 @@ echo ""
 echo "✅ Upload complete!"
 echo ""
 echo "📥 Download URLs:"
-echo "  DMG:      https://releases.hivetechs.io/$CHANNEL/electron/Hive-Consensus-v${VERSION}.dmg"
-echo "  Latest:   https://releases.hivetechs.io/$CHANNEL/electron/Hive-Consensus-latest.dmg"
-echo "  Metadata: https://releases.hivetechs.io/$CHANNEL/electron/version.json"
+echo "  DMG:      https://releases.hivetechs.io/$CHANNEL/Hive-Consensus-v${VERSION}.dmg"
+echo "  Latest:   https://releases.hivetechs.io/$CHANNEL/Hive-Consensus-latest.dmg"
+echo "  Metadata: https://releases.hivetechs.io/$CHANNEL/version.json"
 if [ -f "$ZIP_PATH" ]; then
-    echo "  ZIP:      https://releases.hivetechs.io/$CHANNEL/electron/Hive-Consensus-v${VERSION}-darwin-arm64.zip"
+    echo "  ZIP:      https://releases.hivetechs.io/$CHANNEL/Hive-Consensus-v${VERSION}-darwin-arm64.zip"
 fi
 
 echo ""
