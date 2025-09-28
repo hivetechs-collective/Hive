@@ -38,7 +38,7 @@ fi
 # Compute file size
 SIZE=$(stat -f%z "$DMG_PATH" 2>/dev/null || stat -c%s "$DMG_PATH")
 SIZE_MB=$(echo "scale=2; $SIZE / 1024 / 1024" | bc)
-echo "📦 Uploading DMG (${SIZE_MB}MB) to R2 via S3-compatible API..."
+echo "📦 Uploading DMG (${SIZE_MB} MiB) to R2 via S3-compatible API..."
 
 # Endpoint args for AWS CLI
 ENDPOINT_ARGS=(--endpoint-url "$R2_ENDPOINT")

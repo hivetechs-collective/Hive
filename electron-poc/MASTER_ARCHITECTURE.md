@@ -7582,6 +7582,14 @@ To guarantee deterministic control over versions, updates, uninstalls, and MCP/m
 - Specify (Spec Kit) uv fallback
   - `uv tool upgrade specify-cli` falls back to `uv tool install specify-cli` if not installed, all scoped to `~/.hive/cli-bin`.
 
+#### Startup guardrail — no blocking installers
+
+- Never run package manager installers synchronously during the splash/startup path.
+- All tool installations (including `uv` for Spec Kit) run after the main window shows, either:
+  - Automatically when the user clicks “Install All Tools”, or
+  - When the user clicks “Install” on an individual tool card.
+- Prefer bundling `uv` with the app for zero‑touch Spec Kit installs; when not bundled, attempt background installs with timeouts and clear error messages if prerequisites are missing.
+
 - Cursor CLI (curl installer) integration
   - The upstream installer places `cursor-agent` under user locations (commonly `~/.local/bin`).
   - Hive creates a managed shim at `~/.hive/cli-bin/cursor-agent` pointing to the upstream binary so detection, updates, and launches resolve through the managed prefix.
@@ -8580,6 +8588,16 @@ aiToolsDb.cleanupOldRecords(90);
 
 ### Overview
 The CLI Tools Management UI provides a dedicated, independent panel for managing agentic coding CLI tools, with its own icon in the activity bar. This positions CLI Tools as a core feature alongside Memory Service, Analytics, and Settings - not buried within settings.
+
+### Startup Robustness (Splash → Main)
+
+- Splash updates must be guarded: never call `webContents.send` on a destroyed splash.
+- The transition to the main window must not depend solely on a once‑attached `ready‑to‑show` handler:
+  - Use a fallback timeout (e.g., 5s) and check `webContents.isLoadingMainFrame() === false` to avoid missing the event.
+  - Always destroy the splash and show/focus the main window after the wait.
+  - Log key milestones: “Transitioning to main window…”, `did-finish-load`, and “handlers registered”.
+
+This design prevents “stuck splash” or small black window symptoms across different signing/notarization and timing environments.
 
 ### UI Architecture
 
@@ -14217,6 +14235,26 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
   codesign --force --sign "Developer ID Application: Verone Lazio (FWBLB27H52)" /tmp/true_copy
   rm /tmp/true_copy
   ```
+
+#### Production Guardrails (must pass before publishing)
+
+- Sign all helpers with entitlements
+  - Apply `scripts/entitlements.plist` to every Mach‑O and helper app, not only the main binary:
+    - Embedded executables in `app.asar.unpacked/.webpack/main/binaries/**` (node, ttyd, git)
+    - Helper apps in `Contents/Frameworks/*.app` (Renderer/GPU/Utility/Plugin)
+  - Required keys: `allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`, file and network client permissions.
+- DMG format
+  - Use ULFO (LZFSE) for the notarized DMG to match Forge output and minimize size/mount time.
+- Read‑only DMG readiness
+  - Ensure exec bits (0755) are set on embedded binaries before `electron-forge make`; DMG must be runnable from a mount without mutating perms.
+- Renderer stability verification
+  - From a fresh website download: mount, copy to `/Applications`, launch, and confirm logs show:
+    - `[Renderer] dom-ready`, `[Renderer] did-finish-load`
+    - `[StartupOrchestrator] Transitioning to main window...`
+    - `[MainWindow] did-finish-load`
+  - There must be no `render-process-gone` events.
+- Optional diagnostics (never required for users)
+  - `HIVE_DISABLE_GPU=1` to disable GPU, `HIVE_JITLESS=1` (or `HIVE_JS_FLAGS=--jitless`) for V8 environments with strict CodeRange policies.
 
 #### Local Sign + Notarize (No CI/CD)
 

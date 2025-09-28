@@ -121,7 +121,8 @@ if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
           "${CS_BASE[@]}" --sign "$SIGN_ID" "$bundle"
         fi
       else
-        "${CS_BASE[@]}" --sign "$SIGN_ID" "$bundle"
+        # Helper apps (Renderer/GPU/Plugin/Utility) must carry entitlements (allow-jit, etc.)
+        "${CS_BASE[@]}" --entitlements "$ENTITLEMENTS" --sign "$SIGN_ID" "$bundle"
       fi
     done < <(find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -type d \( -name '*.framework' -o -name '*.app' \) -print0)
 fi
@@ -186,8 +187,9 @@ trap 'rm -rf "$STAGING_DIR"' EXIT
 
 rsync -a "$APP_PATH" "$STAGING_DIR/"
 
+# Create DMG using ULFO (LZFSE) to match Forge output (smaller + faster)
 hdiutil create -volname "$VOLUME_NAME" \
-  -srcfolder "$STAGING_DIR" -ov -format UDZO "$DMG_PATH"
+  -srcfolder "$STAGING_DIR" -ov -format ULFO "$DMG_PATH"
 
 "${CS_BASE[@]}" --sign "$SIGN_ID" "$DMG_PATH"
 
