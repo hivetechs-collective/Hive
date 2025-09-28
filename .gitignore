@@ -53,6 +53,7 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+electron-poc/.r2.env
 
 # Test coverage
 coverage/
