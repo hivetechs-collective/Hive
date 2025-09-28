@@ -14348,6 +14348,51 @@ Wrangler route (recommended if using Cloudflare tokens)
   - `stable/version.json`
   - Optional zip: `stable/Hive-Consensus-v<version>-darwin-arm64.zip`
 
+###### Upload client limits and fallback
+- Wrangler `r2 object put` (remote mode) has a hard 300 MiB upload limit. Our DMG is typically ~700–800 MiB.
+- The upload script automatically falls back to the AWS S3–compatible route for Cloudflare R2 when the file exceeds 300 MiB.
+  - Large artifacts (DMG/ZIP) are uploaded via `aws s3 cp` directly to the R2 bucket.
+  - Small artifacts (e.g., `version.json`) may use Wrangler or AWS depending on size.
+
+###### Environment requirements for the AWS S3 route
+- Required environment variables for the script when uploading large files:
+  - `AWS_ACCESS_KEY_ID` – your R2 access key
+  - `AWS_SECRET_ACCESS_KEY` – your R2 secret key
+  - `R2_ENDPOINT` – e.g., `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
+- The script passes `--endpoint-url $R2_ENDPOINT` to the AWS CLI so no global `aws configure` is required.
+- Bucket name is fixed: `releases-hivetechs`.
+
+###### One‑command local release to R2
+```bash
+cd electron-poc
+# Build → Sign/Notarize
+npm run build:complete
+npm run sign:notarize:local
+
+# Upload (auto-detects large-file path)
+AWS_ACCESS_KEY_ID=… \
+AWS_SECRET_ACCESS_KEY=… \
+R2_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com \
+./scripts/upload-dmg-to-r2.sh stable
+```
+
+###### Verification (website consumption)
+- Public endpoints (single source of truth):
+  - Latest DMG: `https://releases.hivetechs.io/stable/Hive-Consensus-latest.dmg`
+  - Versioned DMG: `https://releases.hivetechs.io/stable/Hive-Consensus-v<version>.dmg`
+  - Metadata: `https://releases.hivetechs.io/stable/version.json`
+- Validate after upload:
+```bash
+# Should return 200 OK
+curl -I https://releases.hivetechs.io/stable/Hive-Consensus-latest.dmg
+
+# Version metadata should reflect the just-uploaded version and URL
+curl -s https://releases.hivetechs.io/stable/version.json | jq
+```
+Notes:
+- The Cloudflare Worker for `releases.hivetechs.io` maps the URL path directly to the R2 key (`stable/…`). No prefix rewriting.
+- If a browser cache serves an older DMG, append a cache‑buster query (e.g., `?ts=$(date +%s)`).
+
 AWS S3-compatible route
 - Script: `electron-poc/scripts/upload-to-r2.sh`
 - Required env:
