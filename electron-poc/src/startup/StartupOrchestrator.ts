@@ -405,70 +405,75 @@ export class StartupOrchestrator {
         const additions = [packagedBinDir, hiveNpmBin, hiveCliBin].filter(Boolean).join(':');
         process.env.PATH = `${additions}:${process.env.PATH || ''}`;
 
-        // Ensure uv is available (for Spec Kit / Specify CLI)
+        // IMPORTANT: Do not attempt to install external tools synchronously here (blocks UI).
+        // We only detect uv presence; installation is handled on-demand from the CLI Tools UI.
         try {
             const childProc = await import('child_process');
             childProc.execSync('which uv', { stdio: 'ignore', env: process.env });
             logger.info('[Startup] uv already present');
         } catch {
-            // Try Homebrew first
-            try {
-                logger.info('[Startup] Installing uv via Homebrew...');
-                const childProc = await import('child_process');
-                childProc.execSync('brew install uv', { stdio: 'inherit', env: process.env });
-                logger.info('[Startup] uv installed via Homebrew');
-            } catch (e) {
-                // Fallback: official installer (installs to ~/.local/bin by default)
-                try {
-                    logger.info('[Startup] Installing uv via official installer...');
-                    const childProc = await import('child_process');
-                    childProc.execSync('curl -LsSf https://astral.sh/uv/install.sh | sh', { shell: '/bin/bash', stdio: 'inherit', env: process.env });
-                    logger.info('[Startup] uv installed via official installer');
-                } catch (e2) {
-                    logger.warn('[Startup] Failed to install uv automatically; Specify CLI install may prompt user to install uv later');
-                }
-            }
+            logger.info('[Startup] uv not found; deferring installation to CLI Tools flow');
         }
     }
     
     
     private updateSplash(percent: number, status: string): void {
-        if (this.splashWindow && !this.splashWindow.isDestroyed()) {
-            this.splashWindow.webContents.send('startup-progress', {
-                percent: Math.min(100, Math.round(percent)),
-                status
-            });
+        try {
+            if (this.splashWindow && !this.splashWindow.isDestroyed()) {
+                this.splashWindow.webContents.send('startup-progress', {
+                    percent: Math.min(100, Math.round(percent)),
+                    status
+                });
+            }
+        } catch (err) {
+            // Ignore race where splash was destroyed mid-send
         }
     }
     
     private showError(error: Error): void {
-        if (this.splashWindow && !this.splashWindow.isDestroyed()) {
-            this.splashWindow.webContents.send('startup-error', {
-                message: error.message
-            });
+        try {
+            if (this.splashWindow && !this.splashWindow.isDestroyed()) {
+                this.splashWindow.webContents.send('startup-error', {
+                    message: error.message
+                });
+            }
+        } catch {
+            // Safe to ignore if splash is gone
         }
     }
     
     private async transitionToMain(createMainWindow: (show: boolean) => BrowserWindow): Promise<void> {
         // Create main window but don't show it yet
         this.mainWindow = createMainWindow(false);
-        
-        // Wait for main window to be ready
-        await new Promise<void>((resolve) => {
+
+        // Wait for 'ready-to-show' with a fallback timeout so we never hang on splash
+        const ready = new Promise<void>((resolve) => {
             if (this.mainWindow) {
                 this.mainWindow.once('ready-to-show', () => resolve());
+                // If renderer already loaded, ensure we don't miss it
+                if (this.mainWindow.webContents.isLoadingMainFrame() === false) {
+                    resolve();
+                }
+            } else {
+                resolve();
             }
         });
-        
+        const timeout = new Promise<void>((resolve) => setTimeout(resolve, 5000));
+        await Promise.race([ready, timeout]);
+
         // Close splash and show main
-        if (this.splashWindow && !this.splashWindow.isDestroyed()) {
-            this.splashWindow.destroy();
-            this.splashWindow = null;
-        }
-        
+        try {
+            if (this.splashWindow && !this.splashWindow.isDestroyed()) {
+                this.splashWindow.destroy();
+                this.splashWindow = null;
+            }
+        } catch {}
+
         if (this.mainWindow) {
-            this.mainWindow.show();
-            this.mainWindow.focus();
+            try {
+                this.mainWindow.show();
+                this.mainWindow.focus();
+            } catch {}
         }
     }
     

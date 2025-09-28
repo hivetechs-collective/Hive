@@ -1897,7 +1897,8 @@ logPhase('BUILD REPORT', 'Generate detailed build information');
 const buildInfo = {
   timestamp: new Date().toISOString(),
   dmgPath: dmgPath,
-  dmgSize: (fs.statSync(dmgPath).size / (1024 * 1024)).toFixed(2) + ' MB',
+  // MiB for clarity (binary megabytes)
+  dmgSize: (fs.statSync(dmgPath).size / (1024 * 1024)).toFixed(2) + ' MiB',
   nodeVersion: nodeVersion?.trim(),
   npmVersion: npmVersion?.trim(),
   platform: process.platform,

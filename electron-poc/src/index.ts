@@ -67,6 +67,42 @@ if (require("electron-squirrel-startup")) {
 // Initialize early so it's available for all components
 const processManager = new ProcessManager();
 
+// Global diagnostics for renderer stability
+app.on("web-contents-created", (_event, contents) => {
+  try {
+    contents.on("render-process-gone", (_e, details) => {
+      logger.error("[Renderer] render-process-gone", {
+        reason: (details as any)?.reason,
+        exitCode: (details as any)?.exitCode,
+      });
+    });
+    contents.on(
+      "did-fail-load",
+      (
+        _e,
+        errorCode: number,
+        errorDescription: string,
+        validatedURL: string,
+      ) => {
+        logger.error("[Renderer] did-fail-load", {
+          errorCode,
+          errorDescription,
+          validatedURL,
+        });
+      },
+    );
+    contents.on("unresponsive", () => {
+      logger.error("[Renderer] unresponsive");
+    });
+    contents.on("dom-ready", () => {
+      logger.info("[Renderer] dom-ready");
+    });
+    contents.on("did-finish-load", () => {
+      logger.info("[Renderer] did-finish-load");
+    });
+  } catch {}
+});
+
 // Inject ProcessManager into CLI tools detector for dynamic port discovery
 setProcessManagerReference(processManager);
 
@@ -81,6 +117,23 @@ const CLI_TOOLS_CONFIG_PATH = path.join(
 
 const PLAYWRIGHT_E2E = process.env.PLAYWRIGHT_E2E === "1";
 const PLAYWRIGHT_REMOTE_DEBUG_PORT = process.env.PLAYWRIGHT_REMOTE_DEBUG_PORT;
+
+// Optional GPU-safe mode for troubleshooting white/blank window issues in production
+try {
+  if (process.env.HIVE_DISABLE_GPU === "1") {
+    app.commandLine.appendSwitch("disable-gpu");
+    app.commandLine.appendSwitch("disable-gpu-compositing");
+    logger.warn("[Main] HIVE_DISABLE_GPU=1 set, running with GPU disabled");
+  }
+  // Optional V8 flags for environments with JIT/CodeRange issues
+  if (process.env.HIVE_JITLESS === "1") {
+    app.commandLine.appendSwitch("js-flags", "--jitless");
+    logger.warn("[Main] HIVE_JITLESS=1 set, running V8 in jitless mode");
+  } else if (process.env.HIVE_JS_FLAGS) {
+    app.commandLine.appendSwitch("js-flags", process.env.HIVE_JS_FLAGS);
+    logger.warn(`[Main] Applied custom V8 js-flags: ${process.env.HIVE_JS_FLAGS}`);
+  }
+} catch {}
 
 if (PLAYWRIGHT_E2E) {
   if (PLAYWRIGHT_REMOTE_DEBUG_PORT) {
@@ -539,6 +592,28 @@ const createWindow = (show: boolean = true): BrowserWindow => {
   // Register terminal handlers with the shared ProcessManager
   // This is safe to call multiple times as it updates the window reference
   registerTerminalHandlers(mainWindow, processManager);
+
+  // Per-window diagnostics for white/blank window troubleshooting
+  try {
+    mainWindow.on("unresponsive", () => {
+      logger.error("[MainWindow] unresponsive");
+    });
+    mainWindow.webContents.on("render-process-gone", (_e, details) => {
+      logger.error("[MainWindow] render-process-gone", {
+        reason: (details as any)?.reason,
+        exitCode: (details as any)?.exitCode,
+      });
+    });
+    mainWindow.webContents.on(
+      "did-fail-load",
+      (_e, code: number, desc: string, url: string) => {
+        logger.error("[MainWindow] did-fail-load", { code, desc, url });
+      },
+    );
+    mainWindow.webContents.on("did-finish-load", () => {
+      logger.info("[MainWindow] did-finish-load");
+    });
+  } catch {}
 
   // Create application menu
 void createApplicationMenu();

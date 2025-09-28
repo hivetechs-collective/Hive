@@ -7582,6 +7582,14 @@ To guarantee deterministic control over versions, updates, uninstalls, and MCP/m
 - Specify (Spec Kit) uv fallback
   - `uv tool upgrade specify-cli` falls back to `uv tool install specify-cli` if not installed, all scoped to `~/.hive/cli-bin`.
 
+#### Startup guardrail — no blocking installers
+
+- Never run package manager installers synchronously during the splash/startup path.
+- All tool installations (including `uv` for Spec Kit) run after the main window shows, either:
+  - Automatically when the user clicks “Install All Tools”, or
+  - When the user clicks “Install” on an individual tool card.
+- Prefer bundling `uv` with the app for zero‑touch Spec Kit installs; when not bundled, attempt background installs with timeouts and clear error messages if prerequisites are missing.
+
 - Cursor CLI (curl installer) integration
   - The upstream installer places `cursor-agent` under user locations (commonly `~/.local/bin`).
   - Hive creates a managed shim at `~/.hive/cli-bin/cursor-agent` pointing to the upstream binary so detection, updates, and launches resolve through the managed prefix.
@@ -8580,6 +8588,16 @@ aiToolsDb.cleanupOldRecords(90);
 
 ### Overview
 The CLI Tools Management UI provides a dedicated, independent panel for managing agentic coding CLI tools, with its own icon in the activity bar. This positions CLI Tools as a core feature alongside Memory Service, Analytics, and Settings - not buried within settings.
+
+### Startup Robustness (Splash → Main)
+
+- Splash updates must be guarded: never call `webContents.send` on a destroyed splash.
+- The transition to the main window must not depend solely on a once‑attached `ready‑to‑show` handler:
+  - Use a fallback timeout (e.g., 5s) and check `webContents.isLoadingMainFrame() === false` to avoid missing the event.
+  - Always destroy the splash and show/focus the main window after the wait.
+  - Log key milestones: “Transitioning to main window…”, `did-finish-load`, and “handlers registered”.
+
+This design prevents “stuck splash” or small black window symptoms across different signing/notarization and timing environments.
 
 ### UI Architecture
 
@@ -14218,6 +14236,26 @@ This architecture achieves the **"Ultimate Goal: Pure TypeScript"** mentioned in
   rm /tmp/true_copy
   ```
 
+#### Production Guardrails (must pass before publishing)
+
+- Sign all helpers with entitlements
+  - Apply `scripts/entitlements.plist` to every Mach‑O and helper app, not only the main binary:
+    - Embedded executables in `app.asar.unpacked/.webpack/main/binaries/**` (node, ttyd, git)
+    - Helper apps in `Contents/Frameworks/*.app` (Renderer/GPU/Utility/Plugin)
+  - Required keys: `allow-jit`, `allow-unsigned-executable-memory`, `disable-library-validation`, file and network client permissions.
+- DMG format
+  - Use ULFO (LZFSE) for the notarized DMG to match Forge output and minimize size/mount time.
+- Read‑only DMG readiness
+  - Ensure exec bits (0755) are set on embedded binaries before `electron-forge make`; DMG must be runnable from a mount without mutating perms.
+- Renderer stability verification
+  - From a fresh website download: mount, copy to `/Applications`, launch, and confirm logs show:
+    - `[Renderer] dom-ready`, `[Renderer] did-finish-load`
+    - `[StartupOrchestrator] Transitioning to main window...`
+    - `[MainWindow] did-finish-load`
+  - There must be no `render-process-gone` events.
+- Optional diagnostics (never required for users)
+  - `HIVE_DISABLE_GPU=1` to disable GPU, `HIVE_JITLESS=1` (or `HIVE_JS_FLAGS=--jitless`) for V8 environments with strict CodeRange policies.
+
 #### Local Sign + Notarize (No CI/CD)
 
 You can sign, notarize, and staple a locally built DMG entirely outside GitHub Actions.
@@ -14347,6 +14385,51 @@ Wrangler route (recommended if using Cloudflare tokens)
   - `stable/Hive-Consensus-latest.dmg`
   - `stable/version.json`
   - Optional zip: `stable/Hive-Consensus-v<version>-darwin-arm64.zip`
+
+###### Upload client limits and fallback
+- Wrangler `r2 object put` (remote mode) has a hard 300 MiB upload limit. Our DMG is typically ~700–800 MiB.
+- The upload script automatically falls back to the AWS S3–compatible route for Cloudflare R2 when the file exceeds 300 MiB.
+  - Large artifacts (DMG/ZIP) are uploaded via `aws s3 cp` directly to the R2 bucket.
+  - Small artifacts (e.g., `version.json`) may use Wrangler or AWS depending on size.
+
+###### Environment requirements for the AWS S3 route
+- Required environment variables for the script when uploading large files:
+  - `AWS_ACCESS_KEY_ID` – your R2 access key
+  - `AWS_SECRET_ACCESS_KEY` – your R2 secret key
+  - `R2_ENDPOINT` – e.g., `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
+- The script passes `--endpoint-url $R2_ENDPOINT` to the AWS CLI so no global `aws configure` is required.
+- Bucket name is fixed: `releases-hivetechs`.
+
+###### One‑command local release to R2
+```bash
+cd electron-poc
+# Build → Sign/Notarize
+npm run build:complete
+npm run sign:notarize:local
+
+# Upload (auto-detects large-file path)
+AWS_ACCESS_KEY_ID=… \
+AWS_SECRET_ACCESS_KEY=… \
+R2_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com \
+./scripts/upload-dmg-to-r2.sh stable
+```
+
+###### Verification (website consumption)
+- Public endpoints (single source of truth):
+  - Latest DMG: `https://releases.hivetechs.io/stable/Hive-Consensus-latest.dmg`
+  - Versioned DMG: `https://releases.hivetechs.io/stable/Hive-Consensus-v<version>.dmg`
+  - Metadata: `https://releases.hivetechs.io/stable/version.json`
+- Validate after upload:
+```bash
+# Should return 200 OK
+curl -I https://releases.hivetechs.io/stable/Hive-Consensus-latest.dmg
+
+# Version metadata should reflect the just-uploaded version and URL
+curl -s https://releases.hivetechs.io/stable/version.json | jq
+```
+Notes:
+- The Cloudflare Worker for `releases.hivetechs.io` maps the URL path directly to the R2 key (`stable/…`). No prefix rewriting.
+- If a browser cache serves an older DMG, append a cache‑buster query (e.g., `?ts=$(date +%s)`).
 
 AWS S3-compatible route
 - Script: `electron-poc/scripts/upload-to-r2.sh`
