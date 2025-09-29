@@ -5425,6 +5425,97 @@ Or try: npm install -g ${installCmd} --force --no-cache
     return [];
   });
 
+  // Spec Kit: specify check
+  ipcMain.handle('specify-check', async (_evt, projectPath: string) => {
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      const enhancedPath = getEnhancedPath();
+      // Verify specify exists
+      try {
+        await execAsync('which specify', { env: { ...process.env, PATH: enhancedPath } });
+      } catch {
+        return { success: false, error: 'Specify CLI not found. Install from AI CLI Tools.' };
+      }
+      const { stdout, stderr } = await execAsync('specify check', { cwd: projectPath || process.cwd(), env: { ...process.env, PATH: enhancedPath } });
+      return { success: true, stdout, stderr, code: 0 };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e), code: e?.code };
+    }
+  });
+
+  // Spec Kit: scaffold simple contracts
+  ipcMain.handle('wizard-scaffold-contracts', async (_evt, args: { projectPath: string; specDir?: string | null; endpoints: Array<{ name: string; method: string; path: string }> }) => {
+    try {
+      const { projectPath, specDir, endpoints } = args || ({} as any);
+      if (!projectPath) return { success: false, error: 'Missing projectPath' };
+      const targetSpecDir = (() => {
+        try {
+          if (specDir) return path.isAbsolute(specDir) ? specDir : path.join(projectPath, specDir);
+          const specsPath = path.join(projectPath, 'specs');
+          if (!fs.existsSync(specsPath)) return null;
+          const dirs = fs.readdirSync(specsPath).filter((d: string) => /^(\d{3})-/.test(d));
+          if (!dirs.length) return null;
+          const sorted = dirs.sort((a: string, b: string) => parseInt(a.slice(0,3)) - parseInt(b.slice(0,3)));
+          return path.join(specsPath, sorted[sorted.length - 1]);
+        } catch { return null; }
+      })();
+      if (!targetSpecDir) return { success: false, error: 'Could not locate latest spec directory' };
+      const contractsDir = path.join(targetSpecDir, 'contracts');
+      try { fs.mkdirSync(contractsDir, { recursive: true }); } catch {}
+
+      const slugify = (s: string) => (s||'').toLowerCase().replace(/[^a-z0-9\-\s_]+/g,'').replace(/[\s_]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'');
+      const created: string[] = [];
+      const skipped: string[] = [];
+      (endpoints || []).forEach((ep: { name?: string; method?: string; path?: string }) => {
+        const fname = slugify(ep.name || `${ep.method}-${ep.path}`) || 'endpoint';
+        const file = path.join(contractsDir, `${fname}.md`);
+        if (!fs.existsSync(file)) {
+          const body = `# Contract: ${ep.name || fname}\n\n- Method: ${ep.method || 'GET'}\n- Path: ${ep.path || '/example'}\n\n## Request\n- Headers: [NEEDS CLARIFICATION]\n- Body: [NEEDS CLARIFICATION]\n\n## Response\n- 200 OK: [NEEDS CLARIFICATION]\n- Errors: [NEEDS CLARIFICATION]\n\n## Tests\n- [ ] Contract test: ${ep.method || 'GET'} ${ep.path || '/example'} returns expected schema\n`;
+          fs.writeFileSync(file, body, 'utf-8');
+          created.push(file);
+        } else {
+          skipped.push(file);
+        }
+      });
+      return { success: true, created, skipped };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
+
+  // Spec Kit: list available specs
+  ipcMain.handle('wizard-list-specs', async (_evt, projectPath: string) => {
+    try {
+      const specsPath = path.join(projectPath, 'specs');
+      if (!fs.existsSync(specsPath)) return [];
+      const dirs = fs.readdirSync(specsPath).filter((d: string) => /^(\d{3})-/.test(d)).sort((a: string, b: string) => parseInt(a.slice(0,3)) - parseInt(b.slice(0,3)));
+      return dirs;
+    } catch { return []; }
+  });
+
+  // Spec Kit: ensure spec files exist in a specific spec directory
+  ipcMain.handle('wizard-ensure-spec-files', async (_evt, args: { projectPath: string; specDir: string }) => {
+    try {
+      const { projectPath, specDir } = args || ({} as any);
+      if (!projectPath || !specDir) return { success: false, error: 'Missing parameters' };
+      const target = path.isAbsolute(specDir) ? specDir : path.join(projectPath, specDir);
+      if (!fs.existsSync(target)) return { success: false, error: 'Spec directory does not exist' };
+      const created: string[] = [];
+      const ensure = (name: string, content: string) => {
+        const file = path.join(target, name);
+        if (!fs.existsSync(file)) { fs.writeFileSync(file, content, 'utf-8'); created.push(file); }
+      };
+      ensure('spec.md', `# Feature\n\n[Add vision, users, stories, AC]\n`);
+      ensure('plan.md', `# Implementation Plan\n\n- [ ] Simplicity\n- [ ] Anti-Abstraction\n- [ ] Integration-First\n`);
+      ensure('tasks.md', `# Tasks\n\n- [ ] Define contracts [P]\n`);
+      return { success: true, created };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
+
   // Launch CLI tool with folder selection (no symlink creation)
   ipcMain.handle(
     "cli-tool-launch",

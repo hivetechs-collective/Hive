@@ -74,6 +74,9 @@ declare global {
         cwd?: string;
         env?: Record<string, string>;
         toolId?: string;
+        // Optional inline script to execute before dropping to interactive shell
+        // If provided, main writes this to a temp file and runs it via bash
+        scriptContent?: string;
       }): Promise<any>;
       writeToTerminal(terminalId: string, data: string): Promise<any>;
       resizeTerminal(terminalId: string, cols: number, rows: number): Promise<any>;
@@ -156,6 +159,12 @@ declare global {
       openExternal?(url: string): Promise<void>;
       refreshMenu(): Promise<any>;
       updateMenuContext(context: { autoSaveEnabled?: boolean; hasFolder?: boolean; isRepo?: boolean }): Promise<any>;
+      
+      // Spec Kit helpers
+      specifyCheck?: (projectPath: string) => Promise<{ success: boolean; stdout?: string; stderr?: string; code?: number; error?: string }>;
+      scaffoldContracts?: (args: { projectPath: string; specDir?: string | null; endpoints: Array<{ name: string; method: string; path: string }> }) => Promise<{ success: boolean; created?: string[]; skipped?: string[]; error?: string }>;
+      listSpecs?: (projectPath: string) => Promise<string[]>;
+      ensureSpecFiles?: (args: { projectPath: string; specDir: string }) => Promise<{ success: boolean; created?: string[]; error?: string }>;
       
       // Memory Service API
       startMemoryService(): Promise<boolean>;

@@ -138,6 +138,12 @@ export class WelcomePage {
                 </svg>
                 <span>Open Terminal…</span>
               </button>
+              <button class="action-item" id="open-spec-wizard-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2l3 7h7l-5.5 4 2 7-6.5-4-6.5 4 2-7L2 9h7z"/>
+                </svg>
+                <span>Spec‑Kit Wizard…</span>
+              </button>
               <button class="action-item" id="open-folder-btn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
@@ -586,6 +592,17 @@ export class WelcomePage {
           }
         }
       } catch (e) { console.error('Failed to open terminal:', e); }
+    });
+
+    // Spec‑Kit Wizard launcher
+    document.getElementById('open-spec-wizard-btn')?.addEventListener('click', async () => {
+      try {
+        // Lazy-load wizard module
+        if (!(window as any).openSpecWizard) {
+          await import('./spec-wizard/SpecWizard');
+        }
+        (window as any).openSpecWizard?.();
+      } catch (e) { console.error('Failed to open Spec‑Kit Wizard:', e); }
     });
 
     document.getElementById('getting-started-btn')?.addEventListener('click', () => {

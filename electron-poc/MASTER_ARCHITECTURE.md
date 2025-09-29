@@ -14625,3 +14625,60 @@ This bootstrap avoids bundling large runtimes in the DMG while guaranteeing fres
 - Specify update no longer uses `--from` (uv rejects it for upgrade). We now run `uv tool upgrade specify-cli`.
 - “Uninstall All” refresh now correctly updates the Spec Kit card and sidebar icon.
 - TTYD terminal view waits for the ttyd URL to be reachable before loading the webview, eliminating initial ERR_FAILED (-2) flaps.
+## v1.8.49x: Spec‑Kit Wizard, Left Pane UX, and Docs Automation
+
+### Spec‑Kit Wizard (Specify CLI) — Guided, Idempotent Flow
+Location: `src/components/spec-wizard/SpecWizard.ts`
+
+Goals:
+- Lead users end‑to‑end: Start → Clarify & Validate → Contracts, with required gates and clear “Done when” criteria.
+- Be repeat‑safe and non‑destructive by default; preserve existing work and never overwrite files without intent.
+
+Key Features:
+- Start (Required)
+  - Create new feature spec: generates `specs/NNN-<slug>/` with `spec.md`, `plan.md`, `tasks.md` via a short terminal script.
+  - Update existing spec mode: select a spec; “Create Missing Files” fills in absent files only (no overwrite). “Verify Spec Created” checks for all 3 files.
+  - Auto-fill existing fields: in update mode, loads Vision, Users & Stories, and Acceptance Criteria from `spec.md` into the Wizard.
+
+- Clarify & Validate (Required)
+  - Target Spec selector (drop‑down) chooses which spec to operate on.
+  - Clarify: lists all `[NEEDS CLARIFICATION: …]` markers; “Remove” cleans tags only; “Undo” restores `spec.md.bak` created before cleanup.
+  - Validate: runs `specify check` (managed PATH) and shows inline output. Step completes when no markers remain and check passes.
+
+- Contracts (Required)
+  - Target Spec selector to receive scaffolded contract files under `contracts/`.
+  - Add endpoints (name, method, path) and scaffold. Never overwrites: shows Created vs Skipped (exists) lists. Step completes when ≥1 contract is created.
+
+Terminal Integration:
+- IPC: `create-terminal-process` accepts optional `scriptContent` and writes to a temp script (`/tmp/hive-spec-wizard-*.sh`).
+- TTYD spawn appends `; exec $SHELL -i`, keeping an interactive shell open.
+- We no longer delete the temp script on first run, preventing reconnect errors.
+
+Files/Code:
+- `src/components/spec-wizard/SpecWizard.ts`: UI, gating, idempotent actions, selectors, Undo, and terminal kickoff.
+- `src/terminal-ipc-handlers.ts`: supports `scriptContent` and avoids deleting temp script prematurely.
+- `src/preload.ts` + `src/types/window.d.ts`: expose Wizard IPC helpers.
+- `src/index.ts`: IPC handlers
+  - `specify-check(projectPath)`
+  - `wizard-list-specs(projectPath)`
+  - `wizard-ensure-spec-files({ projectPath, specDir })`
+  - `wizard-scaffold-contracts({ projectPath, specDir, endpoints[] })` (returns created[] and skipped[])
+
+### Left Pane UX — “DESIGN” Button and Responsive Icons
+Location: `src/renderer.ts`, `src/index.css`
+
+- A distinct “Start Here” Spec‑Kit Wizard button renamed to “DESIGN” and positioned directly under “AI CLI Tools” to emphasize the recommended first step.
+- Visual treatment: subtle gold gradient + soft glow for a premium, modern enterprise feel without visual noise.
+- Responsive icon sizing using CSS `clamp()` so all icons remain visible on smaller screens; vertical scrolling preserved where needed and tooltips never clipped.
+- Tooltips restored for all left‑pane icons (Explorer, Git, Analytics, Memory, AI CLI Tools, DESIGN, etc.).
+
+### Documentation — What’s New Automation
+Location: `src/components/help-viewer.ts`
+
+- Dynamic version header: “Hive v{current} — Highlights” is injected via `electronAPI.getVersion()` after render/navigation.
+- Recent Maintenance list auto‑computes the two previous patch versions from the current version and renders generic blurbs (UI polish, security/stability). Falls back to a generic note if no prior patches exist.
+
+### Design Principles
+- Isolation & Idempotency: All Wizard actions are safe to repeat; create‑only or create‑missing flows; never overwrite without explicit user action.
+- Explain & Verify: Each required step provides “Why”/“Done when” cues and enforces completion gates before Next.
+- Minimal friction: Managed PATH ensures Specify resolves; terminal experiences persist and remain interactive.

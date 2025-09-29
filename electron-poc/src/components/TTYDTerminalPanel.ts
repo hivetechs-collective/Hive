@@ -287,7 +287,7 @@ export class TTYDTerminalPanel {
         };
     }
 
-    async createTerminalTab(toolId?: string, command?: string, env?: Record<string, string>): Promise<void> {
+    async createTerminalTab(toolId?: string, command?: string, env?: Record<string, string>, scriptContent?: string): Promise<void> {
         const terminalId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         console.log('[TTYDTerminalPanel] createTerminalTab called with toolId:', toolId, 'command:', command, 'env:', env);
         
@@ -307,7 +307,8 @@ export class TTYDTerminalPanel {
                 toolId,
                 command,
                 cwd: window.currentOpenedFolder || undefined,
-                env: env  // Pass environment variables if provided
+                env: env,  // Pass environment variables if provided
+                scriptContent
             });
             
             console.log('[TTYDTerminalPanel] createTerminalProcess result:', result);
