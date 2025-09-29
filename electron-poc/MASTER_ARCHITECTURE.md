@@ -1,0 +1,1 @@
+This document has been renamed. Please use electron-poc/MASTER_ARCHITECTURE_DESKTOP.md
