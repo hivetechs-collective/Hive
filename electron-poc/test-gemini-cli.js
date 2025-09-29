@@ -151,7 +151,7 @@ try {
 // Test 7: Documentation check
 info('\nChecking documentation...');
 try {
-  const architectureContent = fs.readFileSync(path.join(__dirname, 'MASTER_ARCHITECTURE.md'), 'utf8');
+  const architectureContent = fs.readFileSync(path.join(__dirname, 'MASTER_ARCHITECTURE_DESKTOP.md'), 'utf8');
   
   if (architectureContent.includes('Step 0: BECOME AN EXPERT')) {
     success('Step 0 documented');
