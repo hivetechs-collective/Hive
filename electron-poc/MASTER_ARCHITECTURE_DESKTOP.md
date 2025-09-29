@@ -4095,6 +4095,16 @@ function testProgressBars() {
 - **File Access**: Main process only
 - **Git Credentials**: Secure askpass handling
 
+### Billing Integration (Reference-only)
+- Canonical billing design, models, limits, grace, and entitlements live in the website repo:
+  - `hivetechs-website-private/MASTER_ARCHITECTURE_WEB.md` → section “Billing Models & Gates (Canonical)”
+  - `hivetechs-website-private/docs/architecture/billing/MASTER_BILLING.md`
+- The desktop app does not define billing; it consumes the website’s subscription contracts and enforces gates client-side.
+- Current desktop integration reads normalized subscription state via the website’s subscription endpoints (no billing writes from the app):
+  - `POST /api/subscription/status`
+  - `POST /api/subscription/details`
+  - Management actions deep-link to the customer portal via the website (`/api/subscription/manage`).
+
 ### Trust System (Future)
 - Directory-level permissions
 - Explicit user consent for file access
