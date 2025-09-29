@@ -6849,72 +6849,9 @@ ipcMain.handle("settings-test-keys", async (_, { openrouterKey, hiveKey }) => {
 
               result.hiveValid = true;
               result.licenseInfo = licenseInfo;
-
-              // Store validated license info in database
-              if (db) {
-                const timestamp = new Date().toISOString();
-                // Persist user id for usage tracking
-                if (userId) {
-                  db.run(
-                    `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
-                     VALUES (?, ?, ?, ?, ?, ?)
-                     ON CONFLICT(key) DO UPDATE SET
-                     value = excluded.value,
-                     updated_at = excluded.updated_at`,
-                    ["hive_user_id", userId, 0, userId, timestamp, timestamp],
-                  );
-                }
-                db.run(
-                  `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
-                   VALUES (?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(key) DO UPDATE SET
-                   value = excluded.value,
-                   updated_at = excluded.updated_at`,
-                  [
-                    "hive_tier",
-                    tier,
-                    0,
-                    userId || "default",
-                    timestamp,
-                    timestamp,
-                  ],
-                );
-
-                db.run(
-                  `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
-                   VALUES (?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(key) DO UPDATE SET
-                   value = excluded.value,
-                   updated_at = excluded.updated_at`,
-                  [
-                    "hive_daily_limit",
-                    String(dailyLimit),
-                    0,
-                    userId || "default",
-                    timestamp,
-                    timestamp,
-                  ],
-                );
-
-                // Only store remaining if D1 provided it
-                if (remaining !== undefined) {
-                  db.run(
-                    `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
-                     VALUES (?, ?, ?, ?, ?, ?)
-                     ON CONFLICT(key) DO UPDATE SET
-                     value = excluded.value,
-                     updated_at = excluded.updated_at`,
-                    [
-                      "hive_remaining",
-                      String(remaining),
-                      0,
-                      userId || "default",
-                      timestamp,
-                      timestamp,
-                    ],
-                  );
-                }
-              }
+              // Note: Do not persist any values during "Test Keys".
+              // Persistence occurs on explicit Save/Apply actions to avoid
+              // concurrent writes while validation is in flight.
             } else {
               result.hiveValid = false;
               result.licenseInfo = {
@@ -7002,7 +6939,7 @@ ipcMain.handle("settings-save-keys", async (_, { openrouterKey, hiveKey }) => {
       );
     } else if (hiveKey) {
       db.run(
-        "INSERT OR REPLACE INTO configuration (key, value, updated_at) VALUES (?, ?, ?)",
+        "INSERT OR REPLACE INTO configurations (key, value, updated_at) VALUES (?, ?, ?)",
         ["hive_license_key", hiveKey, timestamp],
         (err) => {
           if (err) {
