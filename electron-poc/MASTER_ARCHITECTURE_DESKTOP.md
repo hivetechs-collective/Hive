@@ -14692,3 +14692,9 @@ Location: `src/components/help-viewer.ts`
 - Isolation & Idempotency: All Wizard actions are safe to repeat; create‑only or create‑missing flows; never overwrite without explicit user action.
 - Explain & Verify: Each required step provides “Why”/“Done when” cues and enforces completion gates before Next.
 - Minimal friction: Managed PATH ensures Specify resolves; terminal experiences persist and remain interactive.
+## Related Repositories
+
+- Website (Canonical Billing): hivetechs-website-private/MASTER_ARCHITECTURE_WEB.md
+  - Authoritative billing models, gates, entitlements, and Paddle integration.
+  - See also: hivetechs-website-private/docs/architecture/billing/MASTER_BILLING.md
+- This desktop app consumes the website’s billing contracts and does not redefine billing.
