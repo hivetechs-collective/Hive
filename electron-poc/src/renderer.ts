@@ -456,6 +456,18 @@ document.body.innerHTML = `
           </svg>
           <span class="activity-tooltip">AI CLI Tools</span>
         </button>
+
+        <!-- Spec‑Kit Wizard entry (Start Here) placed under AI CLI Tools -->
+        <button class="activity-btn start-here-btn" id="spec-wizard-launch" aria-label="Spec‑Kit Wizard (Start Here)">
+          <!-- Start Here icon: document + spark -->
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <!-- document -->
+            <path d="M7 2h6l4 4v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm6 1.5V7h3.5L13 3.5z"/>
+            <!-- spark/star -->
+            <path d="M12 9l.9 2.1L15 12l-2.1.9L12 15l-.9-2.1L9 12l2.1-.9L12 9z"/>
+          </svg>
+          <span class="activity-tooltip">Start Here: Spec‑Kit Wizard</span>
+        </button>
         
         <div class="sidebar-divider"></div>
         
@@ -6543,6 +6555,21 @@ setTimeout(() => {
       void executeCommand(commandEntry.id, commandEntry.payload);
     });
   });
+
+  // Spec‑Kit Wizard launcher from activity bar
+  const specWizardBtn = document.getElementById('spec-wizard-launch');
+  if (specWizardBtn) {
+    specWizardBtn.addEventListener('click', async () => {
+      try {
+        if (!(window as any).openSpecWizard) {
+          await import('./components/spec-wizard/SpecWizard');
+        }
+        (window as any).openSpecWizard?.();
+      } catch (e) {
+        console.error('[Renderer] Failed to open Spec‑Kit Wizard:', e);
+      }
+    });
+  }
 
   // Close buttons for panels (inside same scope as panels variable)
   document.addEventListener("click", (e) => {

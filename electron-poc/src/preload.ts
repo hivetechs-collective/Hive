@@ -218,6 +218,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuOpenCliTools: (callback: () => void) => {
     ipcRenderer.on('menu-open-cli-tools', callback);
   },
+  // Spec Kit helpers
+  specifyCheck: (projectPath: string) => ipcRenderer.invoke('specify-check', projectPath),
+  scaffoldContracts: (args: { projectPath: string; specDir?: string | null; endpoints: Array<{ name: string; method: string; path: string }> }) => ipcRenderer.invoke('wizard-scaffold-contracts', args),
+  listSpecs: (projectPath: string) => ipcRenderer.invoke('wizard-list-specs', projectPath),
+  ensureSpecFiles: (args: { projectPath: string; specDir: string }) => ipcRenderer.invoke('wizard-ensure-spec-files', args),
   onMenuOpenAnalytics: (callback: () => void) => {
     ipcRenderer.on('menu-open-analytics', callback);
   },
@@ -436,6 +441,7 @@ contextBridge.exposeInMainWorld('terminalAPI', {
     cwd?: string;
     env?: Record<string, string>;
     toolId?: string;
+    scriptContent?: string;
   }) => safeInvoke('create-terminal-process', options),
   
   // Write data to terminal

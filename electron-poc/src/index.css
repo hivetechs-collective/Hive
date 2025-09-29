@@ -648,7 +648,7 @@ body {
   align-items: center;
   gap: 4px;
   padding: 8px 0;
-  overflow: visible !important; /* CRITICAL: allow tooltips to show outside container */
+  overflow: visible !important; /* Ensure tooltips are never clipped */
   position: relative; /* establish positioning context */
   flex: 1; /* take up remaining height */
   padding-bottom: 120px; /* leave room for bottom buttons */
@@ -666,16 +666,16 @@ body {
 }
 
 .ai-cli-icons-section .activity-btn {
-  width: 36px;
-  height: 36px;
+  width: clamp(32px, 3.6vh, 36px);
+  height: clamp(32px, 3.6vh, 36px);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .ai-cli-icons-section .activity-btn img {
-  max-width: 26px;
-  max-height: 26px;
+  max-width: clamp(18px, 2vh, 24px);
+  max-height: clamp(18px, 2vh, 24px);
 }
 
 /* AI CLI Quick Launch Buttons */
@@ -1294,8 +1294,8 @@ body {
 }
 
 .activity-btn {
-  width: 44px;
-  height: 44px;
+  width: clamp(36px, 4.2vh, 44px);
+  height: clamp(36px, 4.2vh, 44px);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -1365,8 +1365,29 @@ body {
 }
 
 .activity-btn svg {
-  width: 24px;
-  height: 24px;
+  width: clamp(18px, 2.2vh, 24px);
+  height: clamp(18px, 2.2vh, 24px);
+}
+
+/* Start Here (Spec‑Kit Wizard) special styling */
+.activity-btn.start-here-btn {
+  color: #ffd54f;
+  border-color: rgba(255, 193, 7, 0.4);
+  background: linear-gradient(180deg, #1F2330 0%, #161B25 100%);
+  box-shadow: 0 0 0 1px rgba(255,193,7,0.15) inset, 0 0 12px rgba(255,193,7,0.25);
+}
+.activity-btn.start-here-btn:hover {
+  color: #fff6cc;
+  border-color: rgba(255, 193, 7, 0.6);
+  box-shadow: 0 0 0 1px rgba(255,193,7,0.25) inset, 0 0 16px rgba(255,193,7,0.35);
+}
+.activity-btn.start-here-btn::after {
+  content: 'DESIGN';
+  position: absolute;
+  bottom: -6px;
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  color: #eada8a;
 }
 
 .activity-tooltip {
@@ -3650,4 +3671,128 @@ body {
   font-size: 13px;
   font-weight: 500;
   color: #34d399;
+}
+/* ========== Spec‑Kit Wizard (scoped) ========== */
+.wizard-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(3px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wizard-root {
+  --wiz-bg: #0F1115;
+  --wiz-surface: #141922;
+  --wiz-panel: #171C26;
+  --wiz-border: #222937;
+  --wiz-text: #E6EBF3;
+  --wiz-muted: #9AA3B2;
+  --wiz-accent: var(--hive-yellow);
+  --wiz-accent-tint: rgba(255, 193, 7, 0.16);
+  --wiz-success: color-mix(in srgb, var(--hive-green) 70%, white 15%);
+  --wiz-error: color-mix(in srgb, var(--hive-red) 70%, white 10%);
+  color: var(--wiz-text);
+}
+
+.wizard-modal {
+  width: clamp(820px, 70vw, 1080px);
+  max-height: 80vh;
+  background: var(--wiz-surface);
+  border: 1px solid var(--wiz-border);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.45);
+  display: flex;
+  flex-direction: column;
+}
+
+.wizard-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--wiz-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, #171C26 0%, #131823 100%);
+}
+.wizard-title { font-size: 16px; font-weight: 600; }
+
+.wizard-body { padding: 16px; overflow: auto; }
+.wizard-footer { padding: 12px 16px; border-top: 1px solid var(--wiz-border); display:flex; gap:8px; align-items:center; }
+.wizard-spacer { flex: 1; }
+
+.wizard-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 1100px) {
+  .wizard-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.wizard-card {
+  background: var(--wiz-panel);
+  border: 1px solid var(--wiz-border);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.35);
+}
+.wizard-card-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--wiz-text); }
+.wizard-card-subtitle { font-size: 12px; font-weight: 600; margin: 8px 0 6px; color: var(--wiz-muted); }
+.wizard-subgrid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 1100px) { .wizard-subgrid { grid-template-columns: 1fr 1fr; } }
+
+.wizard-field-row { display: flex; gap:8px; align-items: center; }
+.wizard-label { display:block; font-size: 12px; color: var(--wiz-muted); margin: 8px 0 4px; }
+.wizard-input, .wizard-textarea {
+  width: 100%;
+  background: #0F141E;
+  color: var(--wiz-text);
+  border: 1px solid #1E2633;
+  border-radius: 8px;
+  padding: 10px 10px;
+  font-size: 12px;
+}
+.wizard-input:where(select) {
+  height: 40px !important;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  line-height: 1.3;
+}
+.wizard-input:focus, .wizard-textarea:focus { outline: none; border-color: rgba(255,193,7,0.45); box-shadow: 0 0 0 2px rgba(255,193,7,0.12); }
+
+.wizard-btn {
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border: 1px solid #2A3242;
+  color: var(--wiz-text);
+  background: transparent;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .08s ease;
+}
+.wizard-btn:hover { border-color: #3A4356; }
+.wizard-btn:focus { outline: none; box-shadow: 0 0 0 2px rgba(255,193,7,0.18); }
+.wizard-btn:active { transform: translateY(1px); }
+
+.wizard-btn.primary {
+  border-color: rgba(255,193,7,0.35);
+  background: linear-gradient(180deg, #1C212D 0%, #161B25 100%);
+}
+.wizard-btn.primary:hover { border-color: rgba(255,193,7,0.55); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06); }
+
+.wizard-btn.secondary { background: #0F141E; }
+.wizard-btn.ghost { background: transparent; border-color: transparent; color: var(--wiz-muted); }
+.wizard-btn.ghost:hover { border-color: #2A3242; color: var(--wiz-text); }
+
+.wizard-code { background: #0F141E; border: 1px solid #1E2633; border-radius: 8px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 12px; }
+
+/* Wizard stepper badges */
+.wiz-badge { display:inline-block; margin-left:6px; padding:2px 6px; border-radius: 999px; font-size:10px; border:1px solid rgba(255,193,7,0.35); color:#eada8a; background: rgba(255,193,7,0.08); }
+.wiz-badge.wiz-required { }
+.wiz-done { box-shadow: inset 0 0 0 1px rgba(98,224,168,0.25); }
+@media (max-height: 900px) {
+  .activity-bar-scroll { gap: 2px; padding: 6px 0; }
+  .sidebar-divider { margin: 4px auto; }
+}
+
+@media (max-height: 780px) {
+  .activity-btn.start-here-btn::after { display: none; }
 }

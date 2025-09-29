@@ -157,26 +157,26 @@ export class HelpViewer {
       title: "What's New",
       icon: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4 4 .5-3 3 .8 4.5L8 11l-3.8 2 1-4.5-3-3L6 5z"/></svg>`,
       content: `
-        <h2>Hive v1.8.486 — Highlights</h2>
+        <h2>Hive v{{VERSION}} — Highlights</h2>
         <ul>
-          <li><strong>In‑App Updater</strong>: checks for updates on launch and every 24 hours while running. Manual “Help → Check for Updates…” added.</li>
-          <li><strong>Notarized DMG Stability</strong>: helper apps (Renderer/GPU/Utility) now signed with entitlements to prevent post‑notarization renderer crashes.</li>
-          <li><strong>ULFO DMG</strong>: standardized LZFSE compression for smaller downloads and faster mounts.</li>
-          <li><strong>Startup Robustness</strong>: hardened splash → main transition to eliminate rare “stuck splash/black box”.</li>
-          <li><strong>CLI Tools Policy</strong>: no blocking installers at startup; installs run after UI or from “Install All”.</li>
+          <li><strong>Spec‑Kit Wizard (End‑to‑End)</strong>: Guided flow from idea → spec → validate → contracts. Required steps are gated and verified.</li>
+          <li><strong>Update Existing Spec</strong>: Safely load existing Vision, Stories, and Acceptance Criteria; create missing files without overwriting.</li>
+          <li><strong>“Design” Start Here</strong>: Distinct left‑bar button under AI CLI Tools to kick off Spec‑Kit quickly.</li>
+          <li><strong>Responsive Left Pane</strong>: Icons scale on small screens; hover tooltips restored for all items.</li>
+          <li><strong>Terminal Stability</strong>: Wizard temp script persists across reconnect; no more missing‑file errors.</li>
         </ul>
 
         <h3>Quick Actions</h3>
         <div class="code-block">
-          <div class="code-header">Try the new updater</div>
-          <pre><code>Help → Check for Updates…
-Restart app to see launch-time prompt</code></pre>
+          <div class="code-header">Start with Spec‑Kit</div>
+          <pre><code>Left bar → DESIGN (Spec‑Kit Wizard)
+Create a spec → Clarify & Validate → Contracts</code></pre>
         </div>
 
         <h3>Recent Maintenance Releases</h3>
         <ul>
-          <li><strong>v1.8.485</strong>: Optimizations and stability fixes for signing/notarization + upload pipeline.</li>
-          <li><strong>v1.8.484</strong>: Security & bug fixes; R2 release feed alignment.</li>
+          <li><strong>v1.8.494</strong>: Activity bar polish; Wizard UX refinements.</li>
+          <li><strong>v1.8.493</strong>: “Start Here” visual treatment; layout adjustments.</li>
         </ul>
       `
     },
@@ -501,6 +501,9 @@ sqlite3 ~/.hive-ai.db "SELECT * FROM code_examples LIMIT 5"</code></pre>
         </div>
       </div>
     `;
+
+    // Post-render dynamic version injection for What's New
+    this.updateWhatsNewVersion();
   }
 
   private renderSection(sectionId: string): string {
@@ -559,6 +562,7 @@ sqlite3 ~/.hive-ai.db "SELECT * FROM code_examples LIMIT 5"</code></pre>
     const contentArea = this.container.querySelector('.help-content-inner');
     if (contentArea) {
       contentArea.innerHTML = this.renderSection(sectionId);
+      this.updateWhatsNewVersion();
       
       // Re-attach event listeners for any interactive elements in the new content
       contentArea.querySelectorAll('.copy-button').forEach(button => {
@@ -581,6 +585,60 @@ sqlite3 ~/.hive-ai.db "SELECT * FROM code_examples LIMIT 5"</code></pre>
         });
       });
     }
+  }
+
+  private async updateWhatsNewVersion() {
+    try {
+      if (this.currentSection !== 'whats-new') return;
+      const version = await (window as any).electronAPI?.getVersion?.();
+      if (!version) return;
+      const contentArea = this.container?.querySelector('.help-content-inner');
+      if (!contentArea) return;
+      const h2 = contentArea.querySelector('h2');
+      if (h2 && /^Hive v/.test(h2.textContent || '')) {
+        h2.textContent = `Hive v${version} — Highlights`;
+      } else if (h2) {
+        // Fallback: set explicitly
+        h2.textContent = `Hive v${version} — Highlights`;
+      }
+
+      // Also refresh the "Recent Maintenance Releases" list dynamically
+      this.updateRecentMaintenanceList(version);
+    } catch {}
+  }
+
+  private updateRecentMaintenanceList(currentVersion: string) {
+    try {
+      const contentArea = this.container?.querySelector('.help-content-inner');
+      if (!contentArea) return;
+      // Find the Recent Maintenance header
+      const headers = Array.from(contentArea.querySelectorAll('h3')) as HTMLHeadingElement[];
+      const recentHeader = headers.find(h => /Recent Maintenance Releases/i.test(h.textContent || ''));
+      if (!recentHeader) return;
+      // Expect the following sibling to be the UL we want to replace
+      const ul = recentHeader.nextElementSibling as HTMLUListElement | null;
+      if (!ul || ul.tagName.toLowerCase() !== 'ul') return;
+
+      // Compute two previous patch versions as a simple, robust default
+      const m = currentVersion.trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
+      if (!m) return;
+      const major = parseInt(m[1], 10);
+      const minor = parseInt(m[2], 10);
+      const patch = parseInt(m[3], 10);
+
+      const items: Array<{ v: string; text: string }> = [];
+      if (patch > 0) items.push({ v: `${major}.${minor}.${patch - 1}`, text: 'Maintenance: UI polish and UX refinements.' });
+      if (patch > 1) items.push({ v: `${major}.${minor}.${patch - 2}`, text: 'Maintenance: Security and stability fixes.' });
+
+      // Render list items; fall back to a generic note if no previous versions
+      if (items.length === 0) {
+        ul.innerHTML = '<li><strong>No prior patch releases</strong>: This is the first build for this train.</li>';
+      } else {
+        ul.innerHTML = items
+          .map(i => `<li><strong>v${i.v}</strong>: ${i.text}</li>`) 
+          .join('');
+      }
+    } catch {}
   }
 
   private getStyles(): string {

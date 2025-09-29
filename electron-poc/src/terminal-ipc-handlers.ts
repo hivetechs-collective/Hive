@@ -79,6 +79,8 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, pro
     cwd?: string;
     env?: Record<string, string>;
     toolId?: string;
+    // Optional: inline script content to execute before interactive shell
+    scriptContent?: string;
   }) => {
     logger.info('[TerminalIPC] create-terminal-process called with options:', options);
     
@@ -101,6 +103,21 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, pro
       
       // Handle special Grok setup wizard
       let actualCommand = options.command;
+
+      // If scriptContent is provided, write it to a temp file and run it
+      if (options.scriptContent && options.scriptContent.trim().length > 0) {
+        try {
+          const scriptPath = path.join(os.tmpdir(), `hive-spec-wizard-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`);
+          fs.writeFileSync(scriptPath, options.scriptContent, { encoding: 'utf-8' });
+          fs.chmodSync(scriptPath, '755');
+          // Run the script, then TTYDManager will append 'exec $SHELL -i' to keep the session
+          // Do NOT delete the script here; reconnections may re-run the command
+          actualCommand = `bash ${scriptPath}`;
+          logger.info(`[TerminalIPC] Created temp script for terminal at ${scriptPath}`);
+        } catch (e: any) {
+          logger.error('[TerminalIPC] Failed to prepare temp script:', e?.message || e);
+        }
+      }
       if (options.command === 'grok:setup') {
         // Create an interactive setup script for Grok
         logger.info('[TerminalIPC] Launching Grok setup wizard');
