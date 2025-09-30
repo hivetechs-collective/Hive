@@ -677,6 +677,12 @@ document.body.innerHTML = `
             <path d="M4 5h8v1H4zm0 2h8v1H4zm0 2h6v1H4zm0 2h7v1H4z"/>
           </svg>
         </button>
+        <!-- TTYD Diagnostics button -->
+        <button class="isolated-terminal-diagnostics" id="isolated-terminal-diagnostics" title="Run TTYD Diagnostics (🩺)" style="padding: 0 8px; background: transparent; border: none; color: #cccccc; cursor: pointer; font-size: 14px; transition: all 0.2s ease;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1a2 2 0 0 1 2 2v3h1.5a2.5 2.5 0 1 1 0 5H10v1a3 3 0 1 1-6 0v-1H2.5a1.5 1.5 0 1 1 0-3H4V3a2 2 0 0 1 2-2h2zM6 3v8h4V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"/>
+          </svg>
+        </button>
         
         <button class="isolated-terminal-new-tab" id="isolated-terminal-new-tab" title="New Terminal" style="padding: 0 10px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 18px;">+</button>
       </div>
@@ -6366,6 +6372,30 @@ setTimeout(() => {
           isolatedTerminalPanel.style.width = ""; // Let CSS handle width
           toggleIsolatedTerminal.textContent = "+";
           toggleIsolatedTerminal.title = "Expand Terminal Panel";
+        }
+      });
+    }
+
+    // TTYD Diagnostics button
+    const diagBtn = document.getElementById("isolated-terminal-diagnostics");
+    if (diagBtn && (window as any).terminalAPI?.runTTYDDiagnostics) {
+      diagBtn.addEventListener('click', async () => {
+        console.log('[TTYD Terminal] Running TTYD diagnostics...');
+        try {
+          const res = await (window as any).terminalAPI.runTTYDDiagnostics();
+          console.log('[TTYD Terminal] Diagnostics run initiated:', res);
+          setTimeout(async () => {
+            try {
+              const out = await (window as any).terminalAPI.getTTYDDiagnostics();
+              if (out?.success) {
+                console.log('[TTYD Terminal] Diagnostics output:\n' + out.content);
+              } else {
+                console.log('[TTYD Terminal] Diagnostics read failed:', out?.error);
+              }
+            } catch {}
+          }, 1200);
+        } catch (e) {
+          console.error('[TTYD Terminal] Diagnostics error:', e);
         }
       });
     }

@@ -326,10 +326,14 @@ contextBridge.exposeInMainWorld('maintenanceAPI', {
 
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown
 const safeInvoke = async (channel: string, ...args: any[]) => {
+  console.log(`[Preload] safeInvoke called for channel: ${channel}`);
+  console.log(`[Preload] safeInvoke args:`, args);
   try {
     const result = await ipcRenderer.invoke(channel, ...args);
+    console.log(`[Preload] safeInvoke result for ${channel}:`, result);
     return result;
   } catch (error) {
+    console.error(`[Preload] safeInvoke error for ${channel}:`, error);
     // If error is an Event object, convert it to a proper error
     if (error instanceof Event) {
       console.error('[SafeInvoke] Caught Event object as error, converting...');
@@ -486,5 +490,8 @@ contextBridge.exposeInMainWorld('terminalAPI', {
   // Listen for terminal error event
   onTerminalError: (callback: (terminalId: string, error: string) => void) => {
     ipcRenderer.on('terminal-error', (_, terminalId, error) => callback(terminalId, error));
-  }
+  },
+  // TTYD diagnostics (spawn packaged ttyd with verbose flags, capture logs)
+  runTTYDDiagnostics: () => ipcRenderer.invoke('ttyd-diagnostics-run'),
+  getTTYDDiagnostics: () => ipcRenderer.invoke('ttyd-diagnostics-read')
 });

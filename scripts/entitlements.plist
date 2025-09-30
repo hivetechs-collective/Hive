@@ -17,6 +17,8 @@
     <!-- Network access -->
     <key>com.apple.security.network.client</key>
     <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
     
     <!-- Required for notarization -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>

@@ -75,15 +75,49 @@ export class ProductionPaths {
    * @param binaryName - Name of the binary
    */
   static getBinaryPath(binaryName: string): string {
-    const basePath = this.getResourcePath('.webpack/main/binaries');
-    const binaryPath = path.join(basePath, binaryName);
-    
+    if (app.isPackaged) {
+      // Production: binaries are in .webpack/main/binaries/ inside app.asar.unpacked
+      const basePath = path.join(
+        process.resourcesPath,
+        'app.asar.unpacked',
+        '.webpack',
+        'main',
+        'binaries'
+      );
+      const binaryPath = path.join(basePath, binaryName);
+
+      // On Windows, add .exe extension if not present
+      if (process.platform === 'win32' && !binaryName.endsWith('.exe')) {
+        return `${binaryPath}.exe`;
+      }
+
+      return binaryPath;
+    }
+
+    // Development: When running `npm start`, webpack copies binaries/ to .webpack/main/binaries/
+    // __dirname after compilation is .webpack/main/utils/
+    // So binaries are at .webpack/main/binaries/ (sibling to utils/)
+    const webpackBinaries = path.join(__dirname, '..', 'binaries', binaryName);
+
+    // Check if webpack has copied the binaries (it should during npm start)
+    if (fs.existsSync(webpackBinaries)) {
+      // On Windows, add .exe extension if not present
+      if (process.platform === 'win32' && !binaryName.endsWith('.exe')) {
+        return `${webpackBinaries}.exe`;
+      }
+      return webpackBinaries;
+    }
+
+    // Fallback to project root binaries/ (for edge cases where webpack hasn't copied yet)
+    const projectRoot = path.join(__dirname, '../../..');
+    const projectBinaries = path.join(projectRoot, 'binaries', binaryName);
+
     // On Windows, add .exe extension if not present
     if (process.platform === 'win32' && !binaryName.endsWith('.exe')) {
-      return `${binaryPath}.exe`;
+      return `${projectBinaries}.exe`;
     }
-    
-    return binaryPath;
+
+    return projectBinaries;
   }
   
   /**

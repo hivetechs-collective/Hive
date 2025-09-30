@@ -300,7 +300,11 @@ export class TTYDTerminalPanel {
         } as TTYDTerminalTab);
         
         try {
+            console.log('[TTYDTerminalPanel] window exists:', !!window);
+            console.log('[TTYDTerminalPanel] window.terminalAPI exists:', !!window.terminalAPI);
+            console.log('[TTYDTerminalPanel] window.terminalAPI.createTerminalProcess exists:', !!(window.terminalAPI && window.terminalAPI.createTerminalProcess));
             console.log('[TTYDTerminalPanel] Calling window.terminalAPI.createTerminalProcess...');
+
             // Request terminal creation from main process
             const result = await window.terminalAPI.createTerminalProcess({
                 terminalId,
@@ -310,7 +314,7 @@ export class TTYDTerminalPanel {
                 env: env,  // Pass environment variables if provided
                 scriptContent
             });
-            
+
             console.log('[TTYDTerminalPanel] createTerminalProcess result:', result);
             
             if (result.success && result.terminal) {
@@ -338,6 +342,7 @@ export class TTYDTerminalPanel {
         port: number;
         toolId?: string;
     }): void {
+        const isPty = false; // No PTY fallback: ttyd is required
         // Ensure tabs container exists
         if (!this.tabsContainer) {
             this.tabsContainer = document.getElementById('isolated-terminal-tabs');
@@ -408,7 +413,7 @@ export class TTYDTerminalPanel {
         this.tabsContainer.appendChild(tabBtn);
         console.log('[TTYDTerminalPanel] Tab button added to container:', tab.id, 'Container children:', this.tabsContainer.children.length);
 
-        // Create content area with iframe for ttyd
+        // Create content area (webview for ttyd)
         const content = document.createElement('div');
         content.id = `isolated-content-${tab.id}`;
         content.className = 'isolated-tab-content';
@@ -424,40 +429,54 @@ export class TTYDTerminalPanel {
             height: 100%;
         `;
         
-        // Create webview to embed ttyd terminal
-        // Using webview instead of iframe for better Electron integration
-        const webview = document.createElement('webview') as any;
+        if (isPty) {
+            // PTY fallback: render xterm.js terminal inline
+            const termContainer = document.createElement('div');
+            termContainer.style.cssText = 'width:100%;height:100%;background:#000';
+            content.appendChild(termContainer);
+            this.contentContainer.appendChild(content);
+
+            tab.element = content;
+            this.tabs.set(tab.id, tab);
+
+            (async () => {
+                const { Terminal } = await import('xterm');
+                const { FitAddon } = await import('xterm-addon-fit');
+                const term = new Terminal({
+                    fontSize: 13,
+                    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                    theme: { background: '#1e1e1e', foreground: '#cccccc', cursor: '#aeafad' },
+                    cursorBlink: true,
+                    scrollback: 10000
+                });
+                const fit = new FitAddon();
+                term.loadAddon(fit);
+                term.open(termContainer);
+                setTimeout(() => fit.fit(), 0);
+
+                term.onData((d) => window.terminalAPI.writeToTerminal(terminalInfo.id, d));
+                term.onResize(({ cols, rows }) => window.terminalAPI.resizeTerminal(terminalInfo.id, cols, rows));
+                window.terminalAPI.onTerminalData((tid: string, data: string) => { if (tid === terminalInfo.id) term.write(data); });
+                window.terminalAPI.onTerminalExit((tid: string, code?: number) => { if (tid === terminalInfo.id) term.write(`\r\n[Process exited ${code ?? 0}]\r\n`); });
+            })().catch(() => {});
+        } else {
+            // Create webview to embed ttyd terminal
+            const webview = document.createElement('webview') as any;
+            // Set the URL immediately to avoid race where 'terminal-ready' arrives before tab creation
+            webview.dataset.originalSrc = terminalInfo.url;
+            webview.src = terminalInfo.url;
+            webview.style.cssText = `width: 100%; height: 100%; border: none; background: #1e1e1e;`;
+            webview.setAttribute('nodeintegration', 'false');
+            webview.setAttribute('disablewebsecurity', 'true');
+            webview.setAttribute('allowpopups', 'true');
+            content.appendChild(webview);
+            this.contentContainer.appendChild(content);
+            tab.element = content;
+            tab.webview = webview;
+            this.tabs.set(tab.id, tab);
+        }
         
-        // CRITICAL: Always delay loading to ensure container has proper size
-        // This prevents the 9-row issue by ensuring ttyd never sees a small container
-        webview.dataset.originalSrc = terminalInfo.url;
-        webview.src = 'about:blank';
-        
-        // Load the webview immediately - flex layout ensures proper size
-        console.log('[TTYDTerminalPanel] Loading ttyd webview');
-        webview.src = terminalInfo.url;
-        
-        webview.style.cssText = `
-            width: 100%;
-            height: 100%;
-            border: none;
-            background: #1e1e1e;
-        `;
-        
-        // Enable node integration for local content (safe for localhost)
-        webview.setAttribute('nodeintegration', 'true');
-        webview.setAttribute('disablewebsecurity', 'true');
-        webview.setAttribute('allowpopups', 'true');
-        
-        content.appendChild(webview);
-        this.contentContainer.appendChild(content);
-        
-        tab.element = content;
-        tab.webview = webview;
-        this.tabs.set(tab.id, tab);
-        
-        // Handle webview ready event to ensure proper sizing
-        webview.addEventListener('dom-ready', () => {
+        if (!isPty && tab.webview) tab.webview.addEventListener('dom-ready', () => {
             console.log('[TTYDTerminalPanel] Webview DOM ready, ensuring proper size');
             
             // Ensure the webview and its container have proper dimensions
@@ -481,7 +500,7 @@ export class TTYDTerminalPanel {
                 // First, try to send a resize signal through the webview
                 try {
                     // Send window resize event to force ttyd to recalculate
-                    webview.executeJavaScript(`
+                    (tab.webview as any)!.executeJavaScript(`
                         window.dispatchEvent(new Event('resize'));
                         if (window.term) {
                             window.term.fit();
@@ -497,31 +516,30 @@ export class TTYDTerminalPanel {
                 // If dimensions are still wrong, force a full reload
                 if (rows < 20 || contentHeight < 400) {
                     console.log('[TTYDTerminalPanel] Height still too small, forcing reload');
-                    const currentSrc = webview.src;
-                    webview.src = '';
+                    const currentSrc = tab.webview!.src;
+                    tab.webview!.src = '';
                     setTimeout(() => {
-                        webview.src = currentSrc;
+                        if (tab.webview) tab.webview.src = currentSrc;
                     }, 100);
                 }
             }, 500);
         });
         
-        // Handle webview load errors
-        webview.addEventListener('did-fail-load', (event: any) => {
+        if (!isPty && tab.webview) tab.webview.addEventListener('did-fail-load', (event: any) => {
             console.error('[TTYDTerminalPanel] Webview failed to load:', event);
 
-            const attempts = parseInt(webview.dataset.reloadAttempts || '0', 10);
+            const attempts = parseInt(tab.webview!.dataset.reloadAttempts || '0', 10);
             if (attempts < 5) {
                 const delay = 300 * (attempts + 1);
                 console.log(`[TTYDTerminalPanel] Retry loading ttyd webview in ${delay}ms (attempt ${attempts + 1})`);
-                webview.dataset.reloadAttempts = String(attempts + 1);
+                tab.webview!.dataset.reloadAttempts = String(attempts + 1);
                 setTimeout(() => {
                     try {
                         const currentUrl = terminalInfo.url;
                         if (currentUrl) {
-                            webview.src = 'about:blank';
+                            tab.webview!.src = 'about:blank';
                             setTimeout(() => {
-                                webview.src = currentUrl;
+                                if (tab.webview) tab.webview.src = currentUrl;
                             }, 50);
                         }
                     } catch (reloadError) {

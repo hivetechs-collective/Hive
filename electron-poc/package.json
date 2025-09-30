@@ -1,7 +1,7 @@
 {
   "name": "hive-consensus",
   "productName": "Hive Consensus",
-  "version": "1.8.500",
+  "version": "1.8.549",
   "description": "Hive Consensus - AI-powered development environment",
   "main": ".webpack/main",
   "scripts": {
@@ -20,6 +20,7 @@
     "make:test": "npm run make:production && npm run test:dmg",
     "test:dmg": "node scripts/test-dmg.js",
     "smoke:memory-health": "node scripts/smoke-memory-health.js",
+    "smoke:ttyd-dmg": "node scripts/smoke-ttyd-dmg.js",
     "clean": "rm -rf .webpack/ out/ node_modules/.cache/ dist/ .electron-forge/",
     "build:fresh": "npm run clean && npm run make:production",
     "build:complete": "node scripts/build-production-dmg.js",

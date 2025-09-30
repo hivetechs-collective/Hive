@@ -10,6 +10,9 @@ import { logger } from './utils/SafeLogger';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as net from 'net';
+import { PortManager } from './utils/PortManager';
+import { ProductionPaths } from './utils/ProductionPaths';
 
 // Managers will be initialized when registerTerminalHandlers is called
 let processManager: ProcessManager;
@@ -23,6 +26,8 @@ let handlersRegistered = false;
 
 // Store reference to main window for events
 let mainWindowRef: Electron.BrowserWindow | null = null;
+
+// No PTY fallback: if ttyd fails, terminal creation fails
 
 /**
  * Get the next available terminal number
@@ -41,22 +46,33 @@ function getNextTerminalNumber(): number {
  * @param processManagerInstance - The ProcessManager instance from the main process
  */
 export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, processManagerInstance: ProcessManager): void {
+  const regLog = '[TerminalIPC] registerTerminalHandlers called\n';
+  try {
+    fs.appendFileSync('/tmp/ttyd-debug.log', regLog);
+  } catch {}
+
   console.log('[TerminalIPC] Registering TTYD terminal handlers');
   logger.info('[TerminalIPC] Registering TTYD terminal handlers');
-  
+
   // Skip if already registered
   if (handlersRegistered) {
     console.log('[TerminalIPC] Terminal IPC handlers already registered, skipping');
     logger.info('[TerminalIPC] Terminal IPC handlers already registered, skipping');
     return;
   }
-  
+
   // Initialize managers with the shared ProcessManager instance
   processManager = processManagerInstance;
   ttydManager = new TTYDManager(processManager);
-  
+
   handlersRegistered = true;
   mainWindowRef = mainWindow;
+
+  const completeLog = '[TerminalIPC] Handler registration complete, ttydManager created\n';
+  try {
+    fs.appendFileSync('/tmp/ttyd-debug.log', completeLog);
+  } catch {}
+
   console.log('[TerminalIPC] Handlers registered, mainWindow set');
   
   // Clean up terminals when the main window actually navigates/reloads
@@ -82,8 +98,13 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, pro
     // Optional: inline script content to execute before interactive shell
     scriptContent?: string;
   }) => {
+    const ipcLog = `[TerminalIPC] create-terminal-process called for ${options.toolId || 'terminal'}\n`;
+    try {
+      fs.appendFileSync('/tmp/ttyd-debug.log', ipcLog);
+    } catch {}
+
     logger.info('[TerminalIPC] create-terminal-process called with options:', options);
-    
+
     try {
       // Generate ID if not provided
       const id = options.terminalId || `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -265,46 +286,56 @@ fi
         actualCommand = `bash ${scriptPath}; rm -f ${scriptPath}`;
       }
       
-      // Create terminal via TTYDManager
-      const terminal = await ttydManager.createTerminal({
-        id,
-        title,
-        toolId: options.toolId,
-        cwd: options.cwd || process.env.HOME || process.cwd(),
-        command: actualCommand,
-        env: options.env
-      });
-      
-      logger.info(`[TerminalIPC] Created terminal: ${title} (${id}) on port ${terminal.port}`);
-      
-      // Notify renderer about the new terminal
-      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-        mainWindowRef.webContents.send('terminal-created', {
-          id: terminal.id,
-          title: terminal.title,
-          url: terminal.url,
-          port: terminal.port,
-          toolId: terminal.toolId
-        });
-      }
-      
-      // Store terminal number in the terminal object for cleanup later
-      if (terminalNumber !== undefined) {
-        terminal.terminalNumber = terminalNumber;
-      }
-      
-      return {
-        success: true,
-        terminal: {
-          id: terminal.id,
-          title: terminal.title,
-          url: terminal.url,
-          port: terminal.port,
-          toolId: terminal.toolId
+      // Prefer TTYD unless disabled or forced fallback
+      const forcePty = process.env.HIVE_TTYD_DISABLED === '1' || process.env.HIVE_FORCE_PTY === '1';
+      if (!forcePty) {
+        try {
+          const terminal = await ttydManager.createTerminal({
+            id,
+            title,
+            toolId: options.toolId,
+            cwd: options.cwd || process.env.HOME || process.cwd(),
+            command: actualCommand,
+            env: options.env
+          });
+
+          logger.info(`[TerminalIPC] Created ttyd terminal: ${title} (${id}) on port ${terminal.port}`);
+          if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+            mainWindowRef.webContents.send('terminal-created', {
+              id: terminal.id,
+              title: terminal.title,
+              url: terminal.url,
+              port: terminal.port,
+              toolId: terminal.toolId
+            });
+          }
+          if (terminalNumber !== undefined) {
+            terminal.terminalNumber = terminalNumber;
+          }
+          return {
+            success: true,
+            terminal: {
+              id: terminal.id,
+              title: terminal.title,
+              url: terminal.url,
+              port: terminal.port,
+              toolId: terminal.toolId
+            }
+          };
+        } catch (e: any) {
+          throw e;
         }
-      };
+      }
+
+      // If we reached here, ttyd failed and no fallback is permitted
+      throw new Error('TTYD failed to start and fallback is disabled');
 
     } catch (error: any) {
+      const errorLog = `[TerminalIPC] ERROR: ${error.message || error}\nStack: ${error.stack}\n`;
+      try {
+        fs.appendFileSync('/tmp/ttyd-debug.log', errorLog);
+      } catch {}
+
       logger.error(`[TerminalIPC] Failed to create terminal:`, error);
       return {
         success: false,
@@ -314,17 +345,14 @@ fi
   });
 
   // Write data to terminal - NOT NEEDED WITH TTYD (webview handles input)
-  // Keeping for compatibility but will be handled by webview
   ipcMain.handle('write-to-terminal', async (event: IpcMainInvokeEvent, terminalId: string, data: string) => {
     // With ttyd, input is handled directly by the webview
-    // This handler can be used to execute commands programmatically
     ttydManager.executeCommand(terminalId, data);
     return { success: true };
   });
 
   // Resize terminal - NOT NEEDED WITH TTYD (webview auto-resizes)
   ipcMain.handle('resize-terminal', async (event: IpcMainInvokeEvent, terminalId: string, cols: number, rows: number) => {
-    // With ttyd, resize is handled automatically by the webview
     logger.info(`[TerminalIPC] Resize not needed for ttyd terminals (auto-handled)`);
     return { success: true };
   });
@@ -405,6 +433,90 @@ fi
 
   console.log('[TerminalIPC] TTYD terminal handlers registered successfully');
   logger.info('[TerminalIPC] TTYD terminal handlers registered');
+
+  // Diagnostics: Run ttyd in verbose mode and capture details
+  ipcMain.handle('ttyd-diagnostics-run', async () => {
+    try {
+      const diagPath = '/tmp/hive-ttyd-diagnostics.txt';
+      const lines: string[] = [];
+      function add(l: string) { lines.push(l); }
+
+      const ttydPath = ProductionPaths.getBinaryPath('ttyd');
+      const libsDir = path.join(path.dirname(ttydPath), 'ttyd-libs');
+      const hasLibs = fs.existsSync(libsDir);
+      const libList = hasLibs ? (fs.readdirSync(libsDir) || []) : [];
+      add(`[TTYD Diag] Binary: ${ttydPath}`);
+      add(`[TTYD Diag] Exists: ${fs.existsSync(ttydPath)}`);
+      add(`[TTYD Diag] LibsDir: ${libsDir} (exists=${hasLibs})`);
+      if (hasLibs) add(`[TTYD Diag] Libs: ${libList.join(', ')}`);
+      try {
+        const { execSync } = require('child_process');
+        const nmOut = hasLibs && fs.existsSync(path.join(libsDir, 'libwebsockets.dylib'))
+          ? execSync(`nm -gU "${path.join(libsDir, 'libwebsockets.dylib')}" || true`, { encoding: 'utf8' }) : '';
+        add(`[TTYD Diag] libwebsockets plugin symbols present: ${/(lws_plugins_init|lws_plugins_destroy)/.test(nmOut)}`);
+      } catch {}
+
+      // Try two attempts: with and without --interface
+      const attempts = [
+        { name: 'with-interface', args: ['--interface', '127.0.0.1'] },
+        { name: 'no-interface', args: [] }
+      ];
+
+      for (const attempt of attempts) {
+        // Allocate a port via PortManager for consistency with runtime
+        const key = `diag-ttyd-${attempt.name}-${Date.now()}`;
+        const port = await PortManager.allocatePortForService(key);
+        add(`[TTYD Diag] Attempt ${attempt.name} on port ${port}`);
+        const { spawn } = require('child_process');
+        const env = { ...process.env };
+        if (hasLibs) {
+          env.DYLD_LIBRARY_PATH = env.DYLD_LIBRARY_PATH ? `${libsDir}:${env.DYLD_LIBRARY_PATH}` : libsDir;
+          env.DYLD_FALLBACK_LIBRARY_PATH = env.DYLD_FALLBACK_LIBRARY_PATH ? `${libsDir}:${env.DYLD_FALLBACK_LIBRARY_PATH}` : libsDir;
+        }
+        env.LWS_PLUGINS = libsDir;
+        env.LWS_PLUGIN_PATH = libsDir;
+        // ttyd uses -d/--debug for log level; -v is version and exits
+        const args = ['-d', '7', '--port', String(port), ...attempt.args, '--once', '--writable', '/bin/zsh', '-l'];
+        add(`[TTYD Diag] Spawning: ${ttydPath} ${args.join(' ')}`);
+        const child = spawn(ttydPath, args, { env });
+        let stderrBuf = '';
+        child.stderr?.on('data', (d: Buffer) => { stderrBuf += d.toString(); });
+        let ready = false;
+        for (let i = 0; i < 40; i++) {
+          const ok = await new Promise<boolean>((resolve) => {
+            const sock = net.createConnection({ host: '127.0.0.1', port }, () => { sock.destroy(); resolve(true); });
+            sock.on('error', () => resolve(false));
+          });
+          if (ok) { ready = true; break; }
+          await new Promise(r => setTimeout(r, 100));
+        }
+        try { child.kill('SIGTERM'); } catch {}
+        add(`[TTYD Diag] Ready: ${ready}`);
+        if (!ready && stderrBuf) {
+          add('[TTYD Diag] STDERR:');
+          add(stderrBuf.trim());
+        }
+        // Release the allocated port key
+        if (port) PortManager.releasePort(key);
+      }
+
+      fs.writeFileSync(diagPath, lines.join('\n') + '\n', { encoding: 'utf8' });
+      return { success: true, path: diagPath };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
+
+  ipcMain.handle('ttyd-diagnostics-read', async () => {
+    try {
+      const diagPath = '/tmp/hive-ttyd-diagnostics.txt';
+      if (!fs.existsSync(diagPath)) return { success: false, error: 'diag-file-missing' };
+      const data = fs.readFileSync(diagPath, 'utf8');
+      return { success: true, content: data };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
 }
 
 /**

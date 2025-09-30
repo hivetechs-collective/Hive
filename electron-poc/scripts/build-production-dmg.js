@@ -643,22 +643,130 @@ console.log(`${CYAN}Bundling ttyd (terminal server)...${RESET}`);
 const ttydTargetPath = path.join(binariesDir, 'ttyd');
 let ttydBundled = false;
 
-// Check if ttyd exists in system
-const ttydSystemPaths = [
-  '/opt/homebrew/bin/ttyd',    // Homebrew on Apple Silicon
-  '/usr/local/bin/ttyd',        // Homebrew on Intel or manual install
-  '/usr/bin/ttyd'               // System package manager
+// Prefer a vendor-provided portable ttyd if present (built without plugins)
+const ttydVendorPaths = [
+  path.join(__dirname, '../vendor/ttyd/darwin-arm64/ttyd'),
+  path.join(__dirname, '../vendor/ttyd/ttyd'),
+  path.join(__dirname, '../binaries/ttyd-prebuilt')
 ];
 
-for (const ttydPath of ttydSystemPaths) {
+// Ensure portable ttyd is available by attempting a local build if missing
+const ensurePortableTtyd = () => {
+  const hasVendor = ttydVendorPaths.some(p => fs.existsSync(p));
+  if (hasVendor) return;
+  const buildScript = path.join(__dirname, '../scripts/build-portable-ttyd-macos.sh');
+  if (!fs.existsSync(buildScript)) return;
+  try {
+    console.log(`${CYAN}Attempting to build portable ttyd (pluginless) via vendor script...${RESET}`);
+    execCommand(`bash "${buildScript}"`, 'Building portable ttyd', { timeout: 30 * 60 * 1000 });
+  } catch (e) {
+    console.log(`${YELLOW}⚠ Portable ttyd build failed, will try system ttyd fallback: ${e.message}${RESET}`);
+  }
+};
+
+ensurePortableTtyd();
+
+// Rewire Mach-O install names to prefer our bundled libs over Homebrew/system
+const rewireInstallNames = (binaryPath, libsDir) => {
+  try {
+    if (!fs.existsSync(binaryPath)) return;
+    if (!fs.existsSync(libsDir)) return;
+    const libs = new Set(fs.readdirSync(libsDir));
+
+    const isHomebrewOrUsrLocal = (p) => p.startsWith('/opt/homebrew/') || p.startsWith('/usr/local/');
+    const basename = (p) => path.basename(p);
+
+    // Helper to run install_name_tool change if target exists in libsDir
+    const maybeChange = (oldPath, targetBinary) => {
+      const name = basename(oldPath);
+      if (libs.has(name)) {
+        const newPath = `@executable_path/ttyd-libs/${name}`;
+        try {
+          execSync(`install_name_tool -change "${oldPath}" "${newPath}" "${targetBinary}"`);
+          console.log(`${GREEN}  • Rewired ${basename(targetBinary)} => ${name}${RESET}`);
+        } catch (e) {
+          console.log(`${YELLOW}  ⚠ Failed to rewire ${oldPath} in ${targetBinary}: ${e.message}${RESET}`);
+        }
+      }
+    };
+
+    // 1) Rewire the main executable
+    try {
+      const out = execSync(`otool -L "${binaryPath}"`, { encoding: 'utf8' });
+      const lines = out.split(/\r?\n/).slice(1);
+      for (const l of lines) {
+        const dep = (l.trim().split(' (')[0] || '').trim();
+        if (dep && isHomebrewOrUsrLocal(dep)) {
+          maybeChange(dep, binaryPath);
+        }
+      }
+      // Add rpath to find libs under @executable_path/ttyd-libs
+      try { execSync(`install_name_tool -add_rpath @executable_path/ttyd-libs "${binaryPath}"`); } catch {}
+    } catch (e) {
+      console.log(`${YELLOW}  ⚠ Skipped rewire for ${basename(binaryPath)}: ${e.message}${RESET}`);
+    }
+
+    // 2) Rewire each dylib we vendored to point to siblings via @loader_path
+    for (const name of Array.from(libs)) {
+      if (!name.endsWith('.dylib')) continue;
+      const libPath = path.join(libsDir, name);
+      try {
+        const out = execSync(`otool -L "${libPath}"`, { encoding: 'utf8' });
+        const lines = out.split(/\r?\n/).slice(1);
+        // Set the dylib ID to @loader_path/<name> so dependents resolve locally
+        try { execSync(`install_name_tool -id "@loader_path/${name}" "${libPath}"`); } catch {}
+        for (const l of lines) {
+          const dep = (l.trim().split(' (')[0] || '').trim();
+          if (!dep || dep === libPath) continue;
+          if (isHomebrewOrUsrLocal(dep)) {
+            const depBase = basename(dep);
+            if (libs.has(depBase)) {
+              const newPath = `@loader_path/${depBase}`;
+              try {
+                execSync(`install_name_tool -change "${dep}" "${newPath}" "${libPath}"`);
+                console.log(`${GREEN}  • Rewired ${name} => ${depBase}${RESET}`);
+              } catch (e) {
+                console.log(`${YELLOW}  ⚠ Failed to rewire ${dep} in ${name}: ${e.message}${RESET}`);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.log(`${YELLOW}  ⚠ Skipped rewire for ${name}: ${e.message}${RESET}`);
+      }
+    }
+  } catch (e) {
+    console.log(`${YELLOW}⚠ install_name_tool rewiring skipped: ${e.message}${RESET}`);
+  }
+};
+
+// Define system ttyd paths (fallback)
+const ttydSystemPaths = [
+  '/opt/homebrew/bin/ttyd',
+  '/usr/local/bin/ttyd',
+  '/usr/bin/ttyd'
+];
+
+for (const ttydPath of [...ttydVendorPaths, ...ttydSystemPaths]) {
   if (fs.existsSync(ttydPath)) {
     try {
       // Copy ttyd binary
       fs.copyFileSync(ttydPath, ttydTargetPath);
       fs.chmodSync(ttydTargetPath, 0o755); // Make executable
       
-      // Verify it works and check version
-      const ttydVersion = execSync(`"${ttydTargetPath}" --version 2>&1`, { encoding: 'utf8' }).trim();
+      // Verify it works and check version (tolerate vendor dylib deps via env)
+      let ttydVersion = 'unknown';
+      try {
+        const vendorLibDir = path.join(__dirname, '../vendor/ttyd/darwin-arm64/lib');
+        const env = { ...process.env };
+        if (fs.existsSync(vendorLibDir)) {
+          env.DYLD_LIBRARY_PATH = env.DYLD_LIBRARY_PATH ? `${vendorLibDir}:${env.DYLD_LIBRARY_PATH}` : vendorLibDir;
+          env.DYLD_FALLBACK_LIBRARY_PATH = env.DYLD_FALLBACK_LIBRARY_PATH ? `${vendorLibDir}:${env.DYLD_FALLBACK_LIBRARY_PATH}` : vendorLibDir;
+        }
+        ttydVersion = execSync(`"${ttydTargetPath}" --version 2>&1`, { encoding: 'utf8', env }).trim();
+      } catch (e) {
+        console.log(`${YELLOW}⚠ ttyd --version probe skipped: ${e.message}${RESET}`);
+      }
       
       // Check version compatibility
       if (!checkVersionCompatibility('ttyd', ttydVersion)) {
@@ -672,7 +780,211 @@ for (const ttydPath of ttydSystemPaths) {
         }
       }
       
-      console.log(`${GREEN}✓ Bundled ttyd: ${ttydVersion}${RESET}`);
+  console.log(`${GREEN}✓ Bundled ttyd: ${ttydVersion}${RESET}`);
+  // Attempt to vendor required dynamic libraries for portability
+  try {
+        // If vendor provided a libwebsockets dylib, copy it
+        const vendorLibDir = path.join(__dirname, '../vendor/ttyd/darwin-arm64/lib');
+        const libsDir = path.join(binariesDir, 'ttyd-libs');
+        let haveVendorLws = false;
+        if (fs.existsSync(vendorLibDir)) {
+          fs.mkdirSync(libsDir, { recursive: true });
+          for (const name of fs.readdirSync(vendorLibDir)) {
+            if (name.endsWith('.dylib')) {
+              const src = path.join(vendorLibDir, name);
+              const dst = path.join(libsDir, name);
+              fs.copyFileSync(src, dst);
+              fs.chmodSync(dst, 0o644);
+              if (name.startsWith('libwebsockets')) haveVendorLws = true;
+            }
+          }
+          // Ensure a versioned alias exists for libwebsockets to satisfy install_name expectations
+          if (haveVendorLws) {
+            try {
+              const versioned = path.join(libsDir, 'libwebsockets.20.dylib');
+              const unversioned = path.join(libsDir, 'libwebsockets.dylib');
+              if (fs.existsSync(unversioned) && !fs.existsSync(versioned)) {
+                fs.copyFileSync(unversioned, versioned);
+                fs.chmodSync(versioned, 0o644);
+              }
+            } catch {}
+          }
+          console.log(`${GREEN}✓ Vendored vendor/libwebsockets dylibs into binaries/ttyd-libs${RESET}`);
+        }
+
+        const libsOut = execSync(`otool -L "${ttydTargetPath}"`, { encoding: 'utf8' });
+        const lines = libsOut.split(/\r?\n/).slice(1);
+        const brewLibs = lines
+          .map(l => (l.trim().split(' (')[0] || '').trim())
+          .filter(p => p.startsWith('/opt/homebrew/') && p.endsWith('.dylib'));
+        if (brewLibs.length) {
+          fs.mkdirSync(libsDir, { recursive: true });
+          for (const lib of brewLibs) {
+            const target = path.join(libsDir, path.basename(lib));
+            try {
+              // Always prefer Homebrew's libwebsockets core if present (plugin-enabled path)
+              fs.copyFileSync(lib, target);
+              fs.chmodSync(target, 0o644);
+            } catch (e) {
+              console.log(`${YELLOW}⚠ Failed to copy dependent lib ${lib}: ${e.message}${RESET}`);
+            }
+          }
+          console.log(`${GREEN}✓ Vendored ${brewLibs.length} ttyd dependent libs into binaries/ttyd-libs${RESET}`);
+        } else {
+          console.log(`${YELLOW}⚠ No Homebrew-dependent ttyd libs detected (static build or system libs only)${RESET}`);
+        }
+
+        // Force-copy Homebrew's libwebsockets.20.dylib if available, regardless of ttyd's current deps
+        try {
+          const lwsCellar = ['/opt/homebrew/Cellar/libwebsockets', '/usr/local/Cellar/libwebsockets']
+            .find(p => fs.existsSync(p));
+          if (lwsCellar) {
+            const versions = fs.readdirSync(lwsCellar).sort().reverse();
+            for (const ver of versions) {
+              const candidate = path.join(lwsCellar, ver, 'lib', 'libwebsockets.20.dylib');
+              if (fs.existsSync(candidate)) {
+                const dst = path.join(libsDir, 'libwebsockets.20.dylib');
+                fs.copyFileSync(candidate, dst);
+                fs.chmodSync(dst, 0o644);
+                console.log(`${GREEN}✓ Overrode libwebsockets.20.dylib with Homebrew Cellar copy (${ver})${RESET}`);
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          console.log(`${YELLOW}⚠ Could not override libwebsockets.20.dylib from Homebrew: ${e.message}${RESET}`);
+        }
+
+        // Rewire install names so our packaged ttyd uses bundled libs, not Homebrew/system
+        try {
+          const libsDir = path.join(binariesDir, 'ttyd-libs');
+          if (fs.existsSync(libsDir)) {
+            console.log(`${CYAN}Rewiring ttyd and dylibs to use @executable_path/ttyd-libs...${RESET}`);
+            rewireInstallNames(ttydTargetPath, libsDir);
+
+            // If a vendor pluginless libwebsockets.dylib is present, force ttyd to link against it
+            // instead of a versioned libwebsockets.20.dylib to avoid runtime plugin loading.
+            try {
+              const versionedPresent = fs.existsSync(path.join(libsDir, 'libwebsockets.20.dylib'));
+              if (versionedPresent) {
+                // Ensure ttyd depends on the versioned brew lib (plugin-enabled path)
+                try {
+                  execSync(`install_name_tool -change "@executable_path/ttyd-libs/libwebsockets.dylib" "@executable_path/ttyd-libs/libwebsockets.20.dylib" "${ttydTargetPath}"`);
+                } catch {}
+              }
+            } catch (e) {
+              console.log(`${YELLOW}  ⚠ Failed to force vendor libwebsockets: ${e.message}${RESET}`);
+            }
+
+            // Attempt to vendor libwebsockets evlib_uv plugin for libuv if available (for plugin-enabled LWS)
+            try {
+              const pluginCandidates = [
+                '/opt/homebrew/Cellar/libwebsockets',
+                '/usr/local/Cellar/libwebsockets'
+              ].filter(p => fs.existsSync(p));
+              let pluginSrc = '';
+              for (const root of pluginCandidates) {
+                const dirs = fs.readdirSync(root).sort().reverse();
+                for (const v of dirs) {
+                  const candidate = path.join(root, v, 'lib', 'libwebsockets-evlib_uv.dylib');
+                  if (fs.existsSync(candidate)) { pluginSrc = candidate; break; }
+                }
+                if (pluginSrc) break;
+              }
+              if (pluginSrc) {
+                const pluginDst = path.join(libsDir, 'libwebsockets-evlib_uv.dylib');
+                fs.copyFileSync(pluginSrc, pluginDst);
+                fs.chmodSync(pluginDst, 0o644);
+                try {
+                  // Rewire plugin to bind against our local libs instead of Homebrew (
+                  const rewrites = [
+                    ['@rpath/libwebsockets.20.dylib', '@loader_path/libwebsockets.20.dylib'],
+                    ['/opt/homebrew/Cellar/libwebsockets/4.4.1/lib/libwebsockets.20.dylib', '@loader_path/libwebsockets.20.dylib'],
+                    ['/opt/homebrew/opt/libwebsockets/lib/libwebsockets-evlib_uv.dylib', '@loader_path/libwebsockets-evlib_uv.dylib'],
+                    ['/opt/homebrew/opt/libuv/lib/libuv.1.dylib', '@loader_path/libuv.1.dylib'],
+                    ['/usr/local/opt/libuv/lib/libuv.1.dylib', '@loader_path/libuv.1.dylib'],
+                    ['/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib', '@loader_path/libssl.3.dylib'],
+                    ['/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib', '@loader_path/libcrypto.3.dylib'],
+                  ];
+                  for (const [from, to] of rewrites) {
+                    try { execSync(`install_name_tool -change "${from}" "${to}" "${pluginDst}"`); } catch {}
+                  }
+                } catch {}
+                console.log(`${GREEN}  • Vendored libwebsockets-evlib_uv.dylib plugin${RESET}`);
+              } else {
+                console.log(`${YELLOW}  ⚠ evlib_uv plugin not found in Homebrew Cellar (proceeding)${RESET}`);
+              }
+            } catch (e) {
+              console.log(`${YELLOW}  ⚠ Failed to vendor evlib_uv plugin: ${e.message}${RESET}`);
+            }
+
+            // CRITICAL: Re-sign all binaries after rewiring
+            // install_name_tool invalidates signatures, and macOS will SIGKILL unsigned binaries
+            console.log(`${CYAN}Re-signing ttyd and dylibs after rewiring...${RESET}`);
+            try {
+              // Sign all dylibs first
+              const dylibs = fs.readdirSync(libsDir).filter(f => f.endsWith('.dylib'));
+              for (const dylib of dylibs) {
+                const dylibPath = path.join(libsDir, dylib);
+                try {
+                  execSync(`codesign --force --sign - "${dylibPath}"`, { stdio: 'pipe' });
+                  console.log(`${GREEN}  • Signed ${dylib}${RESET}`);
+                } catch (e) {
+                  console.log(`${YELLOW}  ⚠ Failed to sign ${dylib}: ${e.message}${RESET}`);
+                }
+              }
+
+              // Sign ttyd binary last
+              execSync(`codesign --force --sign - "${ttydTargetPath}"`, { stdio: 'pipe' });
+              console.log(`${GREEN}  • Signed ttyd${RESET}`);
+              console.log(`${GREEN}✓ All binaries re-signed successfully${RESET}`);
+            } catch (e) {
+              console.log(`${YELLOW}⚠ Code signing failed: ${e.message}${RESET}`);
+              console.log(`${YELLOW}  Binaries may be killed by macOS on execution${RESET}`);
+            }
+
+            // Strict verification: ensure no absolute Homebrew/usr/local deps remain
+            try {
+              const post = execSync(`otool -L "${ttydTargetPath}"`, { encoding: 'utf8' });
+              const badRef = post.split(/\r?\n/).slice(1).some(l => /\/(opt\/homebrew|usr\/local)\//.test(l));
+              if (badRef) {
+                console.error(`${RED}✗ ttyd still references Homebrew/usr/local after rewiring!${RESET}`);
+                console.error(`${RED}  Inspect with: otool -L ${ttydTargetPath}${RESET}`);
+                if (!process.env.ALLOW_TTYD_ABSOLUTE_DEPS) {
+                  process.exit(1);
+                }
+              }
+          } catch (e) {
+            console.log(`${YELLOW}  ⚠ Post-rewire verification skipped: ${e.message}${RESET}`);
+          }
+
+          // Strict policy: disallow plugin-enabled libwebsockets in shipped DMG
+          try {
+            const lwsCoreCandidates = ['libwebsockets.dylib', 'libwebsockets.20.dylib']
+              .map(n => path.join(libsDir, n)).filter(p => fs.existsSync(p));
+            for (const core of lwsCoreCandidates) {
+              const nmOut = execSync(`nm -gU "${core}" || true`, { encoding: 'utf8' });
+              const pluginEnabled = /lws_plugins_init|lws_plugins_destroy/.test(nmOut);
+              if (pluginEnabled) {
+                console.log(`${YELLOW}⚠ libwebsockets is plugin-enabled: ${core}${RESET}`);
+                if (process.env.DISALLOW_LWS_PLUGINS === '1') {
+                  console.error(`${RED}  DISALLOW_LWS_PLUGINS=1 set; failing build.${RESET}`);
+                  process.exit(1);
+                }
+              }
+            }
+          } catch (e) {
+            console.log(`${YELLOW}  ⚠ Plugin symbol scan skipped: ${e.message}${RESET}`);
+          }
+          } else {
+            console.log(`${YELLOW}⚠ No ttyd-libs directory found to rewire against${RESET}`);
+          }
+        } catch (e) {
+          console.log(`${YELLOW}⚠ Failed to rewire install names: ${e.message}${RESET}`);
+        }
+      } catch (e) {
+        console.log(`${YELLOW}⚠ Skipped ttyd dependency vendoring: ${e.message}${RESET}`);
+      }
       bundledBinaries.push('ttyd');
       ttydBundled = true;
       break;
@@ -804,6 +1116,28 @@ try {
 
   if (platform !== 'darwin' && platform !== 'linux') {
     throw new Error(`Unsupported platform for Node runtime bundling: ${platform}`);
+  }
+
+  // Quick local ttyd spawn smoke test (pre-DMG) to ensure packaged libs are resolvable
+  if (process.env.HIVE_STRICT_TTYD === '1') {
+  try {
+    const testPort = 7861 + Math.floor(Math.random() * 100);
+    const libsDir = path.join(binariesDir, 'ttyd-libs');
+    const envPrefix = fs.existsSync(libsDir)
+      ? `LWS_NO_PLUGINS=1 DYLD_LIBRARY_PATH=\"${libsDir}\" DYLD_FALLBACK_LIBRARY_PATH=\"${libsDir}\"`
+      : `LWS_NO_PLUGINS=1`;
+    const cmd = `${envPrefix} "${ttydTargetPath}" --port ${testPort} --interface 127.0.0.1 --once --writable /bin/zsh -l & PID=$!; `+
+                `for i in $(seq 1 30); do curl -s "http://127.0.0.1:${testPort}/" >/dev/null 2>&1 && OK=1 && break || sleep 0.1; done; `+
+                `kill $PID >/dev/null 2>&1 || true; `+
+                `if [ "$OK" != "1" ]; then echo 'ttyd not listening (pre-DMG)' >&2; exit 1; fi`;
+    execCommand(cmd, 'Local ttyd spawn precheck', { timeout: 15000 });
+    console.log(`${GREEN}✓ Local ttyd spawn precheck passed on port ${testPort}${RESET}`);
+  } catch (e) {
+    console.error(`${RED}✗ Local ttyd spawn precheck failed: ${e.message}${RESET}`);
+    if (!process.env.ALLOW_TTYD_SMOKE_SKIP) process.exit(1);
+  }
+  } else {
+    console.log(`${YELLOW}⚠ Skipping local ttyd spawn precheck (HIVE_STRICT_TTYD not set)${RESET}`);
   }
 
   const nodeFilename = `node-v${nodeVersion}-${platform}-${arch}`;
@@ -2016,6 +2350,25 @@ if (IS_CI) {
       execCommand('sleep 0.5', 'Wait for volume to eject', { silent: true });
     } catch (error) {
       // Ignore errors - volume might not exist
+    }
+
+    // Before install: optional DMG ttyd smoke test
+    if (process.env.HIVE_STRICT_TTYD === '1') {
+      try {
+        const smoke = path.join(__dirname, 'smoke-ttyd-dmg.js');
+        if (fs.existsSync(smoke)) {
+          console.log(`${CYAN}Running DMG ttyd smoke test...${RESET}`);
+          execCommand(`node "${smoke}" "${dmgPath}"`, 'DMG ttyd smoke test', { timeout: 15000 });
+          console.log(`${GREEN}✓ DMG ttyd smoke test passed${RESET}`);
+        } else {
+          console.log(`${YELLOW}⚠ Skipping DMG ttyd smoke test (script missing)${RESET}`);
+        }
+      } catch (e) {
+        console.error(`${RED}✗ DMG ttyd smoke test failed: ${e.message}${RESET}`);
+        if (!process.env.ALLOW_TTYD_SMOKE_SKIP) process.exit(1);
+      }
+    } else {
+      console.log(`${YELLOW}⚠ Skipping DMG ttyd smoke test (HIVE_STRICT_TTYD not set)${RESET}`);
     }
 
     // Mount DMG fresh
