@@ -2370,51 +2370,18 @@ const createApplicationMenu = async (): Promise<void> => {
     {
       label: "Edit",
       submenu: [
-        {
-          label: "Undo",
-          accelerator: "CmdOrCtrl+Z",
-          click: () => {
-            mainWindow?.webContents.send("menu-undo");
-          },
-        },
-        {
-          label: "Redo",
-          accelerator: "CmdOrCtrl+Y",
-          click: () => {
-            mainWindow?.webContents.send("menu-redo");
-          },
-        },
+        // Use native roles for standard edit actions so they apply to
+        // whichever element or guest webview currently has focus.
+        { role: "undo" },
+        { role: "redo" },
         { type: "separator" },
-        {
-          label: "Cut",
-          accelerator: "CmdOrCtrl+X",
-          click: () => {
-            mainWindow?.webContents.send("menu-cut");
-          },
-        },
-        {
-          label: "Copy",
-          accelerator: "CmdOrCtrl+C",
-          click: () => {
-            mainWindow?.webContents.send("menu-copy");
-          },
-        },
-        {
-          label: "Paste",
-          accelerator: "CmdOrCtrl+V",
-          click: () => {
-            mainWindow?.webContents.send("menu-paste");
-          },
-        },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
         { type: "separator" },
-        {
-          label: "Select All",
-          accelerator: "CmdOrCtrl+A",
-          click: () => {
-            mainWindow?.webContents.send("menu-select-all");
-          },
-        },
+        { role: "selectAll" },
         { type: "separator" },
+        // Keep explicit items for find/replace which route through our UI
         {
           label: "Find",
           accelerator: "CmdOrCtrl+F",
