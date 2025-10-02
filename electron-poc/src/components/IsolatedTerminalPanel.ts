@@ -46,11 +46,27 @@ export class IsolatedTerminalPanel {
     private initialize(): void {
         // Create System Log as the first tab
         this.createSystemLogTab();
-        
+
         // Set up new tab button
         const newTabBtn = document.getElementById('isolated-terminal-new-tab');
         if (newTabBtn) {
             newTabBtn.addEventListener('click', () => this.createTerminalTab());
+        }
+
+        // Set up global terminal data listener (ONE listener for ALL terminals)
+        const terminalAPI = (window as any).terminalAPI;
+        if (terminalAPI) {
+            terminalAPI.onTerminalData((terminalId: string, data: string) => {
+                const tab = this.tabs.get(terminalId);
+                if (tab && (tab as any).terminal) {
+                    (tab as any).terminal.write(data);
+                }
+            });
+
+            terminalAPI.onTerminalExit((terminalId: string, code?: number) => {
+                console.log(`[IsolatedTerminalPanel] Terminal ${terminalId} exited with code ${code}`);
+                // Optionally remove the tab or show exit status
+            });
         }
     }
 
@@ -280,9 +296,8 @@ export class IsolatedTerminalPanel {
             // Create the PTY process via IPC
             const terminalAPI = (window as any).terminalAPI;
             if (terminalAPI) {
-                // Use the user's home directory as default working directory
-                // In Electron renderer, we need to use a proper path, not /
-                const cwd = process.env.HOME || process.cwd();  // Use home directory or current working directory
+                // Use the currently opened folder or undefined (main process will use HOME)
+                const cwd = (window as any).currentOpenedFolder || undefined;
                 const result = await terminalAPI.createTerminalProcess({
                     terminalId: tabId,
                     cwd: cwd
@@ -290,37 +305,15 @@ export class IsolatedTerminalPanel {
                 
                 if (result.success) {
                     console.log(`[IsolatedTerminalPanel] Terminal ${tabId} created, PID: ${result.pid}`);
-                    
-                    // Connect xterm.js to the PTY process
-                    // Listen for data from PTY and write to xterm
-                    terminalAPI.onTerminalData((terminalId: string, data: string) => {
-                        if (terminalId === tabId && terminal) {
-                            // Debug: Log control sequences
-                            if (data.includes('\r') || data.includes('\x1b[')) {
-                                const sequences = data.replace(/\x1b/g, '\\x1b')
-                                    .replace(/\r/g, '\\r')
-                                    .replace(/\n/g, '\\n');
-                                console.log(`[Terminal ${tabId}] Control sequences:`, sequences.substring(0, 100));
-                            }
-                            terminal.write(data);
-                        }
-                    });
-                    
+
                     // Send xterm input to PTY
                     terminal.onData((data: string) => {
                         terminalAPI.writeToTerminal(tabId, data);
                     });
-                    
+
                     // Handle terminal resize
                     terminal.onResize((size: { cols: number; rows: number }) => {
                         terminalAPI.resizeTerminal(tabId, size.cols, size.rows);
-                    });
-                    
-                    // Handle terminal exit
-                    terminalAPI.onTerminalExit((terminalId: string, code: number) => {
-                        if (terminalId === tabId && terminal) {
-                            terminal.write(`\r\n[Process exited with code ${code}]\r\n`);
-                        }
                     });
                 } else {
                     terminal.write(`\r\n\x1b[91mFailed to create terminal process: ${result.error}\x1b[0m\r\n`);
@@ -960,6 +953,18 @@ export class IsolatedTerminalPanel {
         }
     }
 }
+
+// Export singleton instance
+export const isolatedTerminalPanel = {
+    instance: null as IsolatedTerminalPanel | null,
+
+    initialize(container: HTMLElement): IsolatedTerminalPanel {
+        if (!this.instance) {
+            this.instance = new IsolatedTerminalPanel(container);
+        }
+        return this.instance;
+    }
+};
 
 // Add blinking cursor animation
 const style = document.createElement('style');

@@ -14698,3 +14698,126 @@ Location: `src/components/help-viewer.ts`
   - Authoritative billing models, gates, entitlements, and Paddle integration.
   - See also: hivetechs-website-private/docs/architecture/billing/MASTER_BILLING.md
 - This desktop app consumes the website’s billing contracts and does not redefine billing.
+
+## Homebrew Distribution (No Apple Developer ID Required)
+
+### Overview
+Hive Consensus is distributed via **Homebrew tap** instead of direct DMG downloads, eliminating Apple Developer ID signing requirements while ensuring TTYD terminal functionality works perfectly for all users.
+
+### ✅ What's Configured
+
+**Homebrew Tap Repository**: `/Users/veronelazio/Developer/Private/hive/homebrew-tap`
+- Cask formula: `Casks/hive-consensus.rb` 
+- Version: 1.8.553
+- SHA256: `a15be69842cd5e1f7b621c6729d37aac503504004e46d1dead529dedfd0df2b0`
+- Git initialized with initial commit
+
+**Ad-hoc Signing Scripts** (No Apple Developer ID needed):
+- `scripts/adhoc-sign.sh` - Ad-hoc codesign signing
+- `scripts/build-for-homebrew.sh` - Complete build workflow
+
+### User Installation
+
+```bash
+# One-line installation
+brew install --cask hivetechs-collective/tap/hive-consensus
+
+# Or with tap first
+brew tap hivetechs-collective/tap
+brew install --cask hive-consensus
+```
+
+### Build & Release Workflow
+
+**1. Build New Version**:
+```bash
+npm run build:complete
+```
+
+**2. Calculate SHA256**:
+```bash
+shasum -a 256 "out/make/Hive Consensus.dmg"
+```
+
+**3. Create GitHub Release**:
+```bash
+gh release create v1.8.XXX "out/make/Hive Consensus.dmg" \
+  --title "Hive Consensus v1.8.XXX" \
+  --notes "Release notes here" \
+  --repo hivetechs-collective/Hive
+
+# Rename uploaded DMG to: Hive-Consensus-1.8.XXX.dmg
+```
+
+**4. Update Homebrew Cask**:
+```bash
+cd /Users/veronelazio/Developer/Private/hive/homebrew-tap
+
+# Edit Casks/hive-consensus.rb:
+# - Update version number
+# - Update sha256 hash
+
+git add Casks/hive-consensus.rb
+git commit -m "chore: bump to v1.8.XXX"
+git push
+```
+
+**5. Users Update**:
+```bash
+brew upgrade --cask hive-consensus
+```
+
+### Benefits Over R2 + Apple Developer ID
+
+| Feature | R2 Distribution | Homebrew |
+|---------|----------------|----------|
+| **Signing Required** | Developer ID ($99/year) | Ad-hoc (free) |
+| **Notarization** | Required (slow) | Not needed |
+| **Quarantine Issues** | Yes (blank terminals) | No |
+| **TTYD Works** | ❌ Fails in signed apps | ✅ Works perfectly |
+| **Updates** | Manual download | `brew upgrade` |
+| **User Trust** | Must allow download | Explicit install = trust |
+| **Annual Cost** | $99 + R2 storage | Free |
+
+### Repository Setup (One-Time)
+
+**1. Create GitHub Repository**:
+```bash
+cd /Users/veronelazio/Developer/Private/hive/homebrew-tap
+gh repo create hivetechs-collective/homebrew-tap --public --source=. --remote=origin
+
+# Repository name MUST be "homebrew-tap" for auto-discovery
+```
+
+**2. Push to GitHub**:
+```bash
+git branch -M main
+git push -u origin main
+```
+
+### Technical Notes
+
+- **DMG Naming**: GitHub releases must use `Hive-Consensus-{version}.dmg` format
+- **Version Sync**: Update version in both `package.json` and `Casks/hive-consensus.rb`
+- **SHA256**: Must recalculate for every new build
+- **No Quarantine**: Homebrew installations bypass macOS quarantine attribute
+- **TTYD Localhost**: Works perfectly because no GateKeeper restrictions apply
+
+### Troubleshooting
+
+**Installation fails with "cask not found"**:
+```bash
+brew tap hivetechs-collective/tap
+brew install --cask hivetechs-collective/tap/hive-consensus
+```
+
+**SHA256 mismatch**:
+```bash
+# Recalculate and update cask
+shasum -a 256 "out/make/Hive Consensus.dmg"
+```
+
+**App quarantined (rare)**:
+```bash
+xattr -dr com.apple.quarantine "/Applications/Hive Consensus.app"
+```

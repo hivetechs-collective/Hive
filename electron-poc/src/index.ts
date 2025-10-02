@@ -580,7 +580,7 @@ const createWindow = (show: boolean = true): BrowserWindow => {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false, // Allow HTTP requests to localhost for development
-      webviewTag: true, // Enable webview tags for ttyd terminals
+      webviewTag: false, // No longer needed - using native PTY terminals
     },
   });
 

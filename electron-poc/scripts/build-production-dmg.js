@@ -638,79 +638,7 @@ console.log(`${CYAN}Cleaned old binaries${RESET}`);
 // Track bundled binaries for webpack configuration
 const bundledBinaries = [];
 
-// 1. Bundle ttyd (Terminal Server)
-console.log(`${CYAN}Bundling ttyd (terminal server)...${RESET}`);
-const ttydTargetPath = path.join(binariesDir, 'ttyd');
-let ttydBundled = false;
-
-// Check if ttyd exists in system
-const ttydSystemPaths = [
-  '/opt/homebrew/bin/ttyd',    // Homebrew on Apple Silicon
-  '/usr/local/bin/ttyd',        // Homebrew on Intel or manual install
-  '/usr/bin/ttyd'               // System package manager
-];
-
-for (const ttydPath of ttydSystemPaths) {
-  if (fs.existsSync(ttydPath)) {
-    try {
-      // Copy ttyd binary
-      fs.copyFileSync(ttydPath, ttydTargetPath);
-      fs.chmodSync(ttydTargetPath, 0o755); // Make executable
-      
-      // Verify it works and check version
-      const ttydVersion = execSync(`"${ttydTargetPath}" --version 2>&1`, { encoding: 'utf8' }).trim();
-      
-      // Check version compatibility
-      if (!checkVersionCompatibility('ttyd', ttydVersion)) {
-        const req = binaryRequirements.ttyd;
-        if (req && req.critical) {
-          console.error(`${RED}✗ ttyd version incompatible and marked as critical!${RESET}`);
-          console.error(`${RED}  Please install a compatible version: ${req.installCommand}${RESET}`);
-          if (!process.env.ALLOW_VERSION_MISMATCH) {
-            process.exit(1);
-          }
-        }
-      }
-      
-      console.log(`${GREEN}✓ Bundled ttyd: ${ttydVersion}${RESET}`);
-      bundledBinaries.push('ttyd');
-      ttydBundled = true;
-      break;
-    } catch (e) {
-      console.log(`${YELLOW}⚠ Found ttyd at ${ttydPath} but couldn't bundle it: ${e.message}${RESET}`);
-    }
-  }
-}
-
-if (!ttydBundled) {
-  console.error(`${RED}✗ CRITICAL: ttyd not found! Install with: brew install ttyd${RESET}`);
-  console.error(`${RED}  The app WILL crash without ttyd for terminal functionality${RESET}`);
-  if (process.env.CI !== 'true') {
-    console.log(`${YELLOW}Attempting to install ttyd automatically...${RESET}`);
-    try {
-      execCommand('brew install ttyd', 'Installing ttyd via Homebrew', { timeout: 60000 });
-      // Try again after installation
-      for (const ttydPath of ttydSystemPaths) {
-        if (fs.existsSync(ttydPath)) {
-          fs.copyFileSync(ttydPath, ttydTargetPath);
-          fs.chmodSync(ttydTargetPath, 0o755);
-          const ttydVersion = execSync(`"${ttydTargetPath}" --version 2>&1`, { encoding: 'utf8' }).trim();
-          console.log(`${GREEN}✓ Successfully installed and bundled ttyd: ${ttydVersion}${RESET}`);
-          bundledBinaries.push('ttyd');
-          ttydBundled = true;
-          break;
-        }
-      }
-    } catch (e) {
-      console.error(`${RED}Failed to auto-install ttyd: ${e.message}${RESET}`);
-    }
-  }
-  
-  if (!ttydBundled && !process.env.ALLOW_MISSING_DEPS) {
-    console.error(`${RED}Build cannot continue without ttyd. Set ALLOW_MISSING_DEPS=true to skip.${RESET}`);
-    process.exit(1);
-  }
-}
+// 1. TTYD has been removed - now using native PTY terminal system
 
 // 2. Bundle Git (Version Control) - Optional
 console.log(`${CYAN}Bundling git (version control)...${RESET}`);
@@ -960,7 +888,6 @@ try {
 const binaryManifest = {
   bundled: bundledBinaries,
   paths: {
-    ttyd: ttydBundled ? 'binaries/ttyd' : null,
     git: gitBundled ? 'binaries/git-bundle/bin/git' : null,
     node: nodeBundled ? 'binaries/node' : null,
     uv: uvBundled ? 'binaries/uv' : null,
@@ -980,9 +907,7 @@ console.log(`${GREEN}✓ Binary manifest created${RESET}`);
 console.log(`${CYAN}Bundled binaries: ${bundledBinaries.join(', ') || 'none'}${RESET}`);
 
 // Log warnings for missing binaries
-if (!ttydBundled) {
-  logger.log('WARNING: ttyd not bundled - terminal features will not work!');
-}
+// Note: ttyd removed - now using native PTY terminal system
 if (!gitBundled) {
   logger.log('WARNING: git not bundled - version control features limited');
 }

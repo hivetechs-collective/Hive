@@ -1,10 +1,10 @@
 /**
- * Terminal IPC Handlers for TTYD-based terminals
- * Manages ttyd terminal server instances via IPC communication
+ * Terminal IPC Handlers for PTY-based terminals
+ * Manages terminal instances via native PTY integration (node-pty or hive_pty)
  */
 
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import TTYDManager from './services/TTYDManager';
+import { PtyService } from './main/terminal/PtyService';
 import ProcessManager from './utils/ProcessManager';
 import { logger } from './utils/SafeLogger';
 import * as fs from 'fs';
@@ -13,7 +13,7 @@ import * as path from 'path';
 
 // Managers will be initialized when registerTerminalHandlers is called
 let processManager: ProcessManager;
-let ttydManager: TTYDManager;
+let ptyService: PtyService;
 
 // Track active terminal numbers to reuse closed ones
 const activeTerminalNumbers = new Set<number>();
@@ -41,37 +41,57 @@ function getNextTerminalNumber(): number {
  * @param processManagerInstance - The ProcessManager instance from the main process
  */
 export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, processManagerInstance: ProcessManager): void {
-  console.log('[TerminalIPC] Registering TTYD terminal handlers');
-  logger.info('[TerminalIPC] Registering TTYD terminal handlers');
-  
+  console.log('[TerminalIPC] Registering PTY terminal handlers');
+  logger.info('[TerminalIPC] Registering PTY terminal handlers');
+
   // Skip if already registered
   if (handlersRegistered) {
     console.log('[TerminalIPC] Terminal IPC handlers already registered, skipping');
     logger.info('[TerminalIPC] Terminal IPC handlers already registered, skipping');
     return;
   }
-  
+
   // Initialize managers with the shared ProcessManager instance
   processManager = processManagerInstance;
-  ttydManager = new TTYDManager(processManager);
-  
+  ptyService = new PtyService();
+
   handlersRegistered = true;
   mainWindowRef = mainWindow;
   console.log('[TerminalIPC] Handlers registered, mainWindow set');
-  
+
+  // Set up PTY event forwarding to renderer
+  ptyService.onData((terminalId: string, data: string) => {
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send('terminal-data', terminalId, data);
+    }
+  });
+
+  ptyService.onExit((terminalId: string, exitCode: number) => {
+    // Clean up terminal number when terminal closes
+    const terminals = ptyService.listTerminals();
+    const terminal = terminals.find(t => t.terminalId === terminalId);
+    if (terminal && terminal.terminalNumber) {
+      activeTerminalNumbers.delete(terminal.terminalNumber);
+    }
+
+    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+      mainWindowRef.webContents.send('terminal-exit', terminalId, exitCode);
+    }
+  });
+
   // Clean up terminals when the main window actually navigates/reloads
   // Only cleanup if navigating away from the app, not when webviews load
   mainWindow.webContents.on('will-navigate', async (event, url) => {
     // Only cleanup if it's the main window navigation, not webview navigation
     if (!url.includes('localhost:7') && !url.includes('localhost:8')) {
       logger.info('[TerminalIPC] Main window navigating, cleaning up terminals...');
-      await ttydManager.cleanup();
+      await ptyService.cleanup();
       // Clear all active terminal numbers on reload
       activeTerminalNumbers.clear();
     }
   });
 
-  // Create a new terminal
+  // Create a new terminal - CRITICAL: Keep exact same IPC channel name
   ipcMain.handle('create-terminal-process', async (event: IpcMainInvokeEvent, options: {
     terminalId: string;
     command?: string;
@@ -83,11 +103,11 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, pro
     scriptContent?: string;
   }) => {
     logger.info('[TerminalIPC] create-terminal-process called with options:', options);
-    
+
     try {
       // Generate ID if not provided
       const id = options.terminalId || `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
+
       // Determine title
       let title: string;
       let terminalNumber: number | undefined;
@@ -100,9 +120,10 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, pro
         activeTerminalNumbers.add(terminalNumber);
         title = `Terminal ${terminalNumber}`;
       }
-      
+
       // Handle special Grok setup wizard
       let actualCommand = options.command;
+      let actualArgs = options.args;
 
       // If scriptContent is provided, write it to a temp file and run it
       if (options.scriptContent && options.scriptContent.trim().length > 0) {
@@ -110,20 +131,20 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, pro
           const scriptPath = path.join(os.tmpdir(), `hive-spec-wizard-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`);
           fs.writeFileSync(scriptPath, options.scriptContent, { encoding: 'utf-8' });
           fs.chmodSync(scriptPath, '755');
-          // Run the script, then TTYDManager will append 'exec $SHELL -i' to keep the session
-          // Do NOT delete the script here; reconnections may re-run the command
-          actualCommand = `bash ${scriptPath}`;
+          // Run the script, then shell will continue
+          actualCommand = 'bash';
+          actualArgs = [scriptPath];
           logger.info(`[TerminalIPC] Created temp script for terminal at ${scriptPath}`);
         } catch (e: any) {
           logger.error('[TerminalIPC] Failed to prepare temp script:', e?.message || e);
         }
       }
+
       if (options.command === 'grok:setup') {
         // Create an interactive setup script for Grok
         logger.info('[TerminalIPC] Launching Grok setup wizard');
-        
+
         // Create a multi-line bash script that guides the user through setup
-        // Create a temporary script file for better handling of the setup wizard
         const scriptContent = `#!/bin/bash
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "                 🚀 Grok CLI Setup Wizard"
@@ -150,7 +171,7 @@ if [[ "$response" =~ ^[Yy]$ ]]; then
   echo "📝 Paste your API key below and press Enter:"
   read api_key
   echo ""
-  
+
   if [ -n "$api_key" ]; then
     # Show the key for verification (masked partially for security)
     key_length=\${#api_key}
@@ -164,25 +185,25 @@ if [[ "$response" =~ ^[Yy]$ ]]; then
       echo "🔑 API Key to be saved: [key too short, might be invalid]"
     fi
     echo ""
-    
+
     # Confirm before saving
     read -p "Is this correct? (y/n): " confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
       echo "❌ Setup cancelled. Please run the setup wizard again."
       exit 0
     fi
-    
+
     echo ""
     echo "💾 Saving API key..."
-    
+
     # Create the .grok directory if it doesn't exist
     mkdir -p ~/.grok
-    
+
     # Check if user-settings.json exists and has content
     if [ -f ~/.grok/user-settings.json ]; then
       # Backup existing file
       cp ~/.grok/user-settings.json ~/.grok/user-settings.json.bak
-      
+
       # Read existing settings and add apiKey using a more reliable method
       if command -v python3 >/dev/null 2>&1; then
         python3 -c "
@@ -227,7 +248,7 @@ EOF
 EOF
       echo "✅ API key saved to ~/.grok/user-settings.json"
     fi
-    
+
     echo ""
     echo "🎉 Setup complete! Your API key has been saved."
     echo ""
@@ -255,52 +276,55 @@ else
   echo "https://console.x.ai/team/default/api-keys"
 fi
 `;
-        
+
         // Write the script to a temporary file
         const scriptPath = path.join(os.tmpdir(), `grok-setup-${Date.now()}.sh`);
         fs.writeFileSync(scriptPath, scriptContent);
         fs.chmodSync(scriptPath, '755');
-        
+
         // Run the script
-        actualCommand = `bash ${scriptPath}; rm -f ${scriptPath}`;
+        actualCommand = 'bash';
+        actualArgs = [scriptPath];
       }
-      
-      // Create terminal via TTYDManager
-      const terminal = await ttydManager.createTerminal({
+
+      // Determine shell and args
+      const shell = actualCommand || process.env.SHELL || '/bin/bash';
+      const shellArgs = actualArgs || [];
+
+      // Create terminal via PtyService
+      const terminal = await ptyService.spawn({
         id,
         title,
-        toolId: options.toolId,
+        shell,
+        args: shellArgs,
         cwd: options.cwd || process.env.HOME || process.cwd(),
-        command: actualCommand,
-        env: options.env
+        env: {
+          ...process.env,
+          ...options.env,
+          TERM: 'xterm-256color',
+        },
+        toolId: options.toolId,
+        terminalNumber,
       });
-      
-      logger.info(`[TerminalIPC] Created terminal: ${title} (${id}) on port ${terminal.port}`);
-      
+
+      logger.info(`[TerminalIPC] Created terminal: ${title} (${id})`);
+
       // Notify renderer about the new terminal
       if (mainWindowRef && !mainWindowRef.isDestroyed()) {
         mainWindowRef.webContents.send('terminal-created', {
           id: terminal.id,
           title: terminal.title,
-          url: terminal.url,
-          port: terminal.port,
-          toolId: terminal.toolId
+          toolId: terminal.toolId,
         });
       }
-      
-      // Store terminal number in the terminal object for cleanup later
-      if (terminalNumber !== undefined) {
-        terminal.terminalNumber = terminalNumber;
-      }
-      
+
       return {
         success: true,
+        pid: terminal.pty.pid,
         terminal: {
           id: terminal.id,
           title: terminal.title,
-          url: terminal.url,
-          port: terminal.port,
-          toolId: terminal.toolId
+          toolId: terminal.toolId,
         }
       };
 
@@ -313,98 +337,95 @@ fi
     }
   });
 
-  // Write data to terminal - NOT NEEDED WITH TTYD (webview handles input)
-  // Keeping for compatibility but will be handled by webview
+  // Write data to terminal - CRITICAL: Keep exact same IPC channel name
   ipcMain.handle('write-to-terminal', async (event: IpcMainInvokeEvent, terminalId: string, data: string) => {
-    // With ttyd, input is handled directly by the webview
-    // This handler can be used to execute commands programmatically
-    ttydManager.executeCommand(terminalId, data);
-    return { success: true };
+    try {
+      await ptyService.write(terminalId, data);
+      return { success: true };
+    } catch (error: any) {
+      logger.error(`[TerminalIPC] Failed to write to terminal ${terminalId}:`, error);
+      return {
+        success: false,
+        error: error.message || 'Failed to write to terminal'
+      };
+    }
   });
 
-  // Resize terminal - NOT NEEDED WITH TTYD (webview auto-resizes)
+  // Resize terminal - CRITICAL: Keep exact same IPC channel name
   ipcMain.handle('resize-terminal', async (event: IpcMainInvokeEvent, terminalId: string, cols: number, rows: number) => {
-    // With ttyd, resize is handled automatically by the webview
-    logger.info(`[TerminalIPC] Resize not needed for ttyd terminals (auto-handled)`);
-    return { success: true };
+    try {
+      await ptyService.resize(terminalId, cols, rows);
+      logger.info(`[TerminalIPC] Resized terminal ${terminalId} to ${cols}x${rows}`);
+      return { success: true };
+    } catch (error: any) {
+      logger.error(`[TerminalIPC] Failed to resize terminal ${terminalId}:`, error);
+      return {
+        success: false,
+        error: error.message || 'Failed to resize terminal'
+      };
+    }
   });
 
-  // Kill terminal process
+  // Kill terminal process - CRITICAL: Keep exact same IPC channel name
   ipcMain.handle('kill-terminal-process', async (event: IpcMainInvokeEvent, terminalId: string) => {
     try {
-      // Get terminal info before closing to extract terminal number
-      const terminal = ttydManager.getTerminal(terminalId);
+      // Clean up terminal number before killing
+      const terminals = ptyService.listTerminals();
+      const terminal = terminals.find(t => t.terminalId === terminalId);
       if (terminal && terminal.terminalNumber) {
         activeTerminalNumbers.delete(terminal.terminalNumber);
       }
-      
-      const success = await ttydManager.closeTerminal(terminalId);
-      logger.info(`[TerminalIPC] Closed terminal: ${terminalId}`);
-      return { success };
+
+      await ptyService.kill(terminalId);
+      logger.info(`[TerminalIPC] Killed terminal: ${terminalId}`);
+      return { success: true };
     } catch (error: any) {
-      logger.error(`[TerminalIPC] Failed to close terminal:`, error);
+      logger.error(`[TerminalIPC] Failed to kill terminal:`, error);
       return { success: false, error: error.message };
     }
   });
 
-  // Get terminal status
+  // Get terminal status - CRITICAL: Keep exact same IPC channel name
   ipcMain.handle('get-terminal-status', async (event: IpcMainInvokeEvent, terminalId: string) => {
-    const terminal = ttydManager.getTerminal(terminalId);
-    if (terminal) {
-      return {
-        exists: true,
-        id: terminal.id,
-        title: terminal.title,
-        url: terminal.url,
-        port: terminal.port,
-        status: terminal.status,
-        toolId: terminal.toolId
-      };
-    } else {
+    try {
+      const terminals = ptyService.listTerminals();
+      const terminal = terminals.find(t => t.terminalId === terminalId);
+
+      if (terminal) {
+        return {
+          exists: true,
+          id: terminal.terminalId,
+          title: terminal.title,
+          status: 'running', // PTY terminals are always running until they exit
+          toolId: terminal.toolId,
+        };
+      } else {
+        return { exists: false };
+      }
+    } catch (error: any) {
+      logger.error(`[TerminalIPC] Failed to get terminal status:`, error);
       return { exists: false };
     }
   });
 
-  // List all terminals
+  // List all terminals - CRITICAL: Keep exact same IPC channel name
   ipcMain.handle('list-terminals', async () => {
-    const terminals = ttydManager.getAllTerminals();
-    return terminals.map(t => ({
-      terminalId: t.id,
-      title: t.title,
-      url: t.url,
-      port: t.port,
-      status: t.status,
-      toolId: t.toolId
-    }));
-  });
-  
-  // Set up TTYDManager event forwarding
-  ttydManager.on('terminal:ready', (terminalId, instance) => {
-    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send('terminal-ready', terminalId, instance.url);
-    }
-  });
-  
-  ttydManager.on('terminal:closed', (terminalId) => {
-    // Clean up terminal number when terminal closes on its own
-    const terminal = ttydManager.getTerminal(terminalId);
-    if (terminal && terminal.terminalNumber) {
-      activeTerminalNumbers.delete(terminal.terminalNumber);
-    }
-    
-    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send('terminal-exit', terminalId);
-    }
-  });
-  
-  ttydManager.on('terminal:error', (terminalId, error) => {
-    if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-      mainWindowRef.webContents.send('terminal-error', terminalId, error.message);
+    try {
+      const terminals = ptyService.listTerminals();
+      return terminals.map(t => ({
+        terminalId: t.terminalId,
+        title: t.title,
+        status: 'running',
+        toolId: t.toolId,
+      }));
+    } catch (error: any) {
+      logger.error(`[TerminalIPC] Failed to list terminals:`, error);
+      return [];
     }
   });
 
-  console.log('[TerminalIPC] TTYD terminal handlers registered successfully');
-  logger.info('[TerminalIPC] TTYD terminal handlers registered');
+  console.log('[TerminalIPC] PTY terminal handlers registered successfully');
+  logger.info('[TerminalIPC] PTY terminal handlers registered');
 }
 
 /**
@@ -423,7 +444,7 @@ function getToolDisplayName(toolId: string): string {
     'cline-cli': 'Cline',
     'grok': 'Grok'
   };
-  
+
   return toolNames[toolId] || toolId;
 }
 
@@ -432,6 +453,8 @@ function getToolDisplayName(toolId: string): string {
  */
 export async function cleanupTerminals(): Promise<void> {
   logger.info('[TerminalIPC] Cleaning up all terminals...');
-  await ttydManager.cleanup();
+  if (ptyService) {
+    await ptyService.cleanup();
+  }
   logger.info('[TerminalIPC] All terminals cleaned up');
 }

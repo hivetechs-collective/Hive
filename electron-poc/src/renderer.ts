@@ -87,7 +87,7 @@ import { VSCodeFileExplorer } from "./vs-file-explorer";
 import { VSCodeExplorerExact } from "./vscode-explorer-exact";
 import { EditorTabs } from "./editor-tabs";
 import { StatusBar } from "./status-bar";
-import { ttydTerminalPanel } from "./components/TTYDTerminalPanel";
+import { isolatedTerminalPanel as terminalPanelManager } from "./components/IsolatedTerminalPanel";
 import { helpViewer } from "./components/help-viewer";
 import { WelcomePage } from "./components/welcome-page";
 import { applyCenterView } from "./utils/center-view";
@@ -99,7 +99,7 @@ let welcomePageInstance: WelcomePage | null = null;
 // Current opened folder state
 let currentOpenedFolder: string | null = null;
 
-// Expose to window for TTYDTerminalPanel
+// Expose to window for IsolatedTerminalPanel
 (window as any).currentOpenedFolder = currentOpenedFolder;
 
 // Add welcome view styles
@@ -622,7 +622,7 @@ document.body.innerHTML = `
         <!-- Welcome content will be mounted here -->
       </div>
 
-      <!-- Terminal Section (Bottom, resizable) - Hidden since we use System Log in TTYD panel -->
+      <!-- Terminal Section (Bottom, resizable) - Hidden since we use System Log in Isolated Terminal panel -->
       <div class="terminal-section" id="terminal-section" style="height: 200px; display: none;">
         <div class="resize-handle horizontal-resize" id="terminal-resize"></div>
         <div class="terminal-header">
@@ -5599,9 +5599,9 @@ async function uninstallAllCliTools(): Promise<void> {
 async function launchCliTool(toolId: string): Promise<void> {
   console.log(`[CLI Tools] Launch requested for ${toolId}`);
 
-  // Auto-expand the TTYD terminal when launching a CLI tool
-  if ((window as any).expandTTYDTerminal) {
-    (window as any).expandTTYDTerminal();
+  // Auto-expand the terminal when launching a CLI tool
+  if ((window as any).expandTerminal) {
+    (window as any).expandTerminal();
   }
 
   // First, check if the tool is installed
@@ -6240,10 +6240,10 @@ setTimeout(() => {
     "isolated-terminal-panel",
   );
   if (isolatedTerminalPanelElement) {
-    (window as any).isolatedTerminal = ttydTerminalPanel.initialize(
+    (window as any).isolatedTerminal = terminalPanelManager.initialize(
       isolatedTerminalPanelElement,
     );
-    console.log("✅ TTYD Terminal Panel initialized");
+    console.log("✅ Isolated Terminal Panel initialized");
 
     // Listen for AI tool launch events from main process
     if (window.electronAPI.onLaunchAIToolTerminal) {
@@ -6265,7 +6265,7 @@ setTimeout(() => {
           console.log("📦 [Renderer] CWD:", data.cwd);
           console.log("📦 [Renderer] Has env vars:", !!data.env);
 
-          // Get the TTYDTerminalPanel instance and create a terminal
+          // Get the IsolatedTerminalPanel instance and create a terminal
           const terminal = (window as any).isolatedTerminal;
           console.log(
             "📦 [Renderer] Terminal panel instance exists:",
@@ -6315,52 +6315,52 @@ setTimeout(() => {
       "toggle-isolated-terminal",
     );
 
-    // Helper function to expand TTYD terminal (used by CLI tools)
-    function expandTTYDTerminal() {
+    // Helper function to expand terminal (used by CLI tools)
+    function expandTerminalPanel() {
       if (isolatedTerminalPanel && toggleIsolatedTerminal) {
         if (isolatedTerminalPanel.classList.contains("collapsed")) {
-          // Expand TTYD panel
+          // Expand terminal panel
           isolatedTerminalPanel.classList.remove("collapsed");
           isolatedTerminalPanel.style.width = ""; // Let CSS handle width via flex
           toggleIsolatedTerminal.textContent = "−";
           toggleIsolatedTerminal.title = "Collapse Terminal Panel";
 
-          // Check if center area is collapsed, if so, expand TTYD to fill
+          // Check if center area is collapsed, if so, expand terminal to fill
           if (centerArea && centerArea.classList.contains("collapsed")) {
             isolatedTerminalPanel.classList.add("expanded");
           }
-          console.log("[TTYD Terminal] Expanded terminal for CLI tool launch");
+          console.log("[Terminal] Expanded terminal for CLI tool launch");
         }
       }
     }
 
-    // Make expandTTYDTerminal available globally for CLI tool launches
-    (window as any).expandTTYDTerminal = expandTTYDTerminal;
+    // Make expandTerminal available globally for CLI tool launches
+    (window as any).expandTerminal = expandTerminalPanel;
 
     if (toggleIsolatedTerminal && isolatedTerminalPanel) {
-      // Set TTYD terminal collapsed by default on app start
+      // Set terminal collapsed by default on app start
       isolatedTerminalPanel.classList.add("collapsed");
       isolatedTerminalPanel.style.width = ""; // Let CSS handle width
       toggleIsolatedTerminal.textContent = "+";
       toggleIsolatedTerminal.title = "Expand Terminal Panel";
-      console.log("[TTYD Terminal] Terminal collapsed by default on startup");
+      console.log("[Terminal] Terminal collapsed by default on startup");
 
       toggleIsolatedTerminal.addEventListener("click", () => {
         const isCollapsed =
           isolatedTerminalPanel.classList.contains("collapsed");
         if (isCollapsed) {
-          // Expand TTYD panel
+          // Expand terminal panel
           isolatedTerminalPanel.classList.remove("collapsed");
           isolatedTerminalPanel.style.width = ""; // Let CSS handle width via flex
           toggleIsolatedTerminal.textContent = "−";
           toggleIsolatedTerminal.title = "Collapse Terminal Panel";
 
-          // Check if center area is collapsed, if so, expand TTYD to fill
+          // Check if center area is collapsed, if so, expand terminal to fill
           if (centerArea && centerArea.classList.contains("collapsed")) {
             isolatedTerminalPanel.classList.add("expanded");
           }
         } else {
-          // Collapse TTYD panel
+          // Collapse terminal panel
           isolatedTerminalPanel.classList.add("collapsed");
           isolatedTerminalPanel.classList.remove("expanded");
           isolatedTerminalPanel.style.width = ""; // Let CSS handle width
@@ -6382,7 +6382,7 @@ setTimeout(() => {
           toggleCenterArea.textContent = "−";
           toggleCenterArea.title = "Collapse Editor";
 
-          // Remove expanded from TTYD panel
+          // Remove expanded from terminal panel
           if (isolatedTerminalPanel) {
             isolatedTerminalPanel.classList.remove("expanded");
           }
@@ -6392,7 +6392,7 @@ setTimeout(() => {
           toggleCenterArea.textContent = "+";
           toggleCenterArea.title = "Expand Editor";
 
-          // Add expanded to TTYD panel if it's not collapsed
+          // Add expanded to terminal panel if it's not collapsed
           if (
             isolatedTerminalPanel &&
             !isolatedTerminalPanel.classList.contains("collapsed")
@@ -7853,7 +7853,7 @@ addHelpModalStyles();
 
   window.electronAPI.onMenuTerminalShowLog(() => {
     (window as any).isolatedTerminal?.showSystemLogTab();
-    try { (window as any).expandTTYDTerminal?.(); } catch {}
+    try { (window as any).expandTerminal?.(); } catch {}
   });
 
   window.electronAPI.onMenuTerminalHideLog(() => {

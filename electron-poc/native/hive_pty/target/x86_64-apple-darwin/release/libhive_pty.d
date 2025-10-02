@@ -1,0 +1,1 @@
+/Users/veronelazio/Developer/Private/hive/electron-poc/native/hive_pty/target/x86_64-apple-darwin/release/libhive_pty.dylib: /Users/veronelazio/Developer/Private/hive/electron-poc/native/hive_pty/build.rs /Users/veronelazio/Developer/Private/hive/electron-poc/native/hive_pty/src/lib.rs

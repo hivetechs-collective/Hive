@@ -54,9 +54,8 @@ const config: ForgeConfig = {
       ];
       for (const appPath of candidates) {
         const nodeP = path.join(appPath, 'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/node');
-        const ttydP = path.join(appPath, 'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/ttyd');
         const gitP = path.join(appPath, 'Contents/Resources/app.asar.unpacked/.webpack/main/binaries/git-bundle/bin/git');
-        for (const [label, pth] of [['node', nodeP], ['ttyd', ttydP], ['git', gitP]]) {
+        for (const [label, pth] of [['node', nodeP], ['git', gitP]]) {
           try {
             if (fs.existsSync(pth)) {
               fs.chmodSync(pth, 0o755);

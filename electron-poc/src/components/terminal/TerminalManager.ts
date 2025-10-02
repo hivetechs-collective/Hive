@@ -128,9 +128,8 @@ export class TerminalManager {
                 terminalId,
                 command: options.command,
                 args: options.args,
-                cwd: options.workingDirectory || process.cwd(),
+                cwd: options.workingDirectory || (window as any).currentOpenedFolder || undefined,
                 env: {
-                    ...process.env,
                     ...options.env,
                     TERM: 'xterm-256color'
                 }

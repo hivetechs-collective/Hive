@@ -1,7 +1,7 @@
 {
   "name": "hive-consensus",
   "productName": "Hive Consensus",
-  "version": "1.8.499",
+  "version": "1.8.553",
   "description": "Hive Consensus - AI-powered development environment",
   "main": ".webpack/main",
   "scripts": {
@@ -33,7 +33,8 @@
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
     "test:dmg:memory": "node scripts/test-dmg-memory-service.js",
-    "verify:dmg:helpers": "node scripts/verify-dmg-helpers.js"
+    "verify:dmg:helpers": "node scripts/verify-dmg-helpers.js",
+    "migrate:terminal": "ts-node src/agents/orchestrators/TerminalMigrationOrchestrator.ts"
   },
   "keywords": [],
   "author": {
@@ -51,8 +52,8 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.8.3",
     "@electron-forge/plugin-fuses": "^7.8.3",
     "@electron-forge/plugin-webpack": "^7.8.3",
-    "@playwright/test": "^1.47.0",
     "@electron/fuses": "^1.8.0",
+    "@playwright/test": "^1.47.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^18.19.0",
     "@types/node-fetch": "^2.6.13",
@@ -77,6 +78,9 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.1",
+    "@anthropic-ai/sdk": "^0.65.0",
+    "@modelcontextprotocol/sdk": "^1.18.2",
     "@types/chokidar": "^1.7.5",
     "@types/cors": "^2.8.19",
     "@xterm/addon-canvas": "^0.7.0",
@@ -101,6 +105,7 @@
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0",
     "xterm-addon-search": "^0.13.0",
-    "xterm-addon-web-links": "^0.9.0"
+    "xterm-addon-web-links": "^0.9.0",
+    "zod": "^3.25.76"
   }
 }
