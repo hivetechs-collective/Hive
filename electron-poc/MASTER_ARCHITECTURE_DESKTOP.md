@@ -1082,6 +1082,77 @@ async spawnProcess(config: ProcessConfig): Promise<ChildProcess> {
 }
 ```
 
+### Terminal Tabs Overflow & Consensus Panel Protection (Final Design)
+
+Goal: Allow unlimited terminal tabs without pushing the far‑right Consensus panel off‑screen. When the tabs exceed a predefined space, show navigation arrows and keep the Consensus panel fixed.
+
+Design Principles:
+- Fixed-width terminal panel: terminal occupies a predictable width (`450px`) and never forces siblings wider.
+- Non-shrinking Consensus panel: right panel is protected (`flex-shrink: 0`) with defined min/max widths.
+- Tab overflow handling: the tab strip can shrink below its content via `min-width: 0`, causing arrows to appear on overflow.
+- Controls stability: arrows, system-log toggle, and new-tab button never shrink.
+
+Key CSS (production):
+```css
+/* Terminal panel is fixed-width and can shrink internally */
+.isolated-terminal-panel {
+  flex: 0 0 450px;   /* fixed default width */
+  min-width: 0;      /* allow internal content to clip/scroll */
+}
+
+/* Tabs wrapper can shrink, enabling overflow clipping + arrows */
+.isolated-terminal-tabs-wrapper {  /* electron-poc/src/index.css */
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Keep header controls visible */
+.tab-nav-arrow,
+.isolated-terminal-system-log-toggle,
+.isolated-terminal-new-tab {
+  flex: 0 0 auto;    /* do not shrink */
+}
+
+/* Protect the Consensus panel from being pushed off-screen */
+.consensus-chat-panel {
+  width: 400px;      /* initial width */
+  min-width: 300px;  /* user can resize down to here */
+  max-width: 800px;  /* user can resize up to here */
+  flex: 0 0 auto;    /* fixed-size flex item */
+  flex-shrink: 0;    /* never shrink under pressure */
+}
+```
+
+Renderer Structure (relevant HTML):
+```html
+<!-- Header -->
+<button class="tab-nav-arrow" id="tab-nav-left"  ...></button>
+<div class="isolated-terminal-tabs-wrapper">
+  <div id="isolated-terminal-tabs" class="isolated-terminal-tabs" ...></div>
+  <!-- tabs injected here -->
+</div>
+<button class="tab-nav-arrow" id="tab-nav-right" ...></button>
+<button class="isolated-terminal-system-log-toggle" ...></button>
+<button class="isolated-terminal-new-tab" ...>+</button>
+```
+
+Behavior & Logic:
+- Overflow detection and arrow state are computed by `updateNavigationArrows()` in `src/components/IsolatedTerminalPanel.ts`.
+- Arrows appear when `tabsContainer.scrollWidth > wrapper.offsetWidth`.
+- `scrollToTab()` ensures the active tab is scrolled into view on selection.
+- Resize handling uses `ResizeObserver` to recompute arrow state without layout thrash.
+
+Implementation Notes:
+- The critical flexbox caveat is `min-width: 0` on the tabs wrapper and the terminal panel so the flex item can shrink below its content width. Without it, overflow clipping never engages and the tab strip expands instead of showing arrows.
+- The Consensus panel uses `flex-shrink: 0` to remain visible even when the window is narrow or many tabs are open.
+- Optional enhancement: clamp each tab button width with `max-width` + ellipsis if titles are very long.
+
+Verification:
+- Open many terminal tabs; arrows appear when the tab strip overflows, and the Consensus panel remains fixed.
+- Resize the window and the Consensus panel; tab arrows enable/disable appropriately.
+- Toggle System Log and create/close tabs; the scroll offset and arrow states update correctly.
+
+
 #### 6. IPC Ready Message Handling (Critical Fix)
 ```typescript
 // FIXED: Race condition where message handler intercepted ready signal
