@@ -133,14 +133,18 @@ export class IsolatedTerminalPanel {
         this.startConsoleCapture(tab.id, content);
     }
 
-    private async createTerminalTab(): Promise<void> {
+    private async createTerminalTab(toolId?: string, command?: string, env?: Record<string, string>): Promise<void> {
         // Use timestamp suffix to ensure unique IDs even after counter reset
         const terminalNum = this.terminalCounter++;
         const tabId = `terminal-${terminalNum}-${Date.now()}`;
+
+        // Determine title based on toolId
+        const title = this.getTabTitle(toolId, terminalNum);
+
         const tab: TerminalTab = {
             id: tabId,
-            title: `Terminal ${terminalNum}`,
-            type: 'terminal',
+            title: title,
+            type: toolId ? 'ai-tool' : 'terminal',
             isActive: false
         };
 
@@ -296,12 +300,9 @@ export class IsolatedTerminalPanel {
             // Create the PTY process via IPC
             const terminalAPI = (window as any).terminalAPI;
             if (terminalAPI) {
-                // Use the currently opened folder or undefined (main process will use HOME)
-                const cwd = (window as any).currentOpenedFolder || undefined;
-                const result = await terminalAPI.createTerminalProcess({
-                    terminalId: tabId,
-                    cwd: cwd
-                });
+                // Build terminal options with tool parameters
+                const options = this.buildTerminalOptions(tabId, toolId, command, env);
+                const result = await terminalAPI.createTerminalProcess(options);
                 
                 if (result.success) {
                     console.log(`[IsolatedTerminalPanel] Terminal ${tabId} created, PID: ${result.pid}`);
@@ -328,6 +329,81 @@ export class IsolatedTerminalPanel {
                 <div style="color: #f44747; padding: 10px;">Failed to create terminal: ${error.message}</div>
             `;
         }
+    }
+
+    /**
+     * Get display title for terminal tab based on toolId
+     * @param toolId - AI tool identifier (optional)
+     * @param terminalNum - Terminal number for generic terminals
+     * @returns Display title for the tab
+     */
+    private getTabTitle(toolId?: string, terminalNum?: number): string {
+        if (!toolId) {
+            return `Terminal ${terminalNum}`;
+        }
+
+        // Tool name mapping (matches terminal-ipc-handlers.ts)
+        const toolNames: Record<string, string> = {
+            'claude-code': 'Claude',
+            'claude': 'Claude',
+            'gemini-cli': 'Gemini',
+            'gemini': 'Gemini',
+            'grok': 'Grok',
+            'qwen-code': 'Qwen',
+            'qwen-coder': 'Qwen',
+            'openai-codex': 'Codex',
+            'codex': 'Codex',
+            'github-copilot': 'Copilot',
+            'cursor-cli': 'Cursor',
+            'cursor': 'Cursor',
+            'cline': 'Cline',
+            'aider': 'Aider',
+            'continue': 'Continue'
+        };
+
+        return toolNames[toolId] || toolId;
+    }
+
+    /**
+     * Build IPC options object for terminal creation
+     * @param terminalId - Unique terminal identifier
+     * @param toolId - AI tool identifier (optional)
+     * @param command - Command to execute (optional)
+     * @param env - Environment variables (optional)
+     * @returns Options object for IPC handler
+     */
+    private buildTerminalOptions(
+        terminalId: string,
+        toolId?: string,
+        command?: string,
+        env?: Record<string, string>
+    ): any {
+        const options: any = {
+            terminalId: terminalId
+        };
+
+        // Add working directory (use current opened folder or undefined)
+        const cwd = (window as any).currentOpenedFolder || undefined;
+        if (cwd) {
+            options.cwd = cwd;
+        }
+
+        // Add tool identifier if provided
+        if (toolId) {
+            options.toolId = toolId;
+        }
+
+        // Add command if provided
+        if (command) {
+            options.command = command;
+        }
+
+        // Add environment variables if provided
+        if (env && Object.keys(env).length > 0) {
+            options.env = env;
+        }
+
+        return options;
     }
 
     private switchToTab(tabId: string): void {
