@@ -586,6 +586,8 @@ body {
 /* TTYD Terminal Panel - Primary Definition */
 .isolated-terminal-panel {
   flex: 0 0 450px; /* Fixed default width of 450px */
+  /* Critical: allow panel to be narrower than its content */
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -599,6 +601,31 @@ body {
 /* When center is collapsed, TTYD takes remaining space */
 .isolated-terminal-panel.expanded {
   flex: 1 1 auto; /* Take all available space when expanded */
+}
+
+/* Ensure the tabs wrapper inside the terminal header can shrink so
+   overflow: hidden works and arrows appear instead of pushing siblings */
+.isolated-terminal-tabs-wrapper {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Keep terminal header action buttons from shrinking */
+.isolated-terminal-system-log-toggle,
+.isolated-terminal-new-tab {
+  flex: 0 0 auto;
+}
+
+/* Consensus panel: fixed-width flex item that never shrinks
+   so it cannot be pushed off-screen by growing siblings */
+.consensus-chat-panel {
+  width: 400px;           /* Initial width */
+  min-width: 300px;       /* Allow user resize down to this */
+  max-width: 800px;       /* Allow user resize up to this */
+  flex: 0 0 auto;         /* Do not grow */
+  flex-shrink: 0;         /* Do not shrink under pressure */
+  display: flex;
+  flex-direction: column;
 }
 
 /* Left Sidebar - VS Code Style with Activity Bar + Panel */
@@ -1994,6 +2021,8 @@ body {
   height: 100%;
   display: flex;
   align-items: center;
+  /* Allow the flex item to shrink below content width so arrows activate on overflow */
+  min-width: 0;
   overflow-x: auto;
 }
 
@@ -2010,6 +2039,32 @@ body {
 .tab-nav-button.disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* Terminal panel tab navigation arrows */
+.tab-nav-arrow {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: #969696;
+  cursor: pointer;
+  font-size: 14px;
+  /* Prevent arrows from shrinking away under flex pressure */
+  flex: 0 0 auto;
+}
+
+.tab-nav-arrow:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #cccccc;
+}
+
+.tab-nav-arrow svg {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
 }
 
 .tab-actions {
