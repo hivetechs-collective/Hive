@@ -41,14 +41,52 @@ export interface TTYDInstance {
 export class TTYDManager extends EventEmitter {
   private instances: Map<string, TTYDInstance> = new Map();
   private processManager: ProcessManager;
-  private ttydBinaryPath: string = process.env.TTYD_BINARY_PATH || '/opt/homebrew/bin/ttyd';
+  private ttydBinaryPath: string = process.env.TTYD_BINARY_PATH || '';
   
   constructor(processManager: ProcessManager) {
     super();
     this.processManager = processManager;
+    // Resolve ttyd path up front so we favor the bundled binary in production
+    this.resolveTTYDPath();
     this.verifyTTYDInstalled();
   }
   
+  /**
+   * Determine the most appropriate ttyd binary path, preferring the bundled copy
+   */
+  private resolveTTYDPath(): void {
+    const candidates: string[] = [];
+    try {
+      // 1) Bundled binary inside packaged app (preferred)
+      const bundled = ProductionPaths.getBinaryPath('ttyd');
+      candidates.push(bundled);
+    } catch {}
+    // 2) Explicit override via env
+    if (process.env.TTYD_BINARY_PATH) candidates.push(process.env.TTYD_BINARY_PATH);
+    // 3) Common system locations
+    candidates.push(
+      '/opt/homebrew/bin/ttyd',
+      '/usr/local/bin/ttyd',
+      '/usr/bin/ttyd'
+    );
+
+    for (const p of candidates) {
+      try {
+        if (fs.existsSync(p)) {
+          fs.accessSync(p, fs.constants.X_OK);
+          this.ttydBinaryPath = p;
+          logger.info(`[TTYDManager] Using ttyd at: ${this.ttydBinaryPath}`);
+          return;
+        }
+      } catch {
+        // try next
+      }
+    }
+
+    // If nothing found, leave blank; verifyTTYDInstalled() will warn
+    this.ttydBinaryPath = this.ttydBinaryPath || '/opt/homebrew/bin/ttyd';
+  }
+
   /**
    * Verify ttyd is installed
    */
@@ -60,7 +98,7 @@ export class TTYDManager extends EventEmitter {
         logger.info(`[TTYDManager] ttyd binary found at: ${this.ttydBinaryPath}`);
         return true;
       } else {
-        logger.error(`[TTYDManager] ttyd not found at: ${this.ttydBinaryPath}`);
+        logger.error(`[TTYDManager] ttyd not found. Last tried path: ${this.ttydBinaryPath}`);
         logger.error('[TTYDManager] Please install: brew install ttyd');
         // Don't emit error - just warn and continue without terminal functionality
         logger.warn('[TTYDManager] Terminal functionality will be disabled');
