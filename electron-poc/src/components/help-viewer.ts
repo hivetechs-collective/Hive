@@ -159,11 +159,11 @@ export class HelpViewer {
       content: `
         <h2>Hive v{{VERSION}} — Highlights</h2>
         <ul>
-          <li><strong>Spec‑Kit Wizard (End‑to‑End)</strong>: Guided flow from idea → spec → validate → contracts. Required steps are gated and verified.</li>
-          <li><strong>Update Existing Spec</strong>: Safely load existing Vision, Stories, and Acceptance Criteria; create missing files without overwriting.</li>
-          <li><strong>“Design” Start Here</strong>: Distinct left‑bar button under AI CLI Tools to kick off Spec‑Kit quickly.</li>
-          <li><strong>Responsive Left Pane</strong>: Icons scale on small screens; hover tooltips restored for all items.</li>
-          <li><strong>Terminal Stability</strong>: Wizard temp script persists across reconnect; no more missing‑file errors.</li>
+          <li><strong>Homebrew‑Tap Updater</strong>: In‑app updates now read the hivetechs‑collective/homebrew‑tap cask and install the notarized DMG from GitHub Releases.</li>
+          <li><strong>About Dialog</strong>: Shows tap info and cask install command for clarity.</li>
+          <li><strong>Signed & Notarized</strong>: End‑to‑end Apple signing + stapling validated in the release flow.</li>
+          <li><strong>Tap Docs</strong>: README clarifies support path and install/update steps.</li>
+          <li><strong>Stability</strong>: Minor startup robustness and menu polish.</li>
         </ul>
 
         <h3>Quick Actions</h3>
@@ -175,8 +175,8 @@ Create a spec → Clarify & Validate → Contracts</code></pre>
 
         <h3>Recent Maintenance Releases</h3>
         <ul>
-          <li><strong>v1.8.494</strong>: Activity bar polish; Wizard UX refinements.</li>
-          <li><strong>v1.8.493</strong>: “Start Here” visual treatment; layout adjustments.</li>
+          <li><strong>v1.8.503</strong>: Initial Homebrew tap integration; signed/notarized cask.</li>
+          <li><strong>v1.8.502</strong>: Update flow hardening; docs alignment.</li>
         </ul>
       `
     },

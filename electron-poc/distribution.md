@@ -9,7 +9,7 @@
 
 ### 2. Package Managers
 - **npm**: `npm install -g @hivetechs/consensus` (launches electron app)
-- **Homebrew** (macOS): `brew install hivetechs/tap/consensus`
+- **Homebrew (Cask, macOS)**: `brew install --cask hivetechs-collective/tap/hive-consensus`
 - **Chocolatey** (Windows): `choco install hive-consensus`
 - **Snap Store** (Linux): `snap install hive-consensus`
 

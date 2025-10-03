@@ -585,7 +585,10 @@ body {
 
 /* TTYD Terminal Panel - Primary Definition */
 .isolated-terminal-panel {
-  flex: 0 0 450px; /* Fixed default width of 450px */
+  /* Allow this side panel to shrink when space is tight so the right
+     Consensus panel remains visible alongside the center editor. */
+  flex: 0 1 450px; /* basis 450px, shrinkable */
+  min-width: 320px; /* don’t collapse below a usable width */
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1846,7 +1849,7 @@ body {
 /* REMOVED DUPLICATE - Primary definition is at line 1067 */
 
 .center-area:not(.collapsed) {
-  min-width: 200px; /* Reduced min-width for better flexibility */
+  min-width: 0;
 }
 
 /* Isolated terminal panel normal state */
@@ -2215,7 +2218,8 @@ body {
 
 /* Right Panel (Consensus Chat) */
 .consensus-chat-panel {
-  width: 400px;
+  /* Make the right panel responsive: target 400px, but allow slight shrink */
+  flex: 0 1 400px;
   background: #1e1e1e;
   display: flex;
   flex-direction: column;
@@ -2224,9 +2228,9 @@ body {
   max-height: calc(100vh - 57px); /* Account for title bar and status bar */
   overflow: hidden;
   position: relative;
-  min-width: 300px;
+  min-width: 320px;
   max-width: 600px;
-  flex-shrink: 0; /* Never shrink - stay fixed width */
+  /* allow shrink within min/max so layout keeps all panels visible */
 }
 
 /* Progress Section */

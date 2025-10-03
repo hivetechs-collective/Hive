@@ -4426,9 +4426,22 @@ function registerRendererCommands(): void {
       id: "help.showAbout",
       handler: async () => {
         const version = await window.electronAPI.getVersion();
-        alert(
-          `Hive Consensus\nVersion: ${version}\n\nAdvanced AI-powered development environment\nwith Multi-Stage Consensus Processing\n\nCopyright © 2025 HiveTechs`,
-        );
+        const msg = [
+          `Hive Consensus`,
+          `Version: ${version}`,
+          "",
+          "Advanced AI-powered development environment",
+          "with Multi-Stage Consensus Processing",
+          "",
+          "Updates via Homebrew Tap:",
+          "- Tap: hivetechs-collective/tap",
+          "- Install: brew install --cask hivetechs-collective/tap/hive-consensus",
+          "- 'Help → Check for Updates…' downloads the notarized DMG",
+          "  from the GitHub Release defined by the tap",
+          "",
+          "Copyright © 2025 HiveTechs",
+        ].join("\n");
+        alert(msg);
       },
     },
   ]);

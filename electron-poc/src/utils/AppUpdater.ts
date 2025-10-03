@@ -56,10 +56,11 @@ export class AppUpdater {
     if (this.checking) return;
     this.checking = true;
     try {
-      const feed = `https://releases.hivetechs.io/${channel}/version.json${opts.force ? `?t=${Date.now()}` : ''}`;
-      const info = await this.fetchJSON<VersionInfo>(feed);
+      // Use Homebrew tap cask as the authoritative version source
+      // Cask: https://github.com/hivetechs-collective/homebrew-tap/blob/main/Casks/hive-consensus.rb
+      const info = await this.fetchVersionFromTap();
       if (!info?.version || !info?.url) {
-        logger.warn('[Updater] Invalid version.json from feed');
+        logger.warn('[Updater] Invalid version info from tap');
         return;
       }
 
@@ -99,8 +100,9 @@ export class AppUpdater {
       });
 
       if (res.response === 2) {
-        // Release Notes opens the versioned URL in browser (or docs site if added later)
-        try { await shell.openExternal(info.url); } catch {}
+        // Open GitHub Release page for this version
+        const tagUrl = `https://github.com/hivetechs-collective/Hive/releases/tag/v${info.version}`;
+        try { await shell.openExternal(tagUrl); } catch {}
         return; // Keep prompt minimal; user can invoke manual check again
       }
 
@@ -144,6 +146,57 @@ export class AppUpdater {
         })
         .on('error', reject);
     });
+  }
+
+  private fetchText(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      https
+        .get(url, (res) => {
+          if (res.statusCode && res.statusCode >= 400) {
+            return reject(new Error(`HTTP ${res.statusCode}`));
+          }
+          let data = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => resolve(data));
+        })
+        .on('error', reject);
+    });
+  }
+
+  private async fetchVersionFromTap(): Promise<VersionInfo> {
+    // Read the cask file from the tap repository and parse version/url/sha256
+    // Default branch is main
+    const caskUrl = 'https://raw.githubusercontent.com/hivetechs-collective/homebrew-tap/main/Casks/hive-consensus.rb';
+    const content = await this.fetchText(caskUrl);
+
+    const versionMatch = content.match(/version\s+"([^"]+)"/);
+    const shaMatch = content.match(/sha256\s+"([a-fA-F0-9]{64})"/);
+    const urlMatch = content.match(/url\s+"([^"]+)"/);
+
+    if (!versionMatch || !(urlMatch || versionMatch)) {
+      throw new Error('Failed to parse cask for version/url');
+    }
+
+    const version = versionMatch[1];
+    let url = urlMatch ? urlMatch[1] : '';
+    if (url.includes('#{version}')) {
+      url = url.replace(/#\{version\}/g, version);
+    }
+    // Fallback if url not found: construct from GitHub tag
+    if (!url || !/^https?:\/\//.test(url)) {
+      url = `https://github.com/hivetechs-collective/Hive/releases/download/v${version}/Hive.Consensus.dmg`;
+    }
+
+    const info: VersionInfo = {
+      version,
+      channel: 'tap',
+      platform: process.platform,
+      arch: process.arch,
+      url,
+      sha256: shaMatch ? shaMatch[1] : undefined,
+    };
+    return info;
   }
 
   private async downloadAndInstall(info: VersionInfo): Promise<void> {
@@ -219,4 +272,3 @@ open -a "Hive Consensus"
     });
   }
 }
-

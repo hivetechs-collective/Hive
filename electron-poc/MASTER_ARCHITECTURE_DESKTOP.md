@@ -14698,3 +14698,79 @@ Location: `src/components/help-viewer.ts`
   - Authoritative billing models, gates, entitlements, and Paddle integration.
   - See also: hivetechs-website-private/docs/architecture/billing/MASTER_BILLING.md
 - This desktop app consumes the website’s billing contracts and does not redefine billing.
+
+### Homebrew Tap (Cask Release Flow)
+
+Tap Repository
+- URL: https://github.com/hivetechs-collective/homebrew-tap
+- Cask path: `homebrew-tap/Casks/hive-consensus.rb`
+
+End‑User Install
+```
+brew tap hivetechs-collective/tap
+brew install --cask hivetechs-collective/tap/hive-consensus
+```
+
+Release Steps (per version)
+1) Build DMG
+```
+cd electron-poc
+npm ci
+npm run build:complete
+```
+2) Sign & Notarize
+```
+npm run sign:notarize:local
+```
+3) Publish GitHub Release asset (name must be `Hive.Consensus.dmg`)
+```
+VERSION=$(node -p "require('./electron-poc/package.json').version")
+TAG="v${VERSION}"
+gh release create "$TAG" --title "Hive v${VERSION}" --notes "Signed & notarized DMG" --latest || true
+cp "electron-poc/out/make/Hive Consensus.dmg" /tmp/Hive.Consensus.dmg
+gh release upload "$TAG" /tmp/Hive.Consensus.dmg --clobber
+```
+4) Compute SHA256 for cask
+```
+shasum -a 256 "electron-poc/out/make/Hive Consensus.dmg"
+```
+5) Update cask version and sha256
+```
+# Edit homebrew-tap/Casks/hive-consensus.rb
+#   version "${VERSION}"
+#   sha256 "<SHA_FROM_STEP_4>"
+cd homebrew-tap
+git add Casks/hive-consensus.rb
+git commit -m "chore(cask): bump to v${VERSION} with notarized DMG sha256"
+git push origin main
+```
+6) Verify cask fetch and checksum
+```
+brew tap hivetechs-collective/tap
+HOMEBREW_NO_INSTALL_FROM_API=1 brew fetch --cask hivetechs-collective/tap/hive-consensus --force
+```
+
+Notes
+- The cask URL template is `https://github.com/hivetechs-collective/Hive/releases/download/v#{version}/Hive.Consensus.dmg` — ensure the release asset uses that exact name.
+- Cask includes a `postflight` to remove quarantine attributes; DMG is fully signed and notarized.
+- Livecheck uses GitHub; keep `version` aligned with the tag and uploaded asset.
+- In‑App Update Source: The IDE now reads the tap cask (`homebrew-tap/Casks/hive-consensus.rb`) to determine the latest version and DMG URL. It downloads from the GitHub Release asset and installs in place. R2 `version.json` is no longer used by the in‑app updater.
+
+UI
+- Help → Check for Updates… runs the tap-backed updater described above.
+- Help → About shows a brief “Updates via Homebrew Tap” blurb with the tap name and cask install command.
+
+### Version History & What’s New
+
+- On each release, update:
+  - In‑app What’s New highlights (electron-poc/src/components/help-viewer.ts: “Hive v{current} — Highlights”).
+  - Recent Maintenance list (two prior patches) auto-populates; adjust bullets as needed.
+  - GitHub Release notes (tag v{version}) with a concise change summary and SHA256.
+  - Tap cask bump PR/commit message: “chore(cask): bump to v{version} with notarized DMG sha256”.
+
+Recommended cadence
+- Bundle these updates in the Release step, alongside notarization and cask bump, so UI/docs remain consistent with the published build.
+
+### Support
+
+- Packaging/Cask install or update issues: https://github.com/hivetechs-collective/homebrew-tap/issues
