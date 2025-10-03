@@ -43,7 +43,7 @@ export class GitManager {
         },
         // Ensure Git uses system credential helper
         config: [
-          'credential.helper=osxkeychain'
+          'credential.helper='
         ]
       });
       this.checkIfRepo();
@@ -346,7 +346,14 @@ export class GitManager {
       
       const gitProcess = spawn('git', ['push', ...args], {
         cwd: this.repoPath,
-        env: { ...process.env }
+        env: { 
+          ...process.env,
+          GIT_TERMINAL_PROMPT: '0',
+          // Disable system/global credential helpers (e.g., osxkeychain) for this process
+          GIT_CONFIG_COUNT: '1',
+          GIT_CONFIG_KEY_0: 'credential.helper',
+          GIT_CONFIG_VALUE_0: '',
+        }
       });
       
       let output = '';

@@ -16,6 +16,7 @@ export class SystemCredentialProvider implements CredentialProvider {
   id = 'system';
   name = 'System Credential Manager';
   private platform = process.platform;
+  private enabled = process.env.HIVE_ENABLE_SYSTEM_KEYCHAIN === '1';
   
   canHandle(request: CredentialRequest): boolean {
     // Only handle HTTPS credentials with a host
@@ -48,6 +49,10 @@ export class SystemCredentialProvider implements CredentialProvider {
    * Get credentials from macOS Keychain
    */
   private async getFromKeychain(request: CredentialRequest): Promise<Credential | null> {
+    if (!this.enabled) {
+      // Disabled by default to avoid OS keychain prompts
+      return null;
+    }
     const service = this.getServiceName(request.host!);
     
     try {
@@ -169,6 +174,9 @@ export class SystemCredentialProvider implements CredentialProvider {
    * Store credentials in macOS Keychain
    */
   private async storeInKeychain(service: string, credential: Credential): Promise<boolean> {
+    if (!this.enabled) {
+      return false;
+    }
     if (!credential.username || !credential.password) return false;
     
     try {

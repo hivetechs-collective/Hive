@@ -92,6 +92,11 @@ export class GitAuthHelper {
       GIT_ASKPASS_IPC: this.ipcSocketPath,
       GIT_TERMINAL_PROMPT: '0', // Disable terminal prompts
       SSH_ASKPASS_REQUIRE: 'force',
+      // Disable system/global credential helpers (e.g., osxkeychain) for this process
+      // Equivalent to: git -c credential.helper=
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'credential.helper',
+      GIT_CONFIG_VALUE_0: '',
     };
   }
   

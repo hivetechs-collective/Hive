@@ -323,6 +323,11 @@ process.parentPort.postMessage(request);
       SSH_ASKPASS: this.sshAskpassPath,
       GIT_TERMINAL_PROMPT: '0', // Disable terminal prompts
       SSH_ASKPASS_REQUIRE: 'force',
+      // Disable system/global credential helpers (e.g., osxkeychain) for this process
+      // Equivalent to: git -c credential.helper=
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'credential.helper',
+      GIT_CONFIG_VALUE_0: '',
       ELECTRON_RUN_AS_NODE: '1',
       VSCODE_GIT_ASKPASS_NODE: process.execPath,
       VSCODE_GIT_ASKPASS_MAIN: this.askpassMainPath,
