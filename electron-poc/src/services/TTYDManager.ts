@@ -192,8 +192,7 @@ export class TTYDManager extends EventEmitter {
     logger.info(`[TTYDManager] Spawning ttyd: ${this.ttydBinaryPath} ${ttydArgs.join(' ')}`);
     console.log(`[TTYDManager] Spawning ttyd: ${this.ttydBinaryPath} ${ttydArgs.join(' ')}`);
     
-    // Spawn ttyd process with proper terminal dimensions
-    const ttydProcess = spawn(this.ttydBinaryPath, ttydArgs, {
+    const spawnTTYD = (binaryPath: string) => spawn(binaryPath, ttydArgs, {
       cwd: config.cwd || process.env.HOME,
       env: {
         ...process.env,
@@ -211,6 +210,26 @@ export class TTYDManager extends EventEmitter {
       // Set PTY size if available
       windowsHide: true
     });
+
+    const tryFallback = (): ChildProcess | null => {
+      const fallbacks = process.arch === 'x64'
+        ? ['/usr/local/bin/ttyd', '/opt/homebrew/bin/ttyd']
+        : ['/opt/homebrew/bin/ttyd', '/usr/local/bin/ttyd'];
+      for (const p of fallbacks) {
+        try {
+          if (fs.existsSync(p)) {
+            fs.accessSync(p, fs.constants.X_OK);
+            logger.info(`[TTYDManager] Falling back to system ttyd at: ${p}`);
+            this.ttydBinaryPath = p;
+            return spawnTTYD(p);
+          }
+        } catch {}
+      }
+      return null;
+    };
+
+    // Spawn ttyd process with proper terminal dimensions
+    let ttydProcess = spawnTTYD(this.ttydBinaryPath);
     
     // Track the PID for cleanup
     if (ttydProcess.pid) {
@@ -234,7 +253,36 @@ export class TTYDManager extends EventEmitter {
     this.instances.set(config.id, instance);
     
     // Set up process event handlers
+    let retried = false;
     ttydProcess.on('error', (error) => {
+      const msg = String((error && (error as any).message) || error || '').toLowerCase();
+      const isArchMismatch = msg.includes('bad cpu type') || msg.includes('exec format') || msg.includes('enoexec');
+      if (!retried && isArchMismatch) {
+        retried = true;
+        const fb = tryFallback();
+        if (fb) {
+          // Rewire listeners for the new process
+          ttydProcess = fb;
+          fb.on('error', (err2) => {
+            logger.error(`[TTYDManager] Terminal ${config.title} error after fallback:`, err2);
+            instance.status = 'stopped';
+            this.emit('terminal:error', config.id, err2);
+            this.cleanupTerminal(config.id);
+          });
+          if (fb.stdout) fb.stdout.on('data', (data) => {
+            logger.debug(`[TTYDManager] ${config.title} stdout:`, data.toString());
+          });
+          if (fb.stderr) fb.stderr.on('data', (data) => {
+            const message = data.toString();
+            if (message.toLowerCase().includes('error')) {
+              logger.error(`[TTYDManager] ${config.title} stderr:`, message);
+            } else {
+              logger.debug(`[TTYDManager] ${config.title} info:`, message);
+            }
+          });
+          return;
+        }
+      }
       logger.error(`[TTYDManager] Terminal ${config.title} error:`, error);
       instance.status = 'stopped';
       this.emit('terminal:error', config.id, error);
